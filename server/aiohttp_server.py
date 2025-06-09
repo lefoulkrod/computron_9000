@@ -1,10 +1,13 @@
 import asyncio
+import os
+import json
 from aiohttp import web
 from google.adk.runners import Runner
+from google.adk.events.event import Event
 from google.adk.sessions import InMemorySessionService
 from agents.agent import root_agent
 from google.genai import types
-import os
+from typing import AsyncGenerator
 
 PORT = 8080
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
@@ -42,6 +45,7 @@ async def handle_post(request):
         try:
             data = await request.json()
             user_query = data.get('message')
+            stream = data.get('stream', False)
         except Exception:
             return web.json_response({'error': 'Invalid JSON or missing message field.'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
         await ensure_session()
@@ -50,8 +54,38 @@ async def handle_post(request):
             app_name=APP_NAME,
             session_service=session_service
         )
-        response_text = await handle_agent_chat(user_query, runner)
-        return web.json_response({'response': response_text}, headers={'Access-Control-Allow-Origin': '*'})
+        if stream:
+            # Streaming response
+            resp = web.StreamResponse(
+                status=200,
+                reason='OK',
+                headers={
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Transfer-Encoding': 'chunked',
+                }
+            )
+            await resp.prepare(request)
+            content = types.Content(role='user', parts=[types.Part(text=user_query)])
+            events: AsyncGenerator[Event, None] = runner.run_async(
+                user_id=DEFAULT_USER_ID,
+                session_id=DEFAULT_SESSION_ID,
+                new_message=content
+            )
+            async for event in events:
+                if event.content and event.content.parts and event.content.parts[0].text is not None:
+                    chunk = event.content.parts[0].text
+                    data = {'response': chunk}
+                    await resp.write((json.dumps(data) + '\n').encode('utf-8'))
+                if event.is_final_response():
+                    break
+            await resp.write_eof()
+            return resp
+        else:
+            response_text = await handle_agent_chat(user_query, runner)
+            return web.json_response({'response': response_text}, headers={'Access-Control-Allow-Origin': '*'})
     else:
         return web.Response(status=404)
 
@@ -91,17 +125,22 @@ async def handle_get(request):
     else:
         return web.Response(status=404)
 
-async def handle_agent_chat(user_query: str, runner) -> str:
+async def handle_agent_chat(user_query: str, runner: Runner) -> str:
     content = types.Content(role='user', parts=[types.Part(text=user_query)])
     final_response_text = "Agent did not produce a final response."
-    async for event in runner.run_async(user_id=DEFAULT_USER_ID, session_id=DEFAULT_SESSION_ID, new_message=content):
+    events: AsyncGenerator[Event, None] = runner.run_async(
+        user_id=DEFAULT_USER_ID,
+        session_id=DEFAULT_SESSION_ID,
+        new_message=content
+    )
+    async for event in events:
         if event.is_final_response():
-            if event.content and event.content.parts:
-                final_response_text = event.content.parts[0].text
+            if event.content and event.content.parts and event.content.parts[0].text is not None:
+                final_response_text = str(event.content.parts[0].text)
             elif event.actions and getattr(event.actions, 'escalate', False):
                 final_response_text = f"Agent escalated: {getattr(event, 'error_message', 'No specific message.')}"
             break
-    return final_response_text
+    return final_response_text or "Agent did not produce a final response."
 
 app = web.Application()
 app.router.add_route('OPTIONS', '/api/chat', handle_options)

@@ -281,7 +281,13 @@
             msgDiv.className = `message ${role}`;
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
-            bubble.textContent = content;
+            // Use innerHTML for assistant to allow markdown
+            if (role === 'assistant') {
+                bubble.innerHTML = marked.parse(content);
+                enhanceCodeBlocks(bubble);
+            } else {
+                bubble.textContent = content;
+            }
             msgDiv.appendChild(bubble);
             chatMessages.appendChild(msgDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -301,7 +307,7 @@
             chatMessages.appendChild(assistantDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            // Prepare Ollama request
+            // Prepare request
             const body = {
                 message: message,
                 stream: true
@@ -315,12 +321,12 @@
                 if (!response.body) throw new Error('No response body');
                 const reader = response.body.getReader();
                 let assistantMsg = '';
-                // Remove loading indicator as soon as we get a response chunk
                 let loadingRemoved = false;
+                let decoder = new TextDecoder();
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
-                    const chunk = new TextDecoder().decode(value);
+                    const chunk = decoder.decode(value, { stream: true });
                     chunk.split('\n').forEach(line => {
                         if (line.trim()) {
                             try {
@@ -328,7 +334,6 @@
                                 if (data.response) {
                                     if (!loadingRemoved) {
                                         loadingRemoved = true;
-                                        // Clear loading indicator
                                         bubble.innerHTML = '';
                                     }
                                     assistantMsg += data.response;
