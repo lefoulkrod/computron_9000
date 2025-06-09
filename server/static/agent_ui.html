@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COMPUTRON AI 🤖</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            min-height: 100vh;
+            background: #f6f6f6;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.5rem 2.5rem 0.5rem 2.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            background: #fff;
+            box-sizing: border-box;
+        }
+        .logo {
+            height: 60px;
+        }
+        .app-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 0.03em;
+            font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
+            color: #222;
+            
+        }
+        .main-layout {
+            display: flex;
+            flex-direction: row;
+            height: calc(100vh - 7.5rem);
+            margin: 0;
+            gap: 0;
+            background: none;
+            width: 100vw;
+            box-sizing: border-box;
+        }
+        .column:first-child {
+            flex: 0 0 40%;
+            max-width: 40%;
+            border-right: 1px solid #e5e7eb;
+        }
+        .column:last-child {
+            flex: 1 1 0;
+            max-width: 60%;
+            border-left: none;
+        }
+        .column {
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            height: 100%;
+            border: none;
+            padding: 2.5rem;
+            box-sizing: border-box;
+        }
+        .input-area-col {
+            display: flex;
+            flex-direction: column;
+            height: 20%;
+            box-sizing: border-box;
+            justify-content: flex-start;
+        }
+        .input-area {
+            display: flex;
+            flex-direction: column;
+            border-radius: 0.25rem;
+            border: 1px solid #eee;
+            background: #fafafa;
+            padding: 0.5rem;
+            height: 100%;
+            align-items: stretch;
+        }
+        .input-area textarea {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.25rem;
+            border: 1px solid #ccc;
+            font-size: 1rem;
+            resize: none;
+            height: 100%;
+            min-height: 2.5rem;
+            max-height: 100%;
+            box-sizing: border-box;
+            margin-bottom: 0.5rem;
+        }
+        .input-area button {
+            margin-left: 0;
+            margin-top: 0.25rem;
+            padding: 0.5rem 1.2rem;
+            border-radius: 0.25rem;
+            border: none;
+            background: #0078fe;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            align-self: flex-end;
+        }
+        .input-area button:disabled { background: #aaa; }
+        .chat-messages {
+            flex: 1;
+            padding: 0 0 0 0;
+            overflow-y: auto;
+            background: none;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            margin-bottom: 1.125rem;
+            display: flex;
+        }
+        .assistant {
+            justify-content: flex-start;
+        }
+        .user {
+            justify-content: flex-end;
+        }
+        .assistant .bubble {
+            background: none;
+            color: #222;
+            margin-right: auto;
+        }
+        .user .bubble {
+            background: #f5f5f5;
+            color: #222;
+            margin-left: auto;
+        }
+        .bubble {
+            display: inline-block;
+            padding: 0.6rem 1rem;
+            border-radius: 0.25rem;
+            max-width: 80%;
+        }
+        /* Style code blocks in markdown */
+        .bubble pre, .bubble code {
+            background: #f5f5f5 !important;
+            color: #222;
+            border-radius: 0.25rem;
+            font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+            font-size: 0.98em;
+            position: relative;
+        }
+        .bubble pre {
+            padding: 0.7em 1em 1em 1em;
+            overflow-x: auto;
+            margin: 1em 0;
+            border-radius: 0.75em;
+            background: #f5f5f5 !important;
+            position: relative;
+        }
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0;
+            font-size: 0.95em;
+            color: #888;
+            font-family: inherit;
+            background: none;
+            border-radius: 0.75em 0.75em 0 0;
+            user-select: none;
+            margin-bottom: 2em;
+        }
+        .copy-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 0.95em;
+            cursor: pointer;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 0.3em;
+        }
+        .code-lang-label {
+            font-family: inherit;
+        }
+        @media (max-width: 900px) {
+            .header, .main-layout { margin: 0; padding: 0; }
+            .main-layout { flex-direction: column; height: auto; }
+            .column { width: 100%; min-width: 0; border-right: none !important; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
+            .column:last-child { border-bottom: none; }
+        }
+        /* Loading indicator CSS */
+        .loading-indicator {
+            color: #888;
+            font-style: italic;
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+        }
+        .loading-indicator .dot {
+            animation: blink 1.2s infinite both;
+        }
+        .loading-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
+        .loading-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink {
+            0%, 20% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="/static/computron_logo.png" alt="Computron Logo" class="logo" />
+        <div class="app-title">COMPUTRON_9000</div>
+    </div>
+    <div class="main-layout">
+        <div class="column">
+            <div class="input-area-col">
+                <form class="input-area" id="chatForm">
+                    <textarea id="userInput" placeholder="Type a message..." autocomplete="off" required></textarea>
+                    <button type="submit">Send</button>
+                </form>
+            </div>
+        </div>
+        <div class="column">
+            <div class="chat-messages" id="chatMessages"></div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        const chatMessages = document.getElementById('chatMessages');
+        const chatForm = document.getElementById('chatForm');
+        const userInput = document.getElementById('userInput');
+        let conversation = [];
+
+        // Enhance code blocks with copy button and language label
+        function enhanceCodeBlocks(container) {
+            const pres = container.querySelectorAll('pre code');
+            pres.forEach(codeBlock => {
+                const pre = codeBlock.parentElement;
+                // Avoid duplicate headers
+                if (pre.querySelector('.code-header')) return;
+                // Language label
+                let lang = codeBlock.className.match(/language-([a-zA-Z0-9]+)/);
+                lang = lang ? lang[1] : '';
+                // Header
+                const header = document.createElement('div');
+                header.className = 'code-header';
+                const langLabel = document.createElement('span');
+                langLabel.className = 'code-lang-label';
+                langLabel.textContent = lang;
+                // Copy button
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn';
+                copyBtn.type = 'button';
+                copyBtn.innerHTML = '<span>Copy</span>';
+                copyBtn.onclick = (e) => {
+                    e.preventDefault();
+                    navigator.clipboard.writeText(codeBlock.innerText);
+                    copyBtn.innerHTML = '<span>Copied!</span>';
+                    setTimeout(() => { copyBtn.innerHTML = '<span>Copy</span>'; }, 1200);
+                };
+                header.appendChild(langLabel);
+                header.appendChild(copyBtn);
+                pre.insertAdjacentElement('afterbegin', header);
+                pre.style.position = 'relative';
+            });
+        }
+
+        function addMessage(role, content) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}`;
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.textContent = content;
+            msgDiv.appendChild(bubble);
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function sendMessage(message) {
+            addMessage('user', message);
+            conversation.push({ role: 'user', content: message });
+            // Add placeholder for assistant
+            const assistantDiv = document.createElement('div');
+            assistantDiv.className = 'message assistant';
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            // Show loading indicator
+            bubble.innerHTML = '<span class="loading-indicator">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+            assistantDiv.appendChild(bubble);
+            chatMessages.appendChild(assistantDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Prepare Ollama request
+            const body = {
+                message: message,
+                stream: true
+            };
+            try {
+                const response = await fetch('http://localhost:8080/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!response.body) throw new Error('No response body');
+                const reader = response.body.getReader();
+                let assistantMsg = '';
+                // Remove loading indicator as soon as we get a response chunk
+                let loadingRemoved = false;
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = new TextDecoder().decode(value);
+                    chunk.split('\n').forEach(line => {
+                        if (line.trim()) {
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.response) {
+                                    if (!loadingRemoved) {
+                                        loadingRemoved = true;
+                                        // Clear loading indicator
+                                        bubble.innerHTML = '';
+                                    }
+                                    assistantMsg += data.response;
+                                    bubble.innerHTML = marked.parse(assistantMsg);
+                                    enhanceCodeBlocks(bubble);
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
+                            } catch (e) { /* ignore parse errors */ }
+                        }
+                    });
+                }
+                conversation.push({ role: 'assistant', content: assistantMsg });
+            } catch (err) {
+                bubble.textContent = '[Error: ' + err.message + ']';
+            }
+        }
+
+        chatForm.addEventListener('submit', e => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+            userInput.value = '';
+            sendMessage(message);
+        });
+    </script>
+</body>
+</html>

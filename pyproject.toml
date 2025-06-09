@@ -1,0 +1,16 @@
+[project]
+name = "chat_app"
+version = "0.1.0"
+description = "A simple chat proxy server for Ollama."
+requires-python = ">=3.11.12,<3.12"
+dependencies = [
+    "litellm",
+    "google-adk",
+    "aiohttp"
+]
+[project.optional-dependencies]
+# Add optional dependency groups here, e.g.:
+# dev = ["pytest"]
+
+[tool.uv]
+# uv-specific settings can go here
