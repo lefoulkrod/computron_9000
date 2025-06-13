@@ -1,6 +1,7 @@
 import os
 import stat
 from typing import List, Dict
+import glob
 
 def list_directory_contents(path: str) -> Dict[str, object]:
     """
@@ -119,3 +120,34 @@ def read_file_contents(path: str) -> Dict[str, object]:
         return {"status": "success", "contents": contents}
     except Exception as e:
         return {"status": "error", "contents": "", "error_message": str(e)}
+
+def search_files(pattern: str) -> Dict[str, object]:
+    """
+    Tool to search for files and directories using a glob pattern (wildcards). Use this tool whenever the user asks to search for files.
+
+    Args:
+        pattern (str): The glob pattern to search for (e.g., '*.txt', 'folder/**/*.py').
+
+    Returns:
+        dict: A dictionary with the following keys:
+            - status (str): "success" if the search was performed, "error" otherwise.
+            - matches (List[str]): List of matching file and directory paths if successful, else an empty list.
+            - error_message (str, optional): Human-readable error message if an error occurred.
+
+    Example:
+        {
+            "status": "success",
+            "matches": ["foo.txt", "bar/baz.py", ...]
+        }
+        or
+        {
+            "status": "error",
+            "matches": [],
+            "error_message": "No matches found."
+        }
+    """
+    try:
+        matches = glob.glob(pattern, recursive=True)
+        return {"status": "success", "matches": matches}
+    except Exception as e:
+        return {"status": "error", "matches": [], "error_message": str(e)}
