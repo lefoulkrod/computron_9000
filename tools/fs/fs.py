@@ -1,9 +1,27 @@
 import os
 import stat
-from typing import List, Dict
 import glob
+from functools import lru_cache
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any, Literal
 
-def list_directory_contents(path: str) -> Dict[str, object]:
+class BaseFSResult(BaseModel):
+    status: Literal["success", "error"]
+    error_message: Optional[str] = None
+
+class DirectoryContents(BaseFSResult):
+    contents: List[str]
+
+class PathDetails(BaseFSResult):
+    details: Dict[str, Any]
+
+class FileContents(BaseFSResult):
+    contents: str
+
+class SearchResults(BaseFSResult):
+    matches: List[str]
+
+def list_directory_contents(path: str) -> DirectoryContents:
     """
     Tool to list files and directories at a given path. Use this tool whenever the user asks about files, folders, or directory contents.
 
@@ -30,11 +48,11 @@ def list_directory_contents(path: str) -> Dict[str, object]:
     """
     try:
         contents = os.listdir(path)
-        return {"status": "success", "contents": contents}
+        return DirectoryContents(status="success", contents=contents)
     except Exception as e:
-        return {"status": "error", "contents": [], "error_message": str(e)}
+        return DirectoryContents(status="error", contents=[], error_message=str(e))
 
-def get_path_details(path: str) -> Dict[str, object]:
+def get_path_details(path: str) -> PathDetails:
     """
     Tool to get details about a file or directory at the given path. Use this tool whenever the user asks for information about a specific file or directory (such as type, size, permissions, etc).
 
@@ -82,11 +100,12 @@ def get_path_details(path: str) -> Dict[str, object]:
             "modified": st.st_mtime,
             "created": st.st_ctime
         }
-        return {"status": "success", "details": details}
+        return PathDetails(status="success", details=details)
     except Exception as e:
-        return {"status": "error", "details": {}, "error_message": str(e)}
+        return PathDetails(status="error", details={}, error_message=str(e))
 
-def read_file_contents(path: str) -> Dict[str, object]:
+@lru_cache(maxsize=100)
+def read_file_contents(path: str) -> FileContents:
     """
     Tool to read the contents of a file at the given path. Use this tool whenever the user asks to view or read a file's contents.
 
@@ -117,11 +136,11 @@ def read_file_contents(path: str) -> Dict[str, object]:
     try:
         with open(path, 'r', encoding='utf-8') as f:
             contents = f.read()
-        return {"status": "success", "contents": contents}
+        return FileContents(status="success", contents=contents)
     except Exception as e:
-        return {"status": "error", "contents": "", "error_message": str(e)}
+        return FileContents(status="error", contents="", error_message=str(e))
 
-def search_files(pattern: str) -> Dict[str, object]:
+def search_files(pattern: str) -> SearchResults:
     """
     Tool to search for files and directories using a glob pattern (wildcards). Use this tool whenever the user asks to search for files.
 
@@ -148,6 +167,6 @@ def search_files(pattern: str) -> Dict[str, object]:
     """
     try:
         matches = glob.glob(pattern, recursive=True)
-        return {"status": "success", "matches": matches}
+        return SearchResults(status="success", matches=matches)
     except Exception as e:
-        return {"status": "error", "matches": [], "error_message": str(e)}
+        return SearchResults(status="error", matches=[], error_message=str(e))

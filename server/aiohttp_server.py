@@ -77,7 +77,7 @@ async def handle_post(request):
             async for event in events:
                 if event.content and event.content.parts and event.content.parts[0].text is not None:
                     chunk = event.content.parts[0].text
-                    data = {'response': chunk}
+                    data = {'response': chunk, 'final': event.is_final_response()}
                     await resp.write((json.dumps(data) + '\n').encode('utf-8'))
                 if event.is_final_response():
                     break
@@ -85,7 +85,7 @@ async def handle_post(request):
             return resp
         else:
             response_text = await handle_agent_chat(user_query, runner)
-            return web.json_response({'response': response_text}, headers={'Access-Control-Allow-Origin': '*'})
+            return web.json_response({'response': response_text, 'final': 'true'}, headers={'Access-Control-Allow-Origin': '*'})
     else:
         return web.Response(status=404)
 
