@@ -44,10 +44,13 @@ async def handle_post(request):
     if request.path == '/api/chat':
         try:
             data = await request.json()
-            user_query = data.get('message')
-            stream = data.get('stream', False)
         except Exception:
-            return web.json_response({'error': 'Invalid JSON or missing message field.'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+            return web.json_response({'error': 'Invalid JSON.'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+        user_query = data.get('message')
+        if user_query is None or str(user_query).strip() == "":
+            return web.json_response({'error': 'Message field is required.'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+        user_query = str(user_query)
+        stream = data.get('stream', False)
         await ensure_session()
         runner = Runner(
             agent=root_agent,
