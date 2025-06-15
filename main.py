@@ -1,3 +1,7 @@
+from logging_config import setup_logging
+setup_logging()
+
+# Third-party imports
 import aiohttp.web
 
 from server.aiohttp_server import app, PORT

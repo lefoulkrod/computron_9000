@@ -1,13 +1,18 @@
+# Standard library imports
 import asyncio
 import os
 import json
+from typing import AsyncGenerator
+
+# Third-party imports
 from aiohttp import web
 from google.adk.runners import Runner
 from google.adk.events.event import Event
 from google.adk.sessions import InMemorySessionService
-from agents.agent import root_agent
 from google.genai import types
-from typing import AsyncGenerator
+
+# Local imports
+from agents.agent import root_agent
 
 PORT = 8080
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
