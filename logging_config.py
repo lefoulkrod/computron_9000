@@ -5,3 +5,5 @@ def setup_logging():
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     # Set httpx logger to WARNING level
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    # Set LiteLLM logger to DEBUG level
+    logging.getLogger("LiteLLM").setLevel(logging.DEBUG)
