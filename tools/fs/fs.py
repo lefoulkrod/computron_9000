@@ -107,7 +107,6 @@ def get_path_details(path: str) -> PathDetails:
     except Exception as e:
         return PathDetails(status="error", details={}, error_message=str(e))
 
-@lru_cache(maxsize=100)
 def read_file_contents(path: str) -> FileContents:
     """
     Tool to read the contents of a file at the given path. Use this tool whenever the user asks to view or read a file's contents.

@@ -302,7 +302,10 @@
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             // Show loading indicator
-            bubble.innerHTML = '<span class="loading-indicator">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+            let loadingIndicator = document.createElement('span');
+            loadingIndicator.className = 'loading-indicator';
+            loadingIndicator.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
+            bubble.appendChild(loadingIndicator);
             assistantDiv.appendChild(bubble);
             chatMessages.appendChild(assistantDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -321,8 +324,8 @@
                 if (!response.body) throw new Error('No response body');
                 const reader = response.body.getReader();
                 let assistantMsg = '';
-                let loadingRemoved = false;
                 let decoder = new TextDecoder();
+                let isFinal = false;
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
@@ -332,13 +335,15 @@
                             try {
                                 const data = JSON.parse(line);
                                 if (data.response) {
-                                    if (!loadingRemoved) {
-                                        loadingRemoved = true;
-                                        bubble.innerHTML = '';
-                                    }
                                     assistantMsg += data.response;
                                     bubble.innerHTML = marked.parse(assistantMsg);
                                     enhanceCodeBlocks(bubble);
+                                    if (data.final === true || data.final === 'true') {
+                                        isFinal = true;
+                                    } else {
+                                        // For non-final, show message so far + loading indicator
+                                        bubble.appendChild(loadingIndicator);
+                                    }
                                     chatMessages.scrollTop = chatMessages.scrollHeight;
                                 }
                             } catch (e) { /* ignore parse errors */ }
