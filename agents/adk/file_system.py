@@ -1,12 +1,8 @@
-# Standard library imports
-
-# Third-party imports
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 
-# Local imports
 from tools.fs.fs import list_directory_contents, get_path_details, read_file_contents, search_files
-from . import prompt
+from agents.prompt import FILE_SYSTEM_AGENT_PROMPT
 from config import load_config
 
 MODEL = load_config().llm.model
@@ -24,7 +20,7 @@ file_system_agent = LlmAgent(
     - `read_file_contents`: Read or view the contents of a file.
     - `search_files`: Search for files using patterns or wildcards (glob matching).
     """,
-    instruction=prompt.FILE_SYSTEM_AGENT_PROMPT,
+    instruction=FILE_SYSTEM_AGENT_PROMPT,
     tools=[
         list_directory_contents,
         get_path_details,

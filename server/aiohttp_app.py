@@ -12,9 +12,8 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 # Local imports
-from agents.agent import root_agent
+from agents.adk.agent import root_agent
 
-PORT = 8080
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 
 # Instantiate session service
@@ -155,4 +154,3 @@ app.router.add_route('OPTIONS', '/api/chat', handle_options)
 app.router.add_route('POST', '/api/chat', handle_post)
 app.router.add_route('GET', '/', handle_get)
 app.router.add_route('GET', '/static/{tail:.*}', handle_get)
-
