@@ -1,3 +1,5 @@
+# This file marks the config directory as a Python package.
+
 from pydantic import BaseModel
 import yaml
 from pathlib import Path

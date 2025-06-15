@@ -6,7 +6,8 @@ requires-python = ">=3.11.12,<3.12"
 dependencies = [
     "litellm",
     "google-adk",
-    "aiohttp"
+    "aiohttp",
+    "pydantic-ai"
 ]
 [project.optional-dependencies]
 # Add optional dependency groups here, e.g.:
