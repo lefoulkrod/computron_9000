@@ -1,0 +1,2 @@
+llm:
+  model: ollama_chat/qwen3:32b

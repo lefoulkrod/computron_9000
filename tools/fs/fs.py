@@ -1,9 +1,12 @@
+# Standard library imports
+import glob
 import os
 import stat
-import glob
 from functools import lru_cache
+from typing import Any, Dict, List, Literal, Optional
+
+# Third-party imports
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Literal
 
 class BaseFSResult(BaseModel):
     status: Literal["success", "error"]
