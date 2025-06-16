@@ -1,3 +1,5 @@
+"""Module containing the top-level SequentialAgent configuration."""
+
 from google.adk.agents import SequentialAgent
 
 from .computron import computron_agent

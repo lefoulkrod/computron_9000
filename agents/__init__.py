@@ -1,3 +1,5 @@
-# Standard library imports
+"""Agent package exposing the root agent."""
 
-from agents import agent
+from .agent import root_agent
+
+__all__ = ["root_agent"]
