@@ -11,6 +11,7 @@ from pydantic_ai.messages import ModelMessage
 
 from .file_system import run_file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
+from tools.misc.datetime import datetime_tool, DateTimeResult
 
 config = load_config()
 ollama_model = OpenAIModel(
@@ -39,6 +40,19 @@ async def file_system(ctx: RunContext[None], user_input: str) -> Any:
         Any: The file system agent's response.
     """
     return await run_file_system_agent(user_input, ctx)
+
+@computron_agent.tool_plain
+def get_datetime() -> DateTimeResult:
+    """
+    Get the current system date and time in human-readable 12-hour format (up to seconds).
+
+    Args:
+        ctx (RunContext[None]): The agent run context (unused).
+
+    Returns:
+        DateTimeResult: Result object containing the formatted date and time string, or error details.
+    """
+    return datetime_tool()
 
 async def run_computron_agent(user_input: str, message_history: Optional[List[ModelMessage]] = None) -> Any:
     """

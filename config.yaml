@@ -1,4 +1,4 @@
 llm:
-  model: qwen3:32b 
+  model: deepseek-r1:32b 
 adk:
   provider: ollama_chat/
