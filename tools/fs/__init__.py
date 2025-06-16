@@ -1,3 +1,3 @@
-# fs subpackage for filesystem utilities
+"""Filesystem related tools."""
 
-# Standard library imports
+__all__ = []

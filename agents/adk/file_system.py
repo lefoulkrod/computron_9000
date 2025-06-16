@@ -1,3 +1,7 @@
+# Standard library imports
+"""File system agent definition."""
+
+# Third-party imports
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 
@@ -28,3 +32,4 @@ file_system_agent = LlmAgent(
         search_files
     ],
 )
+

@@ -7,14 +7,29 @@ DEFAULT_USER_ID = "default_user"
 DEFAULT_SESSION_ID = "default_session"
 
 class UserMessageEvent(BaseModel):
+    """
+    Represents a message event from the agent.
+
+    Attributes:
+        message (str): The message content from the agent.
+        final (bool): Whether this is the final response in the sequence.
+    """
     message: str
     final: bool
 
 async def handle_user_message(message: str, runner: Runner, stream: bool) -> AsyncGenerator[UserMessageEvent, None]:
     """
-    Handles user message with the agent runner. Yields UserMessageEvent(message, final).
-    If stream=True, yields one event per agent event.
-    If stream=False, yields only the final response event.
+    Handles user message with the agent runner.
+
+    Args:
+        message (str): The user message to send to the agent.
+        runner (Runner): The agent runner instance.
+        stream (bool): Whether to stream responses (True) or return only the final response (False).
+
+    Yields:
+        UserMessageEvent: Contains the message and final flag.
+            - If stream=True, yields one event per agent event.
+            - If stream=False, yields only the final response event.
     """
     content = types.Content(role='user', parts=[types.Part(text=message)])
     events = runner.run_async(

@@ -1,3 +1,3 @@
-# tools package for shared utilities
+"""Utilities and tool implementations."""
 
-# Standard library imports
+__all__ = []

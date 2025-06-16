@@ -1,4 +1,5 @@
 # Standard library imports
+"""Utility functions for interacting with the local filesystem."""
 import glob
 import os
 import stat
@@ -9,19 +10,29 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel
 
 class BaseFSResult(BaseModel):
+    """Base result model for filesystem operations."""
+
     status: Literal["success", "error"]
     error_message: Optional[str] = None
 
 class DirectoryContents(BaseFSResult):
+    """Result model for directory listings."""
+
     contents: List[str]
 
 class PathDetails(BaseFSResult):
+    """Result model describing a filesystem path."""
+
     details: Dict[str, Any]
 
 class FileContents(BaseFSResult):
+    """Result model containing file contents."""
+
     contents: str
 
 class SearchResults(BaseFSResult):
+    """Result model for glob searches."""
+
     matches: List[str]
 
 def list_directory_contents(path: str) -> DirectoryContents:
