@@ -10,6 +10,7 @@ from .file_system import file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
 from config import load_config
 from . import get_adk_model
+from tools.misc.datetime import datetime_tool
 
 MODEL = get_adk_model()
 
@@ -23,7 +24,8 @@ computron_agent = LlmAgent(
     ),
     instruction=ROOT_AGENT_PROMPT,
     tools=[
-        AgentTool(agent=file_system_agent,)
+        AgentTool(agent=file_system_agent,),
+        datetime_tool,
     ],
 )
 

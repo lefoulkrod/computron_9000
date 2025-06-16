@@ -11,8 +11,9 @@ dependencies = [
     "pydantic"
 ]
 [project.optional-dependencies]
-# Add optional dependency groups here, e.g.:
-# dev = ["pytest"]
+test = [
+    "pytest>=7.0.0,<8.0.0"
+]
 
 [tool.uv]
 # uv-specific settings can go here
