@@ -1,4 +1,6 @@
 # Standard library imports
+"""aiohttp web server exposing the COMPUTRON_9000 agent API."""
+
 import asyncio
 import os
 import json
@@ -25,6 +27,8 @@ DEFAULT_SESSION_ID = "default_session"
 
 # Ensure a session exists, or create one if not (async version)
 async def ensure_session():
+    """Retrieve or create a default session."""
+
     session = await session_service.get_session(
         app_name=APP_NAME,
         user_id=DEFAULT_USER_ID,
@@ -39,6 +43,7 @@ async def ensure_session():
     return session
 
 async def handle_options(request):
+    """Handle CORS preflight requests."""
     return web.Response(status=200, headers={
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -46,6 +51,7 @@ async def handle_options(request):
     })
 
 async def handle_post(request):
+    """Handle chat POST requests from the UI."""
     if request.path == '/api/chat':
         try:
             data = await request.json()
@@ -98,6 +104,7 @@ async def handle_post(request):
         return web.Response(status=404)
 
 async def handle_get(request):
+    """Serve the chat UI and static assets."""
     if request.path in ['', '/']:
         html_path = os.path.join(STATIC_DIR, 'agent_ui.html')
         if os.path.isfile(html_path):
@@ -134,6 +141,8 @@ async def handle_get(request):
         return web.Response(status=404)
 
 async def handle_agent_chat(user_query: str, runner: Runner) -> str:
+    """Run the agent and return the final response text."""
+
     content = types.Content(role='user', parts=[types.Part(text=user_query)])
     final_response_text = "Agent did not produce a final response."
     events: AsyncGenerator[Event, None] = runner.run_async(

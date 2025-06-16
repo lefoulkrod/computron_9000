@@ -1,4 +1,5 @@
 # Standard library imports
+"""Definition of the COMPUTRON_9000 LLM agent."""
 
 # Third-party imports
 from google.adk.agents import LlmAgent
@@ -25,3 +26,4 @@ computron_agent = LlmAgent(
         AgentTool(agent=file_system_agent,)
     ],
 )
+
