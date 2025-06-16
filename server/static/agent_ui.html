@@ -44,22 +44,12 @@
         .main-layout {
             display: flex;
             flex-direction: row;
+            width: 100vw;
             height: calc(100vh - 7.5rem);
             margin: 0;
             gap: 0;
             background: none;
-            width: 100vw;
             box-sizing: border-box;
-        }
-        .column:first-child {
-            flex: 0 0 40%;
-            max-width: 40%;
-            border-right: 1px solid #e5e7eb;
-        }
-        .column:last-child {
-            flex: 1 1 0;
-            max-width: 60%;
-            border-left: none;
         }
         .column {
             background: #fff;
@@ -70,6 +60,17 @@
             border: none;
             padding: 2.5rem;
             box-sizing: border-box;
+            width: 100%;
+        }
+        .column:first-child {
+            flex: 0 0 40%;
+            max-width: 40%;
+            border-right: 1px solid #e5e7eb;
+        }
+        .column:last-child {
+            flex: 1 1 0;
+            max-width: 60%;
+            border-left: none;
         }
         .input-area-col {
             display: flex;
@@ -192,11 +193,28 @@
         .code-lang-label {
             font-family: inherit;
         }
-        @media (max-width: 900px) {
-            .header, .main-layout { margin: 0; padding: 0; }
-            .main-layout { flex-direction: column; height: auto; }
-            .column { width: 100%; min-width: 0; border-right: none !important; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
-            .column:last-child { border-bottom: none; }
+        @media (max-width: 700px) {
+            .main-layout {
+                flex-direction: column;
+                width: 100vw;
+                height: auto;
+                min-height: 100vh;
+            }
+            .column {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                padding: 1rem 0.5rem;
+                border-right: none !important;
+                border-bottom: 1px solid #e5e7eb;
+            }
+            .column:last-child {
+                border-bottom: none;
+            }
+            .bubble {
+                max-width: 95vw;
+                font-size: 1rem;
+                word-break: break-word;
+            }
         }
         /* Loading indicator CSS */
         .loading-indicator {
