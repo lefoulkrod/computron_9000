@@ -25,6 +25,10 @@
 - Avoid hardcoding secrets or credentials.
 - Use Pydantic models for all data validation and serialization.
 - Ensure all API responses are JSON serializable.
+- Always use a single leading underscore (_) for private fields and methods, following PEP 8 recommendations:
+  - See: https://peps.python.org/pep-0008/#descriptive-naming-styles
+  - Use a single leading underscore for non-public methods and instance variables (e.g., _my_private_var).
+  - Use two leading underscores only when name mangling is required to avoid subclass conflicts.
 
 Example import order:
 ```python
