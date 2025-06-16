@@ -7,7 +7,8 @@ dependencies = [
     "litellm",
     "google-adk",
     "aiohttp",
-    "pydantic-ai"
+    "pydantic-ai",
+    "pydantic"
 ]
 [project.optional-dependencies]
 # Add optional dependency groups here, e.g.:
