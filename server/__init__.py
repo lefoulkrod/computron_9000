@@ -1,3 +1,5 @@
-# Standard library imports
+"""Server package for COMPUTRON_9000."""
 
-# ...existing code...
+from .aiohttp_server import app
+
+__all__ = ["app"]

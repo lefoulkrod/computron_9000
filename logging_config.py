@@ -1,9 +1,15 @@
+"""Utility functions for configuring application logging."""
+
 import logging
 import sys
 
-def setup_logging():
+def setup_logging() -> None:
+    """Configure basic loggers for the application.
+
+    Sets the root logger to output to ``stdout`` and adjusts log levels for
+    specific third‑party libraries.
+    """
+
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    # Set httpx logger to WARNING level
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    # Set LiteLLM logger to DEBUG level
     logging.getLogger("LiteLLM").setLevel(logging.DEBUG)
