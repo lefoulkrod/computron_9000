@@ -10,10 +10,16 @@ class LlmConfig(BaseModel):
 
     model: str
 
+class AdkConfig(BaseModel):
+    """Settings for ADK agents."""
+
+    provider: str
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
     llm: LlmConfig
+    adk: AdkConfig
 
 @lru_cache(maxsize=1)
 def load_config() -> AppConfig:

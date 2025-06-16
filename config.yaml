@@ -1,2 +1,4 @@
 llm:
-  model: ollama_chat/qwen3:32b
+  model: qwen3:32b 
+adk:
+  provider: ollama_chat/
