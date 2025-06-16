@@ -227,6 +227,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "google-adk" },
     { name = "litellm" },
+    { name = "pydantic" },
     { name = "pydantic-ai" },
 ]
 
@@ -235,6 +236,7 @@ requires-dist = [
     { name = "aiohttp" },
     { name = "google-adk" },
     { name = "litellm" },
+    { name = "pydantic" },
     { name = "pydantic-ai" },
 ]
 

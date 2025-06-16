@@ -1,17 +1,11 @@
 # Standard library imports
 """aiohttp web server exposing the COMPUTRON_9000 agent API."""
 
-import asyncio
 import os
 import json
-from typing import AsyncGenerator
 
 # Third-party imports
 from aiohttp import web
-from google.adk.runners import Runner
-from google.adk.events.event import Event
-from google.adk.sessions import InMemorySessionService
-from google.genai import types
 
 # Local imports
 from agents.adk.agent import root_agent
@@ -19,34 +13,11 @@ from agents.adk.message_handler import handle_user_message
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 
-# Instantiate session service
-session_service = InMemorySessionService()
-APP_NAME = "computron_9000"
-DEFAULT_USER_ID = "default_user"
-DEFAULT_SESSION_ID = "default_session"
-
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
 }
-
-# Ensure a session exists, or create one if not (async version)
-async def ensure_session():
-    """Retrieve or create a default session."""
-
-    session = await session_service.get_session(
-        app_name=APP_NAME,
-        user_id=DEFAULT_USER_ID,
-        session_id=DEFAULT_SESSION_ID
-    )
-    if session is None:
-        session = await session_service.create_session(
-            app_name=APP_NAME,
-            user_id=DEFAULT_USER_ID,
-            session_id=DEFAULT_SESSION_ID
-        )
-    return session
 
 async def handle_options(request):
     """Handle CORS preflight requests."""
@@ -68,12 +39,6 @@ async def handle_post(request):
             return web.json_response({'error': 'Message field is required.'}, status=400, headers=CORS_HEADERS)
         user_query = str(user_query)
         stream = data.get('stream', False)
-        await ensure_session()
-        runner = Runner(
-            agent=root_agent,
-            app_name=APP_NAME,
-            session_service=session_service
-        )
         if stream:
             # Streaming response
             resp = web.StreamResponse(
@@ -88,16 +53,21 @@ async def handle_post(request):
                 }
             )
             await resp.prepare(request)
-            async for event in handle_user_message(user_query, runner, stream=True):
-                data = {'response': event.message, 'final': event.final}
-                await resp.write((json.dumps(data) + '\n').encode('utf-8'))
-                if event.final:
-                    break
-            await resp.write_eof()
+            try:
+                async for event in handle_user_message(user_query, stream=True):
+                    data = {'response': event.message, 'final': event.final}
+                    await resp.write((json.dumps(data) + '\n').encode('utf-8'))
+                    if event.final:
+                        break
+            except Exception as exc:
+                error_data = {'error': f'Server error: {str(exc)}', 'final': True}
+                await resp.write((json.dumps(error_data) + '\n').encode('utf-8'))
+            finally:
+                await resp.write_eof()
             return resp
         else:
             # Non-streaming: get the only result from the generator
-            gen = handle_user_message(user_query, runner, stream=False)
+            gen = handle_user_message(user_query, stream=False)
             final_response_text = None
             async for event in gen:
                 final_response_text = event.message

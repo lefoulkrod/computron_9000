@@ -1,10 +1,18 @@
+import os
 from typing import AsyncGenerator
+
 from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from pydantic import BaseModel
 
+from agents.adk.agent import root_agent
+
 DEFAULT_USER_ID = "default_user"
 DEFAULT_SESSION_ID = "default_session"
+APP_NAME = "computron_9000"
+
+_session_service = InMemorySessionService()
 
 class UserMessageEvent(BaseModel):
     """
@@ -17,13 +25,32 @@ class UserMessageEvent(BaseModel):
     message: str
     final: bool
 
-async def handle_user_message(message: str, runner: Runner, stream: bool) -> AsyncGenerator[UserMessageEvent, None]:
+async def _ensure_session() -> object:
     """
-    Handles user message with the agent runner.
+    Retrieve or create a default session.
+
+    Returns:
+        object: The session object.
+    """
+    session = await _session_service.get_session(
+        app_name=APP_NAME,
+        user_id=DEFAULT_USER_ID,
+        session_id=DEFAULT_SESSION_ID
+    )
+    if session is None:
+        session = await _session_service.create_session(
+            app_name=APP_NAME,
+            user_id=DEFAULT_USER_ID,
+            session_id=DEFAULT_SESSION_ID
+        )
+    return session
+
+async def handle_user_message(message: str, stream: bool) -> AsyncGenerator[UserMessageEvent, None]:
+    """
+    Handles user message with the agent runner, managing session and runner internally.
 
     Args:
         message (str): The user message to send to the agent.
-        runner (Runner): The agent runner instance.
         stream (bool): Whether to stream responses (True) or return only the final response (False).
 
     Yields:
@@ -31,6 +58,12 @@ async def handle_user_message(message: str, runner: Runner, stream: bool) -> Asy
             - If stream=True, yields one event per agent event.
             - If stream=False, yields only the final response event.
     """
+    await _ensure_session()
+    runner = Runner(
+        agent=root_agent,
+        app_name=APP_NAME,
+        session_service=_session_service
+    )
     content = types.Content(role='user', parts=[types.Part(text=message)])
     events = runner.run_async(
         user_id=DEFAULT_USER_ID,
