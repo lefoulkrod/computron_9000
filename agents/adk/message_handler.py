@@ -4,26 +4,15 @@ from typing import AsyncGenerator
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
-from pydantic import BaseModel
 
 from agents.adk.agent import root_agent
+from agents.types import UserMessageEvent
 
 DEFAULT_USER_ID = "default_user"
 DEFAULT_SESSION_ID = "default_session"
 APP_NAME = "computron_9000"
 
 _session_service = InMemorySessionService()
-
-class UserMessageEvent(BaseModel):
-    """
-    Represents a message event from the agent.
-
-    Attributes:
-        message (str): The message content from the agent.
-        final (bool): Whether this is the final response in the sequence.
-    """
-    message: str
-    final: bool
 
 async def _ensure_session() -> object:
     """

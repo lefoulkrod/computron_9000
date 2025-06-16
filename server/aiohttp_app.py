@@ -7,9 +7,13 @@ import json
 # Third-party imports
 from aiohttp import web
 
+# Conditional imports based on environment variable
+if os.environ.get("AGENT_SDK", "pydantic").lower() == "adk":
+    from agents.adk.message_handler import handle_user_message
+else:
+    from agents.pydantic_ai.message_handler import handle_user_message
+
 # Local imports
-from agents.adk.agent import root_agent
-from agents.adk.message_handler import handle_user_message
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 

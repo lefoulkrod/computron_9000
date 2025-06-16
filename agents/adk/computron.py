@@ -9,8 +9,9 @@ from google.adk.models.lite_llm import LiteLlm
 from .file_system import file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
 from config import load_config
+from . import get_adk_model
 
-MODEL = load_config().llm.model
+MODEL = get_adk_model()
 
 computron_agent = LlmAgent(
     name="COMPUTRON_9000",
