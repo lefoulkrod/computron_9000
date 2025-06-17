@@ -15,6 +15,7 @@ class AdkConfig(BaseModel):
 
     provider: str
 
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 

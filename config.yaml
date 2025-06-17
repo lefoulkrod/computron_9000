@@ -2,3 +2,4 @@ llm:
   model: qwen3:32b-12k
 adk:
   provider: ollama_chat/
+
