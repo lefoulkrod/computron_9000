@@ -12,7 +12,7 @@ from pydantic_ai.messages import ModelMessage
 from .file_system import run_file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
 from tools.misc.datetime import datetime_tool, DateTimeResult
-from tools.web.open_webpage import open_webpage, OpenWebpageError, OpenWebpageResult
+from tools.web.get_webpage import get_webpage, GetWebpageError, GetWebpageResult
 from tools.web.search_google import search_google, GoogleSearchError, GoogleSearchResults
 
 config = load_config()
@@ -57,24 +57,24 @@ def get_datetime() -> DateTimeResult:
     return datetime_tool()
 
 @computron_agent.tool
-async def open_webpage_tool(ctx: RunContext[None], url: str) -> OpenWebpageResult:
+async def get_webpage_tool(ctx: RunContext[None], url: str) -> GetWebpageResult:
     """
     Navigate to a webpage and return its HTML content using Playwright.
 
     Args:
         ctx (RunContext[None]): The agent run context.
-        url (str): The URL to open.
+        url (str): The URL to get.
 
     Returns:
-        OpenWebpageResult: The result containing the URL and HTML content.
+        GetWebpageResult: The result containing the URL and HTML content.
 
     Raises:
-        OpenWebpageError: If navigation or fetching fails.
+        GetWebpageError: If navigation or fetching fails.
     """
     try:
-        return await open_webpage(url)
-    except OpenWebpageError as e:
-        logging.error(f"open_webpage tool error: {e}")
+        return await get_webpage(url)
+    except GetWebpageError as e:
+        logging.error(f"get_webpage tool error: {e}")
         raise
 
 @computron_agent.tool
