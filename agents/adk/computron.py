@@ -11,6 +11,7 @@ from agents.prompt import ROOT_AGENT_PROMPT
 from config import load_config
 from . import get_adk_model
 from tools.misc.datetime import datetime_tool
+from tools.web.search_google import search_google
 
 MODEL = get_adk_model()
 
@@ -26,6 +27,7 @@ computron_agent = LlmAgent(
     tools=[
         AgentTool(agent=file_system_agent,),
         datetime_tool,
+        search_google,  # Register the Google search tool
     ],
 )
 
