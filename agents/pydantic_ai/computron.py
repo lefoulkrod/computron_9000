@@ -12,6 +12,8 @@ from pydantic_ai.messages import ModelMessage
 from .file_system import run_file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
 from tools.misc.datetime import datetime_tool, DateTimeResult
+from tools.web.open_webpage import open_webpage, OpenWebpageError, OpenWebpageResult
+from tools.web.search_google import search_google, GoogleSearchError, GoogleSearchResults
 
 config = load_config()
 ollama_model = OpenAIModel(
@@ -53,6 +55,49 @@ def get_datetime() -> DateTimeResult:
         DateTimeResult: Result object containing the formatted date and time string, or error details.
     """
     return datetime_tool()
+
+@computron_agent.tool
+async def open_webpage_tool(ctx: RunContext[None], url: str) -> OpenWebpageResult:
+    """
+    Navigate to a webpage and return its HTML content using Playwright.
+
+    Args:
+        ctx (RunContext[None]): The agent run context.
+        url (str): The URL to open.
+
+    Returns:
+        OpenWebpageResult: The result containing the URL and HTML content.
+
+    Raises:
+        OpenWebpageError: If navigation or fetching fails.
+    """
+    try:
+        return await open_webpage(url)
+    except OpenWebpageError as e:
+        logging.error(f"open_webpage tool error: {e}")
+        raise
+
+@computron_agent.tool
+def search_google_tool(ctx: RunContext[None], query: str, max_results: int = 5) -> GoogleSearchResults:
+    """
+    Search Google and return the top results using Playwright with stealth.
+
+    Args:
+        ctx (RunContext[None]): The agent run context.
+        query (str): The search query string.
+        max_results (int): Maximum number of results to return.
+
+    Returns:
+        GoogleSearchResults: The search results.
+
+    Raises:
+        GoogleSearchError: If search or scraping fails.
+    """
+    try:
+        return search_google(query, max_results)
+    except GoogleSearchError as e:
+        logging.error(f"search_google tool error: {e}")
+        raise
 
 async def run_computron_agent(user_input: str, message_history: Optional[List[ModelMessage]] = None) -> Any:
     """
