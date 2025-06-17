@@ -9,6 +9,9 @@ from playwright.async_api import async_playwright, Error as PlaywrightError
 from config import load_config
 
 
+logger = logging.getLogger(__name__)
+
+
 class GetWebpageInput(BaseModel):
     """
     Input model for getting a webpage and fetching its contents.
@@ -54,7 +57,7 @@ def _validate_url(url: str) -> HttpUrl:
     try:
         return TypeAdapter(HttpUrl).validate_python(url)
     except ValidationError as e:
-        logging.error(f"Invalid URL: {url} | {e}")
+        logger.error(f"Invalid URL: {url} | {e}")
         raise GetWebpageError(f"Invalid URL: {e}")
 
 
@@ -129,8 +132,8 @@ async def get_webpage(url: str) -> GetWebpageResult:
             html = _reduce_webpage_context(html)
             return GetWebpageResult(url=validated_url, html=html)
     except PlaywrightError as e:
-        logging.error(f"Playwright error for {url}: {e}")
+        logger.error(f"Playwright error for {url}: {e}")
         raise GetWebpageError(f"Playwright error: {e}")
     except Exception as e:
-        logging.error(f"Unexpected error for {url}: {e}")
+        logger.error(f"Unexpected error for {url}: {e}")
         raise GetWebpageError(f"Unexpected error: {e}")

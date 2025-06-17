@@ -27,7 +27,6 @@ computron_agent = LlmAgent(
     tools=[
         AgentTool(agent=file_system_agent,),
         datetime_tool,
-        search_google,  # Register the Google search tool
     ],
 )
 

@@ -29,13 +29,15 @@ file_system_agent = Agent(
     system_prompt=FILE_SYSTEM_AGENT_PROMPT,
 )
 
+logger = logging.getLogger(__name__)
+
 @file_system_agent.tool_plain
 def list_dir(path: str) -> Any:
     """List files and directories at a given path."""
     try:
         return list_directory_contents(path)
     except Exception as exc:
-        logging.error(f"list_directory_contents error: {exc}")
+        logger.error(f"list_directory_contents error: {exc}")
         return {"status": "error", "contents": [], "error_message": str(exc)}
 
 @file_system_agent.tool_plain
@@ -44,7 +46,7 @@ def path_details(path: str) -> Any:
     try:
         return get_path_details(path)
     except Exception as exc:
-        logging.error(f"get_path_details error: {exc}")
+        logger.error(f"get_path_details error: {exc}")
         return {"status": "error", "details": {}, "error_message": str(exc)}
 
 @file_system_agent.tool_plain
@@ -53,7 +55,7 @@ def read_file(path: str) -> Any:
     try:
         return read_file_contents(path)
     except Exception as exc:
-        logging.error(f"read_file_contents error: {exc}")
+        logger.error(f"read_file_contents error: {exc}")
         return {"status": "error", "contents": "", "error_message": str(exc)}
 
 @file_system_agent.tool_plain
@@ -62,7 +64,7 @@ def search(pattern: str) -> Any:
     try:
         return search_files(pattern)
     except Exception as exc:
-        logging.error(f"search_files error: {exc}")
+        logger.error(f"search_files error: {exc}")
         return {"status": "error", "matches": [], "error_message": str(exc)}
 
 async def run_file_system_agent(user_input: str, ctx: RunContext[None]) -> Any:
@@ -80,5 +82,5 @@ async def run_file_system_agent(user_input: str, ctx: RunContext[None]) -> Any:
         result = await file_system_agent.run(user_input, usage=ctx.usage)
         return result.output
     except Exception as exc:
-        logging.error(f"FileSystem agent error: {exc}")
+        logger.error(f"FileSystem agent error: {exc}")
         return {"error": str(exc)}

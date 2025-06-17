@@ -29,6 +29,10 @@
   - See: https://peps.python.org/pep-0008/#descriptive-naming-styles
   - Use a single leading underscore for non-public methods and instance variables (e.g., _my_private_var).
   - Use two leading underscores only when name mangling is required to avoid subclass conflicts.
+- Always use a module-level logger for logging in each Python file:
+  - Use `logger = logging.getLogger(__name__)` at the top of the module.
+  - Log with `logger.debug()`, `logger.info()`, etc., instead of the root `logging` functions.
+  - This ensures logging configuration is respected and allows for per-module log control.
 
 Example import order:
 ```python

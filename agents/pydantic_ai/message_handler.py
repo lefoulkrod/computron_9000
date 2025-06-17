@@ -15,6 +15,8 @@ APP_NAME = "computron_9000"
 # In-memory cache for message history (stores ModelMessage objects)
 _message_history: List[ModelMessage] = []
 
+logger = logging.getLogger(__name__)
+
 def get_message_history() -> list[ModelMessage]:
     """
     Retrieve the in-memory message history.
@@ -31,6 +33,8 @@ async def add_messages_to_history(messages: list[ModelMessage]) -> None:
     Args:
         messages (list[ModelMessage]): The messages to add.
     """
+    logger.debug(f"Current history size: {len(_message_history)}")
+    logger.debug(f"Adding {len(messages)} messages to history")
     _message_history.extend(messages)
 
 async def handle_user_message(message: str, stream: bool) -> AsyncGenerator[UserMessageEvent, None]:
@@ -49,8 +53,11 @@ async def handle_user_message(message: str, stream: bool) -> AsyncGenerator[User
     try:
         # Pass the current message history to the agent
         result = await run_computron_agent(message, message_history=get_message_history())
-        await add_messages_to_history(result.all_messages())
+        if result is None:
+            raise RuntimeError("COMPUTRON_9000 agent returned None result.")
+        logger.debug(f"COMPUTRON_9000 usage: {result.usage()}")
+        await add_messages_to_history(result.new_messages())
         yield UserMessageEvent(message=result.output, final=True)
     except Exception as exc:
-        logging.error(f"Pydantic AI message handler error: {exc}")
+        logger.error(f"Pydantic AI message handler error: {exc}")
         yield UserMessageEvent(message=f"[Error: {exc}]", final=True)

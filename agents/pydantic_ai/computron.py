@@ -8,6 +8,8 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.messages import ModelMessage
+from collections.abc import Coroutine
+from pydantic_ai.agent import AgentRunResult
 
 from .file_system import run_file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
@@ -28,6 +30,8 @@ computron_agent = Agent(
     model=ollama_model,
     system_prompt=ROOT_AGENT_PROMPT,
 )
+
+logger = logging.getLogger(__name__)
 
 @computron_agent.tool
 async def file_system(ctx: RunContext[None], user_input: str) -> Any:
@@ -74,32 +78,13 @@ async def get_webpage_tool(ctx: RunContext[None], url: str) -> GetWebpageResult:
     try:
         return await get_webpage(url)
     except GetWebpageError as e:
-        logging.error(f"get_webpage tool error: {e}")
+        logger.error(f"get_webpage tool error: {e}")
         raise
 
-@computron_agent.tool
-def search_google_tool(ctx: RunContext[None], query: str, max_results: int = 5) -> GoogleSearchResults:
-    """
-    Search Google and return the top results using Playwright with stealth.
-
-    Args:
-        ctx (RunContext[None]): The agent run context.
-        query (str): The search query string.
-        max_results (int): Maximum number of results to return.
-
-    Returns:
-        GoogleSearchResults: The search results.
-
-    Raises:
-        GoogleSearchError: If search or scraping fails.
-    """
-    try:
-        return search_google(query, max_results)
-    except GoogleSearchError as e:
-        logging.error(f"search_google tool error: {e}")
-        raise
-
-async def run_computron_agent(user_input: str, message_history: Optional[List[ModelMessage]] = None) -> Any:
+async def run_computron_agent(
+    user_input: str,
+    message_history: Optional[List[ModelMessage]] = None
+) -> AgentRunResult[str] | None:
     """
     Run the COMPUTRON_9000 agent asynchronously with the given user input and optional message history.
 
@@ -108,7 +93,7 @@ async def run_computron_agent(user_input: str, message_history: Optional[List[Mo
         message_history (Optional[List[ModelMessage]]): The message history to provide as context.
 
     Returns:
-        Any: The agent's result object (not just output).
+        AgentRunResult[str] | None: The agent's result object (not just output), or None if an error occurs.
     """
     try:
         if message_history is not None:
@@ -117,5 +102,5 @@ async def run_computron_agent(user_input: str, message_history: Optional[List[Mo
             result = await computron_agent.run(user_input)
         return result
     except Exception as exc:
-        logging.error(f"COMPUTRON_9000 agent error: {exc}")
+        logger.error(f"COMPUTRON_9000 agent error: {exc}")
         return None

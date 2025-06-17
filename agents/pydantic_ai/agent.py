@@ -4,6 +4,8 @@ from typing import Any
 from tools.web.get_webpage import get_webpage, GetWebpageError, GetWebpageResult
 from pydantic_ai import Agent, RunContext
 
+logger = logging.getLogger(__name__)
+
 # Example: Register get_webpage as a tool for the agent
 async def get_webpage_tool(ctx: RunContext[None], url: str) -> GetWebpageResult:
     """
@@ -22,7 +24,7 @@ async def get_webpage_tool(ctx: RunContext[None], url: str) -> GetWebpageResult:
     try:
         return await get_webpage(url)
     except GetWebpageError as e:
-        logging.error(f"get_webpage tool error: {e}")
+        logger.error(f"get_webpage tool error: {e}")
         raise
 
 # To register this tool with your agent, add a decorator in your agent definition file (e.g., computron.py)
