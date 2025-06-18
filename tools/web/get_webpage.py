@@ -1,10 +1,9 @@
 import logging
 import re
 
+import aiohttp
 import bs4
 from pydantic import BaseModel, HttpUrl, ValidationError, TypeAdapter
-
-from playwright.async_api import async_playwright, Error as PlaywrightError
 
 from config import load_config
 
@@ -109,31 +108,33 @@ def _reduce_webpage_context(html: str) -> str:
 
 async def get_webpage(url: str) -> GetWebpageResult:
     """
-    Navigate to a webpage and return its HTML content using Playwright.
-    Applies post-processing to reduce context for LLMs.
+    Fetch the main content from a web page for LLM consumption.
+
+    This tool takes a URL, fetches the web page using a simple HTTP GET request, and returns the cleaned main content of the page. It removes scripts, styles, and extraneous HTML to provide only the essential readable text, making it suitable for LLMs or agents that need to process web content.
 
     Args:
-        url (str): The URL to get.
+        url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
 
     Returns:
-        GetWebpageResult: The result containing the URL and reduced content.
+        GetWebpageResult: An object containing the original URL and the reduced, cleaned HTML/text content of the page.
 
     Raises:
-        GetWebpageError: If navigation or fetching fails.
+        GetWebpageError: If the URL is invalid or the page cannot be fetched.
     """
     validated_url = _validate_url(url)
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            await page.goto(str(validated_url), timeout=15000)
-            html = await page.content()
-            await browser.close()
-            html = _reduce_webpage_context(html)
-            return GetWebpageResult(url=validated_url, html=html)
-    except PlaywrightError as e:
-        logger.error(f"Playwright error for {url}: {e}")
-        raise GetWebpageError(f"Playwright error: {e}")
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(str(validated_url)) as response:
+                if response.status != 200:
+                    logger.error(f"Failed to fetch {url}: HTTP {response.status}")
+                    raise GetWebpageError(f"HTTP error: {response.status}")
+                html = await response.text()
+        html = _reduce_webpage_context(html)
+        return GetWebpageResult(url=validated_url, html=html)
+    except aiohttp.ClientError as e:
+        logger.error(f"aiohttp error for {url}: {e}")
+        raise GetWebpageError(f"aiohttp error: {e}")
     except Exception as e:
         logger.error(f"Unexpected error for {url}: {e}")
         raise GetWebpageError(f"Unexpected error: {e}")
