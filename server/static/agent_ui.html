@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>COMPUTRON AI 🤖</title>
     <style>
+        :root {
+            --primary: #fafafa; /* matches .input-area background */
+            --secondary: #0078fe; /* matches .input-area button background */
+        }
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
         html, body {
@@ -233,6 +237,16 @@
             50% { opacity: 1; }
             100% { opacity: 0; }
         }
+        think {
+            white-space: pre-line;
+            display: block;
+            background: var(--primary);
+            border-left: 4px solid var(--secondary);
+            padding: 0.75em 1em;
+            margin: 1em 0;
+            border-radius: 0.25em;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -260,23 +274,23 @@
         const userInput = document.getElementById('userInput');
         let conversation = [];
 
-        // Enhance code blocks with copy button and language label
+        // Enhance code blocks in assistant messages with copy button and language label
         function enhanceCodeBlocks(container) {
             const pres = container.querySelectorAll('pre code');
             pres.forEach(codeBlock => {
                 const pre = codeBlock.parentElement;
                 // Avoid duplicate headers
                 if (pre.querySelector('.code-header')) return;
-                // Language label
+                // Extract language from class name
                 let lang = codeBlock.className.match(/language-([a-zA-Z0-9]+)/);
                 lang = lang ? lang[1] : '';
-                // Header
+                // Create header for code block
                 const header = document.createElement('div');
                 header.className = 'code-header';
                 const langLabel = document.createElement('span');
                 langLabel.className = 'code-lang-label';
                 langLabel.textContent = lang;
-                // Copy button
+                // Add copy button to code block
                 const copyBtn = document.createElement('button');
                 copyBtn.className = 'copy-btn';
                 copyBtn.type = 'button';
@@ -294,14 +308,34 @@
             });
         }
 
+        // Add a chat message to the UI
         function addMessage(role, content) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${role}`;
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
-            // Use innerHTML for assistant to allow markdown
             if (role === 'assistant') {
-                bubble.innerHTML = marked.parse(content);
+                // Render <think> blocks as raw HTML (including tags), rest as Markdown
+                let rendered = '';
+                let lastIndex = 0;
+                const thinkRegex = /<think>[\s\S]*?<\/think>/gi;
+                let match;
+                while ((match = thinkRegex.exec(content)) !== null) {
+                    // Render any non-think text before this <think>
+                    if (match.index > lastIndex) {
+                        const nonThink = content.slice(lastIndex, match.index);
+                        rendered += marked.parse(nonThink);
+                    }
+                    // Render the <think> block as-is (including tags)
+                    rendered += match[0];
+                    lastIndex = thinkRegex.lastIndex;
+                }
+                // Render any remaining non-think text after the last <think>
+                if (lastIndex < content.length) {
+                    const nonThink = content.slice(lastIndex);
+                    rendered += marked.parse(nonThink);
+                }
+                bubble.innerHTML = rendered;
                 enhanceCodeBlocks(bubble);
             } else {
                 bubble.textContent = content;
@@ -309,26 +343,27 @@
             msgDiv.appendChild(bubble);
             chatMessages.appendChild(msgDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
+            return msgDiv;
         }
 
+        // Remove all loading indicators from the chat
+        function removeLoadingIndicators() {
+            const indicators = chatMessages.querySelectorAll('.loading-indicator');
+            indicators.forEach(ind => ind.remove());
+        }
+
+        // Send a user message to the backend and handle the streaming response
         async function sendMessage(message) {
             addMessage('user', message);
             conversation.push({ role: 'user', content: message });
-            // Add placeholder for assistant
-            const assistantDiv = document.createElement('div');
-            assistantDiv.className = 'message assistant';
-            const bubble = document.createElement('div');
-            bubble.className = 'bubble';
-            // Show loading indicator
+
+            // Show initial loading indicator
             let loadingIndicator = document.createElement('span');
             loadingIndicator.className = 'loading-indicator';
             loadingIndicator.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
-            bubble.appendChild(loadingIndicator);
-            assistantDiv.appendChild(bubble);
-            chatMessages.appendChild(assistantDiv);
+            chatMessages.appendChild(loadingIndicator);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            // Prepare request
             const body = {
                 message: message,
                 stream: true
@@ -344,36 +379,48 @@
                 let assistantMsg = '';
                 let decoder = new TextDecoder();
                 let isFinal = false;
+                let lastAssistantDiv = null;
+                // Remove initial loading indicator before streaming
+                loadingIndicator.remove();
+                // Read streamed response from backend
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
                     const chunk = decoder.decode(value, { stream: true });
-                    chunk.split('\n').forEach(line => {
-                        if (line.trim()) {
-                            try {
-                                const data = JSON.parse(line);
-                                if (data.response) {
-                                    assistantMsg += data.response;
-                                    bubble.innerHTML = marked.parse(assistantMsg);
-                                    enhanceCodeBlocks(bubble);
-                                    if (data.final === true || data.final === 'true') {
-                                        isFinal = true;
-                                    } else {
-                                        // For non-final, show message so far + loading indicator
-                                        bubble.appendChild(loadingIndicator);
-                                    }
-                                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                                }
-                            } catch (e) { /* ignore parse errors */ }
+                    if (!chunk.trim()) continue;
+                    try {
+                        const data = JSON.parse(chunk);
+                        if (data.response) {
+                            assistantMsg += data.response;
+                            // Remove previous loading indicator if present
+                            removeLoadingIndicators();
+                            // Add assistant message
+                            lastAssistantDiv = addMessage('assistant', data.response);
+                            // If not final, show loading indicator below this message
+                            if (data.final !== true && data.final !== 'true') {
+                                let newLoading = document.createElement('span');
+                                newLoading.className = 'loading-indicator';
+                                newLoading.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
+                                chatMessages.appendChild(newLoading);
+                            }
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                            if (data.final === true || data.final === 'true') {
+                                isFinal = true;
+                                // Remove all loading indicators after final message
+                                removeLoadingIndicators();
+                            }
                         }
-                    });
+                    } catch (e) { /* ignore parse errors */ }
                 }
                 conversation.push({ role: 'assistant', content: assistantMsg });
             } catch (err) {
-                bubble.textContent = '[Error: ' + err.message + ']';
+                // Show error in chat bubble if request fails
+                removeLoadingIndicators();
+                addMessage('assistant', '[Error: ' + err.message + ']');
             }
         }
 
+        // Handle form submission for sending user messages
         chatForm.addEventListener('submit', e => {
             e.preventDefault();
             const message = userInput.value.trim();

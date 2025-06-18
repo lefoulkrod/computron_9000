@@ -63,7 +63,7 @@ def get_datetime() -> DateTimeResult:
 @computron_agent.tool
 async def get_webpage_tool(ctx: RunContext[None], url: str) -> GetWebpageResult:
     """
-    Navigate to a webpage and return its HTML content using Playwright.
+    Navigate to a webpage and return its HTML content.
 
     Args:
         ctx (RunContext[None]): The agent run context.

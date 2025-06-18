@@ -6,9 +6,9 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.models.lite_llm import LiteLlm
 
+from tools.web.get_webpage import get_webpage
 from .file_system import file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
-from config import load_config
 from . import get_adk_model
 from tools.misc.datetime import datetime_tool
 from tools.web.search_google import search_google
@@ -27,6 +27,7 @@ computron_agent = LlmAgent(
     tools=[
         AgentTool(agent=file_system_agent,),
         datetime_tool,
+        get_webpage,
     ],
 )
 
