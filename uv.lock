@@ -243,6 +243,7 @@ dependencies = [
     { name = "litellm" },
     { name = "playwright" },
     { name = "playwright-stealth" },
+    { name = "podman" },
     { name = "pydantic" },
     { name = "pydantic-ai" },
     { name = "setuptools" },
@@ -262,6 +263,7 @@ requires-dist = [
     { name = "playwright" },
     { name = "playwright", specifier = ">=1.40.0" },
     { name = "playwright-stealth" },
+    { name = "podman" },
     { name = "pydantic" },
     { name = "pydantic-ai" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0,<8.0.0" },
@@ -1403,6 +1405,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "podman"
+version = "5.4.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fa/5c/ff701e438360a526a728eae3c18ee439c0875e4b937947f1cd04497ae17e/podman-5.4.0.1.tar.gz", hash = "sha256:ee537aaa44ba530fad7cd939d886a7632f9f7018064e7831e8cb614c54cb1789", size = 68926, upload-time = "2025-02-19T16:59:52.064Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/38/6d4416f3ec8dc18149847bbb31cc54af20de063844029b00fb0c0d4c533c/podman-5.4.0.1-py3-none-any.whl", hash = "sha256:abd32e49a66bf18a680d9a0ac3989a3f4a3cc7293bc2a5060653276d8ee712f4", size = 84516, upload-time = "2025-02-19T16:59:50.326Z" },
 ]
 
 [[package]]

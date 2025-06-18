@@ -13,7 +13,8 @@ dependencies = [
     "playwright>=1.40.0",
     "playwright-stealth",
     "setuptools>=65.0.0",
-    "beautifulsoup4"
+    "beautifulsoup4",
+    "podman"
 ]
 [project.optional-dependencies]
 test = [
