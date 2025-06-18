@@ -110,7 +110,7 @@ async def get_webpage(url: str) -> GetWebpageResult:
     """
     Fetch the main content from a web page for LLM consumption.
 
-    This tool takes a URL, fetches the web page using a simple HTTP GET request, and returns the cleaned main content of the page. It removes scripts, styles, and extraneous HTML to provide only the essential readable text, making it suitable for LLMs or agents that need to process web content.
+    This tool takes a URL, fetches the web page using a simple HTTP GET request, and returns the cleaned main content of the page. It removes scripts, styles, and extraneous HTML to provide only the essential readable text, making it suitable for LLMs or agents that need to process web content. Critical HTML elements, such as links, are retained in the output.
 
     Args:
         url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
