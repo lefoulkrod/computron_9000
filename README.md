@@ -1,6 +1,8 @@
 # COMPUTRON_9000
-I am COMPUTRON_9000.
-![alt text](image.png)
+
+COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive chat UI, Python backend, and easy local setup.
+
+![COMPUTRON_9000 Logo](image.png)
 
 ## Features
 - Modern, responsive chat UI (ChatGPT style)
@@ -11,14 +13,15 @@ I am COMPUTRON_9000.
 ## Requirements
 - Python 3.11.12 (see `.python-version`)
 - [uv](https://github.com/astral-sh/uv) (for dependency and venv management)
-- Ollama running locally (default: `http://localhost:11434`)
+- [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`)
+- [Podman](https://podman.io/) installed and running as a user service
 
 ## Setup
 
 1. **Clone the repo:**
    ```sh
-   git clone <this-repo-url>
-   cd chat_app
+   git clone computron_9000
+   cd computron_9000
    ```
 
 2. **Create a virtual environment:**
@@ -36,19 +39,30 @@ I am COMPUTRON_9000.
      .venv\Scripts\activate
      ```
 
-4. **Install dependencies:**
+4. **Enable Podman systemd socket (required):**
+   ```sh
+   systemctl --user enable --now podman.socket
+   ```
+
+5. **Install dependencies:**
    ```sh
    uv pip install -r pyproject.toml
    ```
 
-5. **Start the proxy server:**
+6. **Start the application:**
    ```sh
    uv run main.py
    ```
 
-6. **Open the chat UI:**
+7. **Open the chat UI:**
    - Visit [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Usage
 - Type your message and press Enter or click Send.
+
+## Contributing
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+
+## License
+[MIT](LICENSE)
 

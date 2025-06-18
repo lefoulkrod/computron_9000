@@ -6,6 +6,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.models.lite_llm import LiteLlm
 
+from tools.code.execute_code import execute_program
 from tools.web.get_webpage import get_webpage
 from .file_system import file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
@@ -28,6 +29,7 @@ computron_agent = LlmAgent(
         AgentTool(agent=file_system_agent,),
         datetime_tool,
         get_webpage,
+        execute_program
     ],
 )
 
