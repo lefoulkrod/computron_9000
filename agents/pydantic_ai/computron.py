@@ -1,23 +1,29 @@
 """Definition of the COMPUTRON_9000 LLM agent using Pydantic AI API (decorator-based tools, async)."""
 
 import logging
-from typing import Any, List, Optional
+from typing import List, Optional
 
-from config import load_config
-from pydantic_ai import Agent, RunContext
+
+from pydantic_ai import Agent, Tool
+from pydantic_ai.agent import AgentRunResult
+from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.messages import ModelMessage
-from collections.abc import Coroutine
-from pydantic_ai.agent import AgentRunResult
 
-from .file_system import run_file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
-from tools.misc.datetime import datetime_tool, DateTimeResult
-from tools.web.get_webpage import get_webpage, GetWebpageError, GetWebpageResult
-from tools.web.search_google import search_google, GoogleSearchError, GoogleSearchResults
+from config import load_config
+from tools.code.execute_code import (
+    execute_program,
+    execute_program_with_packages,
+)
+from tools.misc.datetime import datetime_tool
+from tools.web.get_webpage import get_webpage
+from .file_system import run_file_system_agent
+
+logger = logging.getLogger(__name__)
 
 config = load_config()
+
 ollama_model = OpenAIModel(
     model_name=config.llm.model,
     provider=OpenAIProvider(
@@ -29,57 +35,14 @@ ollama_model = OpenAIModel(
 computron_agent = Agent(
     model=ollama_model,
     system_prompt=ROOT_AGENT_PROMPT,
+    tools=[
+        Tool(run_file_system_agent, takes_ctx=True, name="file_system", description="Interact with the file system."),
+        datetime_tool,
+        get_webpage,
+        execute_program,
+        execute_program_with_packages,
+    ],
 )
-
-logger = logging.getLogger(__name__)
-
-@computron_agent.tool
-async def file_system(ctx: RunContext[None], user_input: str) -> Any:
-    """
-    Call the file system agent with the given user input.
-
-    Args:
-        ctx (RunContext[None]): The agent run context.
-        user_input (str): The user's request or command for the file system agent.
-
-    Returns:
-        Any: The file system agent's response.
-    """
-    return await run_file_system_agent(user_input, ctx)
-
-@computron_agent.tool_plain
-def get_datetime() -> DateTimeResult:
-    """
-    Get the current system date and time in human-readable 12-hour format (up to seconds).
-
-    Args:
-        ctx (RunContext[None]): The agent run context (unused).
-
-    Returns:
-        DateTimeResult: Result object containing the formatted date and time string, or error details.
-    """
-    return datetime_tool()
-
-@computron_agent.tool
-async def get_webpage_tool(ctx: RunContext[None], url: str) -> GetWebpageResult:
-    """
-    Navigate to a webpage and return its HTML content.
-
-    Args:
-        ctx (RunContext[None]): The agent run context.
-        url (str): The URL to get.
-
-    Returns:
-        GetWebpageResult: The result containing the URL and HTML content.
-
-    Raises:
-        GetWebpageError: If navigation or fetching fails.
-    """
-    try:
-        return await get_webpage(url)
-    except GetWebpageError as e:
-        logger.error(f"get_webpage tool error: {e}")
-        raise
 
 async def run_computron_agent(
     user_input: str,
