@@ -1,12 +1,12 @@
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Sequence
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from agents.adk.agent import root_agent
-from agents.types import UserMessageEvent
+from agents.types import UserMessageEvent, Data
 
 DEFAULT_USER_ID = "default_user"
 DEFAULT_SESSION_ID = "default_session"
@@ -34,12 +34,13 @@ async def _ensure_session() -> object:
         )
     return session
 
-async def handle_user_message(message: str, stream: bool) -> AsyncGenerator[UserMessageEvent, None]:
+async def handle_user_message(message: str, data: Sequence[Data] | None = None, stream: bool = False) -> AsyncGenerator[UserMessageEvent, None]:
     """
     Handles user message with the agent runner, managing session and runner internally.
 
     Args:
         message (str): The user message to send to the agent.
+        data (Sequence[Data] | None): Optional list of base64-encoded data and content type objects.
         stream (bool): Whether to stream responses (True) or return only the final response (False).
 
     Yields:
@@ -54,6 +55,7 @@ async def handle_user_message(message: str, stream: bool) -> AsyncGenerator[User
         session_service=_session_service
     )
     content = types.Content(role='user', parts=[types.Part(text=message)])
+    # Optionally handle data (not yet used in logic)
     events = runner.run_async(
         user_id=DEFAULT_USER_ID,
         session_id=DEFAULT_SESSION_ID,

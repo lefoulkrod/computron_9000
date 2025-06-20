@@ -12,6 +12,7 @@ if os.environ.get("AGENT_SDK", "pydantic").lower() == "adk":
     from agents.adk.message_handler import handle_user_message
 else:
     from agents.pydantic_ai.message_handler import handle_user_message
+from agents.types import Data
 
 # Local imports
 
@@ -43,6 +44,13 @@ async def handle_post(request):
             return web.json_response({'error': 'Message field is required.'}, status=400, headers=CORS_HEADERS)
         user_query = str(user_query)
         stream = data.get('stream', False)
+        # Handle optional data field (array with 0 or more entries, always with base64 and content_type)
+        data_objs = []
+        data_field = data.get('data')
+        if data_field and len(data_field) > 0:
+            data_objs = [Data(base64_encoded=obj['base64'], content_type=obj['content_type']) for obj in data_field]
+        else:
+            data_objs = None
         if stream:
             # Streaming response
             resp = web.StreamResponse(
@@ -58,7 +66,7 @@ async def handle_post(request):
             )
             await resp.prepare(request)
             try:
-                async for event in handle_user_message(user_query, stream=True):
+                async for event in handle_user_message(user_query, data_objs, stream=True):
                     data = {'response': event.message, 'final': event.final}
                     await resp.write((json.dumps(data) + '\n').encode('utf-8'))
                     if event.final:
@@ -71,7 +79,7 @@ async def handle_post(request):
             return resp
         else:
             # Non-streaming: get the only result from the generator
-            gen = handle_user_message(user_query, stream=False)
+            gen = handle_user_message(user_query, data_objs, stream=False)
             final_response_text = None
             async for event in gen:
                 final_response_text = event.message
