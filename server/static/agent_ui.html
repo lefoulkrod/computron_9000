@@ -119,6 +119,13 @@
             align-self: flex-end;
         }
         .input-area button:disabled { background: #aaa; }
+        .input-area-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            justify-content: flex-end;
+            margin-bottom: 0.5rem;
+        }
         .chat-messages {
             flex: 1;
             padding: 0 0 0 0;
@@ -197,6 +204,24 @@
         .code-lang-label {
             font-family: inherit;
         }
+        .context-section {
+            min-height: 2.2em;
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+            font-size: 0.98em;
+            color: #555;
+        }
+        .context-pill {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #3730a3;
+            border-radius: 999px;
+            padding: 0.2em 0.9em;
+            font-size: 0.98em;
+            margin-right: 0.5em;
+            margin-bottom: 0.2em;
+            border: 1px solid #a5b4fc;
+        }
         @media (max-width: 700px) {
             .main-layout {
                 flex-direction: column;
@@ -259,7 +284,13 @@
             <div class="input-area-col">
                 <form class="input-area" id="chatForm">
                     <textarea id="userInput" placeholder="Type a message..." autocomplete="off" required></textarea>
-                    <button type="submit">Send</button>
+                    <div class="input-area-buttons">
+                        <button type="button" id="fileButton">File</button>
+                        <input type="file" id="fileInput" style="display: none;" />
+                        <button type="submit">Send</button>
+                    </div>
+                    <hr style="margin: 0.5em 0;" />
+                    <div class="context-section" id="contextSection">no context</div>
                 </form>
             </div>
         </div>
@@ -273,6 +304,10 @@
         const chatForm = document.getElementById('chatForm');
         const userInput = document.getElementById('userInput');
         let conversation = [];
+        let selectedFileBase64 = null;
+        let selectedFileName = null;
+        let selectedFileContentType = null;
+        const contextSection = document.getElementById('contextSection');
 
         // Enhance code blocks in assistant messages with copy button and language label
         function enhanceCodeBlocks(container) {
@@ -352,6 +387,40 @@
             indicators.forEach(ind => ind.remove());
         }
 
+        // Handle File button click
+        document.getElementById('fileButton').addEventListener('click', function() {
+            document.getElementById('fileInput').click();
+        });
+
+        // Handle file selection and convert to base64, update context
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                selectedFileBase64 = null;
+                selectedFileName = null;
+                selectedFileContentType = null;
+                updateContextSection();
+                return;
+            }
+            selectedFileName = file.name;
+            selectedFileContentType = file.type;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Remove data URL prefix
+                selectedFileBase64 = e.target.result.split(',')[1];
+                updateContextSection();
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function updateContextSection() {
+            if (selectedFileName) {
+                contextSection.innerHTML = `<span class="context-pill">${selectedFileName}</span>`;
+            } else {
+                contextSection.textContent = 'no context';
+            }
+        }
+
         // Send a user message to the backend and handle the streaming response
         async function sendMessage(message) {
             addMessage('user', message);
@@ -368,6 +437,14 @@
                 message: message,
                 stream: true
             };
+            if (selectedFileBase64 && selectedFileContentType) {
+                body.data = [
+                    {
+                        base64: selectedFileBase64,
+                        content_type: selectedFileContentType
+                    }
+                ];
+            }
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
@@ -417,6 +494,13 @@
                 // Show error in chat bubble if request fails
                 removeLoadingIndicators();
                 addMessage('assistant', '[Error: ' + err.message + ']');
+            } finally {
+                // Reset file after sending
+                selectedFileBase64 = null;
+                selectedFileName = null;
+                selectedFileContentType = null;
+                document.getElementById('fileInput').value = '';
+                updateContextSection();
             }
         }
 

@@ -15,7 +15,10 @@ from tools.fs.fs import (
     search_files,
 )
 
+logger = logging.getLogger(__name__)
+
 config = load_config()
+
 ollama_model = OpenAIModel(
     model_name=config.llm.model,
     provider=OpenAIProvider(
@@ -27,56 +30,29 @@ ollama_model = OpenAIModel(
 file_system_agent = Agent(
     model=ollama_model,
     system_prompt=FILE_SYSTEM_AGENT_PROMPT,
+    tools=[
+        list_directory_contents,
+        get_path_details,
+        read_file_contents,
+        search_files,
+    ],
 )
 
-logger = logging.getLogger(__name__)
-
-@file_system_agent.tool_plain
-def list_dir(path: str) -> Any:
-    """List files and directories at a given path."""
-    try:
-        return list_directory_contents(path)
-    except Exception as exc:
-        logger.error(f"list_directory_contents error: {exc}")
-        return {"status": "error", "contents": [], "error_message": str(exc)}
-
-@file_system_agent.tool_plain
-def path_details(path: str) -> Any:
-    """Get details about a filesystem path."""
-    try:
-        return get_path_details(path)
-    except Exception as exc:
-        logger.error(f"get_path_details error: {exc}")
-        return {"status": "error", "details": {}, "error_message": str(exc)}
-
-@file_system_agent.tool_plain
-def read_file(path: str) -> Any:
-    """Read the contents of a file."""
-    try:
-        return read_file_contents(path)
-    except Exception as exc:
-        logger.error(f"read_file_contents error: {exc}")
-        return {"status": "error", "contents": "", "error_message": str(exc)}
-
-@file_system_agent.tool_plain
-def search(pattern: str) -> Any:
-    """Search for files matching a glob pattern."""
-    try:
-        return search_files(pattern)
-    except Exception as exc:
-        logger.error(f"search_files error: {exc}")
-        return {"status": "error", "matches": [], "error_message": str(exc)}
-
-async def run_file_system_agent(user_input: str, ctx: RunContext[None]) -> Any:
+async def run_file_system_agent(ctx: RunContext[None], user_input: str) -> Any:
     """
-    Run the file system agent asynchronously with the given user input.
+    Execute file system operations as a tool callable by other agents.
+
+    This function exposes the file system agent as an async tool for use by other agents, enabling them to perform directory listings, file detail inspection, file reading, and file searching. It is designed for seamless integration into multi-agent workflows, allowing agents to delegate file system tasks and receive structured results.
 
     Args:
-        user_input (str): The user's request or command.
-        ctx (RunContext[None]): The agent run context.
+        user_input (str): The file system-related request or command from another agent.
+        ctx (RunContext[None]): The agent run context, including usage tracking and metadata.
 
     Returns:
-        Any: The agent's response.
+        Any: The agent's structured response to the file system operation, or an error message if the operation fails.
+
+    Raises:
+        Logs and returns an error dictionary if an exception occurs during execution.
     """
     try:
         result = await file_system_agent.run(user_input, usage=ctx.usage)

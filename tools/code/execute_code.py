@@ -111,6 +111,8 @@ def execute_program(program_text: str, language: str) -> Dict[str, Optional[str]
         logger.error(f"Unsupported language: {language}")
         raise CodeExecutionError(f"Unsupported language: {language}")
 
+    logger.debug(f"Executing program in language: {language}\n--- Program Start ---\n{program_text}\n--- Program End ---")
+
     image = "python:3.12-slim" if language == "python" else "node:20-slim"
     filename = "main.py" if language == "python" else "main.js"
     command = ["python", f"/root/{filename}"] if language == "python" else ["node", f"/root/{filename}"]
@@ -131,7 +133,7 @@ def execute_program(program_text: str, language: str) -> Dict[str, Optional[str]
                 stdout = output.decode().strip() if output else None
 
             ctr.stop()
-            # Do not remove the container as per requirements
+            ctr.remove()
 
             return {"stdout": stdout, "stderr": stderr, "exit_code": str(exit_code) if exit_code is not None else None}
     except Exception as e:
@@ -156,6 +158,7 @@ def execute_program_with_packages(program_text: str, language: str, packages: li
     if language not in ("python", "node"):
         logger.error(f"Unsupported language: {language}")
         raise CodeExecutionError(f"Unsupported language: {language}")
+    logger.debug(f"Executing program with packages in language: {language}\nPackages: {packages}\n--- Program Start ---\n{program_text}\n--- Program End ---")
     image = "python:3.12-slim" if language == "python" else "node:20-slim"
     filename = "main.py" if language == "python" else "main.js"
     command = ["python", f"/root/{filename}"] if language == "python" else ["node", f"/root/{filename}"]
