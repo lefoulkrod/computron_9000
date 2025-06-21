@@ -40,7 +40,7 @@ fi
 if [[ "$COMPUTRON_9000_SHELL_PACKAGE_MANAGER" == "unknown" ]]; then
   echo "Warning: No common package manager found. Some features may not work as expected." >&2
 else
-  echo "Using package manager: $COMPUTRON_9000_SHELL_PACKAGE_MANAGER" >&2
+  echo "Found package manager: $COMPUTRON_9000_SHELL_PACKAGE_MANAGER" >&2
 fi
 
 ########################################################################
