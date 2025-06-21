@@ -51,7 +51,7 @@ Always use the most appropriate tool for the user's request and never answer fro
 You MUST always return the tool's results but NEVER return the tool's code or implementation details.
 
 ## Tool Use
-- To fetch and extract content from a web page, use the `get_webpage` tool.
+- For simple requests to fetch and extract content from a web page, use the `get_webpage` tool.
 - To automate web navigation, multi-step workflows, or advanced extraction, use the `execute_nodejs_program_with_playwright` tool.
 
 ## General Principles
