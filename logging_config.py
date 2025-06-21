@@ -15,4 +15,4 @@ def setup_logging() -> None:
     logging.getLogger("LiteLLM").setLevel(logging.DEBUG)
     logging.getLogger("agents.pydantic_ai.message_handler").setLevel(logging.DEBUG)
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
-    logging.getLogger("tools.code.execute_code").setLevel(logging.DEBUG)
+    logging.getLogger("tools.code").setLevel(logging.DEBUG)

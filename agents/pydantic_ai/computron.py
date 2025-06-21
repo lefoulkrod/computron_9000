@@ -16,6 +16,7 @@ from tools.code.execute_code import (
     execute_program,
     execute_program_with_packages,
 )
+from tools.code.execute_playwright import execute_playwright_script
 from tools.misc.datetime import datetime_tool
 from tools.web.get_webpage import get_webpage
 from .file_system import run_file_system_agent
@@ -41,6 +42,7 @@ computron_agent = Agent(
         get_webpage,
         execute_program,
         execute_program_with_packages,
+        execute_playwright_script,
     ],
 )
 

@@ -28,9 +28,11 @@ class GetWebpageResult(BaseModel):
     Args:
         url (HttpUrl): The URL that was fetched.
         html (str): The full HTML content of the page.
+        response_code (int): The HTTP response code returned by the server.
     """
     url: HttpUrl
     html: str
+    response_code: int
 
 
 class GetWebpageError(Exception):
@@ -116,22 +118,31 @@ async def get_webpage(url: str) -> GetWebpageResult:
         url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
 
     Returns:
-        GetWebpageResult: An object containing the original URL and the reduced, cleaned HTML/text content of the page.
+        GetWebpageResult: An object containing the original URL, the reduced, cleaned HTML/text content of the page, and the HTTP response code.
 
     Raises:
-        GetWebpageError: If the URL is invalid or the page cannot be fetched.
+        GetWebpageError: For client or unknown errors.
     """
     validated_url = _validate_url(url)
+    html = ""
+    response_code = None
     try:
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(str(validated_url)) as response:
-                if response.status != 200:
-                    logger.error(f"Failed to fetch {url}: HTTP {response.status}")
-                    raise GetWebpageError(f"HTTP error: {response.status}")
-                html = await response.text()
-        html = _reduce_webpage_context(html)
-        return GetWebpageResult(url=validated_url, html=html)
+                response_code = response.status
+                try:
+                    html = await response.text()
+                except Exception as e:
+                    logger.error(f"Failed to read response body for {url}: {e}")
+                    html = ""
+                if response_code != 200:
+                    logger.debug(f"Non-200 response for {url}: HTTP {response_code}")
+        if html:
+            reduced_html = _reduce_webpage_context(html)
+        else:
+            reduced_html = ""
+        return GetWebpageResult(url=validated_url, html=reduced_html, response_code=response_code)
     except aiohttp.ClientError as e:
         logger.error(f"aiohttp error for {url}: {e}")
         raise GetWebpageError(f"aiohttp error: {e}")
