@@ -36,7 +36,7 @@ computron_agent = Agent(
     instructions=ROOT_AGENT_PROMPT,
     tools=[
         Tool(run_file_system_agent, takes_ctx=True, name="file_system", description="Interact with the file system."),
-        Tool(run_web_agent, takes_ctx=True, name="web", description="Navigate, search, and extract information from the web."),
+        Tool(run_web_agent, takes_ctx=True, name="web", description="Tool for delegating internet-enabled goal achievement to a specialized web agent."),
         datetime_tool,
         execute_python_program,
         execute_nodejs_program,

@@ -32,15 +32,15 @@ web_agent = Agent(
     ],
 )
 
-async def run_web_agent(ctx: RunContext[None], user_input: str) -> Any:
+async def run_web_agent(ctx: RunContext[None], instructions: str) -> Any:
     """
-    Execute web navigation, search, and extraction tasks as a tool callable by other agents.
+    Tool for delegating internet-enabled goal achievement to a specialized web agent.
 
-    This function exposes the web agent as an async tool for use by other agents, enabling them to perform web search, navigation, and multi-step workflows. It is designed for seamless integration into multi-agent workflows, allowing agents to delegate web tasks and receive structured results.
+    This function acts as a tool that allows other agents to hand off complex, internet-enabled tasks to a dedicated web agent. The web agent can perform web search, navigation, extraction, and multi-step workflows to achieve specified goals. Callers should provide detailed instructions describing the specific goal or outcome they want the web agent to accomplish. This enables seamless delegation of internet-based objectives within multi-agent systems.
 
     Args:
-        user_input (str): The web-related request or command from another agent.
         ctx (RunContext[None]): The agent run context, including usage tracking and metadata.
+        instructions (str): Detailed instructions describing the goal the web agent should achieve using internet resources.
 
     Returns:
         Any: The agent's structured response to the web operation, or an error message if the operation fails.
@@ -48,9 +48,9 @@ async def run_web_agent(ctx: RunContext[None], user_input: str) -> Any:
     Raises:
         Logs and returns an error dictionary if an exception occurs during execution.
     """
-    logger.debug(f"Running web agent with input: {user_input}")
+    logger.debug(f"Running web agent with instructions: {instructions}")
     try:
-        result = await web_agent.run(user_input, usage=ctx.usage)
+        result = await web_agent.run(instructions, usage=ctx.usage)
         return result.output
     except Exception as exc:
         logger.error(f"Web agent error: {exc}", exc_info=True)
