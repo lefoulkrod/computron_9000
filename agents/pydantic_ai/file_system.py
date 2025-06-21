@@ -24,12 +24,11 @@ ollama_model = OpenAIModel(
     provider=OpenAIProvider(
         base_url="http://localhost:11434/v1",
     ),
-    system_prompt_role="system",
 )
 
 file_system_agent = Agent(
     model=ollama_model,
-    system_prompt=FILE_SYSTEM_AGENT_PROMPT,
+    instructions=FILE_SYSTEM_AGENT_PROMPT,
     tools=[
         list_directory_contents,
         get_path_details,

@@ -21,12 +21,11 @@ ollama_model = OpenAIModel(
     provider=OpenAIProvider(
         base_url="http://localhost:11434/v1",
     ),
-    system_prompt_role="system",
 )
 
 web_agent = Agent(
     model=ollama_model,
-    system_prompt=WEB_AGENT_PROMPT,
+    instructions=WEB_AGENT_PROMPT,
     tools=[
         get_webpage,
         execute_nodejs_program_with_playwright,
@@ -49,6 +48,7 @@ async def run_web_agent(ctx: RunContext[None], user_input: str) -> Any:
     Raises:
         Logs and returns an error dictionary if an exception occurs during execution.
     """
+    logger.debug(f"Running web agent with input: {user_input}")
     try:
         result = await web_agent.run(user_input, usage=ctx.usage)
         return result.output
