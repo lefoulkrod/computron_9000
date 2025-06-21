@@ -9,6 +9,7 @@ COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive c
 - System prompt for consistent assistant behavior
 - Python proxy server for CORS and API routing
 - Easy setup with [uv](https://github.com/astral-sh/uv) and `pyproject.toml`
+- **Playwright test execution tool**: Run Playwright test scripts in a containerized Node.js environment using Podman. See `tools/code/execute_playwright.py` for details.
 
 ## Requirements
 - Python 3.11.12 (see `.python-version`)
@@ -52,6 +53,10 @@ COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive c
 6. **Start the application:**
    ```sh
    uv run main.py
+   ```
+6. **Pull playwright image:**
+   ```sh
+   docker pull mcr.microsoft.com/playwright:v1.50.0-noble
    ```
 
 7. **Open the chat UI:**
