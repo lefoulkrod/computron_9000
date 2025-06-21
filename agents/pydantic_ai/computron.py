@@ -13,10 +13,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from agents.prompt import ROOT_AGENT_PROMPT
 from config import load_config
 from tools.code.execute_code import (
-    execute_program,
-    execute_program_with_packages,
+    execute_nodejs_program_with_playwright,
+    execute_python_program,
 )
-from tools.code.execute_playwright import execute_playwright_script
+from tools.code.execute_code import execute_nodejs_program
 from tools.misc.datetime import datetime_tool
 from tools.web.get_webpage import get_webpage
 from .file_system import run_file_system_agent
@@ -40,9 +40,9 @@ computron_agent = Agent(
         Tool(run_file_system_agent, takes_ctx=True, name="file_system", description="Interact with the file system."),
         datetime_tool,
         get_webpage,
-        execute_program,
-        execute_program_with_packages,
-        execute_playwright_script,
+        execute_python_program,
+        execute_nodejs_program,
+        execute_nodejs_program_with_playwright
     ],
 )
 

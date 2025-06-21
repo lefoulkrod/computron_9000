@@ -1,5 +1,5 @@
 """
-Shared functions for code execution tools (Python, Node.js, Playwright) using Podman containers.
+Container core functions for code execution tools (Python, Node.js) using containers.
 
 This module provides container management, code upload, and package installation utilities for use by code execution tools.
 """
@@ -91,3 +91,75 @@ def _install_packages(ctr: Container, language: str, packages: List[str]) -> Non
     if exit_code != 0:
         stderr = output[1].decode().strip() if output and isinstance(output, tuple) and output[1] else ""
         raise CodeExecutionError(f"Package installation failed: {stderr}")
+
+def _parse_container_output(exit_code: int, output) -> dict:
+    """
+    Parse the output from a container exec_run call.
+
+    Args:
+        exit_code (int): The exit code from the command.
+        output: The output from exec_run (tuple or bytes).
+
+    Returns:
+        dict: Dictionary with 'stdout', 'stderr', and 'exit_code'.
+    """
+    stdout = None
+    stderr = None
+    if isinstance(output, tuple) and len(output) == 2:
+        stdout = output[0].decode().strip() if output[0] else None
+        stderr = output[1].decode().strip() if output[1] else None
+    elif isinstance(output, bytes):
+        stdout = output.decode().strip() if output else None
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": str(exit_code) if exit_code is not None else None,
+    }
+
+def _run_code_in_container(
+    image: str,
+    filename: str,
+    command: list[str],
+    program_text: str,
+    language: str,
+    packages: list[str] | None = None,
+) -> dict:
+    """
+    Run code in a container, handling package install, upload, execution, and cleanup.
+
+    Args:
+        image (str): Container image.
+        filename (str): Name of the code file in the container.
+        command (list[str]): Command to execute.
+        program_text (str): The code to run.
+        language (str): Language for package install ('python' or 'node').
+        packages (list[str] | None): Packages to install.
+
+    Returns:
+        dict: Dictionary with 'stdout', 'stderr', and 'exit_code'.
+
+    Raises:
+        CodeExecutionError: On any failure.
+    """
+    ctr = None
+    packages = packages or []
+    logger.debug(f"Running code in container: image={image}, filename={filename}, language={language}, packages={packages}\n--- Code Start ---\n{program_text}\n--- Code End ---")
+    try:
+        ctr = _create_and_start_container(image)
+        _install_packages(ctr, language, packages)
+        _upload_code_to_container(ctr, filename, program_text)
+        exit_code, output = ctr.exec_run(command, stdout=True, stderr=True, demux=True)
+        exit_code = exit_code if exit_code is not None else -1
+        result = _parse_container_output(exit_code, output)
+        logger.debug(f"Execution completed: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Execution in container failed: {e}")
+        raise CodeExecutionError(f"Execution in container failed: {e}")
+    finally:
+        if ctr is not None:
+            try:
+                ctr.stop()
+                ctr.remove()
+            except Exception as cleanup_err:
+                logger.error(f"Failed to cleanup container: {cleanup_err}")
