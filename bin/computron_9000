@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# computron_9000 — interact with gemma3:4b via Ollama.
+# Generates Fedora-42-compatible Bash commands, explains them, or
+# runs them and explains the resulting output.
+#
+#   chmod +x computron_9000   # then place somewhere in $PATH
+#
+# Requires: curl, jq, a local Ollama server on :11434,
+#           $COMPUTRON_9000_SHELL_MODEL env var pointing at gemma3:4b (or similar).
+
+set -euo pipefail
+
+# Set default model if not found in env
+: "${COMPUTRON_9000_SHELL_MODEL:="qwen2.5-coder:32b"}"
+
+# Check if Ollama is running
+if ! curl -sf http://localhost:11434/ > /dev/null; then
+  echo "Error: Ollama server is not running on :11434." >&2
+  echo "To start Ollama, run: ollama serve" >&2
+  exit 1
+fi
+
+# Detect package manager
+if [[ -z "${COMPUTRON_9000_SHELL_PACKAGE_MANAGER:-}" ]]; then
+  if command -v dnf >/dev/null 2>&1; then
+    COMPUTRON_9000_SHELL_PACKAGE_MANAGER="dnf"
+  elif command -v apt >/dev/null 2>&1; then
+    COMPUTRON_9000_SHELL_PACKAGE_MANAGER="apt"
+  elif command -v pacman >/dev/null 2>&1; then
+    COMPUTRON_9000_SHELL_PACKAGE_MANAGER="pacman"
+  elif command -v zypper >/dev/null 2>&1; then
+    COMPUTRON_9000_SHELL_PACKAGE_MANAGER="zypper"
+  elif command -v apk >/dev/null 2>&1; then
+    COMPUTRON_9000_SHELL_PACKAGE_MANAGER="apk"
+  else
+    COMPUTRON_9000_SHELL_PACKAGE_MANAGER="unknown"
+  fi
+fi
+
+if [[ "$COMPUTRON_9000_SHELL_PACKAGE_MANAGER" == "unknown" ]]; then
+  echo "Warning: No common package manager found. Some features may not work as expected." >&2
+else
+  echo "Using package manager: $COMPUTRON_9000_SHELL_PACKAGE_MANAGER" >&2
+fi
+
+########################################################################
+# Helper: generate an explanation                                       
+#   $1 – command text or question                                        
+#   $2 – (optional) captured output to interpret                         
+########################################################################
+explain() {
+  local cmd="$1"
+  local out="${2-}"
+
+  # System prompt for explanation mode
+  local sys_prompt=$(
+    cat <<'EOF'
+You are Computron 9000, an expert Bash assistant for Linux-like operating systems.
+Explain Bash commands and/or their output clearly and concisely for an
+intermediate shell user. Do NOT emit additional shell commands unless
+explicitly asked. Assume the user has access to common Unix utilities and tools.
+EOF
+  )
+
+  # Build the user prompt
+  local user_prompt
+  if [[ -n "$out" ]]; then
+    user_prompt=$(
+      cat <<EOF
+Please explain what this command does **and** interpret its output.
+
+Command:
+$cmd
+
+Output:
+$out
+EOF
+    )
+  else
+    user_prompt="Explain the following Bash command:\n$cmd"
+  fi
+
+  curl -s http://localhost:11434/api/generate \
+    -d "$(jq -nc \
+          --arg model  "$COMPUTRON_9000_SHELL_MODEL" \
+          --arg system "$sys_prompt" \
+          --arg prompt "$user_prompt" \
+          '{model:$model,system:$system,prompt:$prompt,stream:false}')" |
+    jq -r '.response'
+}
+
+########################################################################
+# Helper: generate a single-line Bash command from the model            
+#   $1 – the user’s natural-language prompt                             
+########################################################################
+generate_command() {
+  local nl_prompt="$1"
+
+  local sys_prompt=$(
+    cat <<EOF
+You are Computron 9000, a helpful AI assistant for Linux-like operating systems.
+Respond with exactly one executable Bash command line, no comments, no
+markdown, no code fences.
+
+Assumptions:
+- Non-root user with sudo.
+- Package manager is $COMPUTRON_9000_SHELL_PACKAGE_MANAGER.
+- Safe commands only (no destructive actions).
+- Common Unix utilities available (curl, jq, grep, awk, ...).
+EOF
+  )
+
+  curl -s http://localhost:11434/api/generate \
+    -d "$(jq -nc \
+          --arg model  "$COMPUTRON_9000_SHELL_MODEL" \
+          --arg system "$sys_prompt" \
+          --arg prompt "$nl_prompt" \
+          '{model:$model,system:$system,prompt:$prompt,stream:false}')" |
+    jq -r '.response'
+}
+
+########################################################################
+# Main logic                                                            
+########################################################################
+if [[ $# -eq 0 ]]; then
+  echo "Usage: $0 <prompt> | /explain <command>" >&2
+  exit 1
+fi
+
+PROMPT="$*"
+
+# Pure explanation shortcut:  computron_9000 /explain ls -l
+if [[ "$PROMPT" == /explain* ]]; then
+  echo
+  explain "${PROMPT#/explain }"
+  exit 0
+fi
+
+# 1. Ask model for a Bash command
+CMD=$(generate_command "$PROMPT")
+
+# 2. Allow user to edit the command (interactive shells only)
+if [[ -t 0 && -t 1 && $- == *i* ]]; then
+  echo
+  read -er -p "$ " -i "$CMD" CMD
+  [[ -z ${CMD// } ]] && { echo "Cancelled."; exit 0; }
+fi
+
+# 3. Confirm / run / explain
+while true; do
+  echo
+  echo "Generated command:"
+  echo "  $CMD"
+  echo -n "Choose: [y = run, r = run+explain, e = explain, N = cancel] "
+  read -r ANSWER
+
+  case "$ANSWER" in
+    [Yy])                     # run only
+      echo "+ $CMD"
+      bash -c "$CMD"
+      exit 0
+      ;;
+    [Rr])                     # run and explain output
+      echo "+ $CMD"
+      OUTPUT=$(bash -c "$CMD" 2>&1)
+      echo
+      echo "─ Command output ─────────────────────────────────────────────"
+      printf '%s\n' "$OUTPUT"
+      echo "──────────────────────────────────────────────────────────────"
+      echo
+      EXPL=$(explain "$CMD" "$OUTPUT")
+      echo "Explanation:"
+      printf '%s\n' "$EXPL"
+      exit 0
+      ;;
+    [Ee])                     # just explain
+      echo
+      printf '%s\n' "$(explain "$CMD")"
+      echo
+      ;;
+    *)                        # cancel / default
+      echo "Cancelled."
+      exit 0
+      ;;
+  esac
+done
+
