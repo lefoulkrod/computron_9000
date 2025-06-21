@@ -29,12 +29,11 @@ ollama_model = OpenAIModel(
     provider=OpenAIProvider(
         base_url="http://localhost:11434/v1",
     ),
-    system_prompt_role="system",
 )
 
 computron_agent = Agent(
     model=ollama_model,
-    system_prompt=ROOT_AGENT_PROMPT,
+    instructions=ROOT_AGENT_PROMPT,
     tools=[
         Tool(run_file_system_agent, takes_ctx=True, name="file_system", description="Interact with the file system."),
         Tool(run_web_agent, takes_ctx=True, name="web", description="Navigate, search, and extract information from the web."),

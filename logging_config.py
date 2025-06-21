@@ -10,9 +10,9 @@ def setup_logging() -> None:
     specific third‑party libraries and application modules.
     """
 
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    logging.basicConfig(level=logging.WARN, stream=sys.stdout)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("LiteLLM").setLevel(logging.DEBUG)
-    logging.getLogger("agents.pydantic_ai.message_handler").setLevel(logging.DEBUG)
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+    logging.getLogger("agents.pydantic_ai").setLevel(logging.DEBUG)
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
-    logging.getLogger("tools.code").setLevel(logging.DEBUG)
+    logging.getLogger("tools").setLevel(logging.DEBUG)

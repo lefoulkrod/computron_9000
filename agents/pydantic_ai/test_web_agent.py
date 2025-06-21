@@ -16,7 +16,6 @@ async def test_run_web_agent_returns_output():
         model=OpenAIModel(
             model_name=config.llm.model,
             provider=OpenAIProvider(base_url="http://localhost:11434/v1"),
-            system_prompt_role="system",
         ),
         usage=Usage(),
         prompt=None,
