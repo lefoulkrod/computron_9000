@@ -8,12 +8,11 @@ from google.adk.models.lite_llm import LiteLlm
 
 from tools.code.execute_code import execute_python_program
 from tools.code.execute_code import execute_nodejs_program
-from tools.web.get_webpage import get_webpage
+from .web import web_agent
 from .file_system import file_system_agent
 from agents.prompt import ROOT_AGENT_PROMPT
 from . import get_adk_model
 from tools.misc.datetime import datetime_tool
-from tools.web.search_google import search_google
 
 MODEL = get_adk_model()
 
@@ -28,8 +27,8 @@ computron_agent = LlmAgent(
     instruction=ROOT_AGENT_PROMPT,
     tools=[
         AgentTool(agent=file_system_agent,),
+        AgentTool(agent=web_agent,),
         datetime_tool,
-        get_webpage,
         execute_python_program,
         execute_nodejs_program
     ],
