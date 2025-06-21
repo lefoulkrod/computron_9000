@@ -65,6 +65,16 @@ COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive c
 ## Usage
 - Type your message and press Enter or click Send.
 
+## Agents
+
+### Web Agent
+
+The `web` agent is an expert AI agent specialized in navigating, searching, and extracting information from the web. It can:
+- Fetch and extract content from web pages
+- Automate web navigation and multi-step workflows using Playwright
+
+The web agent is used by COMPUTRON_9000 as a tool for all web-based tasks, enabling advanced workflows such as multi-page navigation and summarization.
+
 ## Contributing
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
