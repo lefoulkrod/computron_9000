@@ -1,12 +1,15 @@
-import os
 from typing import AsyncGenerator, Sequence
+import logging
 
+from google.adk.events.event import Event
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from agents.adk.agent import root_agent
 from agents.types import UserMessageEvent, Data
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_USER_ID = "default_user"
 DEFAULT_SESSION_ID = "default_session"
@@ -56,24 +59,13 @@ async def handle_user_message(message: str, data: Sequence[Data] | None = None, 
     )
     content = types.Content(role='user', parts=[types.Part(text=message)])
     # Optionally handle data (not yet used in logic)
-    events = runner.run_async(
+    generator: AsyncGenerator[Event, None] = runner.run_async(
         user_id=DEFAULT_USER_ID,
         session_id=DEFAULT_SESSION_ID,
         new_message=content
     )
-    if stream:
-        async for event in events:
-            if event.content and event.content.parts and event.content.parts[0].text is not None:
-                yield UserMessageEvent(message=event.content.parts[0].text, final=event.is_final_response())
-            if event.is_final_response():
-                break
-    else:
-        final_response_text = "Agent did not produce a final response."
-        async for event in events:
-            if event.is_final_response():
-                if event.content and event.content.parts and event.content.parts[0].text is not None:
-                    final_response_text = str(event.content.parts[0].text)
-                elif event.actions and getattr(event.actions, 'escalate', False):
-                    final_response_text = f"Agent escalated: {getattr(event, 'error_message', 'No specific message.')}"
-                break
-        yield UserMessageEvent(message=final_response_text or "Agent did not produce a final response.", final=True)
+    async for event in generator:
+        if event.content and event.content.parts and event.content.parts[0].text is not None:
+            yield UserMessageEvent(message=event.content.parts[0].text, final=event.is_final_response())
+        if event.is_final_response():
+            break

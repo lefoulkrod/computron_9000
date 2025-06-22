@@ -1,3 +1,4 @@
+````instructions
 # Copilot Custom Instructions
 
 - Always format Python imports according to PEP 8:
@@ -33,6 +34,8 @@
   - Use `logger = logging.getLogger(__name__)` at the top of the module.
   - Log with `logger.debug()`, `logger.info()`, etc., instead of the root `logging` functions.
   - This ensures logging configuration is respected and allows for per-module log control.
+- Always prefer package initializers (i.e., `__init__.py` aggregator modules) to re-export public functions, classes, and types for clean and unified imports across your codebase.
+- Place all tests in the `tests/` directory, mirroring the source project structure with matching subfolders. For example, tests for `agents/adk/agent.py` should be located in `tests/agents/adk/test_agent.py`. This ensures consistency, discoverability, and maintainability of your test suite.
 
 Example import order:
 ```python
@@ -57,4 +60,4 @@ def foo(bar: int) -> str:
     Returns:
         str: Description of the return value.
     """
-```
+````
