@@ -67,7 +67,8 @@ def execute_nodejs_program(program_text: str, packages: Optional[List[str]] = No
 
 def execute_nodejs_program_with_playwright(program_text: str, packages: Optional[List[str]] = None) -> Dict[str, Optional[str]]:
     """
-    Execute a Node.js program in a container with Playwright and browsers preinstalled, suitable for web navigation tasks.
+    Execute a Node.js program in a container that has Playwright and browsers preinstalled, suitable for web navigation tasks.
+    This tool can alos be used to execute any arbitrary Node.js code, not just Playwright scripts.
 
     Args:
         program_text (str): The Node.js script to execute.

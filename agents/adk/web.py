@@ -1,16 +1,20 @@
 # Standard library imports
-"""Web agent definition."""
+import logging
 
 # Third-party imports
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.models.llm_response import LlmResponse
+from google.adk.agents.callback_context import CallbackContext
 
-from tools.web.get_webpage import get_webpage
-from tools.web.search_google import search_google
+from agents.adk import remove_thoughts_callback
+from tools.web import get_webpage, html_find_elements
 from tools.code.execute_code import execute_nodejs_program_with_playwright
 from agents.prompt import WEB_AGENT_PROMPT
-from config import load_config
 from . import get_adk_model
+from .callbacks import log_llm_response_callback, log_llm_request_callback
+
+logger = logging.getLogger(__name__)
 
 MODEL = get_adk_model()
 
@@ -20,14 +24,16 @@ web_agent = LlmAgent(
         model=MODEL,
     ),
     description="""
-    An expert AI agent specialized in web navigation, search, and summarization. 
-    The agent can use the following tools to assist with web-based tasks:
-    - `get_webpage`: Fetch and extract content from a web page.
-    - `execute_nodejs_program_with_playwright`: Run Node.js scripts with Playwright for advanced web automation and multi-step workflows.
+    An expert AI agent specialized in navigating the web including viewing web pages, navigating through websites, and downloading content from the internet.
+    The agent will perform the requested web operations based on the provided instructions, which should describe the specific goal or outcome desired.
+    The agent will return a summary of the web content, extracted data, or results of the web operations performed.
     """,
     instruction=WEB_AGENT_PROMPT,
     tools=[
         get_webpage,
-        execute_nodejs_program_with_playwright
+        execute_nodejs_program_with_playwright,
+        html_find_elements
     ],
+    after_model_callback=log_llm_response_callback,
+    before_model_callback=[remove_thoughts_callback, log_llm_request_callback],
 )
