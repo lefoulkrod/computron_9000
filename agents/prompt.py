@@ -40,7 +40,7 @@ You MUST always return the tool's results but NEVER return the tool's code or im
 - To search for files using patterns or wildcards (glob matching), use the `search_files` tool.
 
 ## Response Format
-- Return the raw results of the tool call without summarizing or interpreting them.
+- You MUST return the raw results of the tool call without summarizing or interpreting them.
 
 """
 

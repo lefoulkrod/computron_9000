@@ -17,3 +17,4 @@ def setup_logging() -> None:
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
     logging.getLogger("tools").setLevel(logging.DEBUG)
     logging.getLogger("agents.adk").setLevel(logging.DEBUG)
+    logging.getLogger("google.adk").setLevel(logging.DEBUG)
