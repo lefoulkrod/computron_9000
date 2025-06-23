@@ -6,6 +6,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.models.lite_llm import LiteLlm
 
+from agents.adk.callbacks.callbacks import log_llm_request_callback, log_llm_response_callback
 from tools.code.execute_code import execute_python_program
 from tools.code.execute_code import execute_nodejs_program
 from .web import web_agent
@@ -26,11 +27,16 @@ computron_agent = LlmAgent(
     ),
     instruction=ROOT_AGENT_PROMPT,
     tools=[
-        AgentTool(agent=file_system_agent,),
+        #AgentTool(agent=file_system_agent,),
         AgentTool(agent=web_agent,),
         datetime_tool,
         execute_python_program,
         execute_nodejs_program
     ],
+    sub_agents=[
+        file_system_agent,
+    ],
+    after_model_callback=log_llm_response_callback,
+    before_model_callback=[log_llm_request_callback],
 )
 
