@@ -11,7 +11,7 @@
 set -euo pipefail
 
 # Set default model if not found in env
-: "${COMPUTRON_9000_SHELL_MODEL:="qwen2.5-coder:32b"}"
+: "${COMPUTRON_9000_SHELL_MODEL:="gemma3:12b"}"
 
 # Check if Ollama is running
 if ! curl -sf http://localhost:11434/ > /dev/null; then
