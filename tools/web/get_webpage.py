@@ -4,7 +4,7 @@ import re
 import bs4
 
 from tools.web.get_webpage_raw import get_webpage_raw
-from tools.web.schemas import GetWebpageResult, GetWebpageError
+from tools.web.types import GetWebpageResult, GetWebpageError
 
 logger = logging.getLogger(__name__)
 

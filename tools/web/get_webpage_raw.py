@@ -3,7 +3,7 @@ import logging
 import aiohttp
 from pydantic import HttpUrl, ValidationError, TypeAdapter
 
-from tools.web.schemas import GetWebpageResult, GetWebpageError
+from tools.web.types import GetWebpageResult, GetWebpageError
 
 logger = logging.getLogger(__name__)
 

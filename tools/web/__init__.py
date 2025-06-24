@@ -1,5 +1,5 @@
 from .get_webpage import get_webpage, get_webpage_raw
-from .schemas import GetWebpageResult, GetWebpageError
+from .types import GetWebpageResult, GetWebpageError
 from .html_find_elements import html_find_elements, HtmlElementResult
 from .search_google import search_google, GoogleSearchResults, GoogleSearchResult, GoogleSearchError
 

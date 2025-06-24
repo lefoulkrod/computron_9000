@@ -4,10 +4,7 @@ import logging
 # Third-party imports
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
-from google.adk.models.llm_response import LlmResponse
-from google.adk.agents.callback_context import CallbackContext
 
-from agents.adk.callbacks import remove_thoughts_callback
 from tools.web import get_webpage, html_find_elements, search_google
 from tools.code.execute_code import execute_nodejs_program_with_playwright
 from agents.prompt import WEB_AGENT_PROMPT
@@ -36,5 +33,6 @@ web_agent = LlmAgent(
         search_google,
     ],
     after_model_callback=log_llm_response_callback,
-    before_model_callback=[remove_thoughts_callback, log_llm_request_callback],
+    before_model_callback=[log_llm_request_callback],
 )
+
