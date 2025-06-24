@@ -199,7 +199,7 @@ async def search_google(
     max_results: int = 5
 ) -> GoogleSearchResults:
     """
-    Search Google and return the top results using Playwright with advanced anti-detection.
+    Search Google and return the top results.
 
     Args:
         query (str): The search query string.
@@ -209,7 +209,7 @@ async def search_google(
         GoogleSearchResults: The search results.
 
     Raises:
-        GoogleSearchError: If search or scraping fails.
+        GoogleSearchError: If search fails.
     """
     try:
         validated = GoogleSearchInput(query=query, max_results=max_results)

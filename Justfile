@@ -1,8 +1,12 @@
 # Justfile for computron_9000 project
 
-# Run the main application
-run:
-    uv run main.py
+# Run the main application with the adk agent SDK
+run-adk:
+    AGENT_SDK=adk uv run main.py
+
+# Run the main application with pydantic agent SDK
+run-pydantic:
+    AGENT_SDK=pydantic uv run main.py
 
 # List outdated dependencies (top-level only)
 outdated:
