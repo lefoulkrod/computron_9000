@@ -10,11 +10,10 @@ dependencies = [
     "pydantic-ai",
     "pydantic",
     "playwright",
-    "playwright>=1.40.0",
-    "playwright-stealth",
+    "playwright==1.52.0",
     "setuptools>=65.0.0",
     "beautifulsoup4",
-    "podman"
+    "podman==5.4.0.1",
 ]
 [project.optional-dependencies]
 test = [

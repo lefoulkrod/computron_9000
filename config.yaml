@@ -1,5 +1,11 @@
 llm:
-  model: qwen3:32b-24576k
+  model: qwen3:30b-a3b-40960k
 adk:
   provider: ollama_chat/
+tools:
+  web:
+    search_google:
+      state_file: "/home/larry/.computron_9000/.browser-state.json"
+      no_save_state: false
+      timeout: 6000
 
