@@ -27,14 +27,14 @@ computron_agent = LlmAgent(
     ),
     instruction=ROOT_AGENT_PROMPT,
     tools=[
-        #AgentTool(agent=file_system_agent,),
+        AgentTool(agent=file_system_agent,),
         AgentTool(agent=web_agent,),
         datetime_tool,
         execute_python_program,
         execute_nodejs_program
     ],
     sub_agents=[
-        file_system_agent,
+        #file_system_agent,
     ],
     after_model_callback=log_llm_response_callback,
     before_model_callback=[log_llm_request_callback],

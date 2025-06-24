@@ -10,10 +10,31 @@ class LlmConfig(BaseModel):
 
     model: str
 
+
 class AdkConfig(BaseModel):
     """Settings for ADK agents."""
 
     provider: str
+
+
+class SearchGoogleConfig(BaseModel):
+    """Settings for Google search tool."""
+    
+    state_file: str = "./browser-state.json"
+    no_save_state: bool = False
+    timeout: int = 6000
+
+
+class WebToolsConfig(BaseModel):
+    """Settings for web tools."""
+    
+    search_google: SearchGoogleConfig = SearchGoogleConfig()
+
+
+class ToolsConfig(BaseModel):
+    """Settings for tools."""
+    
+    web: WebToolsConfig = WebToolsConfig()
 
 
 class AppConfig(BaseModel):
@@ -21,6 +42,7 @@ class AppConfig(BaseModel):
 
     llm: LlmConfig
     adk: AdkConfig
+    tools: ToolsConfig = ToolsConfig()
 
 @lru_cache(maxsize=1)
 def load_config() -> AppConfig:
