@@ -27,9 +27,9 @@ def _validate_url(url: str) -> str:
         logger.error(f"Invalid URL: {url} | {e}")
         raise GetWebpageError(f"Invalid URL: {e}")
 
-async def get_webpage_raw(url: str) -> GetWebpageResult:
+async def _get_webpage_raw(url: str) -> GetWebpageResult:
     """
-    Fetch the raw HTML content from a web page.
+    Fetch the raw HTML content from a web page, simulating a real browser to avoid being blocked.
 
     Args:
         url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
@@ -43,9 +43,20 @@ async def get_webpage_raw(url: str) -> GetWebpageResult:
     validated_url = _validate_url(url)
     html = ""
     response_code = None
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
     try:
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(validated_url) as response:
                 response_code = response.status
                 try:

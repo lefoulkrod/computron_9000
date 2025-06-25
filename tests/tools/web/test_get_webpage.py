@@ -2,18 +2,20 @@ import logging
 import re
 import pytest
 from tools.web.get_webpage import _reduce_webpage_context
+from tools.web.types import ReducedWebpage, LinkInfo
 
 logger = logging.getLogger(__name__)
 
-def test_reduce_webpage_context_removes_scripts_and_preserves_links():
+def test_reduce_webpage_context_extracts_links_and_text():
     """
-    Test that _reduce_webpage_context removes scripts/styles and preserves links and structure.
+    Test that _reduce_webpage_context extracts all links and returns only text content.
     """
     html = '''
     <html><head><title>Test</title><script>var x=1;</script></head>
     <body>
         <div>
             <a href="https://example.com" style="color:red;">Example</a>
+            <a href="/foo">Foo Link</a>
             <img src="img.png" style="width:100px;" alt="desc">
             <script>alert('hi');</script>
             <span>Keep me</span>
@@ -21,37 +23,27 @@ def test_reduce_webpage_context_removes_scripts_and_preserves_links():
     </body></html>
     '''
     reduced = _reduce_webpage_context(html)
-    assert '<script>' not in reduced
-    assert '<a href="https://example.com"' in reduced
-    assert 'style=' not in reduced
-    # Check <img> tag with both src and alt, regardless of order
-    assert '<img' in reduced and 'src="img.png"' in reduced and 'alt="desc"' in reduced
-    assert '<span>Keep me</span>' in reduced or 'Keep me' in reduced
-    assert '<div>' in reduced or '<div' not in html  # structure preserved
+    assert isinstance(reduced, ReducedWebpage)
+    assert hasattr(reduced, "page_text")
+    assert hasattr(reduced, "links")
+    # Should not contain any HTML tags
+    assert '<' not in reduced.page_text and '>' not in reduced.page_text
+    # Should contain visible text
+    assert "Example" in reduced.page_text
+    assert "Keep me" in reduced.page_text
+    # Links should be extracted in order
+    assert len(reduced.links) == 2
+    assert reduced.links[0].href == "https://example.com"
+    assert reduced.links[0].text == "Example"
+    assert reduced.links[1].href == "/foo"
+    assert reduced.links[1].text == "Foo Link"
 
-def test_reduce_webpage_context_removes_empty_tags():
+def test_reduce_webpage_context_handles_empty_and_head():
     """
-    Test that empty tags (except <a> and <img>) are removed.
+    Test that empty tags and <head>/<html> elements are ignored in text output.
     """
-    html = '<div></div><span></span><a href="/foo"></a><img src="foo.png">'
+    html = '''<html><head><title>Should be gone</title></head><body><div>Content</div></body></html>'''
     reduced = _reduce_webpage_context(html)
-    assert '<div' not in reduced
-    assert '<span' not in reduced
-    assert '<a href="/foo"></a>' in reduced
-    assert '<img src="foo.png"' in reduced
-
-def test_reduce_webpage_context_removes_head_and_html_elements():
-    """
-    Test that <head> and <html> elements are removed from the reduced HTML.
-    """
-    html = '''
-    <html>
-      <head><title>Should be gone</title></head>
-      <body><div>Content</div></body>
-    </html>
-    '''
-    reduced = _reduce_webpage_context(html)
-    assert '<head' not in reduced
-    assert '<html' not in reduced
-    assert 'Should be gone' not in reduced
-    assert '<div>Content</div>' in reduced or 'Content' in reduced
+    assert "Should be gone" not in reduced.page_text
+    assert "Content" in reduced.page_text
+    assert len(reduced.links) == 0
