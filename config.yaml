@@ -1,5 +1,5 @@
 llm:
-  model: qwen3:30b-a3b-40960k
+  model: hf-unsloth-Qwen3-30B-A3B-128K-GGUF:Q4_K_M-75776k
 adk:
   provider: ollama_chat/
 tools:

@@ -18,3 +18,4 @@ def setup_logging() -> None:
     logging.getLogger("tools").setLevel(logging.DEBUG)
     logging.getLogger("agents.adk").setLevel(logging.DEBUG)
     logging.getLogger("google.adk").setLevel(logging.DEBUG)
+    logging.getLogger("ollama").setLevel(logging.DEBUG)

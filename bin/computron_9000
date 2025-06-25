@@ -45,48 +45,25 @@ fi
 
 ########################################################################
 # Helper: generate an explanation                                       
-#   $1 – command text or question                                        
-#   $2 – (optional) captured output to interpret                         
+#   $1 – command text or question                                       
+#   $2 – (optional) captured output to interpret                        
 ########################################################################
 explain() {
   local cmd="$1"
   local out="${2-}"
 
   # System prompt for explanation mode
-  local sys_prompt=$(
-    cat <<'EOF'
-You are Computron 9000, an expert Bash assistant for Linux-like operating systems.
-Explain Bash commands and/or their output clearly and concisely for an
-intermediate shell user. Do NOT emit additional shell commands unless
-explicitly asked. Assume the user has access to common Unix utilities and tools.
-EOF
-  )
+  local sys_prompt='You are Computron 9000, an expert Bash assistant for Linux-like operating systems.\nExplain Bash commands and/or their output clearly and concisely for an intermediate shell user. Do NOT emit additional shell commands unless explicitly asked. Assume the user has access to common Unix utilities and tools.'
 
   # Build the user prompt
   local user_prompt
   if [[ -n "$out" ]]; then
-    user_prompt=$(
-      cat <<EOF
-Please explain what this command does **and** interpret its output.
-
-Command:
-$cmd
-
-Output:
-$out
-EOF
-    )
+    user_prompt="Please explain what this command does **and** interpret its output.\n\nCommand:\n$cmd\n\nOutput:\n$out"
   else
     user_prompt="Explain the following Bash command:\n$cmd"
   fi
 
-  curl -s http://localhost:11434/api/generate \
-    -d "$(jq -nc \
-          --arg model  "$COMPUTRON_9000_SHELL_MODEL" \
-          --arg system "$sys_prompt" \
-          --arg prompt "$user_prompt" \
-          '{model:$model,system:$system,prompt:$prompt,stream:false}')" |
-    jq -r '.response'
+  ollama run "$COMPUTRON_9000_SHELL_MODEL" "${sys_prompt}\n\n${user_prompt}"
 }
 
 ########################################################################
@@ -96,27 +73,9 @@ EOF
 generate_command() {
   local nl_prompt="$1"
 
-  local sys_prompt=$(
-    cat <<EOF
-You are Computron 9000, a helpful AI assistant for Linux-like operating systems.
-Respond with exactly one executable Bash command line, no comments, no
-markdown, no code fences.
+  local sys_prompt="You are Computron 9000, a helpful AI assistant for Linux-like operating systems.\nRespond with exactly one executable Bash command line, no comments, no markdown, no code fences.\n\nAssumptions:\n- Non-root user with sudo.\n- Package manager is $COMPUTRON_9000_SHELL_PACKAGE_MANAGER. DO NOT recommend installing packages unless explicity asked to do so.\n- Safe commands only (no destructive actions).\n- Common Unix utilities available (curl, jq, grep, awk, ...)."
 
-Assumptions:
-- Non-root user with sudo.
-- Package manager is $COMPUTRON_9000_SHELL_PACKAGE_MANAGER.
-- Safe commands only (no destructive actions).
-- Common Unix utilities available (curl, jq, grep, awk, ...).
-EOF
-  )
-
-  curl -s http://localhost:11434/api/generate \
-    -d "$(jq -nc \
-          --arg model  "$COMPUTRON_9000_SHELL_MODEL" \
-          --arg system "$sys_prompt" \
-          --arg prompt "$nl_prompt" \
-          '{model:$model,system:$system,prompt:$prompt,stream:false}')" |
-    jq -r '.response'
+  ollama run "$COMPUTRON_9000_SHELL_MODEL" "${sys_prompt}\n\n${nl_prompt}"
 }
 
 ########################################################################
