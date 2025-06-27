@@ -5,11 +5,14 @@ Tests for execute_python_program and execute_nodejs_program in execute_code.py.
 import logging
 from typing import Dict, Optional
 
+import pytest
+
 from tools.code.execute_code import execute_nodejs_program, execute_nodejs_program_with_playwright, execute_python_program
 from tools.code.container_core import CodeExecutionError
 
 logger = logging.getLogger(__name__)
 
+@pytest.mark.integration
 def test_execute_python_program_requests():
     """
     Test that execute_python_program installs 'requests' and runs a script using it.
@@ -26,6 +29,7 @@ def test_execute_python_program_requests():
     assert result["exit_code"] == "0", f"Non-zero exit: {result}"
     assert result["stdout"] is not None and "200" in result["stdout"], f"Did not get 200 OK: {result}"
 
+@pytest.mark.integration
 def test_execute_nodejs_program_axios():
     """
     Test that execute_nodejs_program installs 'axios' and runs a Node.js script using it.
@@ -46,6 +50,7 @@ def test_execute_nodejs_program_axios():
     assert result["exit_code"] == "0", f"Non-zero exit: {result}"
     assert result["stdout"] is not None and "200" in result["stdout"], f"Did not get 200 OK: {result}"
 
+@pytest.mark.integration
 def test_execute_playwright_script_basic():
     """
     Test that Playwright can open a page and print its title.

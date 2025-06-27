@@ -21,6 +21,7 @@ class DummyContent(types.Content):
         self.parts = parts or []
         self.role = role
 
+@pytest.mark.unit
 def test_log_llm_request_callback_logs_parts(caplog):
     """
     Test that log_llm_request_callback logs all parts in all contents.
@@ -39,6 +40,7 @@ def test_log_llm_request_callback_logs_parts(caplog):
     assert "[function_response]: resp" in caplog.text
     assert "[thought]: True" in caplog.text
 
+@pytest.mark.unit
 def test_log_llm_request_callback_no_parts(caplog):
     """
     Test that log_llm_request_callback logs when there are no content parts.

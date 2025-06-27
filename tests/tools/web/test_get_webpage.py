@@ -1,11 +1,14 @@
 import logging
 import re
+import asyncio
+from unittest.mock import patch, AsyncMock
 import pytest
 from tools.web.get_webpage import _reduce_webpage_context
 from tools.web.types import ReducedWebpage, LinkInfo
 
 logger = logging.getLogger(__name__)
 
+@pytest.mark.unit
 def test_reduce_webpage_context_extracts_links_and_text():
     """
     Test that _reduce_webpage_context extracts all links and returns only text content.
@@ -38,6 +41,7 @@ def test_reduce_webpage_context_extracts_links_and_text():
     assert reduced.links[1].href == "/foo"
     assert reduced.links[1].text == "Foo Link"
 
+@pytest.mark.unit
 def test_reduce_webpage_context_handles_empty_and_head():
     """
     Test that empty tags and <head>/<html> elements are ignored in text output.

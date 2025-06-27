@@ -20,6 +20,14 @@ outdated:
 test:
     uv run pytest
 
+# Run only unit tests
+test-unit:
+    uv run pytest -m unit
+
+# Run only integration tests
+test-integration:
+    uv run pytest -m integration
+
 # Install all main and test dependencies
 install-all:
     uv pip install -r pyproject.toml --extra test

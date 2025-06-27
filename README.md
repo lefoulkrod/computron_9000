@@ -81,3 +81,6 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 ## License
 [MIT](LICENSE)
 
+## Maintainer Notes
+For maintainers, summarization logic that calls the Ollama AsyncClient has been refactored into a new utility function `generate_summary_with_ollama` in `utils/summarizer/ollama.py`. All direct calls to `AsyncClient().generate` in this module now use the new utility. Tests for the utility are in `tests/utils/summarizer/test_ollama.py`.
+
