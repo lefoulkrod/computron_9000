@@ -13,6 +13,7 @@ def make_llm_request_with_parts(parts):
     content = Content(parts=parts)
     return LlmRequest(contents=[content])
 
+@pytest.mark.unit
 def test_remove_thoughts_callback_removes_think_parts():
     """
     Test that remove_thoughts_callback removes parts starting with '<think>' and keeps others.
@@ -30,6 +31,7 @@ def test_remove_thoughts_callback_removes_think_parts():
     remaining_texts = [p.text for p in (llm_request.contents[0].parts or [])]
     assert remaining_texts == ["Hello world", "Final output"]
 
+@pytest.mark.unit
 def test_remove_thoughts_callback_handles_no_parts():
     """
     Test that remove_thoughts_callback handles contents with no parts gracefully.
@@ -39,6 +41,7 @@ def test_remove_thoughts_callback_handles_no_parts():
     remove_thoughts_callback(callback_context, llm_request)
     assert (llm_request.contents[0].parts or []) == []
 
+@pytest.mark.unit
 def test_remove_thoughts_callback_handles_no_text():
     """
     Test that remove_thoughts_callback ignores parts without text attribute.

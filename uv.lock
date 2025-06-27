@@ -239,6 +239,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "beautifulsoup4" },
+    { name = "cachetools" },
     { name = "google-adk" },
     { name = "litellm" },
     { name = "ollama" },
@@ -259,6 +260,7 @@ test = [
 requires-dist = [
     { name = "aiohttp" },
     { name = "beautifulsoup4" },
+    { name = "cachetools", specifier = ">=5.5.2" },
     { name = "google-adk" },
     { name = "litellm" },
     { name = "ollama", specifier = ">=0.5.1" },
