@@ -23,3 +23,7 @@ test:
 # Install all main and test dependencies
 install-all:
     uv pip install -r pyproject.toml --extra test
+
+# Upgrade all upgradable packages to the latest compatible versions
+upgrade-all:
+    uv pip install --upgrade -r pyproject.toml

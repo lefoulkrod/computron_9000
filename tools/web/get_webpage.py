@@ -86,9 +86,10 @@ async def _summarize_text(text: str) -> str:
         for chunk in chunks:
             response = await AsyncClient().generate(
                 model=MODEL, 
-                prompt=f"summarize this text {chunk}",
+                prompt=f"summarize this text {chunk} /no_think",
                 think=False
             )
+            logger.debug(f"Chunk summary response: {response.response}")
             summaries.append(response.response)
         if len(summaries) > 1:
             combined_summary = " ".join(summaries)
@@ -97,10 +98,11 @@ async def _summarize_text(text: str) -> str:
                 model=MODEL,
                 prompt=f"""
                 This text is a set of summaries created by summarizing a longer text in chunks of {chunk_size}.
-                Create a single summary from them.
+                Create a single summary from them. /no_think
                 {combined_summary}""",
                 think=False
             )
+            logger.debug(f"Final summary response: {final_response.response}")
             return final_response.response
         return " ".join(summaries)
     except Exception as e:
