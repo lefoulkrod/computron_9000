@@ -1,41 +1,30 @@
 ````instructions
 # Copilot Custom Instructions
 
-- Always format Python imports according to PEP 8:
-  - Standard library imports first, then third-party, then local imports.
-  - Each group separated by a blank line.
-  - Imports within each group should be alphabetized.
-- Always use Google style docstrings for all functions, classes, and modules:
-  - Include Args, Returns, and Raises sections as appropriate.
-  - Be clear and concise, but provide enough detail for users and tools.
-- Use type hints for all function signatures.
-- Prefer async/await for I/O-bound operations.
-- Use f-strings for string formatting.
-- Follow the existing directory and module structure.
-- Place new business logic in the appropriate package (e.g., agents/adk/ for agent logic).
-- Keep functions and classes small and focused.
-- Always handle exceptions gracefully and log errors with enough context.
-- Use custom exceptions where appropriate.
-- Write tests for new features and bug fixes.
-- Use descriptive test names and docstrings.
-- Document all public functions, classes, and modules.
-- Update the README and relevant doc files when adding features.
-- Add new dependencies to pyproject.toml and keep them up to date.
-- Prefer minimal and well-maintained libraries.
-- Validate all user input, especially in API endpoints.
-- Avoid hardcoding secrets or credentials.
-- Use Pydantic models for all data validation and serialization.
-- Ensure all API responses are JSON serializable.
-- Always use a single leading underscore (_) for private fields and methods, following PEP 8 recommendations:
-  - See: https://peps.python.org/pep-0008/#descriptive-naming-styles
-  - Use a single leading underscore for non-public methods and instance variables (e.g., _my_private_var).
-  - Use two leading underscores only when name mangling is required to avoid subclass conflicts.
-- Always use a module-level logger for logging in each Python file:
-  - Use `logger = logging.getLogger(__name__)` at the top of the module.
-  - Log with `logger.debug()`, `logger.info()`, etc., instead of the root `logging` functions.
-  - This ensures logging configuration is respected and allows for per-module log control.
-- Always prefer package initializers (i.e., `__init__.py` aggregator modules) to re-export public functions, classes, and types for clean and unified imports across your codebase.
-- Place all tests in the `tests/` directory, mirroring the source project structure with matching subfolders. For example, tests for `agents/adk/agent.py` should be located in `tests/agents/adk/test_agent.py`. This ensures consistency, discoverability, and maintainability of your test suite.
+- Format Python imports per PEP 8: standard first, then third-party, then local (blank line between groups)
+- Use Google-style docstrings with Args/Returns/Raises sections
+- Add type hints to all function signatures
+- Prefer async/await for I/O-bound operations
+- Use f-strings for string formatting
+- Maintain existing directory structure
+- Place business logic in appropriate packages (e.g., agents/adk/)
+- Keep functions/classes small and focused
+- Handle exceptions with context-aware logging
+- Use custom exceptions when appropriate
+- Write tests for new features/bug fixes
+- Use descriptive test names and docstrings
+- Document all public APIs
+- Update README/doc files with new features
+- Add dependencies to pyproject.toml
+- Use minimal well-maintained libraries
+- Validate API inputs
+- Avoid hardcoded secrets
+- Use Pydantic for data validation
+- Ensure JSON serializable API responses
+- Use single leading underscore for private fields/methods
+- Use module-level logger (logger = logging.getLogger(__name__))
+- Use __init__.py for public re-exports
+- Place tests in tests/ directory matching source structure
 
 Example import order:
 ```python

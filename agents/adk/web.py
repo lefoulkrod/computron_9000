@@ -25,6 +25,8 @@ web_agent = LlmAgent(
     The agent will perform the requested web operations based on the provided instructions, which should describe the specific goal or outcome desired.
     The agent will return the results of the web operations without summarizing them unless explicitly requested to do so.
     Provide explicit and detailed instructions for the agent to follow including whether or not to summarize the results.
+    Provide all context necessary for the agent to perform the task, including any specific URLs, search queries, or other relevant information.
+    DO NOT assume the agent has any prior knowledge or context about the task beyond what is provided in the instructions.
     """,
     instruction=WEB_AGENT_PROMPT,
     tools=[
