@@ -144,18 +144,6 @@ def _get_host_machine_config(user_locale: Optional[str] = None) -> FingerprintCo
         forced_colors=forced_colors
     )
 
-
-def _human_delay(min_ms: int, max_ms: int) -> None:
-    """
-    Sleep for a random time between min_ms and max_ms milliseconds.
-    
-    Args:
-        min_ms (int): Minimum delay in milliseconds.
-        max_ms (int): Maximum delay in milliseconds.
-    """
-    time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
-
-
 def _get_device_config(saved_state: SavedState) -> tuple[str, Dict[str, Any]]:
     """
     Get device configuration for browser context.
@@ -219,22 +207,20 @@ async def search_google(
 
     # Load configuration
     config = load_config()
+    home_dir = config.settings.home_dir
     state_file = config.tools.web.search_google.state_file
     no_save_state = config.tools.web.search_google.no_save_state
     timeout = config.tools.web.search_google.timeout
 
-    logger.debug(f"Starting Google search for: {query}")
-    logger.debug(f"Using state file: {state_file}, no_save_state: {no_save_state}, timeout: {timeout}")
-
-    # Check for existing state files
-    state_path = Path(state_file)
+    # Combine home_dir and state_file for the full state path
+    state_path = Path(os.path.join(home_dir, state_file))
     fingerprint_file = state_path.with_name(state_path.stem + '-fingerprint.json')
     
     saved_state = SavedState()
     storage_state = None
     
     if state_path.exists():
-        logger.debug(f"Found browser state file: {state_file}")
+        logger.debug(f"Found browser state file: {state_path}")
         storage_state = str(state_path)
         
         # Load fingerprint config if available
@@ -536,7 +522,7 @@ async def search_google(
                 # Save browser state
                 if not no_save_state:
                     try:
-                        logger.debug(f"Saving browser state to: {state_file}")
+                        logger.debug(f"Saving browser state to: {state_path}")
                         state_path.parent.mkdir(parents=True, exist_ok=True)
                         await context.storage_state(path=str(state_path))
                         

@@ -2,7 +2,7 @@ import logging
 from typing import List
 
 import bs4
-from tools.web.summarize import _summarize_text_full, summarize_text_chunks, ChunkSummary
+from tools.web.summarize import _summarize_text_full, summarize_text_sections, SectionSummary
 
 from config import load_config
 from tools.web.get_webpage_raw import _get_webpage_raw
@@ -120,24 +120,24 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
         logger.error(f"Error getting webpage substring for {url}: {e}")
         raise GetWebpageError(f"Error getting webpage substring: {e}")
 
-async def get_webpage_summary_chunks(url: str) -> List[ChunkSummary]:
+async def get_webpage_summary_sections(url: str) -> List[SectionSummary]:
     """
-    Downloads the web page at the given URL and summarizes its content in chunks.
+    Downloads the web page at the given URL and summarizes its content in sections.
 
-    This function fetches the web page, extracts and cleans the visible text, and generates chunked summaries suitable for LLM consumption. It returns a list of chunk summaries with metadata.
+    This function fetches the web page, extracts and cleans the visible text, and generates section summaries suitable for LLM consumption. It returns a list of section summaries with metadata.
 
     Args:
         url (str): The URL of the web page to summarize. Must be a valid HTTP or HTTPS URL.
 
     Returns:
-        List[ChunkSummary]: List of chunk summaries with indices and positions.
+        List[SectionSummary]: List of section summaries with indices and positions.
 
     Raises:
         GetWebpageError: If the page cannot be fetched or processed.
     """
     try:
         reduced = await get_webpage(url)
-        return await summarize_text_chunks(reduced.page_text)
+        return await summarize_text_sections(reduced.page_text)
     except Exception as e:
-        logger.error(f"Error summarizing webpage in chunks for {url}: {e}")
-        raise GetWebpageError(f"Error summarizing webpage in chunks: {e}")
+        logger.error(f"Error summarizing webpage in sections for {url}: {e}")
+        raise GetWebpageError(f"Error summarizing webpage in sections: {e}")
