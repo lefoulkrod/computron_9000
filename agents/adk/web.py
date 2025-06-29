@@ -5,7 +5,7 @@ import logging
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 
-from tools.web import get_webpage_summary, get_webpage_substring, get_webpage_summary_chunks, search_google
+from tools.web import get_webpage_summary, get_webpage_substring, get_webpage_summary_sections, search_google
 from tools.code.execute_code import execute_nodejs_program_with_playwright
 from agents.prompt import WEB_AGENT_PROMPT
 from . import get_adk_model
@@ -32,7 +32,7 @@ web_agent = LlmAgent(
     tools=[
         #get_webpage_summary,
         #execute_nodejs_program_with_playwright,
-        get_webpage_summary_chunks,
+        get_webpage_summary_sections,
         get_webpage_substring,
         search_google,
     ],

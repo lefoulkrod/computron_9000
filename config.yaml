@@ -1,11 +1,18 @@
 llm:
-  model: hf-unsloth-Qwen3-30B-A3B-128K-GGUF:Q4_K_M-75776k
+  model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL-130048k
 adk:
   provider: ollama_chat/
+settings:
+  home_dir: "/home/larry/.computron_9000"
 tools:
   web:
     search_google:
-      state_file: "/home/larry/.computron_9000/.browser-state.json"
+      state_file: ".browser-state.json"
       no_save_state: false
       timeout: 6000
+agents:
+  web:
+    think: false
+  file_system:
+    think: false
 

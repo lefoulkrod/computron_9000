@@ -5,6 +5,11 @@ import yaml
 from pathlib import Path
 from functools import lru_cache
 
+class Settings(BaseModel):
+    """Application settings."""
+
+    home_dir: str = "/home/larry/.computron_9000"
+
 class LlmConfig(BaseModel):
     """Settings for the language model."""
 
@@ -37,12 +42,25 @@ class ToolsConfig(BaseModel):
     web: WebToolsConfig = WebToolsConfig()
 
 
+class AgentConfig(BaseModel):
+    """Settings for an individual agent."""
+    think: bool = False
+
+
+class AgentsConfig(BaseModel):
+    """Settings for all agents."""
+    web: AgentConfig = AgentConfig()
+    file_system: AgentConfig = AgentConfig()
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
     llm: LlmConfig
     adk: AdkConfig
     tools: ToolsConfig = ToolsConfig()
+    settings: Settings = Settings()
+    agents: AgentsConfig = AgentsConfig()
 
 @lru_cache(maxsize=1)
 def load_config() -> AppConfig:

@@ -8,14 +8,14 @@ import pydantic
 logger = logging.getLogger(__name__)
 config = load_config()
 
-class ChunkSummary(pydantic.BaseModel):
+class SectionSummary(pydantic.BaseModel):
     """
-    Represents a summary of a larger block of text that has been chunked for summarization.
+    Represents a summary of a section of a larger block of text that has been divided for summarization.
 
     Attributes:
-        summary (str): The summary of the chunk.
-        starting_char_position (int): The starting character position of the chunk in the original text.
-        ending_char_position (int): The ending character position of the chunk in the original text.
+        summary (str): The summary of the section.
+        starting_char_position (int): The starting character position of the section in the original text.
+        ending_char_position (int): The ending character position of the section in the original text.
     """
     summary: str
     starting_char_position: int
@@ -23,7 +23,7 @@ class ChunkSummary(pydantic.BaseModel):
 
 async def _summarize_text_full(text: str) -> str:
     """
-    Summarize the text by first chunking it and summarizing each chunk, then combining those summaries into a final summary.
+    Summarize the text by first dividing it into sections and summarizing each section, then combining those summaries into a final summary.
 
     Args:
         text (str): The text to summarize.
@@ -33,11 +33,11 @@ async def _summarize_text_full(text: str) -> str:
     """
     FINAL_PROMPT_TEMPLATE = (
         """
-        This text is a set of summaries created by summarizing a longer text in chunks.\nCreate a single summary from them. /no_think\n{combined_summary}"""
+        This text is a set of summaries created by summarizing a longer text in sections.\nCreate a single summary from them. /no_think\n{combined_summary}"""
     )
     try:
-        chunk_summaries = await summarize_text_chunks(text)
-        summaries = [chunk.summary for chunk in chunk_summaries]
+        section_summaries = await summarize_text_sections(text)
+        summaries = [section.summary for section in section_summaries]
         if len(summaries) > 1:
             combined_summary = " ".join(summaries)
             final_prompt = FINAL_PROMPT_TEMPLATE.format(combined_summary=combined_summary)
@@ -52,51 +52,51 @@ async def _summarize_text_full(text: str) -> str:
         logger.error(f"Error summarizing text: {e}")
         return text
 
-async def summarize_text_chunks(text: str) -> List[ChunkSummary]:
+async def summarize_text_sections(text: str) -> List[SectionSummary]:
     """
-    Summarize the text by chunking it and calling the LLM to generate a concise summary for each chunk. Returns a list of chunk summaries with metadata.
+    Summarize the text by dividing it into sections and calling the LLM to generate a concise summary for each section. Returns a list of section summaries with metadata.
 
     Args:
         text (str): The text to summarize.
 
     Returns:
-        List[ChunkSummary]: List of chunk summaries with indices and positions.
+        List[SectionSummary]: List of section summaries with indices and positions.
     """
     PART_PROMPT_TEMPLATE = (
         "The following text is part {part_num} of {total_parts} of a larger document. "
-        "Summarize this part as if it is not the whole. /no_think\n{chunk}"
+        "Summarize this part as if it is not the whole. /no_think\n{section}"
     )
-    chunk_size = 40000  # Adjust based on LLM capabilities
+    section_size = 40000  # Adjust based on LLM capabilities
     overlap = 4000
-    chunks = []
+    sections = []
     positions = []
     i = 0
     while i < len(text):
-        chunk = text[i:i + chunk_size]
-        chunks.append(chunk)
-        positions.append((i, min(i + chunk_size, len(text))))
-        if i + chunk_size >= len(text):
+        section = text[i:i + section_size]
+        sections.append(section)
+        positions.append((i, min(i + section_size, len(text))))
+        if i + section_size >= len(text):
             break
-        i += chunk_size - overlap
+        i += section_size - overlap
 
-    logger.debug(f"Chunked text length {len(text)} into {len(chunks)} parts for summarization.")
+    logger.debug(f"Divided text length {len(text)} into {len(sections)} parts for summarization.")
     try:
-        summaries: List[ChunkSummary] = []
-        total_parts = len(chunks)
-        for idx, (chunk, (start, end)) in enumerate(zip(chunks, positions)):
+        summaries: List[SectionSummary] = []
+        total_parts = len(sections)
+        for idx, (section, (start, end)) in enumerate(zip(sections, positions)):
             part_num = idx + 1
-            prompt = PART_PROMPT_TEMPLATE.format(part_num=part_num, total_parts=total_parts, chunk=chunk)
+            prompt = PART_PROMPT_TEMPLATE.format(part_num=part_num, total_parts=total_parts, section=section)
             response = await generate_summary_with_ollama(
                 prompt=prompt,
                 think=False
             )
-            logger.debug(f"Chunk summary response: {response}")
-            summaries.append(ChunkSummary(
+            logger.debug(f"Section summary response: {response}")
+            summaries.append(SectionSummary(
                 summary=response,
                 starting_char_position=start,
                 ending_char_position=end
             ))
         return summaries
     except Exception as e:
-        logger.error(f"Error summarizing text chunks: {e}")
+        logger.error(f"Error summarizing text sections: {e}")
         raise
