@@ -35,18 +35,19 @@ class SearchResults(BaseFSResult):
 
     matches: List[str]
 
+class WriteResults(BaseFSResult):
+    """Result model for file write operations."""
+    pass
+
 def list_directory_contents(path: str) -> DirectoryContents:
     """
-    Tool to list files and directories at a given path. Use this tool whenever the user asks about files, folders, or directory contents.
+    List files and directories at a given path.
 
     Args:
         path (str): The directory path to list contents of.
 
     Returns:
-        dict: A dictionary with the following keys:
-            - status (str): "success" if the directory was listed, "error" otherwise.
-            - contents (List[str]): List of file and directory names if successful, else an empty list.
-            - error_message (str, optional): Human-readable error message if an error occurred.
+        DirectoryContents: Result of the directory listing operation.
 
     Example:
         {
@@ -68,16 +69,13 @@ def list_directory_contents(path: str) -> DirectoryContents:
 
 def get_path_details(path: str) -> PathDetails:
     """
-    Tool to get details about a file or directory at the given path. Use this tool whenever the user asks for information about a specific file or directory (such as type, size, permissions, etc).
+    Get details about a file or directory at the given path.
 
     Args:
         path (str): The file or directory path to get details for.
 
     Returns:
-        dict: A dictionary with the following keys:
-            - status (str): "success" if details were retrieved, "error" otherwise.
-            - details (dict): Dictionary with details about the path (type, size, permissions, etc) if successful, else empty dict.
-            - error_message (str, optional): Human-readable error message if an error occurred.
+        PathDetails: Result of the path details operation.
 
     Example:
         {
@@ -120,16 +118,13 @@ def get_path_details(path: str) -> PathDetails:
 
 def read_file_contents(path: str) -> FileContents:
     """
-    Tool to read the contents of a file at the given path. Use this tool whenever the user asks to view or read a file's contents.
+    Read the contents of a file at the given path.
 
     Args:
         path (str): The file path to read.
 
     Returns:
-        dict: A dictionary with the following keys:
-            - status (str): "success" if the file was read, "error" otherwise.
-            - contents (str): The contents of the file (decoded as UTF-8) if successful, else an empty string.
-            - error_message (str, optional): Human-readable error message if an error occurred.
+        FileContents: Result of the file read operation.
 
     Note:
         The file is always read and returned as UTF-8 text. If the file is not valid UTF-8, an error will be returned.
@@ -155,16 +150,13 @@ def read_file_contents(path: str) -> FileContents:
 
 def search_files(pattern: str) -> SearchResults:
     """
-    Tool to search for files and directories using a glob pattern (wildcards). Use this tool whenever the user asks to search for files.
+    Search for files and directories using a glob pattern (wildcards).
 
     Args:
         pattern (str): The glob pattern to search for (e.g., '*.txt', 'folder/**/*.py').
 
     Returns:
-        dict: A dictionary with the following keys:
-            - status (str): "success" if the search was performed, "error" otherwise.
-            - matches (List[str]): List of matching file and directory paths if successful, else an empty list.
-            - error_message (str, optional): Human-readable error message if an error occurred.
+        SearchResults: Result of the search operation.
 
     Example:
         {
@@ -183,3 +175,22 @@ def search_files(pattern: str) -> SearchResults:
         return SearchResults(status="success", matches=matches)
     except Exception as e:
         return SearchResults(status="error", matches=[], error_message=str(e))
+
+def write_text_file(contents: str, filename: str) -> WriteResults:
+    """
+    Write text to a file with the given filename.
+
+    Args:
+        contents (str): The string content to write to the file.
+        filename (str): The name of the file to create or overwrite.
+
+    Returns:
+        WriteResults: Result of the write operation with status and error_message.
+    """
+    try:
+        file_path = os.path.join("/home/larry/.computron_9000", filename)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(contents)
+        return WriteResults(status="success")
+    except Exception as e:
+        return WriteResults(status="error", error_message=str(e))

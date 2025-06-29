@@ -6,7 +6,7 @@ from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 
 from agents.adk.callbacks.callbacks import log_llm_request_callback, log_llm_response_callback
-from tools.fs.fs import list_directory_contents, get_path_details, read_file_contents, search_files
+from tools.fs import list_directory_contents, get_path_details, read_file_contents, search_files, write_text_file
 from agents.prompt import FILE_SYSTEM_AGENT_PROMPT
 from config import load_config
 from . import get_adk_model
@@ -28,7 +28,8 @@ file_system_agent = LlmAgent(
         list_directory_contents,
         get_path_details,
         read_file_contents,
-        search_files
+        search_files,
+        write_text_file
     ],
     after_model_callback=log_llm_response_callback,
     before_model_callback=[log_llm_request_callback],
