@@ -14,6 +14,7 @@ class LlmConfig(BaseModel):
     """Settings for the language model."""
 
     model: str
+    num_ctx: int
 
 
 class AdkConfig(BaseModel):

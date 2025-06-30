@@ -10,6 +10,8 @@ from aiohttp import web
 # Conditional imports based on environment variable
 if os.environ.get("AGENT_SDK", "pydantic").lower() == "adk":
     from agents.adk.message_handler import handle_user_message
+elif os.environ.get("AGENT_SDK", "pydantic").lower() == "ollama":
+    from agents.ollama.message_handler import handle_user_message
 else:
     from agents.pydantic_ai.message_handler import handle_user_message
 from agents.types import Data
