@@ -1,5 +1,6 @@
 llm:
-  model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL-130048k
+  model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
+  num_ctx: 119808
 adk:
   provider: ollama_chat/
 settings:

@@ -8,6 +8,10 @@ run-adk:
 run-pydantic:
     AGENT_SDK=pydantic uv run main.py
 
+# Run the main application with ollama agent SDK
+run-ollama:
+    AGENT_SDK=ollama uv run main.py
+    
 # Add a new dependency to the project
 add-dep package:
     uv add {{package}}
