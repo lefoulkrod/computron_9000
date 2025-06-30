@@ -1,11 +1,12 @@
+import json
 import logging
 from typing import AsyncGenerator, Sequence, AsyncIterator, Iterator, Optional, Union, Tuple
 
 from ollama import AsyncClient, ChatResponse
 
-from agents.prompt import ROOT_AGENT_PROMPT
 from agents.types import UserMessageEvent, Data
 from config import load_config
+from .agents import computron
 
 logger = logging.getLogger(__name__)
 
@@ -27,36 +28,13 @@ async def handle_user_message(
     Yields:
         UserMessageEvent: Events from the LLM.
     """
-    system_message = {'role': 'system', 'content': ROOT_AGENT_PROMPT}
-    send_message = {'role': 'user', 'content': message}
-    client = AsyncClient()
-    chat_args = {
-        'model': config.llm.model,
-        'messages': [system_message, send_message],
-        
-        'options': {
-            "num_ctx": config.llm.num_ctx, 
-        },
-    }
     try:
-        if stream:
-            async for response, done in run_as_agent_stream(await client.chat(
-                **chat_args,
-                stream=True
-            )):
+        async for content in run_as_agent(message, data):
+            if content is not None:
                 yield UserMessageEvent(
-                    message=response or "",
-                    final=done
+                    message=content,
+                    final=False
                 )
-        else:
-            response = run_as_agent(await client.chat(
-                **chat_args,
-                stream=False,
-            ))
-            yield UserMessageEvent(
-                message=response or "",
-                final=True
-            )
     except Exception as exc:
         logger.exception(f"Error handling user message: {exc}")
         yield UserMessageEvent(message="An error occurred while processing your message.", final=True)
@@ -83,15 +61,74 @@ async def run_as_agent_stream(iterator: AsyncIterator[ChatResponse]) -> AsyncIte
         logger.exception(f"Error running agent iterator: {exc}")
         raise
 
-def run_as_agent(response: ChatResponse) -> Optional[str]:
+async def run_as_agent(
+    message: str,
+    data: Sequence[Data] | None = None
+) -> AsyncGenerator[str, None]:
     """
-    Extracts the message content and done flag from a single ChatResponse.
+    Handles a user message, invokes the LLM, executes tool calls, and yields message content at each step.
 
     Args:
-        response (ChatResponse): A ChatResponse object.
+        message (str): The user's message.
+        data (Sequence[Data] | None): Optional additional data.
 
-    Returns:
-        Tuple[Optional[str], bool]: The message content (or None) and the done flag.
+    Yields:
+        str: The message content at each step (never tool call results directly).
     """
-    content = response.message.content
-    return content
+    system_message = {'role': 'system', 'content': computron.instruction}
+    user_message = {'role': 'user', 'content': message}
+    chat_history = [system_message, user_message]
+    client = AsyncClient()
+    while True:
+        try:
+            response = await client.chat(
+                model=computron.model,
+                messages=chat_history,
+                options={
+                    "num_ctx": computron.options["num_ctx"],
+                },
+                tools=computron.tools,
+                stream=False,
+            )
+            logger.debug(f"LLM response: {response}")
+            content = response.message.content or ""
+            tool_calls = getattr(response.message, 'tool_calls', None)
+            if content.strip():
+                yield content
+            if not tool_calls:
+                break
+            for tool_call in tool_calls:
+                function = getattr(tool_call, 'function', None)
+                if not function:
+                    logger.warning(f"Tool call missing function: {tool_call}")
+                    continue
+                tool_name = getattr(function, 'name', None)
+                arguments = getattr(function, 'arguments', {})
+                tool_func = None
+                for tool in computron.tools:
+                    if hasattr(tool, '__name__') and tool.__name__ == tool_name:
+                        tool_func = tool
+                        break
+                if not tool_func:
+                    logger.error(f"Tool '{tool_name}' not found in computron.tools.")
+                    tool_result = {"tool": tool_name, "error": "Tool not found"}
+                else:
+                    try:
+                        result = tool_func(**arguments)
+                        if hasattr(result, 'dict'):
+                            result = result.dict()
+                        tool_result = {"tool": tool_name, "result": result}
+                    except Exception as exc:
+                        logger.exception(f"Error running tool '{tool_name}': {exc}")
+                        tool_result = {"tool": tool_name, "error": str(exc)}
+                tool_message = {
+                    'role': 'tool',
+                    'name': tool_name,
+                    'content': json.dumps(tool_result)
+                }
+                chat_history.append(tool_message)
+            # Do not yield tool results, just continue looping
+        except Exception as exc:
+            logger.exception(f"Error in run_as_agent: {exc}")
+            yield "An error occurred while processing your message."
+            break

@@ -435,7 +435,7 @@
 
             const body = {
                 message: message,
-                stream: false
+                stream: true
             };
             if (selectedFileBase64 && selectedFileContentType) {
                 body.data = [
@@ -462,7 +462,10 @@
                 // Read streamed response from backend
                 while (true) {
                     const { value, done } = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        removeLoadingIndicators();
+                        break;
+                    }
                     const chunk = decoder.decode(value, { stream: true });
                     if (!chunk.trim()) continue;
                     try {
@@ -481,11 +484,6 @@
                                 chatMessages.appendChild(newLoading);
                             }
                             chatMessages.scrollTop = chatMessages.scrollHeight;
-                            if (data.final === true || data.final === 'true') {
-                                isFinal = true;
-                                // Remove all loading indicators after final message
-                                removeLoadingIndicators();
-                            }
                         }
                     } catch (e) { /* ignore parse errors */ }
                 }
