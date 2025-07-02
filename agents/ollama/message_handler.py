@@ -96,6 +96,36 @@ async def run_tool_call_loop(
                 tools=tools,
                 stream=False,
             )
+            # Log LLM stats if present
+            if hasattr(response, 'done') and getattr(response, 'done', False):
+                # Extract and convert durations from ns to s
+                total_duration_ns = getattr(response, 'total_duration', None)
+                load_duration_ns = getattr(response, 'load_duration', None)
+                prompt_eval_count = getattr(response, 'prompt_eval_count', None)
+                prompt_eval_duration_ns = getattr(response, 'prompt_eval_duration', None)
+                eval_count = getattr(response, 'eval_count', None)
+                eval_duration_ns = getattr(response, 'eval_duration', None)
+                def ns_to_s(ns):
+                    return ns / 1_000_000_000 if ns is not None else None
+                total_duration = ns_to_s(total_duration_ns)
+                load_duration = ns_to_s(load_duration_ns)
+                prompt_eval_duration = ns_to_s(prompt_eval_duration_ns)
+                eval_duration = ns_to_s(eval_duration_ns)
+                # Calculate tokens/sec
+                prompt_tokens_per_sec = (prompt_eval_count / prompt_eval_duration) if (prompt_eval_count and prompt_eval_duration) else None
+                eval_tokens_per_sec = (eval_count / eval_duration) if (eval_count and eval_duration) else None
+                # Log nicely, with newlines for readability
+                logger.info(
+                    "\nLLM stats:\n"
+                    f"  total_duration:         {total_duration:.3f}s\n"
+                    f"  load_duration:          {load_duration:.3f}s\n"
+                    f"  prompt_eval_count:      {prompt_eval_count}\n"
+                    f"  prompt_eval_duration:   {prompt_eval_duration:.3f}s\n"
+                    f"  prompt_tokens_per_sec:  {prompt_tokens_per_sec:.2f}\n"
+                    f"  eval_count:             {eval_count}\n"
+                    f"  eval_duration:          {eval_duration:.3f}s\n"
+                    f"  eval_tokens_per_sec:    {eval_tokens_per_sec:.2f}\n"
+                )
             try:
                 # Use model_dump for pretty printing if available (Pydantic BaseModel)
                 response_data = response.model_dump()
