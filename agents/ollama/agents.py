@@ -5,7 +5,9 @@ from pydantic import BaseModel
 
 from agents.prompt import ROOT_AGENT_PROMPT
 from config import load_config
+from tools.code.execute_code import execute_python_program
 from tools.fs import list_directory_contents, read_file_contents, write_text_file
+from tools.misc import datetime_tool
 
 config = load_config()
 logger = logging.getLogger(__name__)
@@ -41,5 +43,7 @@ computron: Agent = Agent(
         list_directory_contents,
         read_file_contents,
         write_text_file,
+        execute_python_program,
+        datetime_tool,
     ],
 )
