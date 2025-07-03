@@ -23,7 +23,8 @@
 - Ensure JSON serializable API responses
 - Use single leading underscore for private fields/methods
 - Use module-level logger (logger = logging.getLogger(__name__))
-- Use __init__.py for public re-exports
+- Always use __init__.py for public re-exports to provide a clean package API.
+- Never re-export private functions, classes, or variables (those starting with a single underscore) in public re-exports.
 - Place tests in tests/ directory matching source structure
 
 Example import order:
