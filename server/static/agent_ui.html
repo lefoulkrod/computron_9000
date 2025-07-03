@@ -148,6 +148,7 @@
             background: none;
             color: #222;
             margin-right: auto;
+            min-width: 80%;
         }
         .user .bubble {
             background: #f5f5f5;
@@ -345,9 +346,10 @@
 
         // Enhance code blocks in assistant messages with copy button and language label
         function enhanceCodeBlocks(container) {
-            const pres = container.querySelectorAll('pre code');
-            pres.forEach(codeBlock => {
-                const pre = codeBlock.parentElement;
+            const pres = container.querySelectorAll('pre');
+            pres.forEach(pre => {
+                const codeBlock = pre.querySelector('code');
+                if (!codeBlock) return;
                 // Avoid duplicate headers
                 if (pre.querySelector('.code-header')) return;
                 // Extract language from class name
@@ -366,9 +368,13 @@
                 copyBtn.innerHTML = '<span>Copy</span>';
                 copyBtn.onclick = (e) => {
                     e.preventDefault();
-                    navigator.clipboard.writeText(codeBlock.innerText);
-                    copyBtn.innerHTML = '<span>Copied!</span>';
-                    setTimeout(() => { copyBtn.innerHTML = '<span>Copy</span>'; }, 1200);
+                    // Always copy the code inside this pre's code element
+                    const code = pre.querySelector('code');
+                    if (code) {
+                        navigator.clipboard.writeText(code.innerText);
+                        copyBtn.innerHTML = '<span>Copied!</span>';
+                        setTimeout(() => { copyBtn.innerHTML = '<span>Copy</span>'; }, 1200);
+                    }
                 };
                 header.appendChild(langLabel);
                 header.appendChild(copyBtn);
@@ -512,6 +518,9 @@
                 let lastAssistantDiv = null;
                 // Remove initial loading indicator before streaming
                 loadingIndicator.remove();
+                // Create a single assistant message bubble for streaming
+                lastAssistantDiv = addMessage('assistant', '');
+                const bubble = lastAssistantDiv.querySelector('.bubble');
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) {
@@ -526,8 +535,21 @@
                             assistantMsg += data.response;
                             // Remove previous loading indicator if present
                             removeLoadingIndicators();
-                            // Add assistant message
-                            lastAssistantDiv = addMessage('assistant', data.response);
+                            // Update assistant message bubble content
+                            bubble.innerHTML = parseAndRenderContent(assistantMsg);
+                            enhanceCodeBlocks(bubble);
+                            // Attach expand/collapse logic for all think blocks in this message
+                            const thinkBlocks = bubble.querySelectorAll('.collapsible-think');
+                            thinkBlocks.forEach(block => {
+                                const header = block.querySelector('.collapsible-think-header');
+                                const contentDiv = block.querySelector('.collapsible-think-content');
+                                block.classList.remove('expanded');
+                                header.textContent = 'Show thoughts';
+                                header.onclick = () => {
+                                    const expanded = block.classList.toggle('expanded');
+                                    header.textContent = expanded ? 'Hide thoughts' : 'Show thoughts';
+                                };
+                            });
                             // If not final, show loading indicator below this message
                             if (data.final !== true && data.final !== 'true') {
                                 let newLoading = document.createElement('span');
