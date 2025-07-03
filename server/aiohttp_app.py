@@ -69,7 +69,7 @@ async def handle_post(request):
             await resp.prepare(request)
             try:
                 async for event in handle_user_message(user_query, data_objs, stream=True):
-                    data = {'response': event.message, 'final': event.final}
+                    data = {'response': event.message, 'final': event.final, 'thinking': event.thinking}
                     await resp.write((json.dumps(data) + '\n').encode('utf-8'))
                     if event.final:
                         break
