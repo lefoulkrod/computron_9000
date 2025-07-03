@@ -10,7 +10,7 @@ from ollama import AsyncClient
 from agents.types import UserMessageEvent, Data
 from config import load_config
 from .agents import computron
-from agents.ollama.sdk import run_tool_call_loop
+from agents.ollama.sdk import run_tool_call_loop, extract_thinking
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +46,12 @@ async def handle_user_message(
             model_options=computron.options
         ):
             if content is not None:
+                main_text, thinking = extract_thinking(content)
                 yield UserMessageEvent(
-                    message=content,
-                    final=False
+                    message=main_text,
+                    final=False,
+                    thinking=thinking
                 )
     except Exception as exc:
         logger.exception(f"Error handling user message: {exc}")
-        yield UserMessageEvent(message="An error occurred while processing your message.", final=True)
+        yield UserMessageEvent(message="An error occurred while processing your message.", final=True, thinking=None)

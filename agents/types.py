@@ -1,6 +1,7 @@
 """Common UserMessageEvent model for agent message streaming, shared across agents package."""
 
 from pydantic import BaseModel
+from typing import Optional
 
 class UserMessageEvent(BaseModel):
     """
@@ -9,9 +10,11 @@ class UserMessageEvent(BaseModel):
     Attributes:
         message (str): The message content from the agent.
         final (bool): Whether this is the final response in the sequence.
+        thinking (Optional[str]): The agent's internal reasoning or thought process, if available.
     """
     message: str
     final: bool
+    thinking: Optional[str] = None
 
 class Data(BaseModel):
     """
