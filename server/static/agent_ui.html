@@ -272,6 +272,40 @@
             border-radius: 0.25em;
             font-style: italic;
         }
+        /* Collapsible think block styles */
+        .collapsible-think {
+            margin: 1em 0;
+            border-left: 4px solid var(--secondary);
+            border-radius: 0.25em;
+            background: var(--primary);
+            font-style: italic;
+        }
+        .collapsible-think-header {
+            cursor: pointer;
+            padding: 0.5em 1em;
+            background: #f0f4ff;
+            color: #3730a3;
+            font-weight: bold;
+            border-radius: 0.25em 0.25em 0 0;
+            user-select: none;
+        }
+        .collapsible-think-content {
+            padding: 0.75em 1em;
+            display: none;
+        }
+        .collapsible-think.expanded .collapsible-think-content {
+            display: block;
+        }
+        .collapsible-think.expanded .collapsible-think-header::after {
+            content: '▲';
+            float: right;
+            font-size: 0.9em;
+        }
+        .collapsible-think .collapsible-think-header::after {
+            content: '▼';
+            float: right;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -343,6 +377,29 @@
             });
         }
 
+        // Helper: Render content with optional <think> block at the start
+        // If present, the first <think>...</think> is rendered as a collapsible block, followed by Markdown for the rest
+        function parseAndRenderContent(content) {
+            // Regex to match a <think>...</think> block at the start
+            const thinkRegex = /^<think>([\s\S]*?)<\/think>/i;
+            let result = '';
+            let match = thinkRegex.exec(content);
+            let afterThinkIdx = 0;
+            if (match) {
+                // There is a <think> block at the start
+                const thinkContent = match[1];
+                const thinkId = `think-block-${Date.now()}`;
+                result += `\n<div class="collapsible-think" id="${thinkId}">\n  <div class="collapsible-think-header">Show thoughts</div>\n  <div class="collapsible-think-content">${thinkContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>\n</div>\n`;
+                afterThinkIdx = match[0].length;
+            }
+            // Render the rest (if any) as Markdown
+            if (afterThinkIdx < content.length) {
+                const nonThink = content.slice(afterThinkIdx);
+                result += marked.parse(nonThink);
+            }
+            return result;
+        }
+
         // Add a chat message to the UI
         function addMessage(role, content) {
             const msgDiv = document.createElement('div');
@@ -350,28 +407,23 @@
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             if (role === 'assistant') {
-                // Render <think> blocks as raw HTML (including tags), rest as Markdown
-                let rendered = '';
-                let lastIndex = 0;
-                const thinkRegex = /<think>[\s\S]*?<\/think>/gi;
-                let match;
-                while ((match = thinkRegex.exec(content)) !== null) {
-                    // Render any non-think text before this <think>
-                    if (match.index > lastIndex) {
-                        const nonThink = content.slice(lastIndex, match.index);
-                        rendered += marked.parse(nonThink);
-                    }
-                    // Render the <think> block as-is (including tags)
-                    rendered += match[0];
-                    lastIndex = thinkRegex.lastIndex;
-                }
-                // Render any remaining non-think text after the last <think>
-                if (lastIndex < content.length) {
-                    const nonThink = content.slice(lastIndex);
-                    rendered += marked.parse(nonThink);
-                }
+                // Render <think> blocks as collapsible, rest as Markdown
+                let rendered = parseAndRenderContent(content);
                 bubble.innerHTML = rendered;
-                enhanceCodeBlocks(bubble);
+                enhanceCodeBlocks(bubble)
+                // Attach expand/collapse logic for all think blocks in this message
+                const thinkBlocks = bubble.querySelectorAll('.collapsible-think');
+                thinkBlocks.forEach(block => {
+                    const header = block.querySelector('.collapsible-think-header');
+                    const contentDiv = block.querySelector('.collapsible-think-content');
+                    // Collapsed by default
+                    block.classList.remove('expanded');
+                    header.textContent = 'Show thoughts';
+                    header.onclick = () => {
+                        const expanded = block.classList.toggle('expanded');
+                        header.textContent = expanded ? 'Hide thoughts' : 'Show thoughts';
+                    };
+                });
             } else {
                 bubble.textContent = content;
             }
@@ -435,8 +487,9 @@
 
             const body = {
                 message: message,
-                stream: true
+                stream: true // this does nothing right now, but is here for future compatibility
             };
+
             if (selectedFileBase64 && selectedFileContentType) {
                 body.data = [
                     {
@@ -445,6 +498,7 @@
                     }
                 ];
             }
+            
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
@@ -455,11 +509,9 @@
                 const reader = response.body.getReader();
                 let assistantMsg = '';
                 let decoder = new TextDecoder();
-                let isFinal = false;
                 let lastAssistantDiv = null;
                 // Remove initial loading indicator before streaming
                 loadingIndicator.remove();
-                // Read streamed response from backend
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) {
