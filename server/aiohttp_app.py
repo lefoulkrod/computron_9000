@@ -45,7 +45,6 @@ async def handle_post(request):
         if user_query is None or str(user_query).strip() == "":
             return web.json_response({'error': 'Message field is required.'}, status=400, headers=CORS_HEADERS)
         user_query = str(user_query)
-        stream = data.get('stream', False)
         # Handle optional data field (array with 0 or more entries, always with base64 and content_type)
         data_objs = []
         data_field = data.get('data')
@@ -53,39 +52,31 @@ async def handle_post(request):
             data_objs = [Data(base64_encoded=obj['base64'], content_type=obj['content_type']) for obj in data_field]
         else:
             data_objs = None
-        if stream:
-            # Streaming response
-            resp = web.StreamResponse(
-                status=200,
-                reason='OK',
-                headers={
-                    'Content-Type': 'application/json',
-                    **CORS_HEADERS,
-                    'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive',
-                    'Transfer-Encoding': 'chunked',
-                }
-            )
-            await resp.prepare(request)
-            try:
-                async for event in handle_user_message(user_query, data_objs, stream=True):
-                    data = {'response': event.message, 'final': event.final, 'thinking': event.thinking}
-                    await resp.write((json.dumps(data) + '\n').encode('utf-8'))
-                    if event.final:
-                        break
-            except Exception as exc:
-                error_data = {'error': f'Server error: {str(exc)}', 'final': True}
-                await resp.write((json.dumps(error_data) + '\n').encode('utf-8'))
-            finally:
-                await resp.write_eof()
-            return resp
-        else:
-            # Non-streaming: get the only result from the generator
-            gen = handle_user_message(user_query, data_objs, stream=False)
-            final_response_text = None
-            async for event in gen:
-                final_response_text = event.message
-            return web.json_response({'response': final_response_text, 'final': 'true'}, headers=CORS_HEADERS)
+
+        resp = web.StreamResponse(
+            status=200,
+            reason='OK',
+            headers={
+                'Content-Type': 'application/json',
+                **CORS_HEADERS,
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Transfer-Encoding': 'chunked',
+            }
+        )
+        await resp.prepare(request)
+        try:
+            async for event in handle_user_message(user_query, data_objs, stream=True):
+                data = {'response': event.message, 'final': event.final, 'thinking': event.thinking}
+                await resp.write((json.dumps(data) + '\n').encode('utf-8'))
+                if event.final:
+                    break
+        except Exception as exc:
+            error_data = {'error': f'Server error: {str(exc)}', 'final': True}
+            await resp.write((json.dumps(error_data) + '\n').encode('utf-8'))
+        finally:
+            await resp.write_eof()
+        return resp
     else:
         return web.Response(status=404)
 

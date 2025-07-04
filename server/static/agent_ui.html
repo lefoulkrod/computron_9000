@@ -338,7 +338,8 @@
         const chatMessages = document.getElementById('chatMessages');
         const chatForm = document.getElementById('chatForm');
         const userInput = document.getElementById('userInput');
-        let conversation = [];
+        // Remove conversation history storage
+        // let conversation = [];
         let selectedFileBase64 = null;
         let selectedFileName = null;
         let selectedFileContentType = null;
@@ -383,45 +384,35 @@
             });
         }
 
-        // Helper: Render content with optional <think> block at the start
-        // If present, the first <think>...</think> is rendered as a collapsible block, followed by Markdown for the rest
-        function parseAndRenderContent(content) {
-            // Regex to match a <think>...</think> block at the start
-            const thinkRegex = /^<think>([\s\S]*?)<\/think>/i;
+        // Helper: Render content with optional thinking block
+        // If present, the 'thinking' string is rendered as collapsible blocks, followed by Markdown for the response
+        function renderAssistantContent(thinking, response) {
             let result = '';
-            let match = thinkRegex.exec(content);
-            let afterThinkIdx = 0;
-            if (match) {
-                // There is a <think> block at the start
-                const thinkContent = match[1];
+            if (thinking) {
                 const thinkId = `think-block-${Date.now()}`;
-                result += `\n<div class="collapsible-think" id="${thinkId}">\n  <div class="collapsible-think-header">Show thoughts</div>\n  <div class="collapsible-think-content">${thinkContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>\n</div>\n`;
-                afterThinkIdx = match[0].length;
+                result += `\n<div class="collapsible-think" id="${thinkId}">\n  <div class="collapsible-think-header">Show thoughts</div>\n  <div class="collapsible-think-content">${thinking.replace(/\n/g, '<br>')}</div>\n</div>\n`;
             }
-            // Render the rest (if any) as Markdown
-            if (afterThinkIdx < content.length) {
-                const nonThink = content.slice(afterThinkIdx);
-                result += marked.parse(nonThink);
+            if (response) {
+                result += marked.parse(response);
             }
             return result;
         }
 
         // Add a chat message to the UI
-        function addMessage(role, content) {
+        function addMessage(role, content, thinking = null) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${role}`;
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             if (role === 'assistant') {
-                // Render <think> blocks as collapsible, rest as Markdown
-                let rendered = parseAndRenderContent(content);
+                // Render thinking (if present) as collapsible, rest as Markdown
+                let rendered = renderAssistantContent(thinking, content);
                 bubble.innerHTML = rendered;
                 enhanceCodeBlocks(bubble)
                 // Attach expand/collapse logic for all think blocks in this message
                 const thinkBlocks = bubble.querySelectorAll('.collapsible-think');
                 thinkBlocks.forEach(block => {
                     const header = block.querySelector('.collapsible-think-header');
-                    const contentDiv = block.querySelector('.collapsible-think-content');
                     // Collapsed by default
                     block.classList.remove('expanded');
                     header.textContent = 'Show thoughts';
@@ -482,7 +473,6 @@
         // Send a user message to the backend and handle the streaming response
         async function sendMessage(message) {
             addMessage('user', message);
-            conversation.push({ role: 'user', content: message });
 
             // Show initial loading indicator
             let loadingIndicator = document.createElement('span');
@@ -493,7 +483,6 @@
 
             const body = {
                 message: message,
-                stream: true // this does nothing right now, but is here for future compatibility
             };
 
             if (selectedFileBase64 && selectedFileContentType) {
@@ -513,14 +502,8 @@
                 });
                 if (!response.body) throw new Error('No response body');
                 const reader = response.body.getReader();
-                let assistantMsg = '';
                 let decoder = new TextDecoder();
-                let lastAssistantDiv = null;
-                // Remove initial loading indicator before streaming
                 loadingIndicator.remove();
-                // Create a single assistant message bubble for streaming
-                lastAssistantDiv = addMessage('assistant', '');
-                const bubble = lastAssistantDiv.querySelector('.bubble');
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) {
@@ -531,37 +514,18 @@
                     if (!chunk.trim()) continue;
                     try {
                         const data = JSON.parse(chunk);
-                        if (data.response) {
-                            assistantMsg += data.response;
-                            // Remove previous loading indicator if present
-                            removeLoadingIndicators();
-                            // Update assistant message bubble content
-                            bubble.innerHTML = parseAndRenderContent(assistantMsg);
-                            enhanceCodeBlocks(bubble);
-                            // Attach expand/collapse logic for all think blocks in this message
-                            const thinkBlocks = bubble.querySelectorAll('.collapsible-think');
-                            thinkBlocks.forEach(block => {
-                                const header = block.querySelector('.collapsible-think-header');
-                                const contentDiv = block.querySelector('.collapsible-think-content');
-                                block.classList.remove('expanded');
-                                header.textContent = 'Show thoughts';
-                                header.onclick = () => {
-                                    const expanded = block.classList.toggle('expanded');
-                                    header.textContent = expanded ? 'Hide thoughts' : 'Show thoughts';
-                                };
-                            });
-                            // If not final, show loading indicator below this message
-                            if (data.final !== true && data.final !== 'true') {
-                                let newLoading = document.createElement('span');
-                                newLoading.className = 'loading-indicator';
-                                newLoading.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
-                                chatMessages.appendChild(newLoading);
-                            }
-                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        addMessage('assistant', data.response, data.thinking);
+                        // Remove previous loading indicator if present
+                        removeLoadingIndicators();
+                        if (data.final !== true && data.final !== 'true') {
+                            let newLoading = document.createElement('span');
+                            newLoading.className = 'loading-indicator';
+                            newLoading.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
+                            chatMessages.appendChild(newLoading);
                         }
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
                     } catch (e) { /* ignore parse errors */ }
                 }
-                conversation.push({ role: 'assistant', content: assistantMsg });
             } catch (err) {
                 // Show error in chat bubble if request fails
                 removeLoadingIndicators();
