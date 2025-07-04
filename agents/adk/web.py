@@ -8,7 +8,7 @@ from google.adk.models.lite_llm import LiteLlm
 from tools.web import get_webpage_summary, get_webpage_substring, get_webpage_summary_sections, search_google
 from tools.code.execute_code import execute_nodejs_program_with_playwright
 from agents.prompt import WEB_AGENT_PROMPT
-from . import get_adk_model
+from .model_utils import get_adk_model
 from .callbacks import log_llm_response_callback, log_llm_request_callback
 
 logger = logging.getLogger(__name__)

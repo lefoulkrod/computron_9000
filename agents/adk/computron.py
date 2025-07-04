@@ -15,7 +15,7 @@ from tools.code.execute_code import execute_python_program, execute_nodejs_progr
 from .web import web_agent
 from .file_system import file_system_agent, run_filesystem_agent
 from agents.prompt import ROOT_AGENT_PROMPT
-from . import get_adk_model
+from .model_utils import get_adk_model
 from tools.misc.datetime import datetime_tool
 
 """
