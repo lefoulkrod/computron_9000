@@ -3,9 +3,26 @@ import logging
 import pprint
 import re
 from collections.abc import AsyncGenerator, Callable, Sequence
-from typing import Mapping, Any
+from typing import Mapping, Any, Optional
+
+from ollama import AsyncClient
+from pydantic import BaseModel
+
+from agents.ollama.sdk.extract_thinking import split_think_content
 
 logger = logging.getLogger(__name__)
+
+# --- Pydantic Model for LLM Stats ---
+
+class _LLMRuntimeStats(BaseModel):
+    total_duration: Optional[float] = None
+    load_duration: Optional[float] = None
+    prompt_eval_count: Optional[int] = None
+    prompt_eval_duration: Optional[float] = None
+    prompt_tokens_per_sec: Optional[float] = None
+    eval_count: Optional[int] = None
+    eval_duration: Optional[float] = None
+    eval_tokens_per_sec: Optional[float] = None
 
 # --- Utility Functions ---
 
@@ -21,35 +38,59 @@ def _strip_think_tags(text: str) -> str:
     """
     return re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE).strip()
 
+def _llm_runtime_stats(response: object) -> _LLMRuntimeStats:
+    """
+    Extracts and converts LLM runtime statistics from the response object.
+
+    Args:
+        response (object): The LLM response object with runtime attributes.
+
+    Returns:
+        _LLMRuntimeStats: Parsed and converted runtime statistics.
+    """
+    def ns_to_s(ns: Optional[int]) -> Optional[float]:
+        return ns / 1_000_000_000 if ns is not None else None
+
+    total_duration = ns_to_s(getattr(response, 'total_duration', None))
+    load_duration = ns_to_s(getattr(response, 'load_duration', None))
+    prompt_eval_count = getattr(response, 'prompt_eval_count', None)
+    prompt_eval_duration = ns_to_s(getattr(response, 'prompt_eval_duration', None))
+    eval_count = getattr(response, 'eval_count', None)
+    eval_duration = ns_to_s(getattr(response, 'eval_duration', None))
+    prompt_tokens_per_sec = (prompt_eval_count / prompt_eval_duration) if (prompt_eval_count and prompt_eval_duration) else None
+    eval_tokens_per_sec = (eval_count / eval_duration) if (eval_count and eval_duration) else None
+    return _LLMRuntimeStats(
+        total_duration=total_duration,
+        load_duration=load_duration,
+        prompt_eval_count=prompt_eval_count,
+        prompt_eval_duration=prompt_eval_duration,
+        prompt_tokens_per_sec=prompt_tokens_per_sec,
+        eval_count=eval_count,
+        eval_duration=eval_duration,
+        eval_tokens_per_sec=eval_tokens_per_sec,
+    )
+
 async def run_tool_call_loop(
     messages: list[dict[str, str]],
     tools: list[Callable[..., object]],
     model: str = '',
     model_options: Mapping[str, Any] | None = None,
-    client=None
 ) -> AsyncGenerator[str, None]:
     """
     Executes a chat loop with the LLM, handling tool calls and yielding message content.
-    This function mutates the messages list in place by appending assistant and tool messages.
+    This function mutates the messages list in place by appending assistant and tool messages to maintain chat history.
 
     Args:
         messages (list[dict[str, str]]): The chat history (including system message). This list is mutated in place.
         tools (list[Callable[..., object]]): List of tool functions to use for tool calls.
         model (str): The model name to use for the LLM.
         model_options (Mapping[str, Any] | None): Options to pass to the LLM.
-        client: The LLM client instance (must have an async chat method).
 
     Yields:
         str: The message content at each step (never tool call results directly).
     """
     opts = dict(model_options) if model_options else {}
-    if client is None:
-        try:
-            from ollama import AsyncClient
-            client = AsyncClient()
-        except ImportError as exc:
-            logger.error("Ollama AsyncClient not available: %s", exc)
-            raise
+    client = AsyncClient()
     while True:
         logger.debug("\033[32mChat history sent to LLM:\n%s\033[0m", pprint.pformat(messages))
         try:
@@ -62,51 +103,35 @@ async def run_tool_call_loop(
             )
             # Log LLM stats if present
             if hasattr(response, 'done') and getattr(response, 'done', False):
-                # Extract and convert durations from ns to s
-                total_duration_ns = getattr(response, 'total_duration', None)
-                load_duration_ns = getattr(response, 'load_duration', None)
-                prompt_eval_count = getattr(response, 'prompt_eval_count', None)
-                prompt_eval_duration_ns = getattr(response, 'prompt_eval_duration', None)
-                eval_count = getattr(response, 'eval_count', None)
-                eval_duration_ns = getattr(response, 'eval_duration', None)
-                def ns_to_s(ns):
-                    return ns / 1_000_000_000 if ns is not None else None
-                total_duration = ns_to_s(total_duration_ns)
-                load_duration = ns_to_s(load_duration_ns)
-                prompt_eval_duration = ns_to_s(prompt_eval_duration_ns)
-                eval_duration = ns_to_s(eval_duration_ns)
-                # Calculate tokens/sec
-                prompt_tokens_per_sec = (prompt_eval_count / prompt_eval_duration) if (prompt_eval_count and prompt_eval_duration) else None
-                eval_tokens_per_sec = (eval_count / eval_duration) if (eval_count and eval_duration) else None
-                # Log nicely, with newlines for readability
+                stats = _llm_runtime_stats(response)
                 logger.info(
                     "\nLLM stats:\n"
-                    f"  total_duration:         {total_duration:.3f}s\n"
-                    f"  load_duration:          {load_duration:.3f}s\n"
-                    f"  prompt_eval_count:      {prompt_eval_count}\n"
-                    f"  prompt_eval_duration:   {prompt_eval_duration:.3f}s\n"
-                    f"  prompt_tokens_per_sec:  {prompt_tokens_per_sec:.2f}\n"
-                    f"  eval_count:             {eval_count}\n"
-                    f"  eval_duration:          {eval_duration:.3f}s\n"
-                    f"  eval_tokens_per_sec:    {eval_tokens_per_sec:.2f}\n"
+                    f"  total_duration:         {stats.total_duration:.3f}s\n"
+                    f"  load_duration:          {stats.load_duration:.3f}s\n"
+                    f"  prompt_eval_count:      {stats.prompt_eval_count}\n"
+                    f"  prompt_eval_duration:   {stats.prompt_eval_duration:.3f}s\n"
+                    f"  prompt_tokens_per_sec:  {stats.prompt_tokens_per_sec:.2f}\n"
+                    f"  eval_count:             {stats.eval_count}\n"
+                    f"  eval_duration:          {stats.eval_duration:.3f}s\n"
+                    f"  eval_tokens_per_sec:    {stats.eval_tokens_per_sec:.2f}\n"
                 )
-            try:
-                # Use model_dump for pretty printing if available (Pydantic BaseModel)
-                response_data = response.model_dump()
-                logger.debug("\033[33mLLM response:\n%s\033[0m", pprint.pformat(response_data))
-            except Exception as exc:
-                logger.debug("\033[33mLLM response (raw): %r\033[0m", response)
+            # Use model_dump for pretty printing if available (Pydantic BaseModel)
+            response_data = response.model_dump()
+            logger.debug("\033[33mLLM response:\n%s\033[0m", pprint.pformat(response_data))
             content = response.message.content or ""
             tool_calls = getattr(response.message, 'tool_calls', None)
             yield content.strip()
-            if not tool_calls:
-                break
+            
             assistant_message = {
                 'role': 'assistant',
-                'content': _strip_think_tags(content),
+                'content': split_think_content(content)[0],
                 'tool_calls': tool_calls
             }
             messages.append(assistant_message)
+            
+            if not tool_calls:
+                break
+            
             for tool_call in tool_calls:
                 function = getattr(tool_call, 'function', None)
                 if not function:
@@ -145,5 +170,3 @@ async def run_tool_call_loop(
             logger.exception("Error: %s", exc)
             yield "An error occurred while processing your message."
             break
-
-__all__ = ["run_tool_call_loop", "_strip_think_tags"]
