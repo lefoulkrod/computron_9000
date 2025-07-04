@@ -1,5 +1,5 @@
 import pytest
-from agents.ollama.sdk.extract_thinking import extract_thinking
+from agents.ollama.sdk.extract_thinking import split_think_content
 
 @pytest.mark.parametrize(
     "input_text,expected_main,expected_thinking",
@@ -16,6 +16,6 @@ def test_extract_thinking(input_text, expected_main, expected_thinking):
     """
     Test extract_thinking for primary <think> tag scenarios.
     """
-    main, thinking = extract_thinking(input_text)
+    main, thinking = split_think_content(input_text)
     assert main == expected_main
     assert thinking == expected_thinking

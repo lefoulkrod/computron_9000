@@ -2,7 +2,7 @@ import re
 from typing import Tuple, Optional
 
 
-def extract_thinking(text: str) -> Tuple[str, Optional[str]]:
+def split_think_content(text: str) -> Tuple[str, Optional[str]]:
     """
     Splits text into <think>...</think> and non-think parts. Strips only leading/trailing newlines from each part.
 
