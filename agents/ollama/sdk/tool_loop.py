@@ -59,6 +59,26 @@ def _llm_runtime_stats(response: object) -> _LLMRuntimeStats:
         eval_tokens_per_sec=eval_tokens_per_sec,
     )
 
+def _to_serializable(obj: Any) -> Any:
+    """
+    Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
+
+    Args:
+        obj (Any): The object to convert.
+
+    Returns:
+        Any: JSON-serializable representation.
+    """
+    if hasattr(obj, 'model_dump'):
+        return _to_serializable(obj.model_dump())
+    if hasattr(obj, 'dict'):
+        return _to_serializable(obj.dict())
+    if isinstance(obj, dict):
+        return {k: _to_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [ _to_serializable(i) for i in obj ]
+    return obj
+
 async def run_tool_call_loop(
     messages: list[dict[str, str]],
     tools: list[Callable[..., object]],
@@ -126,15 +146,7 @@ async def run_tool_call_loop(
                         else:
                             result = tool_func(**arguments)
                         # Ensure result is JSON serializable
-                        if hasattr(result, 'model_dump'):
-                            serializable_result = result.model_dump() # type: ignore
-                        elif hasattr(result, 'dict'):
-                            serializable_result = result.dict() # type: ignore
-                        elif isinstance(result, (str, int, float, bool, type(None), list, dict)):
-                            serializable_result = result
-                        else:
-                            # Fallback: try to convert to string
-                            serializable_result = str(result)
+                        serializable_result = _to_serializable(result)
                         tool_result = {"result": serializable_result}
                     except Exception as exc:
                         logger.exception(f"Error running tool '{tool_name}': {exc}")
