@@ -26,18 +26,6 @@ class _LLMRuntimeStats(BaseModel):
 
 # --- Utility Functions ---
 
-def _strip_think_tags(text: str) -> str:
-    """
-    Remove all <think>...</think> tags and their contents from the given text.
-
-    Args:
-        text (str): The input string possibly containing <think> tags.
-
-    Returns:
-        str: The string with all <think>...</think> blocks removed.
-    """
-    return re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE).strip()
-
 def _llm_runtime_stats(response: object) -> _LLMRuntimeStats:
     """
     Extracts and converts LLM runtime statistics from the response object.

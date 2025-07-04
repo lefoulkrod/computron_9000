@@ -19,7 +19,7 @@
         }
         body {
             min-height: 100vh;
-            background: #f6f6f6;
+            background: var(--primary);
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
@@ -33,6 +33,9 @@
             border-bottom: 1px solid #e5e7eb;
             background: #fff;
             box-sizing: border-box;
+            max-width: 100rem; /* added */
+            margin-left: auto; /* added */
+            margin-right: auto; /* added */
         }
         .logo {
             height: 60px;
@@ -54,6 +57,9 @@
             gap: 0;
             background: none;
             box-sizing: border-box;
+            max-width: 100rem; /* added */
+            margin-left: auto; /* added */
+            margin-right: auto; /* added */
         }
         .column {
             background: #fff;
@@ -88,7 +94,7 @@
             flex-direction: column;
             border-radius: 0.25rem;
             border: 1px solid #eee;
-            background: #fafafa;
+            background: var(--primary); /* was #fafafa */
             padding: 0.5rem;
             height: 100%;
             align-items: stretch;
@@ -112,7 +118,7 @@
             padding: 0.5rem 1.2rem;
             border-radius: 0.25rem;
             border: none;
-            background: #0078fe;
+            background: var(--secondary); /* was #0078fe */
             color: #fff;
             font-size: 1rem;
             cursor: pointer;
