@@ -68,4 +68,5 @@ Always use the most appropriate tool for the user's request.
 - Identify the section(s) whose summary contains information relevant to the user's question or request.
 - For any relevant section, use its `starting_char_position` and `ending_char_position` to request the full text substring from the `get_webpage_substring` tool.
 - Use the retrieved full text to answer the user's question or fulfill their request, providing as much detail as needed.
+- Always return code snippets and relevant URLs unsummarized, as the user may need to see the exact content.
 """

@@ -7,7 +7,7 @@ from ollama import ChatResponse
 from agents.types import UserMessageEvent, Data
 from config import load_config
 from .agents import computron, root_agent
-from agents.ollama.sdk import run_tool_call_loop, split_think_content
+from .sdk import run_tool_call_loop, split_think_content
 
 logger = logging.getLogger(__name__)
 
