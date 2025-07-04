@@ -2,10 +2,11 @@ import json
 import logging
 import pprint
 import re
+import inspect
 from collections.abc import AsyncGenerator, Callable, Sequence
-from typing import Mapping, Any, Optional
+from typing import Mapping, Any, Optional, Callable as TypingCallable
 
-from ollama import AsyncClient
+from ollama import AsyncClient, ChatResponse
 from pydantic import BaseModel
 
 from agents.ollama.sdk.extract_thinking import split_think_content
@@ -63,6 +64,8 @@ async def run_tool_call_loop(
     tools: list[Callable[..., object]],
     model: str = '',
     model_options: Mapping[str, Any] | None = None,
+    before_model_call: TypingCallable[[list[dict[str, str]]], None] | None = None,
+    after_model_call: TypingCallable[["ChatResponse"], None] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Executes a chat loop with the LLM, handling tool calls and yielding message content.
@@ -73,6 +76,8 @@ async def run_tool_call_loop(
         tools (list[Callable[..., object]]): List of tool functions to use for tool calls.
         model (str): The model name to use for the LLM.
         model_options (Mapping[str, Any] | None): Options to pass to the LLM.
+        before_model_call (Callable[[list[dict[str, str]]], None] | None): Callback before model call.
+        after_model_call (Callable[[ChatResponse], None] | None): Callback after model call.
 
     Yields:
         str: The message content at each step (never tool call results directly).
@@ -80,7 +85,8 @@ async def run_tool_call_loop(
     opts = dict(model_options) if model_options else {}
     client = AsyncClient()
     while True:
-        logger.debug("\033[32mChat history sent to LLM:\n%s\033[0m", pprint.pformat(messages))
+        if before_model_call:
+            before_model_call(list(messages))
         try:
             response = await client.chat(
                 model=model,
@@ -89,37 +95,19 @@ async def run_tool_call_loop(
                 tools=tools,
                 stream=False,
             )
-            # Log LLM stats if present
-            if hasattr(response, 'done') and getattr(response, 'done', False):
-                stats = _llm_runtime_stats(response)
-                logger.info(
-                    "\nLLM stats:\n"
-                    f"  total_duration:         {stats.total_duration:.3f}s\n"
-                    f"  load_duration:          {stats.load_duration:.3f}s\n"
-                    f"  prompt_eval_count:      {stats.prompt_eval_count}\n"
-                    f"  prompt_eval_duration:   {stats.prompt_eval_duration:.3f}s\n"
-                    f"  prompt_tokens_per_sec:  {stats.prompt_tokens_per_sec:.2f}\n"
-                    f"  eval_count:             {stats.eval_count}\n"
-                    f"  eval_duration:          {stats.eval_duration:.3f}s\n"
-                    f"  eval_tokens_per_sec:    {stats.eval_tokens_per_sec:.2f}\n"
-                )
-            # Use model_dump for pretty printing if available (Pydantic BaseModel)
-            response_data = response.model_dump()
-            logger.debug("\033[33mLLM response:\n%s\033[0m", pprint.pformat(response_data))
+            if after_model_call:
+                after_model_call(response)
             content = response.message.content or ""
             tool_calls = getattr(response.message, 'tool_calls', None)
             yield content.strip()
-            
             assistant_message = {
                 'role': 'assistant',
                 'content': split_think_content(content)[0],
                 'tool_calls': tool_calls
             }
             messages.append(assistant_message)
-            
             if not tool_calls:
                 break
-            
             for tool_call in tool_calls:
                 function = getattr(tool_call, 'function', None)
                 if not function:
@@ -133,7 +121,10 @@ async def run_tool_call_loop(
                     tool_result = {"error": "Tool not found"}
                 else:
                     try:
-                        result = tool_func(**arguments)
+                        if inspect.iscoroutinefunction(tool_func):
+                            result = await tool_func(**arguments)
+                        else:
+                            result = tool_func(**arguments)
                         # Ensure result is JSON serializable
                         if hasattr(result, 'model_dump'):
                             serializable_result = result.model_dump() # type: ignore
@@ -142,6 +133,7 @@ async def run_tool_call_loop(
                         elif isinstance(result, (str, int, float, bool, type(None), list, dict)):
                             serializable_result = result
                         else:
+                            # Fallback: try to convert to string
                             serializable_result = str(result)
                         tool_result = {"result": serializable_result}
                     except Exception as exc:
