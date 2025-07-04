@@ -6,7 +6,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from agents.adk.agent import root_agent
+from .agent import root_agent
 from agents.types import UserMessageEvent, Data
 
 logger = logging.getLogger(__name__)
