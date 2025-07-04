@@ -107,7 +107,6 @@ async def run_tool_call_loop(
                 'tool_calls': tool_calls
             }
             messages.append(assistant_message)
-            logger.debug("Appended assistant message: %s", assistant_message)
             for tool_call in tool_calls:
                 function = getattr(tool_call, 'function', None)
                 if not function:
@@ -141,7 +140,6 @@ async def run_tool_call_loop(
                     'content': json.dumps(tool_result)
                 }
                 messages.append(tool_message)
-                logger.debug("Appended tool message: %s", tool_message)
             # Do not yield tool results, just continue looping
         except Exception as exc:
             logger.exception("Error: %s", exc)
