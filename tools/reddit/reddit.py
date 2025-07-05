@@ -107,14 +107,14 @@ async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
             )
         return submissions
 
-async def get_reddit_comments_tree_shallow(url: str, limit: int = 10) -> list[RedditComment]:
+async def get_reddit_comments_tree_shallow(submission_id: str, limit: int = 10) -> list[RedditComment]:
     """
-    Retrieve the first N top-level comments for a Reddit submission by URL.
+    Retrieve the first N top-level comments for a Reddit submission by submission ID.
     This function fetches the top-level comments and their immediate replies,
     but does not recursively fetch deeper replies to keep the tree shallow.
 
     Args:
-        url (str): The URL of the Reddit submission.
+        submission_id (str): The Reddit submission ID.
         limit (int): Maximum number of top-level comments to return.
 
     Returns:
@@ -126,7 +126,7 @@ async def get_reddit_comments_tree_shallow(url: str, limit: int = 10) -> list[Re
             client_secret=config.reddit.client_secret,
             user_agent=config.reddit.user_agent,
         ) as reddit:
-            submission = await reddit.submission(url=url)
+            submission = await reddit.submission(id=submission_id, fetch=False)
             submission.comment_sort = "top"  # Sort comments by top
             submission.comment_limit = limit  # Limit to top N comments
             await submission.load()
@@ -154,5 +154,5 @@ async def get_reddit_comments_tree_shallow(url: str, limit: int = 10) -> list[Re
                 comments_tree.append(comment_obj)
             return comments_tree
     except Exception as exc:
-        logger.exception(f"Failed to fetch comments for url: {url}")
+        logger.exception(f"Failed to fetch comments for submission id: {submission_id}")
         raise
