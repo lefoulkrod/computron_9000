@@ -1,17 +1,25 @@
-from typing import Callable, Any, Awaitable
+from typing import Callable, Awaitable
+from ollama import ChatResponse
+
 from .agent import Agent
 from .extract_thinking import split_think_content
 from .tool_loop import run_tool_call_loop
-import asyncio
 
 
-def make_run_agent_as_tool_function(agent: Agent, tool_description: str) -> Callable[[str], Awaitable[str]]:
+def make_run_agent_as_tool_function(
+    agent: Agent,
+    tool_description: str,
+    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
+    after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
+) -> Callable[[str], Awaitable[str]]:
     """
     Returns a function that runs the given agent as a tool, with the provided description as its docstring.
 
     Args:
         agent (Agent): The agent to be run as a tool.
         tool_description (str): The docstring to assign to the returned function.
+        before_model_callbacks (list[Callable[[list[dict[str, str]]], None]] | None): List of callbacks before model call.
+        after_model_callbacks (list[Callable[[ChatResponse], None]] | None): List of callbacks after model call.
 
     Returns:
         Callable[[str], Awaitable[str]]: An async function that takes a string argument 'instructions' and returns a string, with the given docstring.
@@ -38,6 +46,8 @@ Returns:
                 tools=agent.tools,
                 model=agent.model,
                 model_options=agent.options,
+                before_model_callbacks=before_model_callbacks,
+                after_model_callbacks=after_model_callbacks,
             )
             async for output in gen:
                 main_text, _ = split_think_content(output)
