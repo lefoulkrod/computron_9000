@@ -1,13 +1,17 @@
 """Entry point for starting the aiohttp chat server."""
 
-from logging_config import setup_logging
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
-setup_logging()
+from logging_config import setup_logging
 
 # Third-party imports
 import aiohttp.web
 
 from server.aiohttp_app import app
+
+setup_logging()
 
 PORT = 8080
 
