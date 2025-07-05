@@ -13,7 +13,7 @@ import asyncio
 import logging
 
 from dotenv import load_dotenv
-from tools.web.reddit import search_reddit, get_reddit_comments_tree_shallow
+from tools.reddit import search_reddit, get_reddit_comments_tree_shallow
 
 # Load environment variables from .env file
 load_dotenv()

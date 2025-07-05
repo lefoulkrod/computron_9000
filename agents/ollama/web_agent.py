@@ -7,7 +7,8 @@ from agents.ollama.sdk import (
     make_log_after_model_call,
 )
 from config import load_config
-from tools.web import search_google, get_webpage_substring, get_webpage_summary_sections, search_reddit, get_reddit_comments_tree_shallow
+from tools.web import search_google, get_webpage_substring, get_webpage_summary_sections
+from tools.reddit import search_reddit, get_reddit_comments_tree_shallow
 
 WEB_AGENT_NAME = "WEB_AGENT"
 WEB_AGENT_DESCRIPTION = """
