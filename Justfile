@@ -15,6 +15,10 @@ run-ollama:
 # Add a new dependency to the project
 add-dep package:
     uv add {{package}}
+
+# Remove a dependency from the project
+remove-dep package:
+    uv remove {{package}}
     
 # List outdated dependencies (top-level only)
 outdated:

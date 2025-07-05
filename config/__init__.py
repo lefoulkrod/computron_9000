@@ -1,9 +1,10 @@
 """Configuration loading utilities."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import yaml
 from pathlib import Path
 from functools import lru_cache
+import os
 
 class Settings(BaseModel):
     """Application settings."""
@@ -54,6 +55,13 @@ class AgentsConfig(BaseModel):
     file_system: AgentConfig = AgentConfig()
 
 
+class RedditConfig(BaseModel):
+    """Reddit API configuration."""
+    client_id: str = Field(default_factory=lambda: os.getenv("REDDIT_CLIENT_ID", ""))
+    client_secret: str = Field(default_factory=lambda: os.getenv("REDDIT_CLIENT_SECRET", ""))
+    user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -62,6 +70,7 @@ class AppConfig(BaseModel):
     tools: ToolsConfig = ToolsConfig()
     settings: Settings = Settings()
     agents: AgentsConfig = AgentsConfig()
+    reddit: RedditConfig = RedditConfig()
 
 @lru_cache(maxsize=1)
 def load_config() -> AppConfig:
