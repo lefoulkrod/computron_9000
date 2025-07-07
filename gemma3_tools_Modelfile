@@ -1,0 +1,55 @@
+FROM gemma3:27b-it-qat
+TEMPLATE """{{- if or .System .Tools }}
+<start_of_turn>user
+{{- if .System }}
+{{ .System }}
+{{- end }}
+{{- if .Tools }}
+You have access to functions. If you decide to invoke any of the function(s),
+ you MUST put it in the format of
+<tool_call>
+{"name": function name, "parameters": dictionary of argument name and its value}
+</tool_call>
+
+You SHOULD NOT include any other text in the response if you call a function
+{{- range .Tools }}
+{"type": "function", "function": {{ .Function }}}
+{{- end }}
+{{- end }}
+<end_of_turn>
+{{- end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 }}
+{{- if eq .Role "user" }}
+<start_of_turn>user
+{{ .Content }}<end_of_turn>
+{{ if $last }}<start_of_turn>model
+{{ end }}
+{{- else if eq .Role "assistant" }}
+<start_of_turn>model
+{{- if .ToolCalls }}
+<tool_call>
+{{- range .ToolCalls }}
+{"name": "{{ .Function.Name }}", "parameters": {{ .Function.Arguments }}}
+{{- end }}
+</tool_call>
+{{- else }}
+{{ .Content }}
+{{- end }}
+{{- if not $last }}<end_of_turn>
+{{ end }}
+{{- else if eq .Role "tool" }}
+<start_of_turn>user
+<tool_response>
+{{ .Content }}
+</tool_response><end_of_turn>
+{{- /* Start model turn if this is the last message */ -}}
+{{ if $last }}<start_of_turn>model
+{{ end }}
+{{- end }}
+{{- end }}"""
+PARAMETER top_p 0.95
+PARAMETER stop <end_of_turn>
+PARAMETER temperature 0
+PARAMETER top_k 64
+

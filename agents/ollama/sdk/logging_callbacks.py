@@ -2,7 +2,7 @@ import logging
 import pprint
 from typing import Callable, Any
 
-from ollama import ChatResponse
+from ollama import ChatResponse, GenerateResponse
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def make_log_before_model_call(agent: Any) -> Callable[[list[dict[str, str]]], N
         logger.debug("\033[32m%s\033[0m", log_text)
     return log_before_model_call
 
-def make_log_after_model_call(agent: Any) -> Callable[[ChatResponse], None]:
+def make_log_after_model_call(agent: Any) -> Callable[[ChatResponse | GenerateResponse], None]:
     """
     Factory for a callback that logs the LLM response and stats after the model call.
 
@@ -33,9 +33,9 @@ def make_log_after_model_call(agent: Any) -> Callable[[ChatResponse], None]:
         agent (Any): The agent object with a 'name' attribute.
 
     Returns:
-        Callable[[ChatResponse], None]: The logging callback.
+        Callable[[ChatResponse | GenerateResponse], None]: The logging callback.
     """
-    def log_after_model_call(response: ChatResponse) -> None:
+    def log_after_model_call(response: ChatResponse | GenerateResponse) -> None:
         agent_name = getattr(agent, 'name', 'unknown')
         log_text = f"\n========== [after_model_call] for agent: {agent_name} =========="
         # Log LLM stats if present

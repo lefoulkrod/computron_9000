@@ -37,14 +37,13 @@ async def _ensure_session() -> object:
         )
     return session
 
-async def handle_user_message(message: str, data: Sequence[Data] | None = None, stream: bool = False) -> AsyncGenerator[UserMessageEvent, None]:
+async def handle_user_message(message: str, data: Sequence[Data] | None = None) -> AsyncGenerator[UserMessageEvent, None]:
     """
     Handles user message with the agent runner, managing session and runner internally.
 
     Args:
         message (str): The user message to send to the agent.
         data (Sequence[Data] | None): Optional list of base64-encoded data and content type objects.
-        stream (bool): Whether to stream responses (True) or return only the final response (False).
 
     Yields:
         UserMessageEvent: Contains the message and final flag.

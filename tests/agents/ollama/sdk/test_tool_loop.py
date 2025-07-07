@@ -1,4 +1,3 @@
-import pytest
 from pydantic import BaseModel
 
 from agents.ollama.sdk.tool_loop import _to_serializable

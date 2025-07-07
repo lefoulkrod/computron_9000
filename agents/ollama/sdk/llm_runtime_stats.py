@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from ollama import ChatResponse
+from ollama import ChatResponse, GenerateResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -29,12 +29,12 @@ class LLMRuntimeStats(BaseModel):
     eval_duration: Optional[float] = None
     eval_tokens_per_sec: Optional[float] = None
 
-def llm_runtime_stats(response: ChatResponse) -> LLMRuntimeStats:
+def llm_runtime_stats(response: ChatResponse | GenerateResponse) -> LLMRuntimeStats:
     """
     Extracts and converts LLM runtime statistics from the response object.
 
     Args:
-        response (ChatResponse): The LLM response object with runtime attributes.
+        response (ChatResponse | GenerateResponse): The LLM response object with runtime attributes.
 
     Returns:
         LLMRuntimeStats: Parsed and converted runtime statistics.
