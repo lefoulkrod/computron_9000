@@ -41,14 +41,13 @@ async def add_messages_to_history(messages: list[ModelMessage]) -> None:
     logger.debug(f"Adding {len(messages)} messages to history")
     _message_history.extend(messages)
 
-async def handle_user_message(message: str, data: Sequence[Data] | None = None, stream: bool = False) -> AsyncGenerator[UserMessageEvent, None]:
+async def handle_user_message(message: str, data: Sequence[Data] | None = None) -> AsyncGenerator[UserMessageEvent, None]:
     """
     Handles user message with the computron agent, streaming or returning the final response.
 
     Args:
         message (str): The user message to send to the agent.
         data (Sequence[Data] | None): Optional list of base64-encoded data and content type objects.
-        stream (bool): Whether to stream responses (True) or return only the final response (False).
 
     Yields:
         UserMessageEvent: Contains the message and final flag.

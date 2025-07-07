@@ -2,11 +2,12 @@ import json
 import logging
 import inspect
 from collections.abc import AsyncGenerator, Callable
-from typing import Mapping, Any
+from typing import Mapping, Any, Optional, Sequence
 
 from ollama import AsyncClient, ChatResponse
 
 from agents.ollama.sdk.extract_thinking import split_think_content
+from agents.types import Data
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def _to_serializable(obj: Any) -> Any:
 
 async def run_tool_call_loop(
     messages: list[dict[str, str]],
-    tools: list[Callable[..., object]],
+    tools: Optional[Sequence[Callable[..., Any]]] = None,
     model: str = '',
     model_options: Mapping[str, Any] | None = None,
     before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
@@ -46,7 +47,7 @@ async def run_tool_call_loop(
 
     Args:
         messages (list[dict[str, str]]): The chat history (including system message). This list is mutated in place.
-        tools (list[Callable[..., object]]): List of tool functions to use for tool calls.
+        tools (Optional[Sequence[Callable[..., Any]]]): Sequence of tool functions to use for tool calls.
         model (str): The model name to use for the LLM.
         model_options (Mapping[str, Any] | None): Options to pass to the LLM.
         before_model_callbacks (list[Callable[[list[dict[str, str]]], None]] | None): List of callbacks before model call.
@@ -57,6 +58,7 @@ async def run_tool_call_loop(
     """
     opts = dict(model_options) if model_options else {}
     client = AsyncClient()
+    tools = tools or []
     while True:
         if before_model_callbacks:
             for cb in before_model_callbacks:
@@ -72,15 +74,18 @@ async def run_tool_call_loop(
             if after_model_callbacks:
                 for cb in after_model_callbacks:
                     cb(response)
-            content = response.message.content or ""
-            tool_calls = getattr(response.message, 'tool_calls', None)
-            yield content.strip()
+            content = response.message.content or None
+            tool_calls = response.message.tool_calls or None
+            # Remove thinking content from the response before storing in chat history
+            content_without_think = split_think_content(content)[0] if content else None
             assistant_message = {
                 'role': 'assistant',
-                'content': split_think_content(content)[0],
+                'content': content_without_think,
                 'tool_calls': tool_calls
             }
             messages.append(assistant_message)
+            if content:
+                yield content
             if not tool_calls:
                 break
             for tool_call in tool_calls:

@@ -1,11 +1,16 @@
 # Standard library imports
 """aiohttp web server exposing the COMPUTRON_9000 agent API."""
 
-import os
 import json
+import logging
+import os
+from typing import Any, Optional
 
 # Third-party imports
 from aiohttp import web
+from aiohttp.web_request import Request
+from aiohttp.web_response import Response, StreamResponse
+from pydantic import BaseModel, ValidationError
 
 # Conditional imports based on environment variable
 if os.environ.get("AGENT_SDK", "pydantic").lower() == "adk":
@@ -16,7 +21,7 @@ else:
     from agents.pydantic_ai import handle_user_message
 from agents.types import Data
 
-# Local imports
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 
@@ -26,33 +31,79 @@ CORS_HEADERS = {
     'Access-Control-Allow-Headers': 'Content-Type',
 }
 
-async def handle_options(request):
-    """Handle CORS preflight requests."""
-    return web.Response(status=200, headers={
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-    })
+class ChatRequest(BaseModel):
+    message: str
+    data: Optional[list[dict[str, Any]]] = None
 
-async def handle_post(request):
-    """Handle chat POST requests from the UI."""
+
+def _guess_content_type(file_path: str) -> str:
+    """
+    Guess the content type based on file extension.
+
+    Args:
+        file_path (str): The file path.
+
+    Returns:
+        str: The content type.
+    """
+    if file_path.endswith('.css'):
+        return 'text/css'
+    if file_path.endswith('.js'):
+        return 'application/javascript'
+    if file_path.endswith('.html'):
+        return 'text/html'
+    if file_path.endswith('.png'):
+        return 'image/png'
+    if file_path.endswith('.jpg') or file_path.endswith('.jpeg'):
+        return 'image/jpeg'
+    if file_path.endswith('.svg'):
+        return 'image/svg+xml'
+    return 'application/octet-stream'
+
+async def handle_options(request: Request) -> Response:
+    """
+    Handle CORS preflight requests.
+
+    Args:
+        request (Request): The incoming request.
+
+    Returns:
+        Response: The HTTP response.
+    """
+    return web.Response(status=200, headers=CORS_HEADERS)
+
+async def handle_post(request: Request) -> StreamResponse:
+    """
+    Handle chat POST requests from the UI.
+
+    Args:
+        request (Request): The incoming request.
+
+    Returns:
+        StreamResponse: The streaming HTTP response.
+    """
     if request.path == '/api/chat':
         try:
-            data = await request.json()
-        except Exception:
+            body = await request.text()
+            try:
+                data = ChatRequest.model_validate_json(body)
+            except ValidationError as ve:
+                logger.warning(f"Invalid request data: {ve}")
+                return web.json_response({'error': 'Invalid JSON or missing required fields.'}, status=400, headers=CORS_HEADERS)
+        except Exception as exc:
+            logger.exception("Failed to parse request JSON")
             return web.json_response({'error': 'Invalid JSON.'}, status=400, headers=CORS_HEADERS)
-        user_query = data.get('message')
-        if user_query is None or str(user_query).strip() == "":
+        user_query = data.message.strip()
+        if not user_query:
             return web.json_response({'error': 'Message field is required.'}, status=400, headers=CORS_HEADERS)
-        user_query = str(user_query)
         # Handle optional data field (array with 0 or more entries, always with base64 and content_type)
-        data_objs = []
-        data_field = data.get('data')
-        if data_field and len(data_field) > 0:
-            data_objs = [Data(base64_encoded=obj['base64'], content_type=obj['content_type']) for obj in data_field]
-        else:
-            data_objs = None
-
+        data_objs = None
+        if data.data and len(data.data) > 0:
+            try:
+                data_objs = [Data(base64_encoded=obj['base64'], content_type=obj['content_type']) for obj in data.data]
+            except Exception as exc:
+                logger.warning(f"Invalid data field: {exc}")
+                return web.json_response({'error': 'Invalid data field.'}, status=400, headers=CORS_HEADERS)
         resp = web.StreamResponse(
             status=200,
             reason='OK',
@@ -66,12 +117,13 @@ async def handle_post(request):
         )
         await resp.prepare(request)
         try:
-            async for event in handle_user_message(user_query, data_objs, stream=True):
-                data = {'response': event.message, 'final': event.final, 'thinking': event.thinking}
-                await resp.write((json.dumps(data) + '\n').encode('utf-8'))
+            async for event in handle_user_message(user_query, data_objs):
+                data_out = {'response': event.message, 'final': event.final, 'thinking': event.thinking}
+                await resp.write((json.dumps(data_out) + '\n').encode('utf-8'))
                 if event.final:
                     break
         except Exception as exc:
+            logger.exception("Error in handle_user_message")
             error_data = {'error': f'Server error: {str(exc)}', 'final': True}
             await resp.write((json.dumps(error_data) + '\n').encode('utf-8'))
         finally:
@@ -80,8 +132,16 @@ async def handle_post(request):
     else:
         return web.Response(status=404)
 
-async def handle_get(request):
-    """Serve the chat UI and static assets."""
+async def handle_get(request: Request) -> Response:
+    """
+    Serve the chat UI and static assets.
+
+    Args:
+        request (Request): The incoming request.
+
+    Returns:
+        Response: The HTTP response.
+    """
     if request.path in ['', '/']:
         html_path = os.path.join(STATIC_DIR, 'agent_ui.html')
         if os.path.isfile(html_path):
@@ -89,35 +149,24 @@ async def handle_get(request):
                 html = f.read()
             return web.Response(body=html, content_type='text/html', headers=CORS_HEADERS)
         else:
+            logger.warning(f"File not found: {html_path}")
             return web.Response(text='<h1>File not found</h1>', content_type='text/html', headers=CORS_HEADERS)
     elif request.path.startswith('/static/'):
         rel_path = request.path[len('/static/'):]
         file_path = os.path.join(STATIC_DIR, rel_path)
         if os.path.isfile(file_path):
-            # Guess content type
-            if file_path.endswith('.css'):
-                content_type = 'text/css'
-            elif file_path.endswith('.js'):
-                content_type = 'application/javascript'
-            elif file_path.endswith('.html'):
-                content_type = 'text/html'
-            elif file_path.endswith('.png'):
-                content_type = 'image/png'
-            elif file_path.endswith('.jpg') or file_path.endswith('.jpeg'):
-                content_type = 'image/jpeg'
-            elif file_path.endswith('.svg'):
-                content_type = 'image/svg+xml'
-            else:
-                content_type = 'application/octet-stream'
+            content_type = _guess_content_type(file_path)
             with open(file_path, 'rb') as f:
                 data = f.read()
             return web.Response(body=data, content_type=content_type, headers=CORS_HEADERS)
         else:
+            logger.warning(f"Static file not found: {file_path}")
             return web.Response(status=404)
     else:
         return web.Response(status=404)
 
-app = web.Application()
+# Set client_max_size to 10 MB (adjust as needed)
+app = web.Application(client_max_size=10*1024**2)
 app.router.add_route('OPTIONS', '/api/chat', handle_options)
 app.router.add_route('POST', '/api/chat', handle_post)
 app.router.add_route('GET', '/', handle_get)

@@ -96,19 +96,20 @@
             border: 1px solid #eee;
             background: var(--primary); /* was #fafafa */
             padding: 0.5rem;
-            height: 100%;
             align-items: stretch;
         }
-        .input-area textarea {
-            flex: 1;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.25rem;
-            border: 1px solid #ccc;
+        .custom-input-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .custom-input {
+            min-height: 2rem;
+            max-height: 8rem;
+            overflow-y: auto;
             font-size: 1rem;
-            resize: none;
-            height: 100%;
-            min-height: 2.5rem;
-            max-height: 100%;
+            padding: 0.5rem 0.75rem;
+            outline: none;
+            width: 100%;
             box-sizing: border-box;
             margin-bottom: 0.5rem;
         }
@@ -313,6 +314,7 @@
             float: right;
             font-size: 0.9em;
         }
+        
     </style>
 </head>
 <body>
@@ -324,14 +326,15 @@
         <div class="column">
             <div class="input-area-col">
                 <form class="input-area" id="chatForm">
-                    <textarea id="userInput" placeholder="Type a message..." autocomplete="off" required></textarea>
+                    <div id="customInputWrapper" class="custom-input-wrapper">
+                        <div id="customInput" class="custom-input" contenteditable="true" role="textbox" aria-multiline="true"></div>
+                        <textarea id="userInput" name="userInput" style="display:none;"></textarea>
+                    </div>
                     <div class="input-area-buttons">
                         <button type="button" id="fileButton">File</button>
                         <input type="file" id="fileInput" style="display: none;" />
                         <button type="submit">Send</button>
                     </div>
-                    <hr style="margin: 0.5em 0;" />
-                    <div class="context-section" id="contextSection">no context</div>
                 </form>
             </div>
         </div>
@@ -349,7 +352,7 @@
         let selectedFileBase64 = null;
         let selectedFileName = null;
         let selectedFileContentType = null;
-        const contextSection = document.getElementById('contextSection');
+        // const contextSection = document.getElementById('contextSection'); // removed
 
         // Enhance code blocks in assistant messages with copy button and language label
         function enhanceCodeBlocks(container) {
@@ -450,34 +453,73 @@
         // Handle file selection and convert to base64, update context
         document.getElementById('fileInput').addEventListener('change', function(event) {
             const file = event.target.files[0];
+            const customInput = document.getElementById('customInput');
             if (!file) {
                 selectedFileBase64 = null;
                 selectedFileName = null;
                 selectedFileContentType = null;
-                updateContextSection();
+                // Remove any image preview in the content area
+                const imgDiv = customInput.querySelector('.input-image-wrapper');
+                if (imgDiv) imgDiv.remove();
+                document.getElementById('fileInput').value = '';
                 return;
             }
             selectedFileName = file.name;
             selectedFileContentType = file.type;
             const reader = new FileReader();
             reader.onload = function(e) {
-                // Remove data URL prefix
                 selectedFileBase64 = e.target.result.split(',')[1];
-                updateContextSection();
+                // Remove any previous image
+                const oldImgDiv = customInput.querySelector('.input-image-wrapper');
+                if (oldImgDiv) oldImgDiv.remove();
+                // Only show if image
+                if (selectedFileContentType && selectedFileContentType.startsWith('image/')) {
+                    const imgDiv = document.createElement('div');
+                    imgDiv.className = 'input-image-wrapper';
+                    imgDiv.style.display = 'flex';
+                    imgDiv.style.justifyContent = 'flex-start';
+                    imgDiv.style.marginBottom = '0.5em';
+                    imgDiv.style.cursor = 'pointer';
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.alt = 'selected';
+                    img.style.maxWidth = '120px';
+                    img.style.maxHeight = '80px';
+                    img.style.borderRadius = '8px';
+                    img.style.border = '1px solid #eee';
+                    img.style.boxShadow = '0 1px 2px #ddd';
+                    imgDiv.appendChild(img);
+                    // Remove image on click
+                    imgDiv.onclick = function() {
+                        imgDiv.remove();
+                        selectedFileBase64 = null;
+                        selectedFileName = null;
+                        selectedFileContentType = null;
+                        document.getElementById('fileInput').value = '';
+                    };
+                    // Insert at top of content area
+                    customInput.insertBefore(imgDiv, customInput.firstChild);
+                }
             };
             reader.readAsDataURL(file);
         });
 
-        function updateContextSection() {
-            if (selectedFileName) {
-                contextSection.innerHTML = `<span class="context-pill">${selectedFileName}</span>`;
-            } else {
-                contextSection.textContent = 'no context';
-            }
-        }
-
         // Send a user message to the backend and handle the streaming response
         async function sendMessage(message) {
+            // If a file is attached, show the image above the user message
+            if (selectedFileBase64 && selectedFileContentType && selectedFileContentType.startsWith('image/')) {
+                const imgDiv = document.createElement('div');
+                imgDiv.className = 'message user';
+                const img = document.createElement('img');
+                img.src = `data:${selectedFileContentType};base64,${selectedFileBase64}`;
+                img.style.maxWidth = '200px';
+                img.style.maxHeight = '200px';
+                img.style.display = 'block';
+                img.style.margin = '0 0 0.5em auto';
+                imgDiv.appendChild(img);
+                chatMessages.appendChild(imgDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
             addMessage('user', message);
 
             // Show initial loading indicator
@@ -542,17 +584,30 @@
                 selectedFileName = null;
                 selectedFileContentType = null;
                 document.getElementById('fileInput').value = '';
-                updateContextSection();
+                // updateContextSection(); // removed
             }
         }
 
         // Handle form submission for sending user messages
         chatForm.addEventListener('submit', e => {
             e.preventDefault();
-            const message = userInput.value.trim();
+            // Sync contenteditable div to hidden textarea on form submit
+            const customInput = document.getElementById('customInput');
+            const userInput = document.getElementById('userInput');
+            // Copy plain text from contenteditable to textarea for backend
+            userInput.value = customInput.innerText.trim();
+            const message = userInput.value;
             if (!message) return;
-            userInput.value = '';
+            customInput.innerHTML = '';
             sendMessage(message);
+        });
+
+        // Optional: allow Enter for newline, Shift+Enter for submit
+        customInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatForm.requestSubmit();
+            }
         });
     </script>
 </body>

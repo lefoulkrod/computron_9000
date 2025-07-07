@@ -2,8 +2,9 @@ import logging
 import pprint
 from typing import AsyncGenerator, Sequence
 
-from ollama import ChatResponse
+from ollama import AsyncClient, GenerateResponse, Image
 
+from agents.ollama.sdk import llm_runtime_stats
 from agents.types import UserMessageEvent, Data
 from config import load_config
 from .computron_agent import computron
@@ -26,14 +27,12 @@ log_after_model_call = make_log_after_model_call(agent)
 async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None, 
-    stream: bool = False
 ) -> AsyncGenerator[UserMessageEvent, None]:
     """
     Handles a user message by sending it to the LLM and yielding events.
 
     Args:
         message (str): The user's message.
-        stream (bool): Whether to stream responses.
 
     Yields:
         UserMessageEvent: Events from the LLM.
@@ -41,6 +40,31 @@ async def handle_user_message(
     # Append the new user message to the session history
     _message_history.append({'role': 'user', 'content': message})
     try:
+        if data and len(data) > 0:
+            for d in data:
+                _message_history.append({
+                    'role': 'user',
+                    'content': f"<image/base64>{d.base64_encoded}"
+                })
+            log_before_model_call(_message_history)
+            response = await AsyncClient().generate(
+                model=agent.model,
+                prompt=message,
+                options=agent.options,
+                images=[Image(value=d.base64_encoded) for d in data]
+            )
+            main_text, thinking = split_think_content(response.response)
+            _message_history.append({
+                'role': 'assistant',
+                'content': main_text,
+            })
+            log_after_model_call(response)
+            yield UserMessageEvent(
+                message=main_text,
+                final=True,
+                thinking=thinking
+            )
+            return  # Stop the generator after yielding the final message for image input
         async for content in run_tool_call_loop(
             messages=_message_history,
             tools=agent.tools,
