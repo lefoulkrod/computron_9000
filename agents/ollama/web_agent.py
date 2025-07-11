@@ -9,6 +9,7 @@ from agents.ollama.sdk import (
 from config import load_config
 from tools.web import search_google, get_webpage_substring, get_webpage_summary_sections
 from tools.reddit import search_reddit, get_reddit_comments_tree_shallow
+from agents.models import get_model_by_name, get_default_model
 
 WEB_AGENT_NAME = "WEB_AGENT"
 WEB_AGENT_DESCRIPTION = """
@@ -37,14 +38,14 @@ You are WEB_AGENT, an expert at doing research based on information found on the
 config = load_config()
 logger = logging.getLogger(__name__)
 
+model = get_default_model()
+
 web_agent: Agent = Agent(
     name=WEB_AGENT_NAME,
     description=WEB_AGENT_DESCRIPTION,
     instruction=WEB_AGENT_PROMPT,
-    model=config.llm.model,
-    options={
-        "num_ctx": config.llm.num_ctx,
-    },
+    model=model.model,
+    options=model.options,
     tools=[
         get_webpage_summary_sections,
         get_webpage_substring,
