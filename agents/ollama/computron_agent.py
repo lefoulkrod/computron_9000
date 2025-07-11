@@ -1,7 +1,7 @@
 import logging
 
-from agents.ollama.sdk import Agent
-from agents.prompt import ROOT_AGENT_PROMPT
+from agents.types import Agent
+from agents.prompt import COMPUTRON_AGENT_PROMPT
 from config import load_config
 from tools.code.execute_code import execute_python_program
 from tools.misc import datetime_tool
@@ -16,7 +16,7 @@ model = get_default_model()
 computron: Agent = Agent(
     name="COMPUTRON_9000",
     description="COMPUTRON_9000 is a multi-modal multi-agent multi-model AI system designed to assist with a wide range of tasks.",
-    instruction=ROOT_AGENT_PROMPT,
+    instruction=COMPUTRON_AGENT_PROMPT,
     model=model.model,
     options=model.options,
     tools=[
