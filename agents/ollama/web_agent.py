@@ -1,7 +1,8 @@
+
 import logging
 
+from agents.types import Agent
 from agents.ollama.sdk import (
-    Agent,
     make_run_agent_as_tool_function,
     make_log_before_model_call,
     make_log_after_model_call,
