@@ -11,11 +11,13 @@ class Settings(BaseModel):
 
     home_dir: str = "/home/larry/.computron_9000"
 
-class LlmConfig(BaseModel):
-    """Settings for the language model."""
 
+class ModelConfig(BaseModel):
+    """Configuration for a single model."""
+    name: str
     model: str
-    num_ctx: int
+    options: dict
+
 
 
 class AdkConfig(BaseModel):
@@ -62,10 +64,11 @@ class RedditConfig(BaseModel):
     user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
 
 
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
-
-    llm: LlmConfig
+    models: list[ModelConfig]
     adk: AdkConfig
     tools: ToolsConfig = ToolsConfig()
     settings: Settings = Settings()
@@ -82,11 +85,13 @@ def load_config() -> AppConfig:
     Raises:
         RuntimeError: If the configuration file cannot be read or parsed.
     """
-
     path = Path(__file__).parent.parent / "config.yaml"
     try:
         with open(path, "r") as f:
             data = yaml.safe_load(f)
+        # Convert models to list of ModelConfig if present
+        if "models" in data:
+            data["models"] = [ModelConfig(**m) for m in data["models"]]
         return AppConfig(**data)
     except FileNotFoundError as exc:
         raise RuntimeError(f"Config file not found: {path}") from exc

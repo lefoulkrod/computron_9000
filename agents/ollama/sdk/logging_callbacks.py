@@ -6,38 +6,47 @@ from ollama import ChatResponse, GenerateResponse
 
 logger = logging.getLogger(__name__)
 
-def make_log_before_model_call(agent: Any) -> Callable[[list[dict[str, str]]], None]:
+def make_log_before_model_call(agent: Any = None) -> Callable[[list[dict[str, str]]], None]:
     """
     Factory for a callback that logs the chat history before calling the model.
 
     Args:
-        agent (Any): The agent object with a 'name' attribute.
+        agent (Any, optional): The agent object with a 'name' attribute. Defaults to None.
 
     Returns:
         Callable[[list[dict[str, str]]], None]: The logging callback.
     """
     def log_before_model_call(messages: list[dict[str, str]]) -> None:
-        agent_name = getattr(agent, 'name', 'unknown')
-        log_text = (
-            f"\n========== [before_model_call] for agent: {agent_name} =========="
-            f"\nChat history sent to LLM:\n{pprint.pformat(messages)}"
-        )
+        agent_name = getattr(agent, 'name', 'unknown') if agent is not None else None
+        if agent_name:
+            log_text = (
+                f"\n========== [before_model_call] for agent: {agent_name} =========="
+                f"\nChat history sent to LLM:\n{pprint.pformat(messages)}"
+            )
+        else:
+            log_text = (
+                f"\n========== [before_model_call] =========="
+                f"\nChat history sent to LLM:\n{pprint.pformat(messages)}"
+            )
         logger.debug("\033[32m%s\033[0m", log_text)
     return log_before_model_call
 
-def make_log_after_model_call(agent: Any) -> Callable[[ChatResponse | GenerateResponse], None]:
+def make_log_after_model_call(agent: Any = None) -> Callable[[ChatResponse | GenerateResponse], None]:
     """
     Factory for a callback that logs the LLM response and stats after the model call.
 
     Args:
-        agent (Any): The agent object with a 'name' attribute.
+        agent (Any, optional): The agent object with a 'name' attribute. Defaults to None.
 
     Returns:
         Callable[[ChatResponse | GenerateResponse], None]: The logging callback.
     """
     def log_after_model_call(response: ChatResponse | GenerateResponse) -> None:
-        agent_name = getattr(agent, 'name', 'unknown')
-        log_text = f"\n========== [after_model_call] for agent: {agent_name} =========="
+        agent_name = getattr(agent, 'name', 'unknown') if agent is not None else None
+        if agent_name:
+            log_text = f"\n========== [after_model_call] for agent: {agent_name} =========="
+        else:
+            log_text = f"\n========== [after_model_call] =========="
         # Log LLM stats if present
         if hasattr(response, 'done') and getattr(response, 'done', False):
             from agents.ollama.sdk import llm_runtime_stats

@@ -1,10 +1,10 @@
 from typing import Callable, Awaitable
+
 from ollama import ChatResponse
 
 from .agent import Agent
 from .extract_thinking import split_think_content
 from .tool_loop import run_tool_call_loop
-
 
 def make_run_agent_as_tool_function(
     agent: Agent,

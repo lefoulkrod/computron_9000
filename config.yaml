@@ -1,6 +1,14 @@
-llm:
-  model: gemma3:27b-it-qat-tools #hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL #hf.co/unsloth/Qwen3-32B-128K-GGUF:Q4_K_XL
-  num_ctx: 119808 #52479
+models:
+  - name: gemma3
+    model: gemma3:27b-it-qat-tools
+    options:
+      num_ctx: 131072
+      temperature: 1
+  - name: qwen3
+    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
+    options:
+      num_ctx: 119808
+      temperature: 1
 adk:
   provider: ollama_chat/
 settings:

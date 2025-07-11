@@ -1,12 +1,15 @@
 import logging
 
 from agents.ollama.sdk import Agent, make_run_agent_as_tool_function
+
 from config import load_config
+from .computron_agent import computron
+from agents.models import get_model_by_name, get_default_model
 
 config = load_config()
 logger = logging.getLogger(__name__)
 
-from .computron_agent import computron
+model = get_default_model()
 
 root_agent: Agent = Agent(
     name="ROOT_AGENT",
@@ -16,10 +19,8 @@ root_agent: Agent = Agent(
     Do not attempt to execute tools that you don't have access to. If you learn about another agents tool in it's response, do not attempt to use it.
     Always ask the sub-agents to exeucte their own tools.
     """,
-    model=config.llm.model,
-    options={
-        "num_ctx": config.llm.num_ctx,
-    },
+    model=model.model,
+    options=model.options,
     tools=[
         make_run_agent_as_tool_function(
             agent=computron,

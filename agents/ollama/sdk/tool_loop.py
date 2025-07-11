@@ -7,7 +7,6 @@ from typing import Mapping, Any, Optional, Sequence
 from ollama import AsyncClient, ChatResponse
 
 from agents.ollama.sdk.extract_thinking import split_think_content
-from agents.types import Data
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,6 @@ async def run_tool_call_loop(
     Yields:
         str: The message content at each step (never tool call results directly).
     """
-    opts = dict(model_options) if model_options else {}
     client = AsyncClient()
     tools = tools or []
     while True:
@@ -67,7 +65,7 @@ async def run_tool_call_loop(
             response = await client.chat(
                 model=model,
                 messages=messages,
-                options=opts,
+                options=model_options,
                 tools=tools,
                 stream=False,
             )
@@ -113,7 +111,7 @@ async def run_tool_call_loop(
                         tool_result = {"error": str(exc)}
                 tool_message = {
                     'role': 'tool',
-                    'name': tool_name,
+                    'tool_name': tool_name,
                     'content': json.dumps(tool_result)
                 }
                 messages.append(tool_message)
