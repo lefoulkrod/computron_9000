@@ -164,6 +164,10 @@ raw_result = await _get_webpage_raw("https://example.com")
 tables = await html_find_elements(raw_result.html, "table")
 # Find paragraphs containing "climate change"
 climate_paragraphs = await html_find_elements(raw_result.html, "p", "climate change")
+# Find multiple elements with a list of tags or CSS selectors
+navigation_elements = await html_find_elements(raw_result.html, ["nav", ".menu", "#main-nav"])
+# Find elements with CSS selectors
+headers = await html_find_elements(raw_result.html, ["h1", "h2", "h3"])
 ```
 
 #### Research Usage Guidelines

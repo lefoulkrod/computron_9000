@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
@@ -17,15 +17,15 @@ class HtmlElementResult(BaseModel):
 
 async def html_find_elements(
     html: str,
-    tag: str,
+    selectors: Union[str, List[str]],
     text: Optional[str] = None
 ) -> List[HtmlElementResult]:
     """
-    Find elements of a given tag in HTML, optionally matching contained text.
+    Find elements in HTML matching given CSS selector(s), optionally filtering by contained text.
 
     Args:
         html (str): The HTML string to parse.
-        tag (str): The tag name to search for (e.g., 'a', 'div').
+        selectors (Union[str, List[str]]): CSS selector(s) to search for (e.g., 'a', 'div', '.classname', ['a', '.foo']).
         text (Optional[str]): Optional text to match against the element's contained text.
 
     Returns:
@@ -33,11 +33,26 @@ async def html_find_elements(
     """
     try:
         soup = BeautifulSoup(html, "html.parser")
-        if text is not None:
-            matches = soup.find_all(tag, string=lambda t: isinstance(t, str) and text.lower() in t.lower())
-        else:
-            matches = soup.find_all(tag)
-        return [HtmlElementResult(html_element=str(el)) for el in matches]
+        all_matches = []
+
+        # Ensure selectors is always a list for consistent processing
+        selector_list = [selectors] if isinstance(selectors, str) else selectors
+
+        for selector in selector_list:
+            if text is not None:
+                # For complex selectors, find elements then filter by text
+                elements = soup.select(selector)
+                text_matches = [
+                    el for el in elements
+                    if el.string and isinstance(el.string, str)
+                    and text.lower() in el.string.lower()
+                ]
+                all_matches.extend(text_matches)
+            else:
+                matches = soup.select(selector)
+                all_matches.extend(matches)
+
+        return [HtmlElementResult(html_element=str(el)) for el in all_matches]
     except Exception as e:
         logger.error(f"Error in html_find_elements: {e}")
         return []

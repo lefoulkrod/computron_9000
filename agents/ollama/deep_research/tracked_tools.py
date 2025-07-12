@@ -7,7 +7,7 @@ for citation and credibility assessment.
 
 import logging
 import functools
-from typing import List, Optional, Dict, Callable, Any, Union
+from typing import List, Optional, Dict, Callable, Any, Union, Union
 
 from agents.ollama.deep_research.source_tracker import SourceTracker
 from agents.ollama.deep_research.sentiment_analyzer import analyze_reddit_comments_sentiment
@@ -122,7 +122,7 @@ class TrackedWebTools:
         return await get_webpage_substring(url=url, start=start, end=end)
     
     async def html_find_elements(
-        self, html: str, tag: str, text: Optional[str] = None
+        self, html: str, tag: Union[str, List[str]], text: Optional[str] = None
     ) -> List[HtmlElementResult]:
         """
         Find HTML elements with automatic source tracking.
@@ -131,14 +131,14 @@ class TrackedWebTools:
         
         Args:
             html (str): The HTML content
-            tag (str): The HTML tag to search for
+            tag (Union[str, List[str]]): The HTML tag(s) or CSS selector(s) to search for
             text (Optional[str]): Optional text content to match
             
         Returns:
             List[HtmlElementResult]: The matching HTML elements
         """
         # Note: No direct URL to track
-        return await html_find_elements(html=html, tag=tag, text=text)
+        return await html_find_elements(html=html, selectors=tag, text=text)
 
 
 class TrackedRedditTools:
