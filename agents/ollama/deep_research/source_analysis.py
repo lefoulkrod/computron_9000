@@ -169,7 +169,13 @@ async def assess_webpage_credibility(url: str) -> CredibilityAssessment:
         url (str): The URL to assess
         
     Returns:
-        Dict[str, Any]: Credibility assessment results
+        CredibilityAssessment: A strongly typed dictionary containing:
+            - url (str): The analyzed URL
+            - credibility_score (float): Overall credibility score (0.0-1.0)
+            - credibility_level (str): Human-readable level (High/Medium/Low/Very Low)
+            - factors (CredibilityFactors): Detailed scoring factors
+            - domain (str): The domain name
+            - recommendations (List[str]): Usage recommendations
         
     Raises:
         Exception: If webpage cannot be retrieved or analyzed
@@ -465,7 +471,13 @@ def _calculate_credibility_score(factors: CredibilityFactors) -> float:
     Calculate overall credibility score from factors.
     
     Args:
-        factors (Dict[str, Any]): Dictionary of credibility factors
+        factors (CredibilityFactors): Dictionary of credibility factors with weighted components:
+            - domain_credibility (float): Domain reputation score
+            - https_enabled (bool): HTTPS usage
+            - has_author (bool): Author information presence
+            - has_publication_date (bool): Publication date presence
+            - content_quality (float): LLM-assessed content quality
+            - citation_indicators (float): Academic citation presence
         
     Returns:
         float: Overall credibility score between 0.0 and 1.0
@@ -495,11 +507,11 @@ def _generate_credibility_recommendations(factors: CredibilityFactors, level: st
     Generate recommendations for using the source.
     
     Args:
-        factors (Dict[str, Any]): Dictionary of credibility factors
+        factors (CredibilityFactors): Dictionary of credibility factors used for assessment
         level (str): The credibility level (High, Medium, Low, Very Low)
         
     Returns:
-        List[str]: List of recommendation strings
+        List[str]: List of recommendation strings for source usage
     """
     recommendations = []
     
@@ -537,7 +549,21 @@ async def extract_webpage_metadata(url: str) -> WebpageMetadata:
         url (str): The URL to analyze
         
     Returns:
-        Dict[str, Any]: Extracted metadata
+        WebpageMetadata: A strongly typed dictionary containing:
+            - url (str): The analyzed URL
+            - title (Optional[str]): Page title
+            - author (Optional[str]): Author name if found
+            - publication_date (Optional[str]): Publication date if found
+            - description (Optional[str]): Meta description
+            - keywords (Optional[str]): Meta keywords
+            - language (Optional[str]): Language code
+            - publisher (Optional[str]): Publisher name
+            - domain (str): Domain name
+            - word_count (int): Estimated word count
+            - last_modified (Optional[str]): Last modified date if found
+        
+    Raises:
+        Exception: If webpage cannot be retrieved or analyzed
     """
     try:
         # Get webpage content
@@ -741,10 +767,20 @@ def categorize_source(url: str, metadata: WebpageMetadata) -> SourceCategorizati
     
     Args:
         url (str): The URL of the source
-        metadata (WebpageMetadata): Extracted metadata
+        metadata (WebpageMetadata): Extracted metadata from the webpage
         
     Returns:
-        SourceCategorization: Source categorization results
+        SourceCategorization: A strongly typed dictionary containing:
+            - url (str): The analyzed URL
+            - categories (SourceCategories): Detailed categorization including:
+                - primary_type (str): Main source type (Academic/Government/News Media/etc.)
+                - secondary_type (Optional[str]): Additional categorization if applicable
+                - authority_level (str): Authority level (High/Medium-High/Medium/Low-Medium/Low/Unknown)
+                - content_type (str): Content classification (Research/News Article/Opinion/etc.)
+                - geographic_focus (Optional[str]): Geographic region focus
+                - temporal_relevance (str): Temporal classification (Current/Recent/Historical/Unknown)
+            - confidence (float): Confidence score in categorization (0.0-1.0)
+            - notes (List[str]): Categorization notes and recommendations
     """
     domain = urlparse(url).netloc.lower()
     
@@ -834,9 +870,9 @@ def _calculate_categorization_confidence(categories: SourceCategories, domain: s
     Calculate confidence in categorization.
     
     Args:
-        categories (Dict[str, str]): The categorization results
+        categories (SourceCategories): The categorization results with classification data
         domain (str): The domain name
-        metadata (Dict[str, Any]): The extracted metadata
+        metadata (WebpageMetadata): The extracted metadata with structured information
         
     Returns:
         float: Confidence score between 0.0 and 1.0
@@ -867,11 +903,11 @@ def _generate_categorization_notes(categories: SourceCategories, domain: str) ->
     Generate notes about the categorization.
     
     Args:
-        categories (Dict[str, str]): The categorization results
+        categories (SourceCategories): The categorization results with classification data
         domain (str): The domain name
         
     Returns:
-        List[str]: List of categorization notes
+        List[str]: List of categorization notes and usage guidance
     """
     notes = []
     
