@@ -30,10 +30,15 @@ from tools.reddit import (
 )
 from .prompt import DEEP_RESEARCH_AGENT_PROMPT
 from .types import ResearchReport, ResearchSource
+from .source_tracker import SourceTracker
+from .documentation_access import get_tool_documentation, search_tool_documentation, get_citation_practices
 
 # Load configuration and set up logger
 config = load_config()
 logger = logging.getLogger(__name__)
+
+# Initialize source tracker
+source_tracker = SourceTracker()
 
 # Get model configuration for Deep Research Agent
 try:
@@ -45,7 +50,11 @@ except Exception:
     model = get_default_model()
     logger.info(f"Using default model {model.model} for Deep Research Agent")
 
-# No custom callbacks - using standard logging provided by SDK
+# Import tracked tools
+from .tracked_tools import get_tracked_web_tools
+
+# Get tracked web tools with source tracking capability
+tracked_web_tools = get_tracked_web_tools(source_tracker)
 
 # Define the agent with enhanced capabilities
 deep_research_agent: Agent = Agent(
@@ -55,15 +64,22 @@ deep_research_agent: Agent = Agent(
     model=model.model,
     options=model.options,  # Using the options from the dedicated model configuration
     tools=[
-        # Web research tools
-        search_google,
-        get_webpage,
-        get_webpage_summary,
-        html_find_elements,
+        # Web research tools with source tracking
+        tracked_web_tools["search_google"],
+        tracked_web_tools["get_webpage"],
+        tracked_web_tools["get_webpage_summary"],
+        tracked_web_tools["get_webpage_summary_sections"],
+        tracked_web_tools["get_webpage_substring"],
+        tracked_web_tools["html_find_elements"],
         
-        # Reddit research tools
+        # Reddit research tools (not yet tracked)
         search_reddit,
         get_reddit_comments_tree_shallow,
+        
+        # Tool documentation access
+        get_tool_documentation,
+        search_tool_documentation,
+        get_citation_practices,
     ],
 )
 
@@ -97,4 +113,8 @@ __all__ = [
     "deep_research_agent_before_callback",
     "deep_research_agent_after_callback",
     "deep_research_agent_tool",
+    "source_tracker",
+    "get_tool_documentation",
+    "search_tool_documentation",
+    "get_citation_practices",
 ]
