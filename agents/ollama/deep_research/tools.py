@@ -29,10 +29,28 @@ This document provides detailed documentation for the web research tools used by
 | `get_webpage_summary_sections` | Get sectional summaries with position data | Useful for navigating long documents |
 | `get_webpage_substring` | Extract specific portions of a webpage | Allows targeting specific content sections |
 | `html_find_elements` | Extract specific HTML elements | Find elements by tag and content |
+| `assess_webpage_credibility` | Evaluate the credibility of a webpage | Analyzes domain reputation, content quality, citations |
+| `extract_webpage_metadata` | Extract comprehensive metadata from a webpage | Gets author, publication date, description, keywords |
+| `categorize_source` | Categorize a source by type and authority | Determines primary type, authority level, content type |
 | `search_reddit` | Find relevant Reddit posts for a topic | Results include title, content, author, and score |
 | `get_reddit_comments_tree_shallow` | Get comments for a Reddit post | Returns a shallow tree of comments and replies |
 | `analyze_reddit_credibility` | Evaluate credibility of Reddit sources | Analyzes post age, karma, comment ratio |
 | `analyze_comment_sentiment` | Analyze sentiment in Reddit comments | Provides sentiment analysis for comments |
+
+## Source Analysis Guidelines
+
+When analyzing sources for research:
+
+1. **Always Start with Metadata Extraction**: Use `extract_webpage_metadata` to gather basic information
+2. **Categorize for Context**: Use `categorize_source` to understand the source type and authority level
+3. **Assess Credibility**: Use `assess_webpage_credibility` for detailed reliability evaluation
+4. **Follow a Systematic Approach**: 
+   - High authority + high credibility = primary citations
+   - Medium authority + medium credibility = supporting evidence  
+   - Low authority or credibility = supplementary use only
+5. **Check Citation Readiness**: Ensure author and publication date are available
+6. **Consider Temporal Relevance**: Prefer recent sources for current topics
+7. **Balance Source Types**: Mix academic, news, and expert sources appropriately
 
 ## Social Media Research Guidelines
 
@@ -125,9 +143,10 @@ async def get_tool_documentation(tool_name: str = "") -> str:
         return f"### {tool_name}{match.group(1)}"
     
     # Try a partial match if exact match fails
-    for tool in ["search_google", "get_webpage", "get_webpage_summary", 
-                "html_find_elements", "search_reddit", "get_reddit_comments_tree_shallow",
-                "analyze_reddit_credibility", "analyze_comment_sentiment"]:
+    for tool in ["search_google", "get_webpage", "get_webpage_summary", "get_webpage_summary_sections",
+                "get_webpage_substring", "html_find_elements", "assess_webpage_credibility", 
+                "extract_webpage_metadata", "categorize_source", "search_reddit", 
+                "get_reddit_comments_tree_shallow", "analyze_reddit_credibility", "analyze_comment_sentiment"]:
         if tool_name.lower() in tool.lower():
             pattern = rf"### {re.escape(tool)}(.*?)(?:^###|\Z)"
             match = re.search(pattern, TOOL_DOCUMENTATION, re.DOTALL | re.MULTILINE)
