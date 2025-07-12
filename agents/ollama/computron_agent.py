@@ -1,5 +1,7 @@
 import logging
 
+from agents.ollama.sdk.higher_order import make_run_agent_as_tool_function
+from agents.ollama.sdk.logging_callbacks import make_log_after_model_call, make_log_before_model_call
 from agents.types import Agent
 from agents.prompt import COMPUTRON_AGENT_PROMPT
 from config import load_config
@@ -24,4 +26,14 @@ computron: Agent = Agent(
         execute_python_program,
         datetime_tool,
     ],
+)
+
+agent_before_callback = make_log_before_model_call(computron)
+agent_after_callback = make_log_after_model_call(computron)
+
+run_computron_agent_as_tool = make_run_agent_as_tool_function(
+    agent=computron,
+    tool_description=computron.description,
+    before_model_callbacks=[agent_before_callback],
+    after_model_callbacks=[agent_after_callback],
 )

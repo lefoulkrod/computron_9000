@@ -1,15 +1,25 @@
 """Configuration loading utilities."""
 
-from pydantic import BaseModel, Field
-import yaml
-from pathlib import Path
-from functools import lru_cache
+import logging
 import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import yaml
+from pydantic import BaseModel, Field, field_validator
 
 class Settings(BaseModel):
     """Application settings."""
 
-    home_dir: str = "/home/larry/.computron_9000"
+    home_dir: str
+    default_model: str
+
+    @field_validator('home_dir')
+    @classmethod
+    def validate_home_dir(cls, v: str) -> str:
+        """Ensure home directory path is expanded."""
+        return os.path.expanduser(v)
 
 
 class ModelConfig(BaseModel):
@@ -17,14 +27,6 @@ class ModelConfig(BaseModel):
     name: str
     model: str
     options: dict
-
-
-
-class AdkConfig(BaseModel):
-    """Settings for ADK agents."""
-
-    provider: str
-
 
 class SearchGoogleConfig(BaseModel):
     """Settings for Google search tool."""
@@ -37,13 +39,13 @@ class SearchGoogleConfig(BaseModel):
 class WebToolsConfig(BaseModel):
     """Settings for web tools."""
     
-    search_google: SearchGoogleConfig = SearchGoogleConfig()
+    search_google: SearchGoogleConfig = Field(default_factory=SearchGoogleConfig)
 
 
 class ToolsConfig(BaseModel):
     """Settings for tools."""
     
-    web: WebToolsConfig = WebToolsConfig()
+    web: WebToolsConfig = Field(default_factory=WebToolsConfig)
 
 
 class AgentConfig(BaseModel):
@@ -53,8 +55,8 @@ class AgentConfig(BaseModel):
 
 class AgentsConfig(BaseModel):
     """Settings for all agents."""
-    web: AgentConfig = AgentConfig()
-    file_system: AgentConfig = AgentConfig()
+    web: AgentConfig = Field(default_factory=AgentConfig)
+    file_system: AgentConfig = Field(default_factory=AgentConfig)
 
 
 class RedditConfig(BaseModel):
@@ -64,16 +66,48 @@ class RedditConfig(BaseModel):
     user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
 
 
-
-
 class AppConfig(BaseModel):
     """Application level configuration."""
     models: list[ModelConfig]
-    adk: AdkConfig
-    tools: ToolsConfig = ToolsConfig()
-    settings: Settings = Settings()
-    agents: AgentsConfig = AgentsConfig()
-    reddit: RedditConfig = RedditConfig()
+    settings: Settings
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    reddit: RedditConfig = Field(default_factory=RedditConfig)
+
+    @field_validator('models')
+    @classmethod
+    def validate_models_not_empty(cls, v: list[ModelConfig]) -> list[ModelConfig]:
+        """Ensure at least one model is configured."""
+        if not v:
+            raise ValueError("At least one model must be configured")
+        return v
+
+    def get_model_by_name(self, name: str) -> ModelConfig | None:
+        """Get a model configuration by name.
+        
+        Args:
+            name: The model name to search for.
+            
+        Returns:
+            The model configuration if found, None otherwise.
+        """
+        return next((model for model in self.models if model.name == name), None)
+
+    def get_default_model(self) -> ModelConfig:
+        """Get the default model configuration.
+        
+        Returns:
+            The default model configuration.
+            
+        Raises:
+            ValueError: If the default model is not found.
+        """
+        model = self.get_model_by_name(self.settings.default_model)
+        if model is None:
+            raise ValueError(f"Default model '{self.settings.default_model}' not found in configured models")
+        return model
+
+logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
 def load_config() -> AppConfig:
@@ -86,14 +120,29 @@ def load_config() -> AppConfig:
         RuntimeError: If the configuration file cannot be read or parsed.
     """
     path = Path(__file__).parent.parent / "config.yaml"
+    logger.info(f"Loading configuration from {path}")
+    
     try:
-        with open(path, "r") as f:
-            data = yaml.safe_load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            data: dict[str, Any] = yaml.safe_load(f)
+        
         # Convert models to list of ModelConfig if present
         if "models" in data:
             data["models"] = [ModelConfig(**m) for m in data["models"]]
-        return AppConfig(**data)
+        
+        config = AppConfig(**data)
+        logger.info(f"Successfully loaded configuration with {len(config.models)} models")
+        return config
+        
     except FileNotFoundError as exc:
-        raise RuntimeError(f"Config file not found: {path}") from exc
-    except Exception as e:
-        raise RuntimeError(f"Failed to load config: {e}") from e
+        error_msg = f"Config file not found: {path}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from exc
+    except yaml.YAMLError as exc:
+        error_msg = f"Invalid YAML in config file {path}: {exc}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from exc
+    except Exception as exc:
+        error_msg = f"Failed to load config from {path}: {exc}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from exc

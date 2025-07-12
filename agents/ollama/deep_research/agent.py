@@ -25,15 +25,7 @@ logger = logging.getLogger(__name__)
 # Initialize source tracker
 source_tracker = SourceTracker()
 
-# Get model configuration for Deep Research Agent
-try:
-    # Try to get the dedicated deep_research model
-    model = get_model_by_name("deep_research")
-    logger.info(f"Using dedicated deep_research model: {model.model}")
-except Exception:
-    # Fall back to default model if the dedicated one isn't found
-    model = get_default_model()
-    logger.info(f"Using default model {model.model} for Deep Research Agent")
+model = get_model_by_name("deep_research")
 
 # Import tracked tools
 from .tracked_tools import get_tracked_web_tools, get_tracked_reddit_tools
