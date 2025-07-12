@@ -1,6 +1,7 @@
 import pytest
 from agents.ollama.sdk.extract_thinking import split_think_content
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "input_text,expected_main,expected_thinking",
     [
