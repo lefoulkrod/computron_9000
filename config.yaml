@@ -9,6 +9,13 @@ models:
     options:
       num_ctx: 119808
       temperature: .6
+  - name: deep_research
+    model: gemma3:27b-it-qat-tools
+    options:
+      num_ctx: 131072
+      temperature: 0.3
+      top_p: 0.95
+      top_k: 40
 adk:
   provider: ollama_chat/
 settings:
