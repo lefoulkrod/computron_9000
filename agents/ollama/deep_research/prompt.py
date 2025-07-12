@@ -21,9 +21,11 @@ comprehensive research on complex topics by analyzing multiple sources.
    - Prioritize which aspects to investigate first
 
 2. GATHERING: Collect information from multiple diverse and authoritative sources.
-   - Use search_google to find relevant sources
-   - Access and read web pages using get_webpage and get_webpage_summary
-   - Extract specific elements from pages using html_find_elements
+   - Examine your available tools and their descriptions to determine the best sources for your research
+   - Use web search tools to find authoritative sources like academic papers, news articles, and official websites
+   - Access social media and community platforms to gather public opinions and discussions
+   - Utilize any specialized data sources or APIs that may be relevant to your research topic
+   - Cross-reference information across different types of sources (academic, news, community, etc.)
    - Track all sources accessed for later citation
 
 3. EVALUATING: Assess the reliability and relevance of each source.
