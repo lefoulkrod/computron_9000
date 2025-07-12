@@ -12,6 +12,10 @@ This document provides detailed documentation for the web research tools used by
 | `get_webpage_summary_sections` | Get sectional summaries with position data | Useful for navigating long documents |
 | `get_webpage_substring` | Extract specific portions of a webpage | Allows targeting specific content sections |
 | `html_find_elements` | Extract specific HTML elements | Find elements by tag and content |
+| `search_reddit` | Find relevant Reddit posts for a topic | Results include title, score, URL, and subreddit |
+| `get_reddit_comments_tree_shallow` | Extract top-level comments and replies from a Reddit post | Gathers immediate comment threads |
+| `analyze_reddit_credibility` | Evaluate the credibility of a Reddit post | Considers score, comment count, and post age |
+| `analyze_comment_sentiment` | Analyze sentiment and consensus of Reddit comments | Gauges public opinion and agreement level |
 
 ## Detailed Tool Documentation
 
@@ -168,6 +172,118 @@ climate_paragraphs = await html_find_elements(raw_result.html, "p", "climate cha
 - Extract citation elements from academic papers
 - Useful for finding specific content within a page
 
+---
+
+### search_reddit
+
+```python
+async def search_reddit(query: str, limit: int = 10) -> List[RedditSubmission]:
+```
+
+#### Description
+Searches Reddit for posts matching a query with support for boolean operators and field-specific search.
+
+#### Example Usage
+```python
+results = await search_reddit("artificial intelligence ethics")
+for result in results:
+    print(f"Title: {result.title}")
+    print(f"Score: {result.score}")
+    print(f"URL: {result.url}")
+    print(f"Subreddit: {result.subreddit}")
+    print("---")
+```
+
+#### Research Usage Guidelines
+- Use specific queries with subreddit qualifiers for targeted research (e.g., "subreddit:science climate change")
+- Include boolean operators (AND, OR, NOT) for complex queries
+- Search within specific fields using field operators (title:"exact phrase", author:username)
+- Sort by score or recency depending on research needs
+- Cross-reference claims with authoritative sources
+
+---
+
+### get_reddit_comments_tree_shallow
+
+```python
+async def get_reddit_comments_tree_shallow(submission_id: str, limit: int = 10) -> List[RedditComment]:
+```
+
+#### Description
+Retrieves a shallow tree of comments for a Reddit submission, including top-level comments and their immediate replies.
+
+#### Example Usage
+```python
+submission_id = "abcd1234" # Extract from submission.id or URL
+comments = await get_reddit_comments_tree_shallow(submission_id)
+for comment in comments:
+    print(f"Author: {comment.author}")
+    print(f"Body: {comment.body}")
+    print(f"Score: {comment.score}")
+    print(f"Replies: {len(comment.replies)}")
+    print("---")
+```
+
+#### Research Usage Guidelines
+- Focus on highly upvoted comments for community consensus
+- Look for comments with credible sources linked
+- Consider the expertise signaled in user flairs (when available)
+- Balance multiple viewpoints from different comment threads
+- Be aware of community bias in specialized subreddits
+
+---
+
+### analyze_reddit_credibility
+
+```python
+async def analyze_reddit_credibility(submission: RedditSubmission) -> Dict[str, Any]:
+```
+
+#### Description
+Evaluates the credibility of a Reddit submission based on various metrics including score, comment count, and age.
+
+#### Example Usage
+```python
+submission = results[0]  # From search_reddit results
+credibility = await analyze_reddit_credibility(submission)
+print(f"Credibility Score: {credibility['credibility_score']}")
+print(f"Credibility Level: {credibility['credibility_level']}")
+print(f"Factors: {credibility['factors']}")
+```
+
+#### Research Usage Guidelines
+- Consider high credibility scores (>0.8) more reliable
+- Check the factors to understand why a submission scored as it did
+- Use as one signal among many for evaluating information quality
+- Cross-reference with other sources, especially for controversial topics
+
+---
+
+### analyze_comment_sentiment
+
+```python
+async def analyze_comment_sentiment(comments: List[RedditComment]) -> Dict[str, Any]:
+```
+
+#### Description
+Analyzes the sentiment and consensus level in Reddit comments based on scores and distribution.
+
+#### Example Usage
+```python
+comments = await get_reddit_comments_tree_shallow(submission_id)
+sentiment = await analyze_comment_sentiment(comments)
+print(f"Sentiment: {sentiment['sentiment_label']}")
+print(f"Consensus Level: {sentiment['consensus_level']}")
+print(f"Comments Analyzed: {sentiment['total_comments_analyzed']}")
+```
+
+#### Research Usage Guidelines
+- "Strong consensus" indicates widespread agreement among commenters
+- Check sentiment labels to understand community reaction
+- Use for gauging public opinion, not necessarily factual accuracy
+- Compare sentiment across different communities for the same topic
+- Consider both average and top comment scores when evaluating
+
 ## Tool Integration Patterns
 
 ### Basic Research Flow
@@ -204,6 +320,20 @@ climate_paragraphs = await html_find_elements(raw_result.html, "p", "climate cha
            url, section.starting_char_position, section.ending_char_position
        )
        # Analyze full section content
+   ```
+
+2. **Reddit Comment Sentiment and Credibility Analysis**
+   ```python
+   # Search for a relevant Reddit post
+   reddit_results = await search_reddit("machine learning advancements")
+   top_submission = reddit_results[0]
+   
+   # Analyze the credibility of the submission
+   credibility = await analyze_reddit_credibility(top_submission)
+   
+   # Get comments and analyze sentiment
+   comments = await get_reddit_comments_tree_shallow(top_submission.id)
+   sentiment_analysis = await analyze_comment_sentiment(comments)
    ```
 
 ## Source Citation Best Practices

@@ -6,7 +6,7 @@ from config import load_config
 from tools.code.execute_code import execute_python_program
 from tools.misc import datetime_tool
 from .web_agent import web_agent_tool
-from agents.models import get_model_by_name, get_default_model
+from models import get_model_by_name, get_default_model
 
 config = load_config()
 logger = logging.getLogger(__name__)

@@ -10,7 +10,7 @@ from agents.ollama.sdk import (
 from config import load_config
 from tools.web import search_google, get_webpage_substring, get_webpage_summary_sections
 from tools.reddit import search_reddit, get_reddit_comments_tree_shallow
-from agents.models import get_model_by_name, get_default_model
+from models import get_model_by_name, get_default_model
 
 WEB_AGENT_NAME = "WEB_AGENT"
 WEB_AGENT_DESCRIPTION = """

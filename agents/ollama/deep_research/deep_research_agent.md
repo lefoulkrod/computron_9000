@@ -47,10 +47,10 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
   - [x] Add proper tool description documentation
   - [x] Implement tool usage tracking for citation
   
-- [ ] 2.1.1 Social media and forum research capabilities
-  - [ ] Integrate Reddit tools (search_reddit, get_reddit_comments_tree_shallow)
-  - [ ] Implement Reddit source credibility assessment
-  - [ ] Add tools for analyzing comment sentiment and consensus
+- [x] 2.1.1 Social media and forum research capabilities
+  - [x] Integrate Reddit tools (search_reddit, get_reddit_comments_tree_shallow)
+  - [x] Implement Reddit source credibility assessment
+  - [x] Add tools for analyzing comment sentiment and consensus
 
 - [ ] 2.2 Source analysis tools
   - [ ] Implement webpage credibility assessment tool
@@ -143,12 +143,12 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
 ## Implementation Progress
 
 - Phase 1: 100%
-- Phase 2: 25% 
+- Phase 2: 33% 
 - Phase 3: 0%
 - Phase 4: 0%
 - Phase 5: 0%
 
-## Overall Progress: 25%
+## Overall Progress: 27%
 
 ## Changelog
 
@@ -170,7 +170,19 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
   - Created `source_tracker.py` for tracking sources and generating citations
   - Implemented `TrackedWebTools` class in `tracked_tools.py` for automatic source tracking
   - Created comprehensive `tool_documentation.md` with detailed usage instructions
-  - Implemented `documentation_access.py` to allow the agent to query tool documentation at runtime
+  - Implemented `tools.py` with consolidated documentation access functionality
   - Created tools for accessing usage guidelines and citation best practices
   - Updated agent to use tracked web tools for automatic citation management
   - Enhanced existing types with citation support
+- Completed Phase 2.1.1: Social media and forum research capabilities:
+  - Implemented `TrackedRedditTools` class in `tracked_tools.py` for tracking Reddit sources
+  - Created `analyze_reddit_credibility` tool to evaluate the trustworthiness of Reddit submissions
+  - Added `analyze_comment_sentiment` tool for analyzing consensus and sentiment in Reddit discussions
+  - Updated source tracking to properly handle Reddit URLs and permalinks
+  - Enhanced tool documentation with Reddit research guidelines
+  - Added citation formatting support for Reddit sources
+  - Enhanced sentiment analysis with LLM-based tool using generate_completion:
+    - Created `sentiment_analyzer.py` with advanced sentiment analysis capabilities
+    - Added dedicated sentiment_analysis model in config.yaml optimized for sentiment tasks
+    - Implemented nuanced sentiment analysis with emotional tone detection and key topic extraction
+    - Integrated LLM-based sentiment analysis while maintaining the basic version as fallback

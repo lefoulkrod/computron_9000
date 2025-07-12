@@ -4,17 +4,10 @@ import re
 from config import load_config
 from ollama import AsyncClient
 
+from models import get_default_model
+
 logger = logging.getLogger(__name__)
 config = load_config()
-
-def _get_ollama_model() -> str:
-    """
-    Retrieve the Ollama model name from the configuration.
-
-    Returns:
-        str: The model name from the config.
-    """
-    return config.llm.model
 
 async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
     """
@@ -30,10 +23,10 @@ async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
     Raises:
         RuntimeError: If the LLM call fails.
     """
-    model = _get_ollama_model()
+    model = get_default_model()
     try:
         response = await AsyncClient().generate(
-            model=model,
+            model=model.model,
             prompt=prompt,
             think=think
         )
