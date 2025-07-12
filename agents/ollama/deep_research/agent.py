@@ -49,6 +49,9 @@ deep_research_agent: Agent = Agent(
         tracked_web_tools["get_webpage_summary_sections"],
         tracked_web_tools["get_webpage_substring"],
         tracked_web_tools["html_find_elements"],
+        tracked_web_tools["assess_webpage_credibility"],
+        tracked_web_tools["extract_webpage_metadata"],
+        tracked_web_tools["categorize_source"],
         
         # Reddit research tools with source tracking
         tracked_reddit_tools["search_reddit"],

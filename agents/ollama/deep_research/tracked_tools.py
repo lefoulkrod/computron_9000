@@ -11,6 +11,14 @@ from typing import List, Optional, Dict, Callable, Any, Union, Union
 
 from agents.ollama.deep_research.source_tracker import SourceTracker
 from agents.ollama.deep_research.sentiment_analyzer import analyze_reddit_comments_sentiment
+from agents.ollama.deep_research.source_analysis import (
+    assess_webpage_credibility,
+    extract_webpage_metadata,
+    categorize_source,
+    CredibilityAssessment,
+    WebpageMetadata,
+    SourceCategorization,
+)
 from tools.web import (
     search_google, 
     get_webpage, 
@@ -139,6 +147,51 @@ class TrackedWebTools:
         """
         # Note: No direct URL to track
         return await html_find_elements(html=html, selectors=tag, text=text)
+
+    async def assess_webpage_credibility(self, url: str) -> CredibilityAssessment:
+        """
+        Assess webpage credibility with automatic source tracking.
+        
+        Args:
+            url (str): The URL to assess
+            
+        Returns:
+            CredibilityAssessment: Credibility assessment results
+        """
+        self.source_tracker.register_access(url=url, tool_name="assess_webpage_credibility")
+        return await assess_webpage_credibility(url=url)
+    
+    async def extract_webpage_metadata(self, url: str) -> WebpageMetadata:
+        """
+        Extract webpage metadata with automatic source tracking.
+        
+        Args:
+            url (str): The URL to analyze
+            
+        Returns:
+            WebpageMetadata: Extracted metadata
+        """
+        self.source_tracker.register_access(url=url, tool_name="extract_webpage_metadata")
+        return await extract_webpage_metadata(url=url)
+    
+    async def categorize_source(self, url: str, metadata: Optional[WebpageMetadata] = None) -> SourceCategorization:
+        """
+        Categorize a source with automatic source tracking.
+        
+        Args:
+            url (str): The URL of the source
+            metadata (WebpageMetadata, optional): Extracted metadata
+            
+        Returns:
+            SourceCategorization: Source categorization results
+        """
+        self.source_tracker.register_access(url=url, tool_name="categorize_source")
+        
+        # If no metadata provided, extract it
+        if metadata is None:
+            metadata = await extract_webpage_metadata(url=url)
+        
+        return categorize_source(url=url, metadata=metadata)
 
 
 class TrackedRedditTools:
@@ -344,6 +397,9 @@ def get_tracked_web_tools(source_tracker: SourceTracker) -> Dict[str, Callable]:
         "get_webpage_summary_sections": tracked_web_tools.get_webpage_summary_sections,
         "get_webpage_substring": tracked_web_tools.get_webpage_substring,
         "html_find_elements": tracked_web_tools.html_find_elements,
+        "assess_webpage_credibility": tracked_web_tools.assess_webpage_credibility,
+        "extract_webpage_metadata": tracked_web_tools.extract_webpage_metadata,
+        "categorize_source": tracked_web_tools.categorize_source,
     }
 
 
