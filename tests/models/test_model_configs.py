@@ -18,6 +18,7 @@ def mock_config():
     ])
 
 
+@pytest.mark.unit
 @patch("models.model_configs.load_config")
 def test_get_default_model(mock_load_config, mock_config):
     """Test retrieving the default model configuration."""
@@ -27,6 +28,7 @@ def test_get_default_model(mock_load_config, mock_config):
     assert model.model == "gemma:3b"
 
 
+@pytest.mark.unit
 @patch("models.model_configs.load_config")
 def test_get_model_by_name(mock_load_config, mock_config):
     """Test retrieving a model configuration by name."""
@@ -36,6 +38,7 @@ def test_get_model_by_name(mock_load_config, mock_config):
     assert model.model == "llama:7b"
 
 
+@pytest.mark.unit
 @patch("models.model_configs.load_config")
 def test_get_model_by_name_not_found(mock_load_config, mock_config):
     """Test that ModelNotFoundError is raised when a model is not found."""

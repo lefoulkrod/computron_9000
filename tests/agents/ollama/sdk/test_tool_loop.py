@@ -1,3 +1,4 @@
+import pytest
 from pydantic import BaseModel
 
 from agents.ollama.sdk.tool_loop import _to_serializable
@@ -11,6 +12,7 @@ class NestedModel(BaseModel):
     b: list[DummyModel]
     c: dict[str, DummyModel]
 
+@pytest.mark.unit
 def test_to_serializable_with_pydantic_model():
     """
     Test that _to_serializable correctly converts a Pydantic model to a dict.
@@ -20,6 +22,7 @@ def test_to_serializable_with_pydantic_model():
     assert isinstance(result, dict)
     assert result == {"x": 1, "y": "foo"}
 
+@pytest.mark.unit
 def test_to_serializable_with_nested_structures():
     """
     Test that _to_serializable recursively converts nested Pydantic models in lists and dicts.
@@ -35,6 +38,7 @@ def test_to_serializable_with_nested_structures():
     assert result["b"] == [{"x": 3, "y": "baz"}]
     assert result["c"] == {"k": {"x": 4, "y": "qux"}}
 
+@pytest.mark.unit
 def test_to_serializable_with_primitive_types():
     """
     Test that _to_serializable returns primitive types unchanged.
@@ -44,6 +48,7 @@ def test_to_serializable_with_primitive_types():
     assert _to_serializable([1, 2, 3]) == [1, 2, 3]
     assert _to_serializable({"a": 1}) == {"a": 1}
 
+@pytest.mark.unit
 def test_to_serializable_with_non_pydantic_object():
     """
     Test that _to_serializable falls back to the object itself for unsupported types.
