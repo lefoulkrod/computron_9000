@@ -5,9 +5,7 @@ description = "A simple chat proxy server for Ollama."
 requires-python = ">=3.11.12,<3.12"
 dependencies = [
     "litellm",
-    "google-adk",
     "aiohttp",
-    "pydantic-ai",
     "pydantic",
     "playwright",
     "playwright==1.52.0",

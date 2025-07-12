@@ -12,13 +12,7 @@ from aiohttp.web_request import Request
 from aiohttp.web_response import Response, StreamResponse
 from pydantic import BaseModel, ValidationError
 
-# Conditional imports based on environment variable
-if os.environ.get("AGENT_SDK", "pydantic").lower() == "adk":
-    from agents.adk import handle_user_message
-elif os.environ.get("AGENT_SDK", "pydantic").lower() == "ollama":
-    from agents.ollama import handle_user_message
-else:
-    from agents.pydantic_ai import handle_user_message
+from agents.ollama import handle_user_message
 from agents.types import Data
 
 logger = logging.getLogger(__name__)
