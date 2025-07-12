@@ -83,6 +83,9 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
 
 - [ ] 4.1 Create test suite
   - [ ] Create unit tests for all tools
+  - [ ] Add tests for `SourceTracker`
+  - [ ] Add tests for tracked tools
+  - [ ] Add tests for the sentiment analyzer
   - [ ] Implement integration tests for complex workflows
   - [ ] Add performance benchmark tests
 
@@ -95,6 +98,9 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
   - [ ] Create evaluation criteria for research quality
   - [ ] Implement self-evaluation capabilities
   - [ ] Add user feedback processing
+
+- [ ] 4.4 Code cleanup
+  - [ ] Remove unused imports and dead code
 
 ### Phase 5: Documentation and Deployment
 
@@ -109,7 +115,7 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
   - [ ] Create user preference settings for research depth/breadth
 
 - [ ] 5.3 Deployment
-  - [ ] Update main README with Deep Research Agent information
+  - [ ] Update main README with Deep Research Agent information (pending)
   - [ ] Create getting started guide
   - [ ] Document configuration options
 
