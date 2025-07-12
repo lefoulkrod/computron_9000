@@ -6,7 +6,7 @@ import logging
 from config import load_config, ModelConfig
 
 logger = logging.getLogger(__name__)
-
+config = load_config()
 
 class ModelNotFoundError(Exception):
     """
@@ -22,7 +22,8 @@ def get_default_model() -> ModelConfig:
     Returns:
         ModelConfig: The default model configuration.
     """
-    return get_model_by_name("gemma3")
+    default_model = config.settings.default_model
+    return get_model_by_name(default_model)
 
 
 def get_model_by_name(name: str) -> ModelConfig:

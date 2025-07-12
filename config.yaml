@@ -8,11 +8,10 @@ models:
     model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
       num_ctx: 119808
-      temperature: .6
   - name: deep_research
     model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
-      num_ctx: 131072
+      num_ctx: 119808
       temperature: 0.3
       top_p: 0.95
       top_k: 40
@@ -23,10 +22,9 @@ models:
       temperature: 0.2
       top_p: 0.9
       top_k: 40
-adk:
-  provider: ollama_chat/
 settings:
   home_dir: "/home/larry/.computron_9000"
+  default_model: "qwen3"
 tools:
   web:
     search_google:
