@@ -5,33 +5,18 @@ This module contains the Deep Research Agent class and associated tool function.
 """
 
 import logging
-import time
-from typing import Dict, Any, List, Optional, Callable, Union
 
 from agents.types import Agent
 from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
     make_log_before_model_call,
     make_log_after_model_call,
-    LLMRuntimeStats,
 )
-from ollama import ChatResponse, GenerateResponse
 from config import load_config
-from agents.models import get_model_by_name, get_default_model
-from tools.web import (
-    search_google, 
-    get_webpage, 
-    get_webpage_summary,
-    html_find_elements,
-)
-from tools.reddit import (
-    search_reddit,
-    get_reddit_comments_tree_shallow,
-)
+from models import get_model_by_name, get_default_model
 from .prompt import DEEP_RESEARCH_AGENT_PROMPT
-from .types import ResearchReport, ResearchSource
 from .source_tracker import SourceTracker
-from .documentation_access import get_tool_documentation, search_tool_documentation, get_citation_practices
+from .tools import get_tool_documentation, search_tool_documentation, get_citation_practices
 
 # Load configuration and set up logger
 config = load_config()
@@ -51,10 +36,11 @@ except Exception:
     logger.info(f"Using default model {model.model} for Deep Research Agent")
 
 # Import tracked tools
-from .tracked_tools import get_tracked_web_tools
+from .tracked_tools import get_tracked_web_tools, get_tracked_reddit_tools
 
-# Get tracked web tools with source tracking capability
+# Get tracked tools with source tracking capability
 tracked_web_tools = get_tracked_web_tools(source_tracker)
+tracked_reddit_tools = get_tracked_reddit_tools(source_tracker)
 
 # Define the agent with enhanced capabilities
 deep_research_agent: Agent = Agent(
@@ -72,9 +58,11 @@ deep_research_agent: Agent = Agent(
         tracked_web_tools["get_webpage_substring"],
         tracked_web_tools["html_find_elements"],
         
-        # Reddit research tools (not yet tracked)
-        search_reddit,
-        get_reddit_comments_tree_shallow,
+        # Reddit research tools with source tracking
+        tracked_reddit_tools["search_reddit"],
+        tracked_reddit_tools["get_reddit_comments_tree_shallow"],
+        tracked_reddit_tools["analyze_reddit_credibility"],
+        tracked_reddit_tools["analyze_comment_sentiment"],
         
         # Tool documentation access
         get_tool_documentation,

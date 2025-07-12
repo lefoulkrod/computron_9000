@@ -3,7 +3,7 @@ import logging
 from agents.ollama.sdk import Agent
 
 from config import load_config
-from agents.models import get_default_model
+from models import get_default_model
 from .deep_research import deep_research_agent_tool
 config = load_config()
 logger = logging.getLogger(__name__)

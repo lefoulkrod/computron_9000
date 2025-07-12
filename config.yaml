@@ -16,6 +16,13 @@ models:
       temperature: 0.3
       top_p: 0.95
       top_k: 40
+  - name: sentiment_analysis
+    model: gemma3:27b-it-qat-tools
+    options:
+      num_ctx: 32768
+      temperature: 0.2
+      top_p: 0.9
+      top_k: 40
 adk:
   provider: ollama_chat/
 settings:
