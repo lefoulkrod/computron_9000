@@ -6,13 +6,15 @@ from ollama import AsyncClient, Image
 from agents.types import UserMessageEvent, Data
 from config import load_config
 from .computron_agent import computron
+from .root_agent import root_agent
+from .deep_research import deep_research_agent
 from .sdk import run_tool_call_loop, split_think_content, make_log_before_model_call, make_log_after_model_call
 
 logger = logging.getLogger(__name__)
 
 config = load_config()
 
-agent = computron
+agent = deep_research_agent
 
 # Module-level message history for chat session, initialized with system message
 _message_history: list[dict[str, str]] = [

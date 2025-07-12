@@ -41,7 +41,7 @@ You SHOULD NOT include any other text in the response if you call a function
 {{- else if eq .Role "tool" }}
 <start_of_turn>user
 <tool_response>
-{{ .Content }}
+{"name": "{{ .ToolName }}", "content": {{ .Content }}}
 </tool_response><end_of_turn>
 {{- /* Start model turn if this is the last message */ -}}
 {{ if $last }}<start_of_turn>model

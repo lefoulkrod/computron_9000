@@ -1,11 +1,10 @@
 import logging
 
-from agents.ollama.sdk import Agent, make_run_agent_as_tool_function
+from agents.ollama.sdk import Agent
 
 from config import load_config
-from .computron_agent import computron
-from agents.models import get_model_by_name, get_default_model
-
+from agents.models import get_default_model
+from .deep_research import deep_research_agent_tool
 config = load_config()
 logger = logging.getLogger(__name__)
 
@@ -22,13 +21,6 @@ root_agent: Agent = Agent(
     model=model.model,
     options=model.options,
     tools=[
-        make_run_agent_as_tool_function(
-            agent=computron,
-            tool_description="""
-            Run the COMPUTRON_9000 agent. It can handle a wide range of tasks including code execution, file operations, and datetime management.
-            It can be used to run complex workflows so provide it detailed instructions for what you want to acheive.
-            Include a step by step plan if you would like it to follow a specific sequence of operations.
-            """
-        ),
+        deep_research_agent_tool
     ],
 )
