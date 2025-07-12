@@ -10,14 +10,14 @@ models:
       num_ctx: 119808
       temperature: .6
   - name: deep_research
-    model: gemma3:27b-it-qat-tools
+    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
       num_ctx: 131072
       temperature: 0.3
       top_p: 0.95
       top_k: 40
   - name: sentiment_analysis
-    model: gemma3:27b-it-qat-tools
+    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
       num_ctx: 32768
       temperature: 0.2
