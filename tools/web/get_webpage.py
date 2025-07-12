@@ -96,6 +96,7 @@ async def get_webpage_summary(url: str) -> str:
 async def get_webpage_substring(url: str, start: int, end: int) -> str:
     """
     Fetches a web page, extracts the visible text, and returns a substring from start to end indices.
+    This tool can be used to get unsummarized text from a web page that has been summarized using the get_webpage_summary_sections tool.
 
     Args:
         url (str): The URL of the web page to fetch.
