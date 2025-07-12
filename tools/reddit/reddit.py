@@ -60,7 +60,7 @@ class RedditComment(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-        orm_mode = True
+        from_attributes = True
 
 async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
     """
