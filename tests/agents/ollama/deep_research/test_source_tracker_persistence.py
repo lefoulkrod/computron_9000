@@ -24,8 +24,10 @@ from agents.ollama.deep_research.shared.source_tracker_utils import (
     get_workflow_source_summary,
     import_workflow_sources,
 )
-from agents.ollama.deep_research.shared.types import ResearchWorkflow
-from agents.ollama.deep_research.types import ResearchSource
+from agents.ollama.deep_research.shared.types import (
+    ResearchSource,
+    ResearchWorkflow,
+)
 
 
 class TestSharedSourceRegistry:

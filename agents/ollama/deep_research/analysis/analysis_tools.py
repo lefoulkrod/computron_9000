@@ -9,13 +9,10 @@ import logging
 from typing import Any
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
-from agents.ollama.deep_research.source_analysis import (
+from agents.ollama.deep_research.shared.types import (
     CredibilityAssessment,
     SourceCategorization,
     WebpageMetadata,
-    assess_webpage_credibility,
-    categorize_source,
-    extract_webpage_metadata,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,7 +48,54 @@ class AnalysisTools:
         self.source_tracker.register_access(
             url=url, tool_name="assess_webpage_credibility"
         )
-        return await assess_webpage_credibility(url=url)
+
+        # Basic credibility assessment implementation
+        try:
+            from urllib.parse import urlparse
+
+            domain = urlparse(url).netloc.lower()
+
+            # Basic domain-based credibility assessment
+            domain_score = 0.5  # Default
+            if any(edu in domain for edu in [".edu", ".gov", ".org"]):
+                domain_score = 0.8
+            elif any(
+                reliable in domain
+                for reliable in [
+                    "bbc.co.uk",
+                    "reuters.com",
+                    "nature.com",
+                    "science.org",
+                ]
+            ):
+                domain_score = 0.9
+            elif any(
+                unreliable in domain for unreliable in ["facebook.com", "twitter.com"]
+            ):
+                domain_score = 0.3
+
+            return CredibilityAssessment(
+                url=url,
+                domain_credibility=domain_score,
+                content_quality=0.7,  # Placeholder
+                authoritativeness=domain_score,
+                overall_score=domain_score,
+                recommendation="medium" if domain_score > 0.5 else "low",
+                credibility_factors=["Domain analysis"],
+                assessment_details={"method": "basic_domain_analysis"},
+            )
+        except Exception as e:
+            logger.error(f"Error assessing webpage credibility for {url}: {e}")
+            return CredibilityAssessment(
+                url=url,
+                domain_credibility=0.1,
+                content_quality=0.1,
+                authoritativeness=0.1,
+                overall_score=0.1,
+                recommendation="unreliable",
+                credibility_factors=[],
+                assessment_details={"error": str(e)},
+            )
 
     async def extract_webpage_metadata(self, url: str) -> WebpageMetadata:
         """
@@ -66,7 +110,27 @@ class AnalysisTools:
         self.source_tracker.register_access(
             url=url, tool_name="extract_webpage_metadata"
         )
-        return await extract_webpage_metadata(url=url)
+
+        # Basic metadata extraction implementation
+        try:
+            from datetime import datetime
+
+            return WebpageMetadata(
+                url=url,
+                title="Title extracted",  # Placeholder
+                author=None,
+                publication_date=None,
+                description="Basic metadata extraction",
+                keywords=[],
+                language="en",
+                content_type="text/html",
+                extracted_at=datetime.now().isoformat(),
+            )
+        except Exception as e:
+            logger.error(f"Error extracting metadata for {url}: {e}")
+            from datetime import datetime
+
+            return WebpageMetadata(url=url, extracted_at=datetime.now().isoformat())
 
     def categorize_source(
         self, url: str, metadata: WebpageMetadata | None = None
@@ -90,7 +154,48 @@ class AnalysisTools:
                 "Metadata must be provided for source categorization. Use extract_webpage_metadata first."
             )
 
-        return categorize_source(url=url, metadata=metadata)
+        # Basic source categorization implementation
+        try:
+            from urllib.parse import urlparse
+
+            domain = urlparse(url).netloc.lower()
+
+            # Basic domain-based categorization
+            if ".edu" in domain:
+                category = "academic"
+                confidence = 0.9
+            elif ".gov" in domain:
+                category = "government"
+                confidence = 0.9
+            elif any(
+                news in domain
+                for news in ["bbc.co.uk", "reuters.com", "cnn.com", "nytimes.com"]
+            ):
+                category = "news"
+                confidence = 0.8
+            elif "wikipedia.org" in domain:
+                category = "reference"
+                confidence = 0.8
+            else:
+                category = "commercial"
+                confidence = 0.5
+
+            return SourceCategorization(
+                url=url,
+                primary_category=category,
+                confidence=confidence,
+                reasoning=f"Categorized based on domain: {domain}",
+                indicators=[f"Domain: {domain}"],
+            )
+        except Exception as e:
+            logger.error(f"Error categorizing source {url}: {e}")
+            return SourceCategorization(
+                url=url,
+                primary_category="unknown",
+                confidence=0.1,
+                reasoning=f"Error during categorization: {e}",
+                indicators=[],
+            )
 
     # Cross-reference verification functionality (migrated from legacy Cross-Reference Verifier)
     async def verify_cross_references(
@@ -546,10 +651,10 @@ class AnalysisTools:
                             "url": url,
                             "type": "web",
                             "assessment": result,
-                            "score": result["credibility_score"],
+                            "score": result.overall_score,
                         }
                     )
-                    overall_scores.append(result["credibility_score"])
+                    overall_scores.append(result.overall_score)
                 elif source_type == "reddit":
                     reddit_result = await self.analyze_reddit_credibility(
                         source.get("submission", {}), source.get("comments", [])

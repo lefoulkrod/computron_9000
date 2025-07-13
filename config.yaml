@@ -8,7 +8,7 @@ models:
     model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
       num_ctx: 119808
-  - name: deep_research
+  - name: research_coordinator
     model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
       num_ctx: 119808
