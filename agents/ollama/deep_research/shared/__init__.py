@@ -1,4 +1,8 @@
-"""Shared infrastructure for the Deep Research multi-agent system."""
+"""Shared infrastructure for the Deep Research multi-agent system.
+
+This module contains internal infrastructure components used across the
+deep_research package. These are not intended for external use.
+"""
 
 from .agent_config import (
     AgentConfig,
@@ -42,25 +46,32 @@ from .tool_interface import (
 from .types import AgentResult, AgentTask, ResearchWorkflow
 from .workflow_coordinator import ResearchWorkflowCoordinator
 
+# Internal module - exports are available for use within deep_research package only
 __all__ = [
+    # Core types
     "AgentTask",
     "AgentResult",
     "ResearchWorkflow",
+    # Storage and coordination
     "WorkflowStorage",
     "MessageBus",
     "ResearchWorkflowCoordinator",
+    # Logging infrastructure
     "setup_multi_agent_logging",
     "MultiAgentError",
     "AgentTaskError",
     "WorkflowCoordinationError",
     "SourceTrackingError",
+    # Source tracking
     "AgentSourceTracker",
     "SharedSourceRegistry",
     "SourceAccess",
+    # Configuration
     "AgentConfig",
     "MultiAgentConfigManager",
     "get_agent_config",
     "register_custom_agent_config",
+    # Tool interface
     "AgentTool",
     "WebResearchTool",
     "SocialResearchTool",
@@ -71,6 +82,7 @@ __all__ = [
     "StandardErrorHandling",
     "get_tool_registry",
     "register_agent_tool",
+    # Utility functions
     "clear_workflow_sources",
     "create_agent_source_tracker",
     "export_workflow_sources",

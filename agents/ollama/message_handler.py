@@ -6,7 +6,7 @@ from ollama import AsyncClient, Image
 from agents.types import Data, UserMessageEvent
 from config import load_config
 
-from .deep_research import deep_research_agent
+from .deep_research.agent import deep_research_agent
 from .sdk import (
     make_log_after_model_call,
     make_log_before_model_call,

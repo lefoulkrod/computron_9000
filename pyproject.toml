@@ -129,6 +129,7 @@ no_implicit_reexport = true               # Disallow implicit star re-exports (e
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false             # Allow untyped defs in tests for flexibility
+no_implicit_reexport = false              # Allow tests to import from internal modules
 
 [[tool.mypy.overrides]]
 module = ["playwright.*", "podman.*", "ollama.*", "asyncpraw.*"]
