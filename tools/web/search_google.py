@@ -110,7 +110,7 @@ def _get_host_machine_config(user_locale: str | None = None) -> FingerprintConfi
         FingerprintConfig: Browser fingerprint configuration.
     """
     # Get system locale
-    system_locale = user_locale or os.environ.get("LANG", "en-US")
+    system_locale = user_locale or os.environ.get("LANG") or "en-US"
 
     # Get system timezone - simplified approach
     current_time = datetime.now()

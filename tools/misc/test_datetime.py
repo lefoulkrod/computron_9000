@@ -6,7 +6,7 @@ from tools.misc.datetime import datetime_tool
 
 
 @pytest.mark.unit
-def test_datetime_tool_success():
+def test_datetime_tool_success() -> None:
     """
     Test that datetime_tool returns a successful result with a non-empty datetime string and timezone.
     """

@@ -191,11 +191,11 @@ def search_files(pattern: str) -> SearchResults:
                 if "**/" in pattern
                 else pattern.replace("**", "*")
             )
-            matches = list(Path().rglob(base_pattern))
+            path_matches = list(Path().rglob(base_pattern))
         else:
-            matches = list(Path().glob(pattern))
+            path_matches = list(Path().glob(pattern))
         # Convert Path objects to strings for compatibility
-        matches = [str(match) for match in matches]
+        matches = [str(match) for match in path_matches]
         return SearchResults(status="success", matches=matches)
     except Exception as e:
         return SearchResults(status="error", matches=[], error_message=str(e))

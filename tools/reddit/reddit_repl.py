@@ -13,7 +13,7 @@ import logging
 
 from dotenv import load_dotenv
 
-from tools.reddit import get_reddit_comments_tree_shallow, search_reddit
+from tools.reddit import get_reddit_comments_tree_shallow, search_reddit, RedditSubmission
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,7 +26,7 @@ async def main() -> None:
     Interactive REPL for searching Reddit and viewing comments.
     """
     print("Reddit Search REPL. Type 'exit' to quit.")
-    results = []
+    results: list[RedditSubmission] = []
     while True:
         if not results:
             query = input("Enter search string: ").strip()

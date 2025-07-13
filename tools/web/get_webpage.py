@@ -130,7 +130,7 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
     """
     try:
         reduced = await get_webpage(url)
-        page_text = reduced.page_text
+        page_text: str = reduced.page_text
         if not (0 <= start <= end <= len(page_text)):
             logger.error(
                 f"Invalid substring indices: start={start}, end={end}, text length={len(page_text)}"

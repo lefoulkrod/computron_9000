@@ -182,3 +182,9 @@ exclude_lines = [
 ]
 precision = 2
 show_missing = true
+
+[dependency-groups]
+dev = [
+    "types-cachetools>=6.0.0.20250525",
+    "types-pyyaml>=6.0.12.20250516",
+]
