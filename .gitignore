@@ -31,9 +31,6 @@ logs/
 .vscode/
 .idea/
 
-# Pre-commit (not used)
-.pre-commit-config.yaml
-
 # OS generated files
 .DS_Store
 

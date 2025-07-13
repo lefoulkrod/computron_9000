@@ -7,6 +7,7 @@ This module provides container management, code upload, and package installation
 import io
 import logging
 import tarfile
+from typing import Any, Union
 
 from podman import PodmanClient
 from podman.domain.containers import Container
@@ -103,7 +104,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
         raise CodeExecutionError(f"Package installation failed: {stderr}")
 
 
-def _parse_container_output(exit_code: int, output) -> dict:
+def _parse_container_output(exit_code: int, output: Any) -> dict:
     """
     Parse the output from a container exec_run call.
 

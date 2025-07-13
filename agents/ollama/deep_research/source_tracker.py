@@ -52,7 +52,7 @@ class SourceTracker:
     information was extracted.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize an empty source tracker."""
         self._sources: dict[str, ResearchSource] = {}  # url -> ResearchSource
         self._accesses: list[SourceAccess] = []  # All source accesses

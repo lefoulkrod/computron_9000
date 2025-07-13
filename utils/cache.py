@@ -30,7 +30,7 @@ def async_lru_cache(maxsize: int = 10) -> Callable:
         cache = _cache_registry[cache_key]
 
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             key = hashkey(*args, **kwargs)
             if key in cache:
                 logger.debug(f"Cache hit for {cache_key} key: {key}")
