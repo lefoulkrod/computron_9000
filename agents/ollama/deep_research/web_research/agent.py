@@ -31,8 +31,7 @@ model, options = config.get_model_settings()
 
 # Initialize source tracking for web research
 web_source_tracker = AgentSourceTracker(
-    agent_id="web_research",
-    shared_registry=SharedSourceRegistry()
+    agent_id="web_research", shared_registry=SharedSourceRegistry()
 )
 
 # Initialize web research tools with agent-specific source tracker

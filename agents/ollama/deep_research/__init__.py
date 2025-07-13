@@ -25,14 +25,18 @@ from .agent import (
     search_tool_documentation,
     source_tracker,
 )
+from .analysis import (
+    analysis_agent,
+    analysis_tool,
+)
 
 # Multi-agent system components
 from .coordinator import (
-    CoordinationTools,
     ConcreteResearchWorkflowCoordinator,
+    CoordinationTools,
     coordination_tools,
-    research_coordinator_agent,
     research_coordinator_after_callback,
+    research_coordinator_agent,
     research_coordinator_before_callback,
     research_coordinator_tool,
 )
@@ -71,10 +75,6 @@ from .shared.logging_infrastructure import (
     WorkflowCoordinationError,
     setup_multi_agent_logging,
 )
-from .analysis import (
-    analysis_agent,
-    analysis_tool,
-)
 from .social_research import (
     social_research_agent,
     social_research_tool,
@@ -91,12 +91,12 @@ from .web_research import (
 __all__ = [
     # Legacy single-agent interface (backward compatibility)
     "deep_research_agent",
-    "deep_research_agent_before_callback", 
+    "deep_research_agent_before_callback",
     "deep_research_agent_after_callback",
     "deep_research_agent_tool",
     "source_tracker",
     "get_tool_documentation",
-    "search_tool_documentation", 
+    "search_tool_documentation",
     "get_citation_practices",
     # Research Coordinator (Phase 3.1.3)
     "research_coordinator_agent",

@@ -45,16 +45,34 @@ source_tracker = create_legacy_source_tracker()
 tracked_tools = get_legacy_tracked_tools(source_tracker)
 
 # Extract specific tool categories for readability
-tracked_web_tools = {k: v for k, v in tracked_tools.items() if k in [
-    "search_google", "get_webpage", "get_webpage_summary", 
-    "get_webpage_summary_sections", "get_webpage_substring", "html_find_elements",
-    "assess_webpage_credibility", "extract_webpage_metadata", "categorize_source"
-]}
+tracked_web_tools = {
+    k: v
+    for k, v in tracked_tools.items()
+    if k
+    in [
+        "search_google",
+        "get_webpage",
+        "get_webpage_summary",
+        "get_webpage_summary_sections",
+        "get_webpage_substring",
+        "html_find_elements",
+        "assess_webpage_credibility",
+        "extract_webpage_metadata",
+        "categorize_source",
+    ]
+}
 
-tracked_reddit_tools = {k: v for k, v in tracked_tools.items() if k in [
-    "search_reddit", "get_reddit_comments_tree_shallow", 
-    "analyze_reddit_credibility", "analyze_comment_sentiment"
-]}
+tracked_reddit_tools = {
+    k: v
+    for k, v in tracked_tools.items()
+    if k
+    in [
+        "search_reddit",
+        "get_reddit_comments_tree_shallow",
+        "analyze_reddit_credibility",
+        "analyze_comment_sentiment",
+    ]
+}
 
 # Define the agent with enhanced capabilities (legacy interface)
 deep_research_agent: Agent = Agent(

@@ -41,7 +41,7 @@ sentiment, emotional_tones, consensus_level, key_topics, confidence_level, and b
 class SocialResearchTools:
     """
     Social research tools with agent-specific source tracking.
-    
+
     This class provides social media and forum research capabilities for the Social Research Agent,
     migrated from the centralized TrackedRedditTools implementation and sentiment analyzer.
     """
@@ -69,7 +69,9 @@ class SocialResearchTools:
             dict[str, Any]: Sentiment analysis results
         """
         # Prepare the prompt
-        prompt = f"{SENTIMENT_SYSTEM_PROMPT}\n\nAnalyze the sentiment of the following text"
+        prompt = (
+            f"{SENTIMENT_SYSTEM_PROMPT}\n\nAnalyze the sentiment of the following text"
+        )
         if context:
             prompt += f" (Context: {context})"
         prompt += f":\n\n{text}\n\nProvide a detailed sentiment analysis."
@@ -77,11 +79,18 @@ class SocialResearchTools:
         try:
             # Use LLM for advanced sentiment analysis
             response = await generate_completion(prompt=prompt)
-            
+
             try:
                 result = json.loads(response)
                 # Ensure required fields exist
-                required_fields = ["sentiment", "emotional_tones", "consensus_level", "key_topics", "confidence_level", "brief_summary"]
+                required_fields = [
+                    "sentiment",
+                    "emotional_tones",
+                    "consensus_level",
+                    "key_topics",
+                    "confidence_level",
+                    "brief_summary",
+                ]
                 for field in required_fields:
                     if field not in result:
                         result[field] = "Unknown"
@@ -243,7 +252,9 @@ class SocialResearchTools:
         comments_text = "\n\n".join(
             [
                 f"Comment (Score: {comment.score}): {comment.body}"
-                for comment in comments[:15]  # Limit to top 15 comments for context window
+                for comment in comments[
+                    :15
+                ]  # Limit to top 15 comments for context window
             ]
         )
 
@@ -259,7 +270,9 @@ class SocialResearchTools:
             max(comment.score for comment in comments) if comments else 0
         )
         result["average_comment_score"] = (
-            sum(comment.score for comment in comments) / len(comments) if comments else 0
+            sum(comment.score for comment in comments) / len(comments)
+            if comments
+            else 0
         )
 
         return result

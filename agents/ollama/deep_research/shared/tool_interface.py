@@ -7,7 +7,7 @@ tools that can work together in the multi-agent system.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
 
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 class ToolResult(Protocol):
     """Protocol for tool results that can be passed between agents."""
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for serialization."""
         ...
 
@@ -29,7 +29,7 @@ class ToolResult(Protocol):
 class AgentTool(ABC):
     """
     Base class for agent-specific tools.
-    
+
     Provides common functionality for source tracking, error handling,
     and result formatting that all agent tools should have.
     """
@@ -38,7 +38,7 @@ class AgentTool(ABC):
         self,
         tool_name: str,
         agent_id: str,
-        source_tracker: Optional[AgentSourceTracker] = None
+        source_tracker: AgentSourceTracker | None = None,
     ) -> None:
         """
         Initialize agent tool.
@@ -53,11 +53,7 @@ class AgentTool(ABC):
         self.source_tracker = source_tracker
         self.logger = logging.getLogger(f"{__name__}.{agent_id}.{tool_name}")
 
-    def track_source_access(
-        self,
-        url: str,
-        query: Optional[str] = None
-    ) -> None:
+    def track_source_access(self, url: str, query: str | None = None) -> None:
         """
         Track access to a source if source tracker is available.
 
@@ -67,9 +63,7 @@ class AgentTool(ABC):
         """
         if self.source_tracker:
             self.source_tracker.register_access(
-                url=url,
-                tool_name=self.tool_name,
-                query=query
+                url=url, tool_name=self.tool_name, query=query
             )
             self.logger.debug(f"Tracked source access: {url}")
 
@@ -86,7 +80,7 @@ class AgentTool(ABC):
         """
         pass
 
-    def get_tool_info(self) -> Dict[str, str]:
+    def get_tool_info(self) -> dict[str, str]:
         """Get information about this tool."""
         return {
             "name": self.tool_name,
@@ -102,7 +96,7 @@ class WebResearchTool(AgentTool):
         self,
         tool_name: str,
         agent_id: str = "web_research",
-        source_tracker: Optional[AgentSourceTracker] = None
+        source_tracker: AgentSourceTracker | None = None,
     ) -> None:
         super().__init__(tool_name, agent_id, source_tracker)
 
@@ -114,7 +108,7 @@ class SocialResearchTool(AgentTool):
         self,
         tool_name: str,
         agent_id: str = "social_research",
-        source_tracker: Optional[AgentSourceTracker] = None
+        source_tracker: AgentSourceTracker | None = None,
     ) -> None:
         super().__init__(tool_name, agent_id, source_tracker)
 
@@ -126,7 +120,7 @@ class AnalysisTool(AgentTool):
         self,
         tool_name: str,
         agent_id: str = "analysis",
-        source_tracker: Optional[AgentSourceTracker] = None
+        source_tracker: AgentSourceTracker | None = None,
     ) -> None:
         super().__init__(tool_name, agent_id, source_tracker)
 
@@ -138,7 +132,7 @@ class SynthesisTool(AgentTool):
         self,
         tool_name: str,
         agent_id: str = "synthesis",
-        source_tracker: Optional[AgentSourceTracker] = None
+        source_tracker: AgentSourceTracker | None = None,
     ) -> None:
         super().__init__(tool_name, agent_id, source_tracker)
 
@@ -146,14 +140,16 @@ class SynthesisTool(AgentTool):
 class ToolRegistry:
     """
     Registry for managing agent-specific tools.
-    
+
     Allows agents to register their tools and enables cross-agent
     tool discovery and usage patterns.
     """
 
     def __init__(self) -> None:
         """Initialize empty tool registry."""
-        self._tools: Dict[str, Dict[str, AgentTool]] = {}  # agent_id -> tool_name -> tool
+        self._tools: dict[str, dict[str, AgentTool]] = (
+            {}
+        )  # agent_id -> tool_name -> tool
 
     def register_tool(self, agent_id: str, tool: AgentTool) -> None:
         """
@@ -165,11 +161,11 @@ class ToolRegistry:
         """
         if agent_id not in self._tools:
             self._tools[agent_id] = {}
-        
+
         self._tools[agent_id][tool.tool_name] = tool
         logger.info(f"Registered tool {tool.tool_name} for agent {agent_id}")
 
-    def get_tool(self, agent_id: str, tool_name: str) -> Optional[AgentTool]:
+    def get_tool(self, agent_id: str, tool_name: str) -> AgentTool | None:
         """
         Get a specific tool for an agent.
 
@@ -182,7 +178,7 @@ class ToolRegistry:
         """
         return self._tools.get(agent_id, {}).get(tool_name)
 
-    def get_agent_tools(self, agent_id: str) -> Dict[str, AgentTool]:
+    def get_agent_tools(self, agent_id: str) -> dict[str, AgentTool]:
         """
         Get all tools for a specific agent.
 
@@ -194,11 +190,11 @@ class ToolRegistry:
         """
         return self._tools.get(agent_id, {}).copy()
 
-    def get_all_agents(self) -> List[str]:
+    def get_all_agents(self) -> list[str]:
         """Get list of all agents with registered tools."""
         return list(self._tools.keys())
 
-    def get_tool_list(self, agent_id: str) -> List[str]:
+    def get_tool_list(self, agent_id: str) -> list[str]:
         """Get list of tool names for a specific agent."""
         return list(self._tools.get(agent_id, {}).keys())
 
@@ -206,13 +202,15 @@ class ToolRegistry:
 class StandardErrorHandling:
     """
     Standard error handling patterns for agent tools.
-    
+
     Provides consistent error handling, logging, and recovery
     patterns across all agent tools.
     """
 
     @staticmethod
-    def handle_network_error(error: Exception, url: str, tool_name: str) -> Dict[str, Any]:
+    def handle_network_error(
+        error: Exception, url: str, tool_name: str
+    ) -> dict[str, Any]:
         """
         Handle network-related errors consistently.
 
@@ -234,7 +232,9 @@ class StandardErrorHandling:
         }
 
     @staticmethod
-    def handle_parsing_error(error: Exception, content: str, tool_name: str) -> Dict[str, Any]:
+    def handle_parsing_error(
+        error: Exception, content: str, tool_name: str
+    ) -> dict[str, Any]:
         """
         Handle content parsing errors consistently.
 
@@ -256,7 +256,9 @@ class StandardErrorHandling:
         }
 
     @staticmethod
-    def handle_validation_error(error: Exception, input_data: Any, tool_name: str) -> Dict[str, Any]:
+    def handle_validation_error(
+        error: Exception, input_data: Any, tool_name: str
+    ) -> dict[str, Any]:
         """
         Handle input validation errors consistently.
 

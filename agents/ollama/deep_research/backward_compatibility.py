@@ -6,7 +6,7 @@ using the new multi-agent infrastructure when appropriate.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agents.ollama.deep_research.shared import (
     AgentSourceTracker,
@@ -32,17 +32,16 @@ class BackwardCompatibilitySourceTracker:
         """Initialize backward compatibility source tracker."""
         # Create a shared registry for legacy usage
         self._shared_registry = SharedSourceRegistry()
-        
+
         # Create an agent tracker for the legacy single-agent
         self._agent_tracker = AgentSourceTracker(
-            agent_id="legacy_deep_research",
-            shared_registry=self._shared_registry
+            agent_id="legacy_deep_research", shared_registry=self._shared_registry
         )
-        
+
         logger.info("Initialized backward compatibility source tracker")
 
     def register_access(
-        self, url: str, tool_name: str, query: Optional[str] = None
+        self, url: str, tool_name: str, query: str | None = None
     ) -> None:
         """
         Register a source access (backward compatible interface).
@@ -63,7 +62,7 @@ class BackwardCompatibilitySourceTracker:
         """
         self._agent_tracker.register_source(source)
 
-    def get_source(self, url: str) -> Optional[Any]:
+    def get_source(self, url: str) -> Any | None:
         """
         Get a source by URL (backward compatible interface).
 
@@ -75,19 +74,19 @@ class BackwardCompatibilitySourceTracker:
         """
         return self._agent_tracker.get_source(url)
 
-    def get_all_sources(self) -> List[Any]:
+    def get_all_sources(self) -> list[Any]:
         """Get all sources (backward compatible interface)."""
         return self._agent_tracker.get_local_sources()
 
-    def get_citations(self) -> List[Any]:
+    def get_citations(self) -> list[Any]:
         """Get citations (backward compatible interface)."""
         return self._agent_tracker.get_citations()
 
-    def get_source_summary(self) -> Dict[str, int]:
+    def get_source_summary(self) -> dict[str, int]:
         """Get source summary (backward compatible interface)."""
         accesses = self._agent_tracker.get_local_accesses()
         sources = self._agent_tracker.get_local_sources()
-        
+
         return {
             "total_sources": len(sources),
             "total_accesses": len(accesses),
@@ -121,7 +120,7 @@ class LegacyAgentConfig:
         return model
 
     @property
-    def options(self) -> Dict[str, Any]:
+    def options(self) -> dict[str, Any]:
         """Get model options."""
         _, options = self._config.get_model_settings()
         return options
@@ -137,7 +136,9 @@ def create_legacy_source_tracker() -> BackwardCompatibilitySourceTracker:
     return BackwardCompatibilitySourceTracker()
 
 
-def get_legacy_tracked_tools(source_tracker: BackwardCompatibilitySourceTracker) -> Dict[str, Any]:
+def get_legacy_tracked_tools(
+    source_tracker: BackwardCompatibilitySourceTracker,
+) -> dict[str, Any]:
     """
     Get tracked tools with legacy interface compatibility.
 
@@ -149,21 +150,21 @@ def get_legacy_tracked_tools(source_tracker: BackwardCompatibilitySourceTracker)
     """
     # Create a compatibility layer that wraps the agent tracker
     legacy_tracker = SourceTracker()
-    
+
     # Copy methods from the backward compatibility tracker
     legacy_tracker.register_access = source_tracker.register_access
     legacy_tracker.register_source = source_tracker.register_source
     legacy_tracker.get_source = source_tracker.get_source
-    
+
     # Get the original tracked tools
     web_tools = get_tracked_web_tools(legacy_tracker)
     reddit_tools = get_tracked_reddit_tools(legacy_tracker)
-    
+
     # Combine and return
     all_tools = {}
     all_tools.update(web_tools)
     all_tools.update(reddit_tools)
-    
+
     return all_tools
 
 

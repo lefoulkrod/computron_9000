@@ -6,7 +6,6 @@ Migrated from tracked_tools.py as part of Phase 3.2 tool migration refactors.
 """
 
 import logging
-from typing import Optional
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
 from agents.ollama.deep_research.source_analysis import (
@@ -36,7 +35,7 @@ logger = logging.getLogger(__name__)
 class WebResearchTools:
     """
     Web research tools with agent-specific source tracking.
-    
+
     This class provides web research capabilities for the Web Research Agent,
     migrated from the centralized TrackedWebTools implementation.
     """
@@ -191,11 +190,11 @@ class WebResearchTools:
             SourceCategorization: Source categorization results
         """
         self.source_tracker.register_access(url=url, tool_name="categorize_source")
-        
+
         # If metadata is not provided, extract it first
         if metadata is None:
             metadata = await self.extract_webpage_metadata(url)
-            
+
         return categorize_source(url=url, metadata=metadata)
 
 

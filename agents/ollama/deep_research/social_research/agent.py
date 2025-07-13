@@ -31,8 +31,7 @@ model, options = config.get_model_settings()
 
 # Initialize source tracking for social research
 social_source_tracker = AgentSourceTracker(
-    agent_id="social_research",
-    shared_registry=SharedSourceRegistry()
+    agent_id="social_research", shared_registry=SharedSourceRegistry()
 )
 
 # Initialize social research tools with agent-specific source tracker
