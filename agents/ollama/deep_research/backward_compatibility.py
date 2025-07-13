@@ -18,6 +18,7 @@ from agents.ollama.deep_research.tracked_tools import (
     get_tracked_reddit_tools,
     get_tracked_web_tools,
 )
+from agents.ollama.deep_research.types import ResearchSource
 
 logger = logging.getLogger(__name__)
 
@@ -148,13 +149,24 @@ def get_legacy_tracked_tools(
     Returns:
         Dict[str, Any]: Dictionary of tracked tool functions.
     """
-    # Create a compatibility layer that wraps the agent tracker
-    legacy_tracker = SourceTracker()
 
-    # Copy methods from the backward compatibility tracker
-    legacy_tracker.register_access = source_tracker.register_access
-    legacy_tracker.register_source = source_tracker.register_source
-    legacy_tracker.get_source = source_tracker.get_source
+    # Create a compatibility layer that wraps the agent tracker
+    class LegacyTrackerWrapper(SourceTracker):
+        def __init__(self, compat_tracker: BackwardCompatibilitySourceTracker):
+            self._compat_tracker = compat_tracker
+
+        def register_access(
+            self, url: str, tool_name: str, query: str | None = None
+        ) -> None:
+            return self._compat_tracker.register_access(url, tool_name, query)
+
+        def register_source(self, source: ResearchSource) -> None:
+            return self._compat_tracker.register_source(source)
+
+        def get_source(self, url: str) -> ResearchSource | None:
+            return self._compat_tracker.get_source(url)
+
+    legacy_tracker = LegacyTrackerWrapper(source_tracker)
 
     # Get the original tracked tools
     web_tools = get_tracked_web_tools(legacy_tracker)

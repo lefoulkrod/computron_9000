@@ -8,7 +8,6 @@ specialized settings while maintaining sensible defaults.
 import logging
 from typing import Any
 
-from config import load_config
 from models import get_model_by_name
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,6 @@ class AgentConfig:
         self.model_name = model_name or "deep_research"
 
         # Load base configuration
-        config = load_config()
         base_model = get_model_by_name(self.model_name)
 
         # Apply agent-specific overrides
@@ -114,8 +112,14 @@ class MultiAgentConfigManager:
     def _initialize_default_configs(self) -> None:
         """Initialize default configurations for all agent types."""
         for agent_type, config_overrides in self.DEFAULT_AGENT_CONFIGS.items():
+            temperature = config_overrides.get("temperature")
+            max_tokens = config_overrides.get("max_tokens")
+
             self._agent_configs[agent_type] = AgentConfig(
-                agent_type=agent_type, **config_overrides
+                agent_type=agent_type,
+                temperature=temperature,
+                max_tokens=int(max_tokens) if max_tokens is not None else None,
+                custom_options=None,  # No custom options in default configs
             )
 
     def get_agent_config(self, agent_type: str) -> AgentConfig:

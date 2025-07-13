@@ -133,7 +133,9 @@ class SharedSourceRegistry:
             dict: Serializable dictionary representation of the registry.
         """
         return {
-            "sources": {url: source.model_dump() for url, source in self._sources.items()},
+            "sources": {
+                url: source.model_dump() for url, source in self._sources.items()
+            },
             "all_accesses": [access.model_dump() for access in self._all_accesses],
             "agent_accesses": {
                 agent_id: [access.model_dump() for access in accesses]
@@ -167,7 +169,8 @@ class SharedSourceRegistry:
         # Restore agent accesses
         for agent_id, accesses_data in data.get("agent_accesses", {}).items():
             registry._agent_accesses[agent_id] = [
-                SourceAccess.model_validate(access_data) for access_data in accesses_data
+                SourceAccess.model_validate(access_data)
+                for access_data in accesses_data
             ]
 
         return registry
@@ -336,11 +339,15 @@ class AgentSourceTracker:
         return {
             "agent_id": self.agent_id,
             "local_accesses": [access.model_dump() for access in self._local_accesses],
-            "local_sources": {url: source.model_dump() for url, source in self._local_sources.items()},
+            "local_sources": {
+                url: source.model_dump() for url, source in self._local_sources.items()
+            },
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], shared_registry: SharedSourceRegistry) -> "AgentSourceTracker":
+    def from_dict(
+        cls, data: dict[str, Any], shared_registry: SharedSourceRegistry
+    ) -> "AgentSourceTracker":
         """
         Restore the agent tracker from a serialized dictionary.
 

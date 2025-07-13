@@ -15,9 +15,7 @@ from .storage import get_storage
 logger = logging.getLogger(__name__)
 
 
-def create_agent_source_tracker(
-    agent_id: str, workflow_id: str
-) -> AgentSourceTracker:
+def create_agent_source_tracker(agent_id: str, workflow_id: str) -> AgentSourceTracker:
     """
     Create an agent-specific source tracker linked to the workflow's shared registry.
 
@@ -32,7 +30,7 @@ def create_agent_source_tracker(
         ValueError: If workflow not found or source registry not available.
     """
     storage = get_storage()
-    
+
     # Get the shared source registry for the workflow
     shared_registry = storage.get_source_registry(workflow_id)
     if not shared_registry:
@@ -40,8 +38,10 @@ def create_agent_source_tracker(
 
     # Create agent-specific tracker
     tracker = AgentSourceTracker(agent_id, shared_registry)
-    
-    logger.info(f"Created source tracker for agent {agent_id} in workflow {workflow_id}")
+
+    logger.info(
+        f"Created source tracker for agent {agent_id} in workflow {workflow_id}"
+    )
     return tracker
 
 
@@ -59,7 +59,7 @@ def get_workflow_source_summary(workflow_id: str) -> dict[str, Any]:
         ValueError: If workflow not found.
     """
     storage = get_storage()
-    
+
     workflow = storage.get_workflow(workflow_id)
     if not workflow:
         raise ValueError(f"Workflow {workflow_id} not found")
@@ -79,17 +79,17 @@ def get_workflow_source_summary(workflow_id: str) -> dict[str, Any]:
     # Get all sources and accesses
     all_sources = shared_registry.get_all_sources()
     all_accesses = shared_registry.get_all_accesses()
-    
+
     # Group sources by type/domain
     source_breakdown = {}
     for source in all_sources:
-        source_type = getattr(source, 'source_type', 'unknown')
+        source_type = getattr(source, "source_type", "unknown")
         if source_type not in source_breakdown:
             source_breakdown[source_type] = 0
         source_breakdown[source_type] += 1
 
     # Get agent activity summary
-    agent_activity = {}
+    agent_activity: dict[str, dict[str, Any]] = {}
     for access in all_accesses:
         agent_id = access.agent_id
         if agent_id not in agent_activity:
@@ -98,15 +98,17 @@ def get_workflow_source_summary(workflow_id: str) -> dict[str, Any]:
                 "unique_sources": set(),
                 "tools_used": set(),
             }
-        
+
         agent_activity[agent_id]["total_accesses"] += 1
         agent_activity[agent_id]["unique_sources"].add(access.url)
         agent_activity[agent_id]["tools_used"].add(access.tool_name)
 
     # Convert sets to counts for JSON serialization
     for agent_data in agent_activity.values():
-        agent_data["unique_sources"] = len(agent_data["unique_sources"])
-        agent_data["tools_used"] = list(agent_data["tools_used"])
+        unique_sources = agent_data["unique_sources"]
+        tools_used = agent_data["tools_used"]
+        agent_data["unique_sources"] = len(unique_sources)
+        agent_data["tools_used"] = list(tools_used)
 
     return {
         "workflow_id": workflow_id,
@@ -119,7 +121,9 @@ def get_workflow_source_summary(workflow_id: str) -> dict[str, Any]:
     }
 
 
-def export_workflow_sources(workflow_id: str, include_full_content: bool = False) -> dict[str, Any]:
+def export_workflow_sources(
+    workflow_id: str, include_full_content: bool = False
+) -> dict[str, Any]:
     """
     Export all sources and tracking data for a workflow.
 
@@ -134,13 +138,13 @@ def export_workflow_sources(workflow_id: str, include_full_content: bool = False
         ValueError: If workflow not found.
     """
     storage = get_storage()
-    
+
     shared_registry = storage.get_source_registry(workflow_id)
     if not shared_registry:
         raise ValueError(f"No source registry found for workflow {workflow_id}")
 
     export_data = shared_registry.to_dict()
-    
+
     if not include_full_content:
         # Remove content field from sources to reduce size
         for source_data in export_data.get("sources", {}).values():
@@ -167,7 +171,7 @@ def import_workflow_sources(workflow_id: str, source_data: dict[str, Any]) -> No
         ValueError: If workflow not found or data format invalid.
     """
     storage = get_storage()
-    
+
     workflow = storage.get_workflow(workflow_id)
     if not workflow:
         raise ValueError(f"Workflow {workflow_id} not found")
@@ -178,7 +182,7 @@ def import_workflow_sources(workflow_id: str, source_data: dict[str, Any]) -> No
         storage._source_registries[workflow_id] = imported_registry
         logger.info(f"Imported source tracking data for workflow {workflow_id}")
     except Exception as e:
-        raise ValueError(f"Invalid source data format: {e}")
+        raise ValueError(f"Invalid source data format: {e}") from e
 
 
 def clear_workflow_sources(workflow_id: str) -> None:
@@ -192,7 +196,7 @@ def clear_workflow_sources(workflow_id: str) -> None:
         ValueError: If workflow not found.
     """
     storage = get_storage()
-    
+
     shared_registry = storage.get_source_registry(workflow_id)
     if not shared_registry:
         raise ValueError(f"No source registry found for workflow {workflow_id}")

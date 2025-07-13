@@ -636,7 +636,9 @@ class QueryDecomposer:
 
         return sources
 
-    def _identify_context_needs(self, sub_query: str, original_query: str) -> list[str]:
+    def _identify_context_needs(
+        self, sub_query: str, _original_query: str
+    ) -> list[str]:
         """Identify what context this sub-query needs from other queries."""
         requirements = []
 
@@ -664,7 +666,7 @@ class QueryDecomposer:
             Dict[str, List[str]]: Mapping of query IDs to their dependencies.
         """
         try:
-            dependencies = {}
+            dependencies: dict[str, list[str]] = {}
 
             for query in sub_queries:
                 query_id = query["query_id"]
@@ -730,10 +732,7 @@ class QueryDecomposer:
             word in prereq_text for word in ["what", "definition", "characteristics"]
         ):
             return True
-        if "impact" in query_text and "cause" in prereq_text:
-            return True
-
-        return False
+        return "impact" in query_text and "cause" in prereq_text
 
     def prioritize_sub_queries(
         self, sub_queries: list[dict[str, Any]], dependencies: dict[str, list[str]]
@@ -749,9 +748,6 @@ class QueryDecomposer:
             List[str]: Ordered list of query IDs by priority.
         """
         try:
-            # Create a map for quick lookup
-            query_map = {q["query_id"]: q for q in sub_queries}
-
             # Calculate priority scores
             priority_scores = {}
             for query in sub_queries:
@@ -806,7 +802,7 @@ class QueryDecomposer:
         """Perform topological sort with priority consideration."""
         # Build reverse dependency graph
         in_degree = {q["query_id"]: 0 for q in sub_queries}
-        graph = {q["query_id"]: [] for q in sub_queries}
+        graph: dict[str, list[str]] = {q["query_id"]: [] for q in sub_queries}
 
         for query_id, deps in dependencies.items():
             for dep in deps:
@@ -979,7 +975,7 @@ class QueryDecomposer:
         """Create research phases for parallel execution where possible."""
         phases = []
         query_map = {q["query_id"]: q for q in sub_queries}
-        processed = set()
+        processed: set[str] = set()
 
         phase_num = 1
 
@@ -992,9 +988,6 @@ class QueryDecomposer:
                     continue
 
                 # Check if dependencies are satisfied
-                query = query_map[query_id]
-                can_execute = True
-
                 # This is a simplified check - in reality would check actual dependencies
                 phase_queries.append(query_id)
 

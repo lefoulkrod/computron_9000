@@ -5,7 +5,6 @@ This module tests the enhanced source tracking capabilities including
 serialization, persistence, and workflow integration.
 """
 
-import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -36,7 +35,7 @@ class TestSharedSourceRegistry:
         """Test serialization of empty registry."""
         registry = SharedSourceRegistry()
         data = registry.to_dict()
-        
+
         assert data == {
             "sources": {},
             "all_accesses": [],
@@ -46,21 +45,21 @@ class TestSharedSourceRegistry:
     def test_to_dict_with_data(self):
         """Test serialization of registry with data."""
         registry = SharedSourceRegistry()
-        
+
         # Add a source
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
+            content_summary="Test content summary",
         )
         registry.register_source(source)
-        
+
         # Add an access
         tracker = AgentSourceTracker("test_agent", registry)
         tracker.register_access("https://example.com", "search_google", "test query")
-        
+
         data = registry.to_dict()
-        
+
         assert "sources" in data
         assert "all_accesses" in data
         assert "agent_accesses" in data
@@ -75,17 +74,17 @@ class TestSharedSourceRegistry:
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
+            content_summary="Test content summary",
         )
         original.register_source(source)
-        
+
         tracker = AgentSourceTracker("test_agent", original)
         tracker.register_access("https://example.com", "search_google", "test query")
-        
+
         # Serialize and restore
         data = original.to_dict()
         restored = SharedSourceRegistry.from_dict(data)
-        
+
         # Verify restoration
         assert restored.has_source("https://example.com")
         assert len(restored.get_all_sources()) == 1
@@ -95,37 +94,35 @@ class TestSharedSourceRegistry:
     def test_json_serialization(self):
         """Test JSON serialization round-trip."""
         registry = SharedSourceRegistry()
-        
+
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         registry.register_source(source)
-        
+
         # Serialize to JSON and back
         json_str = registry.to_json()
         restored = SharedSourceRegistry.from_json(json_str)
-        
+
         assert restored.has_source("https://example.com")
         assert len(restored.get_all_sources()) == 1
 
     def test_clear_registry(self):
         """Test clearing registry data."""
         registry = SharedSourceRegistry()
-        
+
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         registry.register_source(source)
-        
+
         tracker = AgentSourceTracker("test_agent", registry)
         tracker.register_access("https://example.com", "search_google")
-        
+
         # Clear and verify
         registry.clear()
         assert len(registry.get_all_sources()) == 0
@@ -139,21 +136,20 @@ class TestAgentSourceTracker:
         """Test tracker serialization and restoration."""
         registry = SharedSourceRegistry()
         tracker = AgentSourceTracker("test_agent", registry)
-        
+
         # Add some data
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         tracker.register_source(source)
         tracker.register_access("https://example.com", "search_google", "test query")
-        
+
         # Serialize and restore
         data = tracker.to_dict()
         restored = AgentSourceTracker.from_dict(data, registry)
-        
+
         assert restored.agent_id == "test_agent"
         assert len(restored.get_local_accesses()) == 1
         assert len(restored.get_local_sources()) == 1
@@ -166,7 +162,7 @@ class TestWorkflowStorage:
     def test_create_workflow_with_source_registry(self):
         """Test workflow creation includes source registry."""
         storage = WorkflowStorage()
-        
+
         workflow = ResearchWorkflow(
             workflow_id="test_workflow",
             original_query="test query",
@@ -176,16 +172,16 @@ class TestWorkflowStorage:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow)
-        
+
         assert storage.get_workflow("test_workflow") is not None
         assert storage.get_source_registry("test_workflow") is not None
 
     def test_workflow_file_persistence(self):
         """Test saving and loading workflows to/from files."""
         storage = WorkflowStorage()
-        
+
         # Create workflow
         workflow = ResearchWorkflow(
             workflow_id="test_workflow",
@@ -196,44 +192,43 @@ class TestWorkflowStorage:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow)
-        
+
         # Add some source data
         registry = storage.get_source_registry("test_workflow")
         assert registry is not None  # Ensure registry exists
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         registry.register_source(source)
-        
+
         # Save to file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             filepath = f.name
-        
+
         try:
             storage.save_workflow_to_file("test_workflow", filepath)
-            
+
             # Clear storage and reload
             new_storage = WorkflowStorage()
             workflow_id = new_storage.load_workflow_from_file(filepath)
-            
+
             assert workflow_id == "test_workflow"
             assert new_storage.get_workflow("test_workflow") is not None
             registry = new_storage.get_source_registry("test_workflow")
             assert registry is not None
             assert registry.has_source("https://example.com")
-            
+
         finally:
             Path(filepath).unlink(missing_ok=True)
 
     def test_workflow_summary(self):
         """Test workflow summary with source tracking stats."""
         storage = WorkflowStorage()
-        
+
         workflow = ResearchWorkflow(
             workflow_id="test_workflow",
             original_query="test query",
@@ -243,26 +238,25 @@ class TestWorkflowStorage:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow)
-        
+
         # Add source data
         registry = storage.get_source_registry("test_workflow")
         assert registry is not None  # Ensure registry exists
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         registry.register_source(source)
-        
+
         tracker = AgentSourceTracker("test_agent", registry)
         tracker.register_access("https://example.com", "search_google")
-        
+
         # Get summary
         summary = storage.get_workflow_summary("test_workflow")
-        
+
         assert summary is not None
         assert summary["workflow_id"] == "test_workflow"
         assert summary["total_sources"] == 1
@@ -278,7 +272,7 @@ class TestSourceTrackerUtils:
         # Set up storage with workflow
         storage = get_storage()
         storage.clear_all()  # Start fresh
-        
+
         workflow = ResearchWorkflow(
             workflow_id="test_workflow",
             original_query="test query",
@@ -288,12 +282,12 @@ class TestSourceTrackerUtils:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow)
-        
+
         # Create tracker
         tracker = create_agent_source_tracker("test_agent", "test_workflow")
-        
+
         assert tracker.agent_id == "test_agent"
         assert tracker.shared_registry is not None
 
@@ -301,7 +295,7 @@ class TestSourceTrackerUtils:
         """Test getting workflow source summary."""
         storage = get_storage()
         storage.clear_all()
-        
+
         # Create workflow with source data
         workflow = ResearchWorkflow(
             workflow_id="test_workflow",
@@ -312,24 +306,23 @@ class TestSourceTrackerUtils:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow)
-        
+
         # Add sources through tracker
         tracker = create_agent_source_tracker("web_agent", "test_workflow")
-        
+
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         tracker.register_source(source)
         tracker.register_access("https://example.com", "search_google", "test query")
-        
+
         # Get summary
         summary = get_workflow_source_summary("test_workflow")
-        
+
         assert summary["workflow_id"] == "test_workflow"
         assert summary["total_sources"] == 1
         assert summary["total_accesses"] == 1
@@ -340,7 +333,7 @@ class TestSourceTrackerUtils:
         """Test exporting and importing workflow sources."""
         storage = get_storage()
         storage.clear_all()
-        
+
         # Create source workflow
         workflow1 = ResearchWorkflow(
             workflow_id="source_workflow",
@@ -351,23 +344,22 @@ class TestSourceTrackerUtils:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow1)
-        
+
         # Add data
         tracker = create_agent_source_tracker("test_agent", "source_workflow")
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         tracker.register_source(source)
         tracker.register_access("https://example.com", "search_google")
-        
+
         # Export data
         export_data = export_workflow_sources("source_workflow")
-        
+
         # Create target workflow
         workflow2 = ResearchWorkflow(
             workflow_id="target_workflow",
@@ -378,12 +370,12 @@ class TestSourceTrackerUtils:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow2)
-        
+
         # Import data
         import_workflow_sources("target_workflow", export_data)
-        
+
         # Verify import
         summary = get_workflow_source_summary("target_workflow")
         assert summary["total_sources"] == 1
@@ -393,7 +385,7 @@ class TestSourceTrackerUtils:
         """Test clearing workflow sources."""
         storage = get_storage()
         storage.clear_all()
-        
+
         workflow = ResearchWorkflow(
             workflow_id="test_workflow",
             original_query="test query",
@@ -403,24 +395,23 @@ class TestSourceTrackerUtils:
             created_at=datetime.now().isoformat(),
             updated_at=datetime.now().isoformat(),
         )
-        
+
         storage.create_workflow(workflow)
-        
+
         # Add data
         tracker = create_agent_source_tracker("test_agent", "test_workflow")
         source = ResearchSource(
             url="https://example.com",
             title="Test Source",
-            content_summary="Test content summary"
-            
+            content_summary="Test content summary",
         )
         tracker.register_source(source)
         tracker.register_access("https://example.com", "search_google")
-        
+
         # Verify data exists
         summary = get_workflow_source_summary("test_workflow")
         assert summary["total_sources"] == 1
-        
+
         # Clear and verify
         clear_workflow_sources("test_workflow")
         summary = get_workflow_source_summary("test_workflow")

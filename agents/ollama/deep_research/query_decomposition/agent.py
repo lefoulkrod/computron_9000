@@ -65,7 +65,7 @@ query_decomposition_tool = make_run_agent_as_tool_function(
     4. Research dependencies need identification
 
     Input should be a complex research query or topic.
-    
+
     The agent will provide:
     - Analysis of query complexity and scope
     - Breakdown into specific sub-queries

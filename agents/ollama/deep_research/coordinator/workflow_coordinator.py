@@ -153,7 +153,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                     return workflow
 
         # If not found in active workflows, search all workflows in storage
-        for workflow_id, workflow in self._storage._workflows.items():
+        for _workflow_id, workflow in self._storage._workflows.items():
             for task in workflow.active_tasks:
                 if task.task_id == task_id:
                     return workflow
@@ -184,7 +184,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
         if result.agent_type == "query_decomposition":
             # Generate research tasks from decomposed queries
             if result.success and "sub_queries" in result.result_data:
-                for i, sub_query in enumerate(result.result_data["sub_queries"]):
+                for _i, sub_query in enumerate(result.result_data["sub_queries"]):
                     # Create web research task
                     web_task = AgentTask(
                         task_id=str(uuid.uuid4()),
@@ -242,26 +242,25 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                     )
                     follow_up_tasks.append(analysis_task)
 
-        elif result.agent_type == "analysis":
+        elif result.agent_type == "analysis" and workflow:
             # Start synthesis after analysis is complete
-            if workflow:
-                synthesis_task = AgentTask(
-                    task_id=str(uuid.uuid4()),
-                    agent_type="synthesis",
-                    task_type="synthesize_findings",
-                    input_data={
-                        "analysis_result": result.result_data,
-                        "all_research_data": [
-                            r.result_data for r in workflow.completed_tasks
-                        ],
-                        "original_query": workflow.original_query,
-                        "workflow_id": workflow.workflow_id,
-                    },
-                    priority=5,
-                    dependencies=[result.task_id],
-                    created_at=timestamp,
-                )
-                follow_up_tasks.append(synthesis_task)
+            synthesis_task = AgentTask(
+                task_id=str(uuid.uuid4()),
+                agent_type="synthesis",
+                task_type="synthesize_findings",
+                input_data={
+                    "analysis_result": result.result_data,
+                    "all_research_data": [
+                        r.result_data for r in workflow.completed_tasks
+                    ],
+                    "original_query": workflow.original_query,
+                    "workflow_id": workflow.workflow_id,
+                },
+                priority=5,
+                dependencies=[result.task_id],
+                created_at=timestamp,
+            )
+            follow_up_tasks.append(synthesis_task)
 
         return follow_up_tasks
 

@@ -113,7 +113,7 @@ class AnalysisTools:
                 )
 
         # Basic implementation - can be enhanced with LLM analysis
-        verification_result = {
+        return {
             "claim": claim,
             "sources_checked": len(sources),
             "verification_status": "pending_implementation",
@@ -124,8 +124,6 @@ class AnalysisTools:
                 "Cross-reference verification to be implemented with LLM analysis"
             ],
         }
-
-        return verification_result
 
     def detect_inconsistencies(
         self, sources: list[dict[str, Any]]

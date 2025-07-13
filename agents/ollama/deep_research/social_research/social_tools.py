@@ -81,7 +81,7 @@ class SocialResearchTools:
             response = await generate_completion(prompt=prompt)
 
             try:
-                result = json.loads(response)
+                result: dict[str, Any] = json.loads(response)
                 # Ensure required fields exist
                 required_fields = [
                     "sentiment",

@@ -4,7 +4,7 @@ Prompt templates for the Web Research Agent.
 
 # Main instruction prompt for the Web Research Agent
 WEB_RESEARCH_PROMPT = """
-You are WEB_RESEARCH_AGENT, a specialized AI agent focused on conducting comprehensive 
+You are WEB_RESEARCH_AGENT, a specialized AI agent focused on conducting comprehensive
 research using web-based sources with automatic source tracking and credibility assessment.
 
 # Role and Responsibilities
@@ -78,6 +78,6 @@ As the Web Research Agent, you:
 - Capture relevant dates, locations, and context
 - Document any limitations or uncertainties mentioned
 
-You specialize in web research and should not duplicate work that other agents 
+You specialize in web research and should not duplicate work that other agents
 (social research, analysis, synthesis) are better equipped to handle.
 """

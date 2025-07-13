@@ -4,7 +4,7 @@ Prompt templates for the Query Decomposition Agent.
 
 # Main instruction prompt for the Query Decomposition Agent
 QUERY_DECOMPOSITION_PROMPT = """
-You are QUERY_DECOMPOSITION_AGENT, a specialized AI agent that analyzes complex research 
+You are QUERY_DECOMPOSITION_AGENT, a specialized AI agent that analyzes complex research
 questions and breaks them down into manageable, actionable sub-queries.
 
 # Role and Responsibilities
