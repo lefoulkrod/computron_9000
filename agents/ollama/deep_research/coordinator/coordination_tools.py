@@ -7,7 +7,6 @@ and result processing in the multi-agent research system.
 
 import json
 import logging
-from typing import Any
 
 from ..shared import (
     AgentResult,
@@ -26,11 +25,11 @@ class CoordinationTools:
 
     def __init__(self, agent_id: str) -> None:
         self.agent_id = agent_id
-        
+
         # Initialize source tracking for this agent
         source_registry = SharedSourceRegistry()
         self.source_tracker = AgentSourceTracker(agent_id, source_registry)
-        
+
         # Initialize workflow infrastructure
         self.storage = WorkflowStorage()
         self.bus = MessageBus()
@@ -39,26 +38,26 @@ class CoordinationTools:
     async def initiate_research_workflow(self, query: str) -> str:
         """
         Initiate a new multi-agent research workflow.
-        
+
         Args:
             query: The research query to investigate
-            
+
         Returns:
             JSON string with workflow ID and initial status
         """
         try:
             workflow_id = await self.coordinator.start_research_workflow(query)
-            
+
             result = {
                 "success": True,
                 "workflow_id": workflow_id,
                 "message": f"Started research workflow for: {query}",
                 "initial_phase": "decomposition",
             }
-            
+
             logger.info(f"Initiated workflow {workflow_id} for query: {query}")
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             error_result = {
                 "success": False,
@@ -71,19 +70,19 @@ class CoordinationTools:
     async def get_workflow_status(self, workflow_id: str) -> str:
         """
         Get the current status of a research workflow.
-        
+
         Args:
             workflow_id: The ID of the workflow to check
-            
+
         Returns:
             JSON string with workflow status information
         """
         try:
             status = await self.coordinator.get_workflow_status(workflow_id)
-            
+
             logger.info(f"Retrieved status for workflow {workflow_id}")
             return json.dumps(status, indent=2)
-            
+
         except Exception as e:
             error_result = {
                 "success": False,
@@ -98,20 +97,22 @@ class CoordinationTools:
     ) -> str:
         """
         Process results from a specialized agent and generate follow-up tasks.
-        
+
         Args:
             task_id: The ID of the completed task
             agent_type: The type of agent that completed the task
             result_data: JSON string containing the agent's results
             success: Whether the task completed successfully
-            
+
         Returns:
             JSON string with follow-up task information
         """
         try:
             # Parse result data
-            parsed_data = json.loads(result_data) if isinstance(result_data, str) else result_data
-            
+            parsed_data = (
+                json.loads(result_data) if isinstance(result_data, str) else result_data
+            )
+
             # Create agent result object
             agent_result = AgentResult(
                 task_id=task_id,
@@ -120,10 +121,10 @@ class CoordinationTools:
                 success=success,
                 completion_time=self._get_current_timestamp(),
             )
-            
+
             # Process the result and get follow-up tasks
             follow_up_tasks = await self.coordinator.process_agent_result(agent_result)
-            
+
             result = {
                 "success": True,
                 "processed_task_id": task_id,
@@ -131,12 +132,12 @@ class CoordinationTools:
                 "follow_up_task_ids": [task.task_id for task in follow_up_tasks],
                 "message": f"Processed result from {agent_type} agent",
             }
-            
+
             logger.info(
                 f"Processed result for task {task_id}, created {len(follow_up_tasks)} follow-up tasks"
             )
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             error_result = {
                 "success": False,
@@ -150,19 +151,19 @@ class CoordinationTools:
     async def complete_workflow(self, workflow_id: str) -> str:
         """
         Mark a workflow as complete and get final results.
-        
+
         Args:
             workflow_id: The ID of the workflow to complete
-            
+
         Returns:
             JSON string with final workflow results
         """
         try:
             result = await self.coordinator.complete_workflow(workflow_id)
-            
+
             logger.info(f"Completed workflow {workflow_id}")
             return json.dumps(result, indent=2)
-            
+
         except Exception as e:
             error_result = {
                 "success": False,
@@ -175,7 +176,7 @@ class CoordinationTools:
     def get_coordination_guidelines(self) -> str:
         """
         Get guidelines for coordinating multi-agent research workflows.
-        
+
         Returns:
             Guidelines for effective workflow coordination
         """
@@ -208,10 +209,11 @@ class CoordinationTools:
         - Ensure proper source tracking and citation management
         - Monitor for contradictions or inconsistencies across sources
         """
-        
+
         return guidelines.strip()
 
     def _get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
         from datetime import datetime
+
         return datetime.now().isoformat()

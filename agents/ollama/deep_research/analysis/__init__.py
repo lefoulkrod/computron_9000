@@ -9,8 +9,8 @@ from .agent import (
     analysis_after_callback,
     analysis_agent,
     analysis_before_callback,
-    analysis_tool,
     analysis_source_tracker,
+    analysis_tool,
 )
 from .analysis_tools import AnalysisTools
 

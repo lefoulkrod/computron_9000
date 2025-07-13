@@ -8,7 +8,6 @@ to avoid conflicts between agents while enabling source deduplication.
 import logging
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Set
 
 import pydantic
 
@@ -33,7 +32,7 @@ class SourceAccess(pydantic.BaseModel):
     tool_name: str
     timestamp: float
     agent_id: str
-    query: Optional[str] = None
+    query: str | None = None
 
     @property
     def access_datetime(self) -> datetime:
@@ -49,7 +48,7 @@ class SourceAccess(pydantic.BaseModel):
 class SharedSourceRegistry:
     """
     Shared registry for deduplicating sources across agents.
-    
+
     This registry maintains a global view of all sources accessed during
     a research workflow to avoid duplicate processing and enable
     cross-reference verification.
@@ -57,9 +56,9 @@ class SharedSourceRegistry:
 
     def __init__(self) -> None:
         """Initialize an empty shared source registry."""
-        self._sources: Dict[str, ResearchSource] = {}  # url -> ResearchSource
-        self._all_accesses: List[SourceAccess] = []  # All source accesses across agents
-        self._agent_accesses: Dict[str, List[SourceAccess]] = {}  # agent_id -> accesses
+        self._sources: dict[str, ResearchSource] = {}  # url -> ResearchSource
+        self._all_accesses: list[SourceAccess] = []  # All source accesses across agents
+        self._agent_accesses: dict[str, list[SourceAccess]] = {}  # agent_id -> accesses
 
     def register_source(self, source: ResearchSource) -> None:
         """
@@ -71,7 +70,7 @@ class SharedSourceRegistry:
         self._sources[source.url] = source
         logger.info(f"Registered shared source: {source.title} ({source.url})")
 
-    def get_source(self, url: str) -> Optional[ResearchSource]:
+    def get_source(self, url: str) -> ResearchSource | None:
         """
         Get a source from the shared registry.
 
@@ -103,24 +102,24 @@ class SharedSourceRegistry:
             access (SourceAccess): The source access to register.
         """
         self._all_accesses.append(access)
-        
+
         if access.agent_id not in self._agent_accesses:
             self._agent_accesses[access.agent_id] = []
         self._agent_accesses[access.agent_id].append(access)
 
-    def get_all_sources(self) -> List[ResearchSource]:
+    def get_all_sources(self) -> list[ResearchSource]:
         """Get all sources in the registry."""
         return list(self._sources.values())
 
-    def get_accesses_by_agent(self, agent_id: str) -> List[SourceAccess]:
+    def get_accesses_by_agent(self, agent_id: str) -> list[SourceAccess]:
         """Get all accesses by a specific agent."""
         return self._agent_accesses.get(agent_id, [])
 
-    def get_all_accesses(self) -> List[SourceAccess]:
+    def get_all_accesses(self) -> list[SourceAccess]:
         """Get all source accesses across all agents."""
         return self._all_accesses
 
-    def get_accessing_agents(self, url: str) -> Set[str]:
+    def get_accessing_agents(self, url: str) -> set[str]:
         """Get set of agent IDs that have accessed a specific URL."""
         return {access.agent_id for access in self._all_accesses if access.url == url}
 
@@ -128,7 +127,7 @@ class SharedSourceRegistry:
 class AgentSourceTracker:
     """
     Agent-specific source tracker that works with the shared registry.
-    
+
     Each agent gets its own tracker instance to avoid state conflicts,
     while the shared registry enables cross-agent source deduplication.
     """
@@ -143,11 +142,11 @@ class AgentSourceTracker:
         """
         self.agent_id = agent_id
         self.shared_registry = shared_registry
-        self._local_accesses: List[SourceAccess] = []  # This agent's accesses
-        self._local_sources: Dict[str, ResearchSource] = {}  # This agent's sources
+        self._local_accesses: list[SourceAccess] = []  # This agent's accesses
+        self._local_sources: dict[str, ResearchSource] = {}  # This agent's sources
 
     def register_access(
-        self, url: str, tool_name: str, query: Optional[str] = None
+        self, url: str, tool_name: str, query: str | None = None
     ) -> None:
         """
         Register a source access with both local and shared tracking.
@@ -162,12 +161,12 @@ class AgentSourceTracker:
             tool_name=tool_name,
             timestamp=time.time(),
             agent_id=self.agent_id,
-            query=query
+            query=query,
         )
 
         # Register locally
         self._local_accesses.append(access)
-        
+
         # Register with shared registry
         self.shared_registry.register_access(access)
 
@@ -182,14 +181,16 @@ class AgentSourceTracker:
         """
         # Register locally
         self._local_sources[source.url] = source
-        
+
         # Register with shared registry (only if not already there)
         if not self.shared_registry.has_source(source.url):
             self.shared_registry.register_source(source)
 
-        logger.info(f"Agent {self.agent_id} registered source: {source.title} ({source.url})")
+        logger.info(
+            f"Agent {self.agent_id} registered source: {source.title} ({source.url})"
+        )
 
-    def get_source(self, url: str) -> Optional[ResearchSource]:
+    def get_source(self, url: str) -> ResearchSource | None:
         """
         Get a source, checking local cache first then shared registry.
 
@@ -202,15 +203,15 @@ class AgentSourceTracker:
         # Check local cache first
         if url in self._local_sources:
             return self._local_sources[url]
-        
+
         # Check shared registry
         return self.shared_registry.get_source(url)
 
-    def get_local_accesses(self) -> List[SourceAccess]:
+    def get_local_accesses(self) -> list[SourceAccess]:
         """Get all accesses made by this agent."""
         return self._local_accesses.copy()
 
-    def get_local_sources(self) -> List[ResearchSource]:
+    def get_local_sources(self) -> list[ResearchSource]:
         """Get all sources registered by this agent."""
         return list(self._local_sources.values())
 
@@ -218,7 +219,7 @@ class AgentSourceTracker:
         """Check if this agent has accessed a specific URL."""
         return any(access.url == url for access in self._local_accesses)
 
-    def get_citations(self) -> List[ResearchCitation]:
+    def get_citations(self) -> list[ResearchCitation]:
         """
         Generate citations for all sources accessed by this agent.
 
@@ -226,10 +227,10 @@ class AgentSourceTracker:
             List[ResearchCitation]: List of citations for accessed sources.
         """
         citations = []
-        
+
         # Get unique URLs accessed by this agent
         accessed_urls = {access.url for access in self._local_accesses}
-        
+
         for url in accessed_urls:
             source = self.get_source(url)
             if source:
@@ -238,14 +239,12 @@ class AgentSourceTracker:
                 if source.publication_date:
                     citation_text += f"({source.publication_date}). "
                 citation_text += f"{source.title}. Retrieved from {source.url}"
-                
+
                 citation = ResearchCitation(
-                    source=source,
-                    citation_text=citation_text,
-                    citation_style="APA"
+                    source=source, citation_text=citation_text, citation_style="APA"
                 )
                 citations.append(citation)
-        
+
         return citations
 
     def clear_local_data(self) -> None:
@@ -258,6 +257,6 @@ class AgentSourceTracker:
 # Module exports
 __all__ = [
     "SourceAccess",
-    "SharedSourceRegistry", 
+    "SharedSourceRegistry",
     "AgentSourceTracker",
 ]

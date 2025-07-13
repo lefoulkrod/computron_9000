@@ -31,8 +31,7 @@ model, options = config.get_model_settings()
 
 # Initialize source tracking for analysis
 analysis_source_tracker = AgentSourceTracker(
-    agent_id="analysis",
-    shared_registry=SharedSourceRegistry()
+    agent_id="analysis", shared_registry=SharedSourceRegistry()
 )
 
 # Initialize analysis tools with agent-specific source tracker

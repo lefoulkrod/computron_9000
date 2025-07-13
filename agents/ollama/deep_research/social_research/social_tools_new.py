@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class SocialResearchTools:
     """
     Social research tools with agent-specific source tracking.
-    
+
     This class provides social media and forum research capabilities for the Social Research Agent,
     migrated from the centralized TrackedRedditTools implementation.
     """

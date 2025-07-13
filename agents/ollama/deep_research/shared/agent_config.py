@@ -6,7 +6,7 @@ specialized settings while maintaining sensible defaults.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from config import load_config
 from models import get_model_by_name
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class AgentConfig:
     """
     Configuration container for a specific agent.
-    
+
     Provides agent-specific model settings, parameters, and options
     while falling back to shared defaults.
     """
@@ -25,10 +25,10 @@ class AgentConfig:
     def __init__(
         self,
         agent_type: str,
-        model_name: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        custom_options: Optional[Dict[str, Any]] = None
+        model_name: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        custom_options: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize agent configuration.
@@ -42,15 +42,15 @@ class AgentConfig:
         """
         self.agent_type = agent_type
         self.model_name = model_name or "deep_research"
-        
+
         # Load base configuration
         config = load_config()
         base_model = get_model_by_name(self.model_name)
-        
+
         # Apply agent-specific overrides
         self.model = base_model.model
         self.options = base_model.options.copy() if base_model.options else {}
-        
+
         # Override with agent-specific settings
         if temperature is not None:
             self.options["temperature"] = temperature
@@ -61,7 +61,7 @@ class AgentConfig:
 
         logger.info(f"Configured agent {agent_type} with model {self.model_name}")
 
-    def get_model_settings(self) -> tuple[str, Dict[str, Any]]:
+    def get_model_settings(self) -> tuple[str, dict[str, Any]]:
         """
         Get model and options for agent initialization.
 
@@ -74,7 +74,7 @@ class AgentConfig:
 class MultiAgentConfigManager:
     """
     Manages configurations for all agents in the multi-agent system.
-    
+
     Provides centralized configuration with agent-specific customizations.
     """
 
@@ -108,15 +108,14 @@ class MultiAgentConfigManager:
 
     def __init__(self) -> None:
         """Initialize the multi-agent configuration manager."""
-        self._agent_configs: Dict[str, AgentConfig] = {}
+        self._agent_configs: dict[str, AgentConfig] = {}
         self._initialize_default_configs()
 
     def _initialize_default_configs(self) -> None:
         """Initialize default configurations for all agent types."""
         for agent_type, config_overrides in self.DEFAULT_AGENT_CONFIGS.items():
             self._agent_configs[agent_type] = AgentConfig(
-                agent_type=agent_type,
-                **config_overrides
+                agent_type=agent_type, **config_overrides
             )
 
     def get_agent_config(self, agent_type: str) -> AgentConfig:
@@ -134,14 +133,10 @@ class MultiAgentConfigManager:
         """
         if agent_type not in self._agent_configs:
             raise ValueError(f"Unknown agent type: {agent_type}")
-        
+
         return self._agent_configs[agent_type]
 
-    def register_agent_config(
-        self,
-        agent_type: str,
-        config: AgentConfig
-    ) -> None:
+    def register_agent_config(self, agent_type: str, config: AgentConfig) -> None:
         """
         Register a custom configuration for an agent type.
 
@@ -176,10 +171,10 @@ def get_agent_config(agent_type: str) -> AgentConfig:
 
 def register_custom_agent_config(
     agent_type: str,
-    model_name: Optional[str] = None,
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-    custom_options: Optional[Dict[str, Any]] = None
+    model_name: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    custom_options: dict[str, Any] | None = None,
 ) -> None:
     """
     Register a custom configuration for an agent type.
@@ -196,7 +191,7 @@ def register_custom_agent_config(
         model_name=model_name,
         temperature=temperature,
         max_tokens=max_tokens,
-        custom_options=custom_options
+        custom_options=custom_options,
     )
     _config_manager.register_agent_config(agent_type, config)
 

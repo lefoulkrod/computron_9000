@@ -15,6 +15,7 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 
 from ..shared import get_agent_config
+from .decomposer import QueryDecomposer
 from .prompt import QUERY_DECOMPOSITION_PROMPT
 
 # Load configuration and set up logger
@@ -24,6 +25,11 @@ logger = logging.getLogger(__name__)
 config = get_agent_config("query_decomposition")
 model, options = config.get_model_settings()
 
+# Initialize query decomposition tools
+# Note: The QueryDecomposer will be used for implementation logic
+# but for now we'll integrate tools in the agent definition
+decomposer = QueryDecomposer()  # Initialize without source tracker for now
+
 # Define the Query Decomposition Agent
 query_decomposition_agent: Agent = Agent(
     name="QUERY_DECOMPOSITION_AGENT",
@@ -32,7 +38,8 @@ query_decomposition_agent: Agent = Agent(
     model=model,
     options=options,
     tools=[
-        # Query analysis tools will be added in Phase 3.1.4
+        # Tools will be added in the next implementation phase
+        # For now, the agent provides query decomposition through conversation
     ],
 )
 
@@ -58,6 +65,13 @@ query_decomposition_tool = make_run_agent_as_tool_function(
     4. Research dependencies need identification
 
     Input should be a complex research query or topic.
+    
+    The agent will provide:
+    - Analysis of query complexity and scope
+    - Breakdown into specific sub-queries
+    - Dependency relationships between sub-queries
+    - Prioritized execution order
+    - Research strategy recommendations
     """,
     before_model_callbacks=[query_decomposition_before_callback],
     after_model_callbacks=[query_decomposition_after_callback],
@@ -69,4 +83,5 @@ __all__ = [
     "query_decomposition_before_callback",
     "query_decomposition_after_callback",
     "query_decomposition_tool",
+    "decomposer",
 ]

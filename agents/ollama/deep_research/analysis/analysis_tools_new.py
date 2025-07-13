@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class AnalysisTools:
     """
     Analysis tools with agent-specific source tracking.
-    
+
     This class provides source analysis capabilities for the Analysis Agent,
     including credibility assessment, metadata extraction, and source categorization.
     """
@@ -82,12 +82,14 @@ class AnalysisTools:
             SourceCategorization: Source categorization results
         """
         self.source_tracker.register_access(url=url, tool_name="categorize_source")
-        
+
         # If metadata is not provided, we would need to extract it first
         # For now, require metadata to be provided
         if metadata is None:
-            raise ValueError("Metadata must be provided for source categorization. Use extract_webpage_metadata first.")
-            
+            raise ValueError(
+                "Metadata must be provided for source categorization. Use extract_webpage_metadata first."
+            )
+
         return categorize_source(url=url, metadata=metadata)
 
     async def verify_cross_references(
@@ -109,7 +111,7 @@ class AnalysisTools:
                 self.source_tracker.register_access(
                     url=source["url"], tool_name="verify_cross_references", query=claim
                 )
-        
+
         # Basic implementation - can be enhanced with LLM analysis
         verification_result = {
             "claim": claim,
@@ -118,12 +120,16 @@ class AnalysisTools:
             "confidence": 0.0,
             "supporting_sources": [],
             "conflicting_sources": [],
-            "notes": ["Cross-reference verification to be implemented with LLM analysis"]
+            "notes": [
+                "Cross-reference verification to be implemented with LLM analysis"
+            ],
         }
-        
+
         return verification_result
 
-    def detect_inconsistencies(self, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def detect_inconsistencies(
+        self, sources: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Detect inconsistencies and contradictions between sources.
 
@@ -139,14 +145,14 @@ class AnalysisTools:
                 self.source_tracker.register_access(
                     url=source["url"], tool_name="detect_inconsistencies"
                 )
-        
+
         # Basic implementation - can be enhanced with LLM analysis
         return [
             {
                 "type": "pending_implementation",
                 "description": "Inconsistency detection to be implemented with LLM analysis",
                 "sources_involved": [s.get("url", "unknown") for s in sources],
-                "confidence": 0.0
+                "confidence": 0.0,
             }
         ]
 
@@ -167,9 +173,11 @@ class AnalysisTools:
         for source in sources:
             if "url" in source:
                 self.source_tracker.register_access(
-                    url=source["url"], tool_name="evaluate_evidence_strength", query=topic
+                    url=source["url"],
+                    tool_name="evaluate_evidence_strength",
+                    query=topic,
                 )
-        
+
         # Basic implementation - can be enhanced with actual analysis
         return {
             "topic": topic,
@@ -177,7 +185,9 @@ class AnalysisTools:
             "evidence_strength": "pending_implementation",
             "quality_score": 0.0,
             "reliability_factors": [],
-            "recommendations": ["Evidence strength evaluation to be implemented with advanced analysis"]
+            "recommendations": [
+                "Evidence strength evaluation to be implemented with advanced analysis"
+            ],
         }
 
 

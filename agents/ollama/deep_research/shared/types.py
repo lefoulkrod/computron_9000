@@ -48,3 +48,41 @@ class ResearchWorkflow(BaseModel):
     workflow_state: dict[str, Any] = {}
     created_at: str
     updated_at: str
+
+
+class SubQuery(BaseModel):
+    """Represents a sub-query generated from decomposing a complex query."""
+
+    query_id: str
+    query_text: str
+    description: str
+    importance: int = 5  # 1-10 scale
+    estimated_complexity: int = 3  # 1-5 scale
+    suggested_sources: list[str] = []  # web, social, academic, news
+    research_type: str = "factual"  # factual, analytical, comparative, opinion
+    context_requirements: list[str] = []
+    created_at: str
+
+
+class QueryDependency(BaseModel):
+    """Represents a dependency relationship between sub-queries."""
+
+    dependent_query_id: str
+    prerequisite_query_id: str
+    dependency_type: str = "sequential"  # sequential, informational, contextual
+    dependency_strength: int = 5  # 1-10 scale
+    description: str
+
+
+class ResearchStrategy(BaseModel):
+    """Represents a comprehensive research strategy for a decomposed query."""
+
+    strategy_id: str
+    original_query: str
+    sub_queries: list[SubQuery]
+    dependencies: list[QueryDependency]
+    execution_order: list[str]  # List of query_ids in execution order
+    estimated_duration: int  # minutes
+    success_criteria: list[str]
+    potential_challenges: list[str]
+    created_at: str

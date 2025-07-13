@@ -30,8 +30,7 @@ model, options = config.get_model_settings()
 
 # Initialize source tracking for synthesis
 synthesis_source_tracker = AgentSourceTracker(
-    agent_id="synthesis",
-    shared_registry=SharedSourceRegistry()
+    agent_id="synthesis", shared_registry=SharedSourceRegistry()
 )
 
 # Define the Synthesis Agent

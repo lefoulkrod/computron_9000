@@ -33,7 +33,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
         """Initiate a new research workflow."""
         workflow_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
-        
+
         # Create initial workflow
         workflow = ResearchWorkflow(
             workflow_id=workflow_id,
@@ -42,11 +42,11 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
             created_at=timestamp,
             updated_at=timestamp,
         )
-        
+
         # Store workflow
         self._active_workflows[workflow_id] = workflow
         self._storage.create_workflow(workflow)
-        
+
         # Create initial query decomposition task
         initial_task = AgentTask(
             task_id=str(uuid.uuid4()),
@@ -56,12 +56,12 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
             priority=1,
             created_at=timestamp,
         )
-        
+
         # Add task to workflow and assign it
         workflow.active_tasks.append(initial_task)
         self._storage.update_workflow(workflow)
         await self.assign_task_to_agent(initial_task)
-        
+
         logger.info(f"Started research workflow {workflow_id} for query: {query}")
         return workflow_id
 
@@ -70,9 +70,9 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
         # Update task status
         task.status = "assigned"
         task.assigned_at = datetime.now().isoformat()
-        
+
         # Note: Task updates are managed through workflow updates
-        
+
         # Publish task assignment message
         message = {
             "type": "task_assignment",
@@ -81,14 +81,14 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
             "task_data": task.model_dump(),
         }
         await self._bus.publish(message)
-        
+
         logger.info(f"Assigned task {task.task_id} to {task.agent_type} agent")
         return task.task_id
 
     async def process_agent_result(self, result: AgentResult) -> list[AgentTask]:
         """Process results from an agent and generate follow-up tasks."""
         # Note: Results are stored as part of workflow updates
-        
+
         # Update workflow with completed task
         workflow = await self._get_workflow_for_task(result.task_id)
         if workflow:
@@ -96,26 +96,26 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
             workflow.active_tasks = [
                 t for t in workflow.active_tasks if t.task_id != result.task_id
             ]
-            
+
             # Add to completed tasks
             workflow.completed_tasks.append(result)
             workflow.updated_at = datetime.now().isoformat()
-            
+
             # Update workflow phase based on completed work
             workflow.current_phase = self._determine_next_phase(workflow)
-            
+
             self._storage.update_workflow(workflow)
-        
+
         # Generate follow-up tasks based on result
         follow_up_tasks = await self._generate_follow_up_tasks(result, workflow)
-        
+
         # Assign follow-up tasks
         for task in follow_up_tasks:
             if workflow:
                 workflow.active_tasks.append(task)
                 self._storage.update_workflow(workflow)
             await self.assign_task_to_agent(task)
-        
+
         logger.info(
             f"Processed result for task {result.task_id}, "
             f"generated {len(follow_up_tasks)} follow-up tasks"
@@ -127,10 +127,10 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
         workflow = self._active_workflows.get(workflow_id)
         if not workflow:
             workflow = self._storage.get_workflow(workflow_id)
-        
+
         if not workflow:
             return {"error": f"Workflow {workflow_id} not found"}
-        
+
         return {
             "workflow_id": workflow_id,
             "original_query": workflow.original_query,
@@ -149,29 +149,28 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
             for task in workflow.active_tasks:
                 if task.task_id == task_id:
                     return workflow
-        
+
         # If not found in active workflows, search all workflows in storage
         for workflow_id, workflow in self._storage._workflows.items():
             for task in workflow.active_tasks:
                 if task.task_id == task_id:
                     return workflow
-        
+
         return None
 
     def _determine_next_phase(self, workflow: ResearchWorkflow) -> str:
         """Determine the next phase based on completed work."""
         completed_types = {result.agent_type for result in workflow.completed_tasks}
-        
+
         if "query_decomposition" not in completed_types:
             return "decomposition"
-        elif not any(t in completed_types for t in ["web_research", "social_research"]):
+        if not any(t in completed_types for t in ["web_research", "social_research"]):
             return "research"
-        elif "analysis" not in completed_types:
+        if "analysis" not in completed_types:
             return "analysis"
-        elif "synthesis" not in completed_types:
+        if "synthesis" not in completed_types:
             return "synthesis"
-        else:
-            return "completed"
+        return "completed"
 
     async def _generate_follow_up_tasks(
         self, result: AgentResult, workflow: ResearchWorkflow | None
@@ -179,7 +178,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
         """Generate follow-up tasks based on agent results."""
         follow_up_tasks = []
         timestamp = datetime.now().isoformat()
-        
+
         if result.agent_type == "query_decomposition":
             # Generate research tasks from decomposed queries
             if result.success and "sub_queries" in result.result_data:
@@ -198,7 +197,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                         created_at=timestamp,
                     )
                     follow_up_tasks.append(web_task)
-                    
+
                     # Create social research task
                     social_task = AgentTask(
                         task_id=str(uuid.uuid4()),
@@ -213,15 +212,16 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                         created_at=timestamp,
                     )
                     follow_up_tasks.append(social_task)
-        
+
         elif result.agent_type in ["web_research", "social_research"]:
             # Check if we have enough research results to start analysis
             if workflow:
                 research_results = [
-                    r for r in workflow.completed_tasks 
+                    r
+                    for r in workflow.completed_tasks
                     if r.agent_type in ["web_research", "social_research"]
                 ]
-                
+
                 # If we have multiple research results, start analysis
                 if len(research_results) >= 2:
                     analysis_task = AgentTask(
@@ -229,7 +229,9 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                         agent_type="analysis",
                         task_type="analyze_sources",
                         input_data={
-                            "research_results": [r.result_data for r in research_results],
+                            "research_results": [
+                                r.result_data for r in research_results
+                            ],
                             "workflow_id": workflow.workflow_id,
                         },
                         priority=4,
@@ -237,7 +239,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                         created_at=timestamp,
                     )
                     follow_up_tasks.append(analysis_task)
-        
+
         elif result.agent_type == "analysis":
             # Start synthesis after analysis is complete
             if workflow:
@@ -258,7 +260,7 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
                     created_at=timestamp,
                 )
                 follow_up_tasks.append(synthesis_task)
-        
+
         return follow_up_tasks
 
     async def complete_workflow(self, workflow_id: str) -> dict[str, Any]:
@@ -266,29 +268,29 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
         workflow = self._active_workflows.get(workflow_id)
         if not workflow:
             workflow = self._storage.get_workflow(workflow_id)
-        
+
         if not workflow:
             return {"error": f"Workflow {workflow_id} not found"}
-        
+
         # Find synthesis result
         synthesis_results = [
             r for r in workflow.completed_tasks if r.agent_type == "synthesis"
         ]
-        
+
         if not synthesis_results:
             return {"error": "Workflow not complete - no synthesis results found"}
-        
+
         # Mark workflow as complete
         workflow.current_phase = "completed"
         workflow.updated_at = datetime.now().isoformat()
         self._storage.update_workflow(workflow)
-        
+
         # Remove from active workflows
         if workflow_id in self._active_workflows:
             del self._active_workflows[workflow_id]
-        
+
         final_result = synthesis_results[-1].result_data
-        
+
         logger.info(f"Completed workflow {workflow_id}")
         return {
             "workflow_id": workflow_id,
