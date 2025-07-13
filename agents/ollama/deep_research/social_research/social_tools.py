@@ -8,7 +8,9 @@ Migrated from tracked_tools.py and sentiment_analyzer.py as part of Phase 3.2 to
 import json
 import logging
 import time
+from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
 from tools.reddit import (
@@ -345,6 +347,156 @@ class SocialResearchTools:
             "total_comments_analyzed": len(comments),
             "method": "basic_heuristics",
         }
+
+    # Citation management functionality for social media sources
+    async def generate_reddit_citation(
+        self, url: str, style: str = "APA"
+    ) -> dict[str, Any]:
+        """
+        Generate a properly formatted citation for a Reddit source.
+
+        Args:
+            url (str): The Reddit URL to generate citation for
+            style (str): Citation style (APA, MLA, Chicago)
+
+        Returns:
+            Dict[str, Any]: Formatted citation information
+        """
+        try:
+            # Extract Reddit metadata from URL or submission data
+            reddit_data = await self._extract_reddit_metadata(url)
+
+            # Format citation based on style
+            if style.upper() == "APA":
+                citation = self._format_reddit_apa_citation(reddit_data)
+            elif style.upper() == "MLA":
+                citation = self._format_reddit_mla_citation(reddit_data)
+            elif style.upper() == "CHICAGO":
+                citation = self._format_reddit_chicago_citation(reddit_data)
+            else:
+                citation = self._format_reddit_apa_citation(
+                    reddit_data
+                )  # Default to APA
+
+            return {
+                "url": url,
+                "style": style,
+                "formatted_citation": citation,
+                "reddit_data": reddit_data,
+                "access_date": datetime.now().strftime("%Y-%m-%d"),
+            }
+        except Exception as e:
+            logger.error(f"Error generating Reddit citation for {url}: {e}")
+            return {
+                "url": url,
+                "style": style,
+                "formatted_citation": f"Error generating citation: {str(e)}",
+                "reddit_data": {},
+                "access_date": datetime.now().strftime("%Y-%m-%d"),
+            }
+
+    async def _extract_reddit_metadata(self, url: str) -> dict[str, Any]:
+        """Extract metadata from Reddit URL."""
+        # Basic Reddit URL parsing
+
+        parsed = urlparse(url)
+        path_parts = parsed.path.strip("/").split("/")
+
+        if "comments" in path_parts:
+            # Post URL
+            try:
+                subreddit_idx = path_parts.index("r") + 1
+                comments_idx = path_parts.index("comments")
+                subreddit = (
+                    path_parts[subreddit_idx] if subreddit_idx < len(path_parts) else ""
+                )
+                post_id = (
+                    path_parts[comments_idx + 1]
+                    if comments_idx + 1 < len(path_parts)
+                    else ""
+                )
+
+                return {
+                    "type": "post",
+                    "subreddit": subreddit,
+                    "post_id": post_id,
+                    "url": url,
+                    "title": "Reddit Post",  # Would need API call to get actual title
+                    "author": "Unknown",
+                    "date": datetime.now().strftime("%Y, %B %d"),
+                }
+            except (ValueError, IndexError):
+                pass
+
+        return {
+            "type": "unknown",
+            "subreddit": "",
+            "url": url,
+            "title": "Reddit Content",
+            "author": "Unknown",
+            "date": datetime.now().strftime("%Y, %B %d"),
+        }
+
+    def _format_reddit_apa_citation(self, reddit_data: dict[str, Any]) -> str:
+        """Format Reddit citation in APA style."""
+        author = reddit_data.get("author", "Unknown")
+        date = reddit_data.get("date", "n.d.")
+        title = reddit_data.get("title", "Reddit Post")
+        url = reddit_data.get("url", "")
+
+        return f"{author}. ({date}). {title} [Post]. Reddit. {url}"
+
+    def _format_reddit_mla_citation(self, reddit_data: dict[str, Any]) -> str:
+        """Format Reddit citation in MLA style."""
+        author = reddit_data.get("author", "Unknown")
+        title = reddit_data.get("title", "Reddit Post")
+        subreddit = reddit_data.get("subreddit", "")
+        date = reddit_data.get("date", "")
+        url = reddit_data.get("url", "")
+        access_date = datetime.now().strftime("%d %b %Y")
+
+        if subreddit:
+            return f'{author}. "{title}." Reddit, r/{subreddit}, {date}, {url}. Accessed {access_date}.'
+        return f'{author}. "{title}." Reddit, {date}, {url}. Accessed {access_date}.'
+
+    def _format_reddit_chicago_citation(self, reddit_data: dict[str, Any]) -> str:
+        """Format Reddit citation in Chicago style."""
+        author = reddit_data.get("author", "Unknown")
+        title = reddit_data.get("title", "Reddit Post")
+        date = reddit_data.get("date", "")
+        url = reddit_data.get("url", "")
+        access_date = datetime.now().strftime("%B %d, %Y")
+
+        return f'{author}. "{title}." Reddit. {date}. {url} (accessed {access_date}).'
+
+    async def get_social_citation_guidelines(self) -> str:
+        """
+        Get guidelines for properly citing social media sources.
+
+        Returns:
+            str: Citation guidelines for social media platforms
+        """
+        return """# Citation Guidelines for Social Media Sources
+
+## Reddit Posts
+
+### APA Style
+Username. (Year, Month Day). Title of post [Post]. Reddit. URL
+
+### MLA Style
+Username. "Title of Post." Reddit, Subreddit Name, Date posted, URL. Accessed Day Month Year.
+
+### Chicago Style
+Username. "Title of Post." Reddit. Date posted. URL (accessed Month Day, Year).
+
+## Best Practices for Social Sources
+1. Use the actual username, not real name unless publicly known
+2. Include subreddit or platform context
+3. Note the post type (e.g., [Post], [Comment], [Thread])
+4. Always include access date due to potential deletion
+5. Consider screenshot capture for important content
+6. Evaluate credibility based on community context and user history
+"""
 
 
 # Module exports

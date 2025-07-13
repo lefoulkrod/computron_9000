@@ -49,8 +49,9 @@ analysis_agent: Agent = Agent(
         analysis_tools.extract_webpage_metadata,
         analysis_tools.categorize_source,
         analysis_tools.verify_cross_references,
-        analysis_tools.detect_inconsistencies,
-        analysis_tools.evaluate_evidence_strength,
+        analysis_tools.evaluate_source_consistency,
+        analysis_tools.perform_comprehensive_credibility_assessment,
+        analysis_tools.analyze_reddit_credibility,
     ],
 )
 
