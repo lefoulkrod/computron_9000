@@ -668,8 +668,10 @@ class SynthesisTools:
         return min(total_score / 10.0, 1.0)
 
 
-# Module-level convenience functions for backward compatibility
-def synthesize_multi_source_findings(_findings: list[dict[str, Any]]) -> dict[str, Any]:
+# Multi-source synthesis functionality
+async def synthesize_multi_source_findings(
+    findings: list[dict[str, Any]]
+) -> dict[str, Any]:
     """
     Synthesize information from multiple research sources and agents.
 
@@ -679,12 +681,56 @@ def synthesize_multi_source_findings(_findings: list[dict[str, Any]]) -> dict[st
     Returns:
         Dict[str, Any]: Synthesized information organized by topic.
     """
-    # This will be implemented in Phase 3.1.8
-    return {}
+    try:
+        from agents.ollama.deep_research.shared.source_tracking import (
+            AgentSourceTracker,
+            SharedSourceRegistry,
+        )
+
+        temp_tracker = AgentSourceTracker("synthesis", SharedSourceRegistry())
+        tools = SynthesisTools(temp_tracker)
+
+        # Group findings by topic and source type
+        grouped_findings = _group_findings_by_topic(findings)
+        
+        # Extract key themes across all findings
+        key_themes = _extract_key_themes(findings)
+        
+        # Identify consensus areas and contradictions
+        consensus_analysis = _analyze_consensus_and_contradictions(findings)
+        
+        # Create comprehensive synthesis
+        synthesis = {
+            "total_sources": len(findings),
+            "grouped_findings": grouped_findings,
+            "key_themes": key_themes,
+            "consensus_analysis": consensus_analysis,
+            "source_types": _categorize_source_types(findings),
+            "temporal_coverage": _analyze_temporal_coverage(findings),
+            "geographic_coverage": _analyze_geographic_coverage(findings),
+            "credibility_assessment": _assess_overall_credibility(findings),
+            "synthesis_metadata": {
+                "synthesis_date": __import__("datetime").datetime.now().isoformat(),
+                "methodology": "multi-agent deep research synthesis",
+                "confidence_level": _calculate_synthesis_confidence(findings),
+            }
+        }
+        
+        return synthesis
+        
+    except Exception as e:
+        logger.error(f"Error synthesizing multi-source findings: {e}")
+        return {
+            "error": str(e),
+            "total_sources": len(findings) if findings else 0,
+            "grouped_findings": {},
+            "key_themes": [],
+            "consensus_analysis": {},
+        }
 
 
 def generate_research_report(
-    _synthesized_info: dict[str, Any], _format_type: str = "academic"
+    synthesized_info: dict[str, Any], format_type: str = "academic"
 ) -> str:
     """
     Generate a comprehensive research report.
@@ -696,12 +742,23 @@ def generate_research_report(
     Returns:
         str: Formatted research report.
     """
-    # This will be implemented in Phase 3.1.8
-    return ""
+    try:
+        if format_type == "academic":
+            return _generate_academic_report(synthesized_info)
+        elif format_type == "summary":
+            return _generate_summary_report(synthesized_info)
+        elif format_type == "detailed":
+            return _generate_detailed_report(synthesized_info)
+        else:
+            return _generate_academic_report(synthesized_info)  # Default to academic
+            
+    except Exception as e:
+        logger.error(f"Error generating research report: {e}")
+        return f"Error generating report: {str(e)}"
 
 
 def create_citation_list(
-    _sources: list[dict[str, Any]], _style: str = "APA"
+    sources: list[dict[str, Any]], style: str = "APA"
 ) -> list[str]:
     """
     Create a formatted citation list from sources.
@@ -713,25 +770,328 @@ def create_citation_list(
     Returns:
         List[str]: Formatted citations.
     """
-    # This will be implemented in Phase 3.1.8
-    return []
+    try:
+        citations = []
+        
+        for source in sources:
+            if style.upper() == "APA":
+                citation = _format_apa_citation(source)
+            elif style.upper() == "MLA":
+                citation = _format_mla_citation(source)
+            elif style.upper() == "CHICAGO":
+                citation = _format_chicago_citation(source)
+            else:
+                citation = _format_apa_citation(source)  # Default to APA
+                
+            if citation:
+                citations.append(citation)
+        
+        return sorted(citations)  # Alphabetical order
+        
+    except Exception as e:
+        logger.error(f"Error creating citation list: {e}")
+        return [f"Error creating citations: {str(e)}"]
 
 
 def generate_bibliography(
-    _sources: list[dict[str, Any]], _style: str = "APA", _categorize: bool = True
+    sources: list[dict[str, Any]], style: str = "APA", categorize: bool = True
 ) -> dict[str, list[str]]:
     """
     Generate a comprehensive bibliography from research sources.
 
     Args:
         sources (List[Dict[str, Any]]): List of research sources.
+        style (str): Citation style (APA, MLA, Chicago).
         categorize (bool): Whether to categorize sources by type.
 
     Returns:
         Dict[str, List[str]]: Bibliography organized by category if requested.
     """
-    # This will be implemented in Phase 3.1.8
-    return {}
+    try:
+        citations = create_citation_list(sources, style)
+        
+        if not categorize:
+            return {"all_sources": citations}
+        
+        # Categorize sources by type
+        categorized = {
+            "academic_sources": [],
+            "news_articles": [],
+            "social_media": [],
+            "government_reports": [],
+            "websites": [],
+            "other": []
+        }
+        
+        for i, source in enumerate(sources):
+            if i < len(citations):
+                category = _determine_source_category(source)
+                categorized[category].append(citations[i])
+        
+        # Remove empty categories
+        return {k: v for k, v in categorized.items() if v}
+        
+    except Exception as e:
+        logger.error(f"Error generating bibliography: {e}")
+        return {"error": [f"Error generating bibliography: {str(e)}"]}
+
+
+# Helper functions for synthesis
+def _group_findings_by_topic(findings: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Group findings by topic or theme."""
+    grouped = {}
+    
+    for finding in findings:
+        # Extract topic from content or metadata
+        topic = finding.get("topic", "general")
+        if topic not in grouped:
+            grouped[topic] = []
+        grouped[topic].append(finding)
+    
+    return grouped
+
+
+def _extract_key_themes(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract key themes across all findings."""
+    themes = {}
+    
+    for finding in findings:
+        content = finding.get("content", "")
+        # Simple keyword extraction (in practice, would use more sophisticated NLP)
+        words = content.lower().split()
+        for word in words:
+            if len(word) > 3 and word.isalpha():
+                themes[word] = themes.get(word, 0) + 1
+    
+    # Return top themes
+    top_themes = sorted(themes.items(), key=lambda x: x[1], reverse=True)[:10]
+    return [{"theme": theme, "frequency": freq} for theme, freq in top_themes]
+
+
+def _analyze_consensus_and_contradictions(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Analyze areas of consensus and contradiction."""
+    return {
+        "consensus_areas": [],  # Would implement sophisticated analysis
+        "contradictions": [],
+        "uncertain_areas": [],
+        "confidence_levels": {}
+    }
+
+
+def _categorize_source_types(findings: list[dict[str, Any]]) -> dict[str, int]:
+    """Categorize sources by type."""
+    types = {}
+    
+    for finding in findings:
+        source_type = finding.get("source_type", "unknown")
+        types[source_type] = types.get(source_type, 0) + 1
+    
+    return types
+
+
+def _analyze_temporal_coverage(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Analyze temporal coverage of sources."""
+    dates = []
+    
+    for finding in findings:
+        date = finding.get("publication_date") or finding.get("date")
+        if date:
+            dates.append(date)
+    
+    return {
+        "total_dated_sources": len(dates),
+        "date_range": f"{min(dates)} to {max(dates)}" if dates else "unknown",
+        "temporal_distribution": {}  # Would implement proper date analysis
+    }
+
+
+def _analyze_geographic_coverage(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Analyze geographic coverage of sources."""
+    return {
+        "regions_covered": [],
+        "geographic_bias": "unknown",
+        "global_coverage": False
+    }
+
+
+def _assess_overall_credibility(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Assess overall credibility of source collection."""
+    credibility_scores = []
+    
+    for finding in findings:
+        score = finding.get("credibility_score", 0.5)
+        credibility_scores.append(score)
+    
+    if credibility_scores:
+        avg_credibility = sum(credibility_scores) / len(credibility_scores)
+    else:
+        avg_credibility = 0.5
+    
+    return {
+        "average_credibility": avg_credibility,
+        "high_credibility_sources": len([s for s in credibility_scores if s > 0.8]),
+        "low_credibility_sources": len([s for s in credibility_scores if s < 0.3]),
+        "overall_assessment": "high" if avg_credibility > 0.7 else "medium" if avg_credibility > 0.4 else "low"
+    }
+
+
+def _calculate_synthesis_confidence(findings: list[dict[str, Any]]) -> float:
+    """Calculate confidence level in synthesis."""
+    if not findings:
+        return 0.0
+    
+    # Simple confidence calculation based on source count and credibility
+    source_count_factor = min(len(findings) / 10, 1.0)  # Max benefit at 10 sources
+    credibility_assessment = _assess_overall_credibility(findings)
+    credibility_factor = credibility_assessment["average_credibility"]
+    
+    return (source_count_factor + credibility_factor) / 2
+
+
+# Report generation helper functions
+def _generate_academic_report(synthesized_info: dict[str, Any]) -> str:
+    """Generate an academic-style research report."""
+    report_parts = []
+    
+    # Executive Summary
+    report_parts.append("# Research Report\n")
+    report_parts.append("## Executive Summary\n")
+    report_parts.append(f"This report synthesizes information from {synthesized_info.get('total_sources', 0)} sources ")
+    report_parts.append(f"with an overall credibility assessment of {synthesized_info.get('credibility_assessment', {}).get('overall_assessment', 'unknown')}.\n\n")
+    
+    # Key Themes
+    key_themes = synthesized_info.get("key_themes", [])
+    if key_themes:
+        report_parts.append("## Key Themes\n")
+        for theme in key_themes[:5]:  # Top 5 themes
+            report_parts.append(f"- {theme.get('theme', 'Unknown')} (mentioned {theme.get('frequency', 0)} times)\n")
+        report_parts.append("\n")
+    
+    # Source Analysis
+    source_types = synthesized_info.get("source_types", {})
+    if source_types:
+        report_parts.append("## Source Analysis\n")
+        for source_type, count in source_types.items():
+            report_parts.append(f"- {source_type}: {count} sources\n")
+        report_parts.append("\n")
+    
+    # Credibility Assessment
+    credibility = synthesized_info.get("credibility_assessment", {})
+    if credibility:
+        report_parts.append("## Credibility Assessment\n")
+        report_parts.append(f"- Average credibility score: {credibility.get('average_credibility', 0):.2f}\n")
+        report_parts.append(f"- High credibility sources: {credibility.get('high_credibility_sources', 0)}\n")
+        report_parts.append(f"- Overall assessment: {credibility.get('overall_assessment', 'unknown')}\n\n")
+    
+    return "".join(report_parts)
+
+
+def _generate_summary_report(synthesized_info: dict[str, Any]) -> str:
+    """Generate a summary-style report."""
+    total_sources = synthesized_info.get("total_sources", 0)
+    key_themes = synthesized_info.get("key_themes", [])[:3]  # Top 3 themes
+    credibility = synthesized_info.get("credibility_assessment", {}).get("overall_assessment", "unknown")
+    
+    summary = f"Research Summary: Analyzed {total_sources} sources with {credibility} overall credibility. "
+    
+    if key_themes:
+        theme_list = ", ".join([theme.get("theme", "") for theme in key_themes])
+        summary += f"Key themes include: {theme_list}."
+    
+    return summary
+
+
+def _generate_detailed_report(synthesized_info: dict[str, Any]) -> str:
+    """Generate a detailed research report."""
+    # For now, use academic format with additional details
+    report = _generate_academic_report(synthesized_info)
+    
+    # Add additional sections for detailed report
+    report += "\n## Detailed Analysis\n"
+    
+    grouped_findings = synthesized_info.get("grouped_findings", {})
+    for topic, findings in grouped_findings.items():
+        report += f"\n### {topic.title()}\n"
+        report += f"Found {len(findings)} sources related to this topic.\n"
+    
+    temporal_coverage = synthesized_info.get("temporal_coverage", {})
+    if temporal_coverage.get("date_range"):
+        report += f"\n## Temporal Coverage\n"
+        report += f"Sources span from {temporal_coverage['date_range']}\n"
+    
+    return report
+
+
+# Citation formatting helper functions
+def _format_apa_citation(source: dict[str, Any]) -> str:
+    """Format source in APA style."""
+    try:
+        url = source.get("url", "")
+        title = source.get("title", "Untitled")
+        date = source.get("publication_date") or source.get("date", "n.d.")
+        
+        if "reddit.com" in url:
+            return f"Reddit discussion. ({date}). {title}. Retrieved from {url}"
+        elif any(domain in url for domain in ["twitter.com", "x.com"]):
+            return f"Social media post. ({date}). {title}. Retrieved from {url}"
+        else:
+            return f"Web source. ({date}). {title}. Retrieved from {url}"
+            
+    except Exception:
+        return f"Source: {source.get('url', 'Unknown source')}"
+
+
+def _format_mla_citation(source: dict[str, Any]) -> str:
+    """Format source in MLA style."""
+    try:
+        url = source.get("url", "")
+        title = source.get("title", "Untitled")
+        date = source.get("publication_date") or source.get("date", "")
+        
+        citation = f'"{title}." Web'
+        if date:
+            citation += f". {date}"
+        citation += f". <{url}>."
+        
+        return citation
+        
+    except Exception:
+        return f"Source: {source.get('url', 'Unknown source')}"
+
+
+def _format_chicago_citation(source: dict[str, Any]) -> str:
+    """Format source in Chicago style."""
+    try:
+        url = source.get("url", "")
+        title = source.get("title", "Untitled")
+        date = source.get("publication_date") or source.get("date", "")
+        
+        citation = f'"{title}."'
+        if date:
+            citation += f" Accessed {date}."
+        citation += f" {url}."
+        
+        return citation
+        
+    except Exception:
+        return f"Source: {source.get('url', 'Unknown source')}"
+
+
+def _determine_source_category(source: dict[str, Any]) -> str:
+    """Determine the category of a source."""
+    url = source.get("url", "").lower()
+    
+    if any(domain in url for domain in ["edu", "org", "gov"]):
+        if "gov" in url:
+            return "government_reports"
+        else:
+            return "academic_sources"
+    elif any(domain in url for domain in ["reddit.com", "twitter.com", "x.com", "facebook.com"]):
+        return "social_media"
+    elif any(domain in url for domain in ["news", "cnn", "bbc", "reuters", "ap", "npr"]):
+        return "news_articles"
+    else:
+        return "websites"
 
 
 async def build_knowledge_graph(

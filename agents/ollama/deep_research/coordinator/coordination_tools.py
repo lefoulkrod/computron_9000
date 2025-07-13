@@ -20,6 +20,7 @@ from ..shared import (
     WorkflowStorage,
 )
 from ..social_research.agent import social_research_tool
+from ..synthesis.agent import synthesis_tool
 from ..web_research.agent import web_research_tool
 from .workflow_coordinator import ConcreteResearchWorkflowCoordinator
 
@@ -210,6 +211,8 @@ class CoordinationTools:
                 result = await social_research_tool(query)
             elif agent_type == "analysis":
                 result = await analysis_tool(query)
+            elif agent_type == "synthesis":
+                result = await synthesis_tool(query)
             else:
                 # For agents not yet implemented, return a placeholder
                 result = {

@@ -4,10 +4,12 @@ Synthesis tools and functionality.
 This module provides tools for synthesizing information and generating research reports.
 """
 
+import json
 import logging
 from typing import Any
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
+from agents.ollama.deep_research.shared.types import ResearchSource
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,7 @@ class SynthesisTools:
             isolated_nodes = self._identify_isolated_nodes(nodes, edges)
 
             # Identify weak connections
-            weak_connections = self._identify_weak_connections(nodes, edges)
+            weak_connections = self._identify_weak_connections(edges)
 
             # Find missing relationships based on query context
             missing_relationships = self._identify_missing_relationships(
@@ -432,6 +434,7 @@ class SynthesisTools:
         """Identify key insights from the knowledge graph."""
         insights = []
         nodes = knowledge_graph["nodes"]
+        # edges = knowledge_graph["edges"]  # Not currently used
 
         # Most important entities
         top_entities = sorted(nodes, key=lambda x: x["importance"], reverse=True)[:3]
@@ -558,7 +561,7 @@ class SynthesisTools:
         return sorted(isolated, key=lambda x: x["importance"], reverse=True)
 
     def _identify_weak_connections(
-        self, _nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
+        self, edges: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Identify weak connections that might indicate gaps."""
         weak_connections = []
@@ -667,8 +670,10 @@ class SynthesisTools:
         return min(total_score / 10.0, 1.0)
 
 
-# Module-level convenience functions for backward compatibility
-def synthesize_multi_source_findings(_findings: list[dict[str, Any]]) -> dict[str, Any]:
+# Multi-source synthesis functionality
+async def synthesize_multi_source_findings(
+    findings: list[dict[str, Any]],
+) -> dict[str, Any]:
     """
     Synthesize information from multiple research sources and agents.
 
@@ -678,12 +683,46 @@ def synthesize_multi_source_findings(_findings: list[dict[str, Any]]) -> dict[st
     Returns:
         Dict[str, Any]: Synthesized information organized by topic.
     """
-    # This will be implemented in Phase 3.1.8
-    return {}
+    try:
+        # Group findings by topic and source type
+        grouped_findings = _group_findings_by_topic(findings)
+
+        # Extract key themes across all findings
+        key_themes = _extract_key_themes(findings)
+
+        # Identify consensus areas and contradictions
+        consensus_analysis = _analyze_consensus_and_contradictions(findings)
+
+        # Create comprehensive synthesis
+        return {
+            "total_sources": len(findings),
+            "grouped_findings": grouped_findings,
+            "key_themes": key_themes,
+            "consensus_analysis": consensus_analysis,
+            "source_types": _categorize_source_types(findings),
+            "temporal_coverage": _analyze_temporal_coverage(findings),
+            "geographic_coverage": _analyze_geographic_coverage(findings),
+            "credibility_assessment": _assess_overall_credibility(findings),
+            "synthesis_metadata": {
+                "synthesis_date": __import__("datetime").datetime.now().isoformat(),
+                "methodology": "multi-agent deep research synthesis",
+                "confidence_level": _calculate_synthesis_confidence(findings),
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error synthesizing multi-source findings: {e}")
+        return {
+            "error": str(e),
+            "total_sources": len(findings) if findings else 0,
+            "grouped_findings": {},
+            "key_themes": [],
+            "consensus_analysis": {},
+        }
 
 
 def generate_research_report(
-    _synthesized_info: dict[str, Any], _format_type: str = "academic"
+    synthesized_info: dict[str, Any], format_type: str = "academic"
 ) -> str:
     """
     Generate a comprehensive research report.
@@ -695,12 +734,22 @@ def generate_research_report(
     Returns:
         str: Formatted research report.
     """
-    # This will be implemented in Phase 3.1.8
-    return ""
+    try:
+        if format_type == "academic":
+            return _generate_academic_report(synthesized_info)
+        if format_type == "summary":
+            return _generate_summary_report(synthesized_info)
+        if format_type == "detailed":
+            return _generate_detailed_report(synthesized_info)
+        return _generate_academic_report(synthesized_info)  # Default to academic
+
+    except Exception as e:
+        logger.error(f"Error generating research report: {e}")
+        return f"Error generating report: {str(e)}"
 
 
 def create_citation_list(
-    _sources: list[dict[str, Any]], _style: str = "APA"
+    sources: list[dict[str, Any]], style: str = "APA"
 ) -> list[str]:
     """
     Create a formatted citation list from sources.
@@ -712,25 +761,659 @@ def create_citation_list(
     Returns:
         List[str]: Formatted citations.
     """
-    # This will be implemented in Phase 3.1.8
-    return []
+    try:
+        citations = []
+
+        for source in sources:
+            if style.upper() == "APA":
+                citation = _format_apa_citation(source)
+            elif style.upper() == "MLA":
+                citation = _format_mla_citation(source)
+            elif style.upper() == "CHICAGO":
+                citation = _format_chicago_citation(source)
+            else:
+                citation = _format_apa_citation(source)  # Default to APA
+
+            if citation:
+                citations.append(citation)
+
+        return sorted(citations)  # Alphabetical order
+
+    except Exception as e:
+        logger.error(f"Error creating citation list: {e}")
+        return [f"Error creating citations: {str(e)}"]
 
 
 def generate_bibliography(
-    _sources: list[dict[str, Any]], _style: str = "APA", _categorize: bool = True
+    sources: list[dict[str, Any]], style: str = "APA", categorize: bool = True
 ) -> dict[str, list[str]]:
     """
     Generate a comprehensive bibliography from research sources.
 
     Args:
         sources (List[Dict[str, Any]]): List of research sources.
+        style (str): Citation style (APA, MLA, Chicago).
         categorize (bool): Whether to categorize sources by type.
 
     Returns:
         Dict[str, List[str]]: Bibliography organized by category if requested.
     """
-    # This will be implemented in Phase 3.1.8
-    return {}
+    try:
+        citations = create_citation_list(sources, style)
+
+        if not categorize:
+            return {"all_sources": citations}
+
+        # Categorize sources by type
+        categorized: dict[str, list[str]] = {
+            "academic_sources": [],
+            "news_articles": [],
+            "social_media": [],
+            "government_reports": [],
+            "websites": [],
+            "other": [],
+        }
+
+        for i, source in enumerate(sources):
+            if i < len(citations):
+                category = _determine_source_category(source)
+                categorized[category].append(citations[i])
+
+        # Remove empty categories
+        return {k: v for k, v in categorized.items() if v}
+
+    except Exception as e:
+        logger.error(f"Error generating bibliography: {e}")
+        return {"error": [f"Error generating bibliography: {str(e)}"]}
+
+
+# Agent tool functions for synthesis capabilities
+class SynthesisAgentTools:
+    """Agent tools for synthesis capabilities."""
+
+    def __init__(self, source_tracker: AgentSourceTracker):
+        """Initialize synthesis agent tools."""
+        self.source_tracker = source_tracker
+        self.synthesis_tools = SynthesisTools(source_tracker)
+
+    async def synthesize_research_findings(self, research_data: str) -> str:
+        """
+        Synthesize findings from multiple research sources and agents.
+
+        Args:
+            research_data: JSON string containing research findings from all agents
+
+        Returns:
+            JSON string with synthesized information
+        """
+        try:
+            # Parse input data
+            input_data = (
+                json.loads(research_data)
+                if isinstance(research_data, str)
+                else research_data
+            )
+            findings = input_data.get("findings", [])
+
+            # Synthesize findings
+            synthesis_result = await synthesize_multi_source_findings(findings)
+
+            # Track sources
+            for finding in findings:
+                if "url" in finding:
+                    source = ResearchSource(
+                        url=finding["url"],
+                        title=finding.get("title", "Unknown"),
+                        source_type=finding.get("source_type", "unknown"),
+                        description=(
+                            finding.get("content", "")[:200]
+                            if finding.get("content")
+                            else None
+                        ),
+                        content_summary=(
+                            finding.get("content", "")[:500]
+                            if finding.get("content")
+                            else None
+                        ),
+                        metadata=finding.get("metadata", {}),
+                        first_accessed=__import__("datetime")
+                        .datetime.now()
+                        .isoformat(),
+                        last_accessed=__import__("datetime").datetime.now().isoformat(),
+                    )
+                    self.source_tracker.register_source(source)
+
+            result = {
+                "success": True,
+                "synthesis": synthesis_result,
+                "sources_processed": len(findings),
+                "message": "Successfully synthesized research findings",
+            }
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error synthesizing research findings: {e}")
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to synthesize research findings",
+            }
+            return json.dumps(error_result, indent=2)
+
+    async def generate_comprehensive_report(
+        self, synthesis_data: str, report_format: str = "academic"
+    ) -> str:
+        """
+        Generate a comprehensive research report from synthesized data.
+
+        Args:
+            synthesis_data: JSON string with synthesized research data
+            report_format: Format type (academic, summary, detailed)
+
+        Returns:
+            Generated research report as a string
+        """
+        try:
+            # Parse input data
+            input_data = (
+                json.loads(synthesis_data)
+                if isinstance(synthesis_data, str)
+                else synthesis_data
+            )
+            synthesized_info = input_data.get("synthesis", {})
+
+            # Generate report
+            report = generate_research_report(synthesized_info, report_format)
+
+            logger.info(f"Generated {report_format} research report")
+            return report
+
+        except Exception as e:
+            logger.error(f"Error generating research report: {e}")
+            return f"Error generating research report: {str(e)}"
+
+    async def create_citations_and_bibliography(
+        self, sources_data: str, citation_style: str = "APA"
+    ) -> str:
+        """
+        Create citations and bibliography from research sources.
+
+        Args:
+            sources_data: JSON string with source data
+            citation_style: Citation style (APA, MLA, Chicago)
+
+        Returns:
+            JSON string with citations and bibliography
+        """
+        try:
+            # Parse input data
+            input_data = (
+                json.loads(sources_data)
+                if isinstance(sources_data, str)
+                else sources_data
+            )
+            sources = input_data.get("sources", [])
+
+            # Create citations and bibliography
+            citations = create_citation_list(sources, citation_style)
+            bibliography = generate_bibliography(
+                sources, citation_style, categorize=True
+            )
+
+            result = {
+                "success": True,
+                "citation_style": citation_style,
+                "citations": citations,
+                "bibliography": bibliography,
+                "total_sources": len(sources),
+                "message": f"Successfully created {citation_style} citations and bibliography",
+            }
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error creating citations and bibliography: {e}")
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to create citations and bibliography",
+            }
+            return json.dumps(error_result, indent=2)
+
+    async def build_research_knowledge_graph(
+        self, research_data: str, topic: str
+    ) -> str:
+        """
+        Build a knowledge graph from research findings.
+
+        Args:
+            research_data: JSON string containing research findings
+            topic: Main research topic
+
+        Returns:
+            JSON string with knowledge graph representation
+        """
+        try:
+            # Parse input data
+            input_data = (
+                json.loads(research_data)
+                if isinstance(research_data, str)
+                else research_data
+            )
+            findings = input_data.get("findings", [])
+
+            # Build knowledge graph
+            knowledge_graph = await self.synthesis_tools.build_knowledge_graph(
+                findings, topic
+            )
+
+            result = {
+                "success": True,
+                "knowledge_graph": knowledge_graph,
+                "topic": topic,
+                "sources_analyzed": len(findings),
+                "message": "Successfully built knowledge graph",
+            }
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error building knowledge graph: {e}")
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to build knowledge graph",
+            }
+            return json.dumps(error_result, indent=2)
+
+    async def identify_research_gaps(
+        self, knowledge_graph_data: str, original_query: str
+    ) -> str:
+        """
+        Identify knowledge gaps and contradictions in research.
+
+        Args:
+            knowledge_graph_data: JSON string with knowledge graph data
+            original_query: Original research query
+
+        Returns:
+            JSON string with knowledge gaps analysis
+        """
+        try:
+            # Parse input data
+            input_data = (
+                json.loads(knowledge_graph_data)
+                if isinstance(knowledge_graph_data, str)
+                else knowledge_graph_data
+            )
+            knowledge_graph = input_data.get("knowledge_graph", {})
+
+            # Identify knowledge gaps
+            gaps_analysis = await self.synthesis_tools.identify_knowledge_gaps(
+                knowledge_graph, original_query
+            )
+
+            result = {
+                "success": True,
+                "gaps_analysis": gaps_analysis,
+                "original_query": original_query,
+                "message": "Successfully identified knowledge gaps",
+            }
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error identifying knowledge gaps: {e}")
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to identify knowledge gaps",
+            }
+            return json.dumps(error_result, indent=2)
+
+    async def resolve_contradictions(self, synthesis_data: str) -> str:
+        """
+        Analyze and attempt to resolve contradictions in research findings.
+
+        Args:
+            synthesis_data: JSON string with synthesized research data
+
+        Returns:
+            JSON string with contradiction analysis and resolution attempts
+        """
+        try:
+            # Parse input data
+            input_data = (
+                json.loads(synthesis_data)
+                if isinstance(synthesis_data, str)
+                else synthesis_data
+            )
+            synthesized_info = input_data.get("synthesis", {})
+
+            # Analyze contradictions (simplified implementation)
+            consensus_analysis = synthesized_info.get("consensus_analysis", {})
+            contradictions = consensus_analysis.get("contradictions", [])
+
+            # Attempt resolution strategies
+            resolution_strategies = []
+            for contradiction in contradictions:
+                strategy = self._suggest_resolution_strategy(contradiction)
+                resolution_strategies.append(strategy)
+
+            result = {
+                "success": True,
+                "contradictions_found": len(contradictions),
+                "resolution_strategies": resolution_strategies,
+                "consensus_areas": consensus_analysis.get("consensus_areas", []),
+                "message": "Successfully analyzed contradictions",
+            }
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error resolving contradictions: {e}")
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to resolve contradictions",
+            }
+            return json.dumps(error_result, indent=2)
+
+    def _suggest_resolution_strategy(
+        self, contradiction: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Suggest a strategy for resolving a contradiction."""
+        return {
+            "contradiction": contradiction,
+            "suggested_strategy": "Compare source credibility and recency",
+            "additional_research_needed": True,
+            "confidence": "medium",
+        }
+
+
+# Helper functions for synthesis
+def _group_findings_by_topic(
+    findings: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Group findings by topic or theme."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for finding in findings:
+        # Extract topic from content or metadata
+        topic = finding.get("topic", "general")
+        if topic not in grouped:
+            grouped[topic] = []
+        grouped[topic].append(finding)
+
+    return grouped
+
+
+def _extract_key_themes(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract key themes across all findings."""
+    themes: dict[str, int] = {}
+
+    for finding in findings:
+        content = finding.get("content", "")
+        # Simple keyword extraction (in practice, would use more sophisticated NLP)
+        words = content.lower().split()
+        for word in words:
+            if len(word) > 3 and word.isalpha():
+                themes[word] = themes.get(word, 0) + 1
+
+    # Return top themes
+    top_themes = sorted(themes.items(), key=lambda x: x[1], reverse=True)[:10]
+    return [{"theme": theme, "frequency": freq} for theme, freq in top_themes]
+
+
+def _analyze_consensus_and_contradictions(
+    findings: list[dict[str, Any]],  # noqa: ARG001
+) -> dict[str, Any]:
+    """Analyze areas of consensus and contradiction."""
+    return {
+        "consensus_areas": [],  # Would implement sophisticated analysis
+        "contradictions": [],
+        "uncertain_areas": [],
+        "confidence_levels": {},
+    }
+
+
+def _categorize_source_types(findings: list[dict[str, Any]]) -> dict[str, int]:
+    """Categorize sources by type."""
+    types: dict[str, int] = {}
+
+    for finding in findings:
+        source_type = finding.get("source_type", "unknown")
+        types[source_type] = types.get(source_type, 0) + 1
+
+    return types
+
+
+def _analyze_temporal_coverage(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Analyze temporal coverage of sources."""
+    dates = []
+
+    for finding in findings:
+        date = finding.get("publication_date") or finding.get("date")
+        if date:
+            dates.append(date)
+
+    return {
+        "total_dated_sources": len(dates),
+        "date_range": f"{min(dates)} to {max(dates)}" if dates else "unknown",
+        "temporal_distribution": {},  # Would implement proper date analysis
+    }
+
+
+def _analyze_geographic_coverage(
+    findings: list[dict[str, Any]],  # noqa: ARG001
+) -> dict[str, Any]:
+    """Analyze geographic coverage of sources."""
+    return {
+        "regions_covered": [],
+        "geographic_bias": "unknown",
+        "global_coverage": False,
+    }
+
+
+def _assess_overall_credibility(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Assess overall credibility of source collection."""
+    credibility_scores = []
+
+    for finding in findings:
+        score = finding.get("credibility_score", 0.5)
+        credibility_scores.append(score)
+
+    if credibility_scores:
+        avg_credibility = sum(credibility_scores) / len(credibility_scores)
+    else:
+        avg_credibility = 0.5
+
+    return {
+        "average_credibility": avg_credibility,
+        "high_credibility_sources": len([s for s in credibility_scores if s > 0.8]),
+        "low_credibility_sources": len([s for s in credibility_scores if s < 0.3]),
+        "overall_assessment": (
+            "high"
+            if avg_credibility > 0.7
+            else "medium" if avg_credibility > 0.4 else "low"
+        ),
+    }
+
+
+def _calculate_synthesis_confidence(findings: list[dict[str, Any]]) -> float:
+    """Calculate confidence level in synthesis."""
+    if not findings:
+        return 0.0
+
+    # Simple confidence calculation based on source count and credibility
+    source_count_factor: float = min(
+        len(findings) / 10, 1.0
+    )  # Max benefit at 10 sources
+    credibility_assessment = _assess_overall_credibility(findings)
+    credibility_factor: float = credibility_assessment["average_credibility"]
+
+    return (source_count_factor + credibility_factor) / 2
+
+
+# Report generation helper functions
+def _generate_academic_report(synthesized_info: dict[str, Any]) -> str:
+    """Generate an academic-style research report."""
+    report_parts = []
+
+    # Executive Summary
+    report_parts.append("# Research Report\n")
+    report_parts.append("## Executive Summary\n")
+    report_parts.append(
+        f"This report synthesizes information from {synthesized_info.get('total_sources', 0)} sources "
+    )
+    report_parts.append(
+        f"with an overall credibility assessment of {synthesized_info.get('credibility_assessment', {}).get('overall_assessment', 'unknown')}.\n\n"
+    )
+
+    # Key Themes
+    key_themes = synthesized_info.get("key_themes", [])
+    if key_themes:
+        report_parts.append("## Key Themes\n")
+        for theme in key_themes[:5]:  # Top 5 themes
+            report_parts.append(
+                f"- {theme.get('theme', 'Unknown')} (mentioned {theme.get('frequency', 0)} times)\n"
+            )
+        report_parts.append("\n")
+
+    # Source Analysis
+    source_types = synthesized_info.get("source_types", {})
+    if source_types:
+        report_parts.append("## Source Analysis\n")
+        for source_type, count in source_types.items():
+            report_parts.append(f"- {source_type}: {count} sources\n")
+        report_parts.append("\n")
+
+    # Credibility Assessment
+    credibility = synthesized_info.get("credibility_assessment", {})
+    if credibility:
+        report_parts.append("## Credibility Assessment\n")
+        report_parts.append(
+            f"- Average credibility score: {credibility.get('average_credibility', 0):.2f}\n"
+        )
+        report_parts.append(
+            f"- High credibility sources: {credibility.get('high_credibility_sources', 0)}\n"
+        )
+        report_parts.append(
+            f"- Overall assessment: {credibility.get('overall_assessment', 'unknown')}\n\n"
+        )
+
+    return "".join(report_parts)
+
+
+def _generate_summary_report(synthesized_info: dict[str, Any]) -> str:
+    """Generate a summary-style report."""
+    total_sources = synthesized_info.get("total_sources", 0)
+    key_themes = synthesized_info.get("key_themes", [])[:3]  # Top 3 themes
+    credibility = synthesized_info.get("credibility_assessment", {}).get(
+        "overall_assessment", "unknown"
+    )
+
+    summary = f"Research Summary: Analyzed {total_sources} sources with {credibility} overall credibility. "
+
+    if key_themes:
+        theme_list = ", ".join([theme.get("theme", "") for theme in key_themes])
+        summary += f"Key themes include: {theme_list}."
+
+    return summary
+
+
+def _generate_detailed_report(synthesized_info: dict[str, Any]) -> str:
+    """Generate a detailed research report."""
+    # For now, use academic format with additional details
+    report = _generate_academic_report(synthesized_info)
+
+    # Add additional sections for detailed report
+    report += "\n## Detailed Analysis\n"
+
+    grouped_findings = synthesized_info.get("grouped_findings", {})
+    for topic, findings in grouped_findings.items():
+        report += f"\n### {topic.title()}\n"
+        report += f"Found {len(findings)} sources related to this topic.\n"
+
+    temporal_coverage = synthesized_info.get("temporal_coverage", {})
+    if temporal_coverage.get("date_range"):
+        report += "\n## Temporal Coverage\n"
+        report += f"Sources span from {temporal_coverage['date_range']}\n"
+
+    return report
+
+
+# Citation formatting helper functions
+def _format_apa_citation(source: dict[str, Any]) -> str:
+    """Format source in APA style."""
+    try:
+        url = source.get("url", "")
+        title = source.get("title", "Untitled")
+        date = source.get("publication_date") or source.get("date", "n.d.")
+
+        if "reddit.com" in url:
+            return f"Reddit discussion. ({date}). {title}. Retrieved from {url}"
+        if any(domain in url for domain in ["twitter.com", "x.com"]):
+            return f"Social media post. ({date}). {title}. Retrieved from {url}"
+        return f"Web source. ({date}). {title}. Retrieved from {url}"
+
+    except Exception:
+        return f"Source: {source.get('url', 'Unknown source')}"
+
+
+def _format_mla_citation(source: dict[str, Any]) -> str:
+    """Format source in MLA style."""
+    try:
+        url = source.get("url", "")
+        title = source.get("title", "Untitled")
+        date = source.get("publication_date") or source.get("date", "")
+
+        citation = f'"{title}." Web'
+        if date:
+            citation += f". {date}"
+        citation += f". <{url}>."
+
+        return citation
+
+    except Exception:
+        return f"Source: {source.get('url', 'Unknown source')}"
+
+
+def _format_chicago_citation(source: dict[str, Any]) -> str:
+    """Format source in Chicago style."""
+    try:
+        url = source.get("url", "")
+        title = source.get("title", "Untitled")
+        date = source.get("publication_date") or source.get("date", "")
+
+        citation = f'"{title}."'
+        if date:
+            citation += f" Accessed {date}."
+        citation += f" {url}."
+
+        return citation
+
+    except Exception:
+        return f"Source: {source.get('url', 'Unknown source')}"
+
+
+def _determine_source_category(source: dict[str, Any]) -> str:
+    """Determine the category of a source."""
+    url = source.get("url", "").lower()
+
+    if any(domain in url for domain in ["edu", "org", "gov"]):
+        if "gov" in url:
+            return "government_reports"
+        return "academic_sources"
+    if any(
+        domain in url
+        for domain in ["reddit.com", "twitter.com", "x.com", "facebook.com"]
+    ):
+        return "social_media"
+    if any(domain in url for domain in ["news", "cnn", "bbc", "reuters", "ap", "npr"]):
+        return "news_articles"
+    return "websites"
 
 
 async def build_knowledge_graph(
@@ -789,4 +1472,5 @@ __all__ = [
     "generate_bibliography",
     "identify_knowledge_gaps",
     "build_knowledge_graph",
+    "SynthesisAgentTools",
 ]
