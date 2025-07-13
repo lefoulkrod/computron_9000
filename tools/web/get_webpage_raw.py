@@ -1,11 +1,12 @@
 import logging
 
 import aiohttp
-from pydantic import HttpUrl, ValidationError, TypeAdapter
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 
-from tools.web.types import GetWebpageResult, GetWebpageError
+from tools.web.types import GetWebpageError, GetWebpageResult
 
 logger = logging.getLogger(__name__)
+
 
 def _validate_url(url: str) -> str:
     """
@@ -25,7 +26,8 @@ def _validate_url(url: str) -> str:
         return url
     except ValidationError as e:
         logger.error(f"Invalid URL: {url} | {e}")
-        raise GetWebpageError(f"Invalid URL: {e}")
+        raise GetWebpageError(f"Invalid URL: {e}") from e
+
 
 async def _get_webpage_raw(url: str) -> GetWebpageResult:
     """
@@ -56,20 +58,24 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
     }
     try:
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            async with session.get(validated_url) as response:
-                response_code = response.status
-                try:
-                    html = await response.text()
-                except Exception as e:
-                    logger.error(f"Failed to read response body for {url}: {e}")
-                    html = ""
-                if response_code != 200:
-                    logger.debug(f"Non-200 response for {url}: HTTP {response_code}")
-        return GetWebpageResult(url=validated_url, html=html, response_code=response_code)
+        async with (
+            aiohttp.ClientSession(timeout=timeout, headers=headers) as session,
+            session.get(validated_url) as response,
+        ):
+            response_code = response.status
+            try:
+                html = await response.text()
+            except Exception as e:
+                logger.error(f"Failed to read response body for {url}: {e}")
+                html = ""
+            if response_code != 200:
+                logger.debug(f"Non-200 response for {url}: HTTP {response_code}")
+        return GetWebpageResult(
+            url=validated_url, html=html, response_code=response_code
+        )
     except aiohttp.ClientError as e:
         logger.error(f"aiohttp error for {url}: {e}")
-        raise GetWebpageError(f"aiohttp error: {e}")
+        raise GetWebpageError(f"aiohttp error: {e}") from e
     except Exception as e:
         logger.error(f"Unexpected error for {url}: {e}")
-        raise GetWebpageError(f"Unexpected error: {e}")
+        raise GetWebpageError(f"Unexpected error: {e}") from e

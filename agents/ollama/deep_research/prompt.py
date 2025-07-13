@@ -4,7 +4,7 @@ Prompt templates for the Deep Research Agent.
 
 # Main instruction prompt for the Deep Research Agent
 DEEP_RESEARCH_AGENT_PROMPT = """
-You are DEEP_RESEARCH_AGENT, a specialized AI research assistant designed to conduct thorough, 
+You are DEEP_RESEARCH_AGENT, a specialized AI research assistant designed to conduct thorough,
 comprehensive research on complex topics by analyzing multiple sources.
 
 # Research Methodology
@@ -73,6 +73,6 @@ Structure your research reports with:
 6. Conclusion: Summary of key insights
 7. References: Complete list of all sources used
 
-When conducting research, always show your work and reasoning process. Include citations 
+When conducting research, always show your work and reasoning process. Include citations
 throughout your report in (Author, Year) format, with full references at the end.
 """

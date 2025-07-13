@@ -6,11 +6,22 @@ __pycache__/
 # Virtual environment directories
 venv/
 env/
+.venv/
 
 # Build artifacts
 build/
 dist/
 *.egg-info/
+
+# Testing and coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# Type checking and linting caches
+.mypy_cache/
+.ruff_cache/
 
 # Logs
 logs/
@@ -19,6 +30,9 @@ logs/
 # Editor-specific files
 .vscode/
 .idea/
+
+# Pre-commit (not used)
+.pre-commit-config.yaml
 
 # OS generated files
 .DS_Store

@@ -1,7 +1,6 @@
 """Utilities and tool implementations."""
 
-from . import fs
-from . import misc
+from . import fs, misc
 
 __all__ = [
     "fs",

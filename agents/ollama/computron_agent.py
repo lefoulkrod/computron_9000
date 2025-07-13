@@ -1,14 +1,18 @@
 import logging
 
 from agents.ollama.sdk.higher_order import make_run_agent_as_tool_function
-from agents.ollama.sdk.logging_callbacks import make_log_after_model_call, make_log_before_model_call
-from agents.types import Agent
+from agents.ollama.sdk.logging_callbacks import (
+    make_log_after_model_call,
+    make_log_before_model_call,
+)
 from agents.prompt import COMPUTRON_AGENT_PROMPT
+from agents.types import Agent
 from config import load_config
+from models import get_default_model
 from tools.code.execute_code import execute_python_program
 from tools.misc import datetime_tool
+
 from .web_agent import web_agent_tool
-from models import get_model_by_name, get_default_model
 
 config = load_config()
 logger = logging.getLogger(__name__)

@@ -3,14 +3,17 @@ from pydantic import BaseModel
 
 from agents.ollama.sdk.tool_loop import _to_serializable
 
+
 class DummyModel(BaseModel):
     x: int
     y: str
+
 
 class NestedModel(BaseModel):
     a: DummyModel
     b: list[DummyModel]
     c: dict[str, DummyModel]
+
 
 @pytest.mark.unit
 def test_to_serializable_with_pydantic_model():
@@ -22,6 +25,7 @@ def test_to_serializable_with_pydantic_model():
     assert isinstance(result, dict)
     assert result == {"x": 1, "y": "foo"}
 
+
 @pytest.mark.unit
 def test_to_serializable_with_nested_structures():
     """
@@ -30,13 +34,14 @@ def test_to_serializable_with_nested_structures():
     nested = NestedModel(
         a=DummyModel(x=2, y="bar"),
         b=[DummyModel(x=3, y="baz")],
-        c={"k": DummyModel(x=4, y="qux")}
+        c={"k": DummyModel(x=4, y="qux")},
     )
     result = _to_serializable(nested)
     assert isinstance(result, dict)
     assert result["a"] == {"x": 2, "y": "bar"}
     assert result["b"] == [{"x": 3, "y": "baz"}]
     assert result["c"] == {"k": {"x": 4, "y": "qux"}}
+
 
 @pytest.mark.unit
 def test_to_serializable_with_primitive_types():
@@ -48,12 +53,15 @@ def test_to_serializable_with_primitive_types():
     assert _to_serializable([1, 2, 3]) == [1, 2, 3]
     assert _to_serializable({"a": 1}) == {"a": 1}
 
+
 @pytest.mark.unit
 def test_to_serializable_with_non_pydantic_object():
     """
     Test that _to_serializable falls back to the object itself for unsupported types.
     """
+
     class NotSerializable:
         pass
+
     obj = NotSerializable()
     assert _to_serializable(obj) == obj

@@ -3,6 +3,7 @@
 import logging
 import sys
 
+
 def setup_logging() -> None:
     """Configure basic loggers for the application.
 

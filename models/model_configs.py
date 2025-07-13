@@ -3,15 +3,18 @@ Model configuration management utilities.
 """
 
 import logging
-from config import load_config, ModelConfig
+
+from config import ModelConfig, load_config
 
 logger = logging.getLogger(__name__)
 config = load_config()
+
 
 class ModelNotFoundError(Exception):
     """
     Exception raised when a model configuration is not found by name.
     """
+
     pass
 
 

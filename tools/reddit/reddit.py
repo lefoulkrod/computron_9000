@@ -1,16 +1,17 @@
 """
 Provides tools for interacting with Reddit using PRAW (Python Reddit API Wrapper).
 """
+
 import logging
 
 import asyncpraw
-from asyncpraw.models import Submission
 from pydantic import BaseModel
 
 from config import load_config
 
 config = load_config()
 logger = logging.getLogger(__name__)
+
 
 class RedditSubmission(BaseModel):
     """
@@ -28,6 +29,7 @@ class RedditSubmission(BaseModel):
         created_utc (float): UTC timestamp of creation.
         permalink (str): Relative URL to the post.
     """
+
     id: str
     title: str
     selftext: str
@@ -38,6 +40,7 @@ class RedditSubmission(BaseModel):
     num_comments: int
     created_utc: float
     permalink: str
+
 
 class RedditComment(BaseModel):
     """
@@ -51,6 +54,7 @@ class RedditComment(BaseModel):
         created_utc (float): UTC timestamp of creation.
         replies (list["RedditComment"]): List of immediate replies as RedditComment objects.
     """
+
     id: str
     author: str | None
     body: str
@@ -61,6 +65,7 @@ class RedditComment(BaseModel):
     class Config:
         arbitrary_types_allowed = True
         from_attributes = True
+
 
 async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
     """
@@ -107,7 +112,10 @@ async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
             )
         return submissions
 
-async def get_reddit_comments_tree_shallow(submission_id: str, limit: int = 10) -> list[RedditComment]:
+
+async def get_reddit_comments_tree_shallow(
+    submission_id: str, limit: int = 10
+) -> list[RedditComment]:
     """
     Retrieve the first N top-level comments for a Reddit submission by submission ID.
     This function fetches the top-level comments and their immediate replies,
@@ -146,13 +154,13 @@ async def get_reddit_comments_tree_shallow(submission_id: str, limit: int = 10) 
                             body=reply.body,
                             score=reply.score,
                             created_utc=reply.created_utc,
-                            replies=[]
+                            replies=[],
                         )
                         for reply in top_comment.replies
                     ],
                 )
                 comments_tree.append(comment_obj)
             return comments_tree
-    except Exception as exc:
+    except Exception:
         logger.exception(f"Failed to fetch comments for submission id: {submission_id}")
         raise

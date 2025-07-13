@@ -1,16 +1,15 @@
-
 import logging
 
-from agents.types import Agent
 from agents.ollama.sdk import (
-    make_run_agent_as_tool_function,
-    make_log_before_model_call,
     make_log_after_model_call,
+    make_log_before_model_call,
+    make_run_agent_as_tool_function,
 )
+from agents.types import Agent
 from config import load_config
-from tools.web import search_google, get_webpage_substring, get_webpage_summary_sections
-from tools.reddit import search_reddit, get_reddit_comments_tree_shallow
-from models import get_model_by_name, get_default_model
+from models import get_default_model
+from tools.reddit import get_reddit_comments_tree_shallow, search_reddit
+from tools.web import get_webpage_substring, get_webpage_summary_sections, search_google
 
 WEB_AGENT_NAME = "WEB_AGENT"
 WEB_AGENT_DESCRIPTION = """

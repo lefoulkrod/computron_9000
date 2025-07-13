@@ -1,8 +1,7 @@
 import re
-from typing import Tuple, Optional
 
 
-def split_think_content(text: str) -> Tuple[str, Optional[str]]:
+def split_think_content(text: str) -> tuple[str, str | None]:
     """
     Splits text into <think>...</think> and non-think parts. Strips only leading/trailing newlines from each part.
 
@@ -12,9 +11,9 @@ def split_think_content(text: str) -> Tuple[str, Optional[str]]:
     Returns:
         Tuple[str, Optional[str]]: (main text, thinking text or None)
     """
-    match = re.search(r'<think>([\s\S]*?)</think>', text, re.IGNORECASE)
+    match = re.search(r"<think>([\s\S]*?)</think>", text, re.IGNORECASE)
     if match:
-        thinking = match.group(1).strip('\n')
-        main = (text[:match.start()] + text[match.end():]).strip('\n')
+        thinking = match.group(1).strip("\n")
+        main = (text[: match.start()] + text[match.end() :]).strip("\n")
         return main, thinking
-    return text.strip('\n'), None
+    return text.strip("\n"), None

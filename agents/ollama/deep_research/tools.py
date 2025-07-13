@@ -7,9 +7,6 @@ and citation practices for the Deep Research Agent.
 
 import logging
 import re
-from typing import Optional
-
-from agents.ollama.deep_research.source_tracker import SourceTracker
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +41,9 @@ When analyzing sources for research:
 1. **Always Start with Metadata Extraction**: Use `extract_webpage_metadata` to gather basic information
 2. **Categorize for Context**: Use `categorize_source` to understand the source type and authority level
 3. **Assess Credibility**: Use `assess_webpage_credibility` for detailed reliability evaluation
-4. **Follow a Systematic Approach**: 
+4. **Follow a Systematic Approach**:
    - High authority + high credibility = primary citations
-   - Medium authority + medium credibility = supporting evidence  
+   - Medium authority + medium credibility = supporting evidence
    - Low authority or credibility = supplementary use only
 5. **Check Citation Readiness**: Ensure author and publication date are available
 6. **Consider Temporal Relevance**: Prefer recent sources for current topics
@@ -126,70 +123,81 @@ Username. "Title of Post." Reddit, Subreddit Name, Date posted, URL. Accessed Da
 async def get_tool_documentation(tool_name: str = "") -> str:
     """
     Get detailed documentation for available research tools.
-    
+
     Args:
         tool_name (str): Optional name of specific tool to get documentation for
-        
+
     Returns:
         str: Markdown documentation of research tools.
     """
     if not tool_name:
         return TOOL_DOCUMENTATION
-        
+
     # If a specific tool is requested, try to find its section
     pattern = rf"### {re.escape(tool_name)}(.*?)(?:^###|\Z)"
     match = re.search(pattern, TOOL_DOCUMENTATION, re.DOTALL | re.MULTILINE)
     if match:
         return f"### {tool_name}{match.group(1)}"
-    
+
     # Try a partial match if exact match fails
-    for tool in ["search_google", "get_webpage", "get_webpage_summary", "get_webpage_summary_sections",
-                "get_webpage_substring", "html_find_elements", "assess_webpage_credibility", 
-                "extract_webpage_metadata", "categorize_source", "search_reddit", 
-                "get_reddit_comments_tree_shallow", "analyze_reddit_credibility", "analyze_comment_sentiment"]:
+    for tool in [
+        "search_google",
+        "get_webpage",
+        "get_webpage_summary",
+        "get_webpage_summary_sections",
+        "get_webpage_substring",
+        "html_find_elements",
+        "assess_webpage_credibility",
+        "extract_webpage_metadata",
+        "categorize_source",
+        "search_reddit",
+        "get_reddit_comments_tree_shallow",
+        "analyze_reddit_credibility",
+        "analyze_comment_sentiment",
+    ]:
         if tool_name.lower() in tool.lower():
             pattern = rf"### {re.escape(tool)}(.*?)(?:^###|\Z)"
             match = re.search(pattern, TOOL_DOCUMENTATION, re.DOTALL | re.MULTILINE)
             if match:
                 return f"### {tool}{match.group(1)}"
-    
+
     return f"Documentation for {tool_name} not found."
 
 
 async def search_tool_documentation(query: str) -> str:
     """
     Search for specific information in the tool documentation.
-    
+
     Args:
         query (str): The search query.
-        
+
     Returns:
         str: Relevant documentation sections matching the query.
     """
     # Simple search implementation
     query_terms = query.lower().split()
-    
+
     # Split documentation into sections
-    sections = re.split(r'\n#{2,3} ', TOOL_DOCUMENTATION)
-    
+    sections = re.split(r"\n#{2,3} ", TOOL_DOCUMENTATION)
+
     matching_sections = []
     for section in sections:
         if any(term in section.lower() for term in query_terms):
             # Add the heading syntax back
-            if not section.startswith('#'):
+            if not section.startswith("#"):
                 section = "## " + section
             matching_sections.append(section)
-    
+
     if not matching_sections:
         return "No matching documentation found. Try a different search term."
-    
+
     return "\n\n".join(matching_sections)
 
 
 async def get_citation_practices() -> str:
     """
     Get guidelines for properly citing research sources.
-    
+
     Returns:
         str: Markdown documentation of citation best practices.
     """
@@ -199,6 +207,6 @@ async def get_citation_practices() -> str:
 # Module exports
 __all__ = [
     "get_tool_documentation",
-    "search_tool_documentation", 
+    "search_tool_documentation",
     "get_citation_practices",
 ]

@@ -1,8 +1,9 @@
 """Ollama agent package exposing all public agents and message handler."""
-from .web_agent import web_agent
+
 from .computron_agent import computron
-from .root_agent import root_agent
 from .message_handler import handle_user_message
+from .root_agent import root_agent
+from .web_agent import web_agent
 
 __all__ = [
     "web_agent",

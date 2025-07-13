@@ -1,10 +1,10 @@
 import logging
-from typing import List, Optional, Union
 
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
 
 class HtmlElementResult(BaseModel):
     """
@@ -13,13 +13,13 @@ class HtmlElementResult(BaseModel):
     Args:
         html_element (str): The HTML string of the matching element.
     """
+
     html_element: str
 
+
 async def html_find_elements(
-    html: str,
-    selectors: Union[str, List[str]],
-    text: Optional[str] = None
-) -> List[HtmlElementResult]:
+    html: str, selectors: str | list[str], text: str | None = None
+) -> list[HtmlElementResult]:
     """
     Find elements in HTML matching given CSS selector(s), optionally filtering by contained text.
 
@@ -43,8 +43,10 @@ async def html_find_elements(
                 # For complex selectors, find elements then filter by text
                 elements = soup.select(selector)
                 text_matches = [
-                    el for el in elements
-                    if el.string and isinstance(el.string, str)
+                    el
+                    for el in elements
+                    if el.string
+                    and isinstance(el.string, str)
                     and text.lower() in el.string.lower()
                 ]
                 all_matches.extend(text_matches)

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
-from .types import AgentResult, AgentTask, ResearchWorkflow
-from .storage import WorkflowStorage
 from .communication import MessageBus
+from .storage import WorkflowStorage
+from .types import AgentResult, AgentTask
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,10 @@ class ResearchWorkflowCoordinator:
         """Assign a task to the appropriate specialized agent."""
         raise NotImplementedError
 
-    async def process_agent_result(self, result: AgentResult) -> List[AgentTask]:
+    async def process_agent_result(self, result: AgentResult) -> list[AgentTask]:
         """Process results from an agent and generate follow-up tasks."""
         raise NotImplementedError
 
-    async def get_workflow_status(self, workflow_id: str) -> Dict[str, Any]:
+    async def get_workflow_status(self, workflow_id: str) -> dict[str, Any]:
         """Get current status of a research workflow."""
         raise NotImplementedError

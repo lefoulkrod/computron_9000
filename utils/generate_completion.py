@@ -1,6 +1,5 @@
 import logging
 import re
-from typing import Optional
 
 from ollama import AsyncClient
 
@@ -11,11 +10,12 @@ from models.model_configs import get_model_by_name
 logger = logging.getLogger(__name__)
 config = load_config()
 
+
 async def generate_completion(
-    prompt: str, 
-    system: Optional[str] = None, 
-    think: bool = False, 
-    model_name: Optional[str] = None
+    prompt: str,
+    system: str | None = None,
+    think: bool = False,
+    model_name: str | None = None,
 ) -> str:
     """
     Generate a completion using the Ollama AsyncClient.
@@ -48,13 +48,12 @@ async def generate_completion(
             prompt=prompt,
             system=system or "Generate a response based on the provided prompt.",
             think=think,
-            options=model.options
+            options=model.options,
         )
         logger.debug(f"Ollama LLM response: {response.response}")
-        
+
         # Clean any think tags from the response
-        cleaned_response = re.sub(r'<think>\s*</think>', '', response.response, flags=re.DOTALL)
-        return cleaned_response
+        return re.sub(r"<think>\s*</think>", "", response.response, flags=re.DOTALL)
     except Exception as e:
         logger.error(f"Error in Ollama AsyncClient.generate: {e}")
         raise RuntimeError(f"Failed to generate completion: {e}") from e

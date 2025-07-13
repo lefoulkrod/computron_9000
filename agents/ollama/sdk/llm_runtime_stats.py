@@ -1,10 +1,10 @@
 import logging
-from typing import Optional
 
 from ollama import ChatResponse, GenerateResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
 
 class LLMRuntimeStats(BaseModel):
     """
@@ -20,14 +20,16 @@ class LLMRuntimeStats(BaseModel):
         eval_duration (Optional[float]): Eval duration in seconds.
         eval_tokens_per_sec (Optional[float]): Eval tokens per second.
     """
-    total_duration: Optional[float] = None
-    load_duration: Optional[float] = None
-    prompt_eval_count: Optional[int] = None
-    prompt_eval_duration: Optional[float] = None
-    prompt_tokens_per_sec: Optional[float] = None
-    eval_count: Optional[int] = None
-    eval_duration: Optional[float] = None
-    eval_tokens_per_sec: Optional[float] = None
+
+    total_duration: float | None = None
+    load_duration: float | None = None
+    prompt_eval_count: int | None = None
+    prompt_eval_duration: float | None = None
+    prompt_tokens_per_sec: float | None = None
+    eval_count: int | None = None
+    eval_duration: float | None = None
+    eval_tokens_per_sec: float | None = None
+
 
 def llm_runtime_stats(response: ChatResponse | GenerateResponse) -> LLMRuntimeStats:
     """
@@ -39,22 +41,23 @@ def llm_runtime_stats(response: ChatResponse | GenerateResponse) -> LLMRuntimeSt
     Returns:
         LLMRuntimeStats: Parsed and converted runtime statistics.
     """
-    def ns_to_s(ns: Optional[int]) -> Optional[float]:
+
+    def ns_to_s(ns: int | None) -> float | None:
         return ns / 1_000_000_000 if ns is not None else None
 
-    total_duration = ns_to_s(getattr(response, 'total_duration', None))
-    load_duration = ns_to_s(getattr(response, 'load_duration', None))
-    prompt_eval_count = getattr(response, 'prompt_eval_count', None)
-    prompt_eval_duration = ns_to_s(getattr(response, 'prompt_eval_duration', None))
-    eval_count = getattr(response, 'eval_count', None)
-    eval_duration = ns_to_s(getattr(response, 'eval_duration', None))
+    total_duration = ns_to_s(getattr(response, "total_duration", None))
+    load_duration = ns_to_s(getattr(response, "load_duration", None))
+    prompt_eval_count = getattr(response, "prompt_eval_count", None)
+    prompt_eval_duration = ns_to_s(getattr(response, "prompt_eval_duration", None))
+    eval_count = getattr(response, "eval_count", None)
+    eval_duration = ns_to_s(getattr(response, "eval_duration", None))
     prompt_tokens_per_sec = (
         prompt_eval_count / prompt_eval_duration
-        if (prompt_eval_count and prompt_eval_duration) else None
+        if (prompt_eval_count and prompt_eval_duration)
+        else None
     )
     eval_tokens_per_sec = (
-        eval_count / eval_duration
-        if (eval_count and eval_duration) else None
+        eval_count / eval_duration if (eval_count and eval_duration) else None
     )
     return LLMRuntimeStats(
         total_duration=total_duration,

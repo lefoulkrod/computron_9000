@@ -3,7 +3,7 @@ Type definitions for the Deep Research Agent.
 """
 
 import pydantic
-from typing import List, Dict, Optional, Union
+
 
 class ResearchSource(pydantic.BaseModel):
     """
@@ -17,12 +17,14 @@ class ResearchSource(pydantic.BaseModel):
         credibility_score (Optional[float]): A score from 0 to 1 representing the estimated credibility.
         content_summary (str): A brief summary of the source content.
     """
+
     url: str
     title: str
-    author: Optional[str] = None
-    publication_date: Optional[str] = None
-    credibility_score: Optional[float] = None
+    author: str | None = None
+    publication_date: str | None = None
+    credibility_score: float | None = None
     content_summary: str
+
 
 class ResearchCitation(pydantic.BaseModel):
     """
@@ -33,9 +35,11 @@ class ResearchCitation(pydantic.BaseModel):
         citation_text (str): The formatted citation text.
         citation_style (str): The style used for the citation (APA, MLA, etc.).
     """
+
     source: ResearchSource
     citation_text: str
     citation_style: str = "APA"
+
 
 class ResearchReport(pydantic.BaseModel):
     """
@@ -52,12 +56,13 @@ class ResearchReport(pydantic.BaseModel):
         sources (List[ResearchSource]): List of sources used.
         citations (List[ResearchCitation]): List of citations.
     """
+
     topic: str
     summary: str
     methodology: str
-    findings: Dict[str, str]
+    findings: dict[str, str]
     analysis: str
     limitations: str
     conclusion: str
-    sources: List[ResearchSource]
-    citations: List[ResearchCitation]
+    sources: list[ResearchSource]
+    citations: list[ResearchCitation]
