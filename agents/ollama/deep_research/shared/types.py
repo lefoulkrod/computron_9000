@@ -46,6 +46,8 @@ class ResearchWorkflow(BaseModel):
     active_tasks: list[AgentTask] = []
     completed_tasks: list[AgentResult] = []
     workflow_state: dict[str, Any] = {}
+    source_tracking_enabled: bool = True
+    source_registry_id: str | None = None  # Links to SharedSourceRegistry
     created_at: str
     updated_at: str
 

@@ -5,9 +5,11 @@ This module provides agent-specific source trackers and a shared source registry
 to avoid conflicts between agents while enabling source deduplication.
 """
 
+import json
 import logging
 import time
 from datetime import datetime
+from typing import Any
 
 import pydantic
 
@@ -122,6 +124,83 @@ class SharedSourceRegistry:
     def get_accessing_agents(self, url: str) -> set[str]:
         """Get set of agent IDs that have accessed a specific URL."""
         return {access.agent_id for access in self._all_accesses if access.url == url}
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serialize the registry to a dictionary for persistence.
+
+        Returns:
+            dict: Serializable dictionary representation of the registry.
+        """
+        return {
+            "sources": {url: source.model_dump() for url, source in self._sources.items()},
+            "all_accesses": [access.model_dump() for access in self._all_accesses],
+            "agent_accesses": {
+                agent_id: [access.model_dump() for access in accesses]
+                for agent_id, accesses in self._agent_accesses.items()
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SharedSourceRegistry":
+        """
+        Restore the registry from a serialized dictionary.
+
+        Args:
+            data (dict): Dictionary representation from to_dict().
+
+        Returns:
+            SharedSourceRegistry: Restored registry instance.
+        """
+        registry = cls()
+
+        # Restore sources
+        for url, source_data in data.get("sources", {}).items():
+            source = ResearchSource.model_validate(source_data)
+            registry._sources[url] = source
+
+        # Restore accesses
+        for access_data in data.get("all_accesses", []):
+            access = SourceAccess.model_validate(access_data)
+            registry._all_accesses.append(access)
+
+        # Restore agent accesses
+        for agent_id, accesses_data in data.get("agent_accesses", {}).items():
+            registry._agent_accesses[agent_id] = [
+                SourceAccess.model_validate(access_data) for access_data in accesses_data
+            ]
+
+        return registry
+
+    def to_json(self) -> str:
+        """
+        Serialize the registry to JSON string for persistence.
+
+        Returns:
+            str: JSON representation of the registry.
+        """
+        return json.dumps(self.to_dict(), indent=2)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "SharedSourceRegistry":
+        """
+        Restore the registry from a JSON string.
+
+        Args:
+            json_str (str): JSON string from to_json().
+
+        Returns:
+            SharedSourceRegistry: Restored registry instance.
+        """
+        data = json.loads(json_str)
+        return cls.from_dict(data)
+
+    def clear(self) -> None:
+        """Clear all registry data."""
+        self._sources.clear()
+        self._all_accesses.clear()
+        self._agent_accesses.clear()
+        logger.info("Cleared shared source registry")
 
 
 class AgentSourceTracker:
@@ -246,6 +325,45 @@ class AgentSourceTracker:
                 citations.append(citation)
 
         return citations
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serialize the agent tracker to a dictionary for persistence.
+
+        Returns:
+            dict: Serializable dictionary representation of the tracker.
+        """
+        return {
+            "agent_id": self.agent_id,
+            "local_accesses": [access.model_dump() for access in self._local_accesses],
+            "local_sources": {url: source.model_dump() for url, source in self._local_sources.items()},
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], shared_registry: SharedSourceRegistry) -> "AgentSourceTracker":
+        """
+        Restore the agent tracker from a serialized dictionary.
+
+        Args:
+            data (dict): Dictionary representation from to_dict().
+            shared_registry (SharedSourceRegistry): Shared registry for coordination.
+
+        Returns:
+            AgentSourceTracker: Restored tracker instance.
+        """
+        tracker = cls(data["agent_id"], shared_registry)
+
+        # Restore local accesses
+        for access_data in data.get("local_accesses", []):
+            access = SourceAccess.model_validate(access_data)
+            tracker._local_accesses.append(access)
+
+        # Restore local sources
+        for url, source_data in data.get("local_sources", {}).items():
+            source = ResearchSource.model_validate(source_data)
+            tracker._local_sources[url] = source
+
+        return tracker
 
     def clear_local_data(self) -> None:
         """Clear local tracking data (for cleanup after task completion)."""
