@@ -18,6 +18,7 @@ from ..shared import (
     SharedSourceRegistry,
     WorkflowStorage,
 )
+from ..social_research.agent import social_research_tool
 from ..web_research.agent import web_research_tool
 from .workflow_coordinator import ConcreteResearchWorkflowCoordinator
 
@@ -204,6 +205,8 @@ class CoordinationTools:
                 result = await query_decomposition_tool(query)
             elif agent_type == "web_research":
                 result = await web_research_tool(query)
+            elif agent_type == "social_research":
+                result = await social_research_tool(query)
             else:
                 # For agents not yet implemented, return a placeholder
                 result = {
