@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from .source_tracking import SharedSourceRegistry
@@ -17,7 +18,9 @@ class WorkflowStorage:
 
     def __init__(self) -> None:
         self._workflows: dict[str, ResearchWorkflow] = {}
-        self._source_registries: dict[str, SharedSourceRegistry] = {}  # workflow_id -> registry
+        self._source_registries: dict[str, SharedSourceRegistry] = (
+            {}
+        )  # workflow_id -> registry
 
     def create_workflow(self, workflow: ResearchWorkflow) -> None:
         """
@@ -98,7 +101,7 @@ class WorkflowStorage:
             "version": "1.0",
         }
 
-        with open(filepath, "w", encoding="utf-8") as f:
+        with Path(filepath).open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
         logger.info(f"Saved workflow {workflow_id} to {filepath}")
@@ -116,7 +119,7 @@ class WorkflowStorage:
         Raises:
             ValueError: If file format is invalid.
         """
-        with open(filepath, "r", encoding="utf-8") as f:
+        with Path(filepath).open(encoding="utf-8") as f:
             data = json.load(f)
 
         if "workflow" not in data:
@@ -226,11 +229,18 @@ class WorkflowStorage:
         }
 
         if source_registry:
-            summary.update({
-                "total_sources": len(source_registry.get_all_sources()),
-                "total_accesses": len(source_registry.get_all_accesses()),
-                "active_agents": len(set(access.agent_id for access in source_registry.get_all_accesses())),
-            })
+            summary.update(
+                {
+                    "total_sources": len(source_registry.get_all_sources()),
+                    "total_accesses": len(source_registry.get_all_accesses()),
+                    "active_agents": len(
+                        {
+                            access.agent_id
+                            for access in source_registry.get_all_accesses()
+                        }
+                    ),
+                }
+            )
 
         return summary
 

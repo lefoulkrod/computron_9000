@@ -35,17 +35,16 @@ def delegate_to_multi_agent_research(query: str) -> str:
         import asyncio
         import concurrent.futures
 
-        def run_async_in_thread():
+        def run_async_in_thread() -> str:
             """Run the async function in a separate thread with its own event loop."""
             try:
                 # Create a new event loop for this thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    result = loop.run_until_complete(
+                    return loop.run_until_complete(
                         _coordination_tools.initiate_research_workflow(query)
                     )
-                    return result
                 finally:
                     loop.close()
             except Exception as e:
@@ -108,17 +107,16 @@ def check_multi_agent_workflow_status(workflow_id: str) -> str:
         import asyncio
         import concurrent.futures
 
-        def run_async_in_thread():
+        def run_async_in_thread() -> str:
             """Run the async function in a separate thread with its own event loop."""
             try:
                 # Create a new event loop for this thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    result = loop.run_until_complete(
+                    return loop.run_until_complete(
                         _coordination_tools.get_workflow_status(workflow_id)
                     )
-                    return result
                 finally:
                     loop.close()
             except Exception as e:

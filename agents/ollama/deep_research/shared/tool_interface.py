@@ -68,7 +68,7 @@ class AgentTool(ABC):
             self.logger.debug(f"Tracked source access: {url}")
 
     @abstractmethod
-    async def execute(self, **kwargs) -> Any:
+    async def execute(self, **kwargs: Any) -> Any:
         """
         Execute the tool with given parameters.
 

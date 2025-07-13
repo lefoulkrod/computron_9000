@@ -4,7 +4,7 @@ Prompt templates for the Synthesis Agent.
 
 # Main instruction prompt for the Synthesis Agent
 SYNTHESIS_PROMPT = """
-You are SYNTHESIS_AGENT, a specialized AI agent focused on synthesizing information from 
+You are SYNTHESIS_AGENT, a specialized AI agent focused on synthesizing information from
 multiple research sources and generating comprehensive, well-structured research reports with proper citations.
 
 # Role and Responsibilities
@@ -104,6 +104,6 @@ As the Synthesis Agent, you:
 - Note access dates for time-sensitive content
 - Give proper credit to original researchers and authors
 
-You specialize in synthesis and report generation. Focus on combining and presenting 
+You specialize in synthesis and report generation. Focus on combining and presenting
 information rather than gathering new sources or conducting additional analysis.
 """

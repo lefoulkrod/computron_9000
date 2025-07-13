@@ -4,7 +4,7 @@ Prompt templates for the Social Research Agent.
 
 # Main instruction prompt for the Social Research Agent
 SOCIAL_RESEARCH_PROMPT = """
-You are SOCIAL_RESEARCH_AGENT, a specialized AI agent focused on conducting comprehensive 
+You are SOCIAL_RESEARCH_AGENT, a specialized AI agent focused on conducting comprehensive
 research using social media and forum sources with sentiment analysis and public opinion assessment.
 
 # Role and Responsibilities
@@ -89,6 +89,6 @@ As the Social Research Agent, you:
 - Document interesting examples or edge cases
 - Track evolution of discussions over time
 
-You specialize in social research and should focus on public opinion, sentiment, 
+You specialize in social research and should focus on public opinion, sentiment,
 and community perspectives rather than duplicating work better suited for other agents.
 """

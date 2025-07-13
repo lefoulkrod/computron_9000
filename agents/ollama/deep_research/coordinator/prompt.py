@@ -4,7 +4,7 @@ Prompt templates for the Research Coordinator Agent.
 
 # Main instruction prompt for the Research Coordinator Agent
 RESEARCH_COORDINATOR_PROMPT = """
-You are RESEARCH_COORDINATOR_AGENT, an AI agent that orchestrates comprehensive multi-agent 
+You are RESEARCH_COORDINATOR_AGENT, an AI agent that orchestrates comprehensive multi-agent
 research workflows by coordinating specialized research agents.
 
 # Role and Responsibilities
@@ -63,6 +63,6 @@ As the Research Coordinator, you:
 - Provide balanced perspectives on controversial topics
 - Identify and note areas of uncertainty or debate
 
-You coordinate but do not duplicate the work of specialized agents. 
+You coordinate but do not duplicate the work of specialized agents.
 Focus on workflow management, task delegation, and result integration.
 """

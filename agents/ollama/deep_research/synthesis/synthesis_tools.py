@@ -10,7 +10,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def synthesize_multi_source_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+def synthesize_multi_source_findings(_findings: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Synthesize information from multiple research sources and agents.
 
@@ -25,7 +25,7 @@ def synthesize_multi_source_findings(findings: list[dict[str, Any]]) -> dict[str
 
 
 def generate_research_report(
-    synthesized_info: dict[str, Any], format_type: str = "academic"
+    _synthesized_info: dict[str, Any], _format_type: str = "academic"
 ) -> str:
     """
     Generate a comprehensive research report from synthesized information.
@@ -42,7 +42,7 @@ def generate_research_report(
 
 
 def create_citation_list(
-    sources: list[dict[str, Any]], citation_style: str = "APA"
+    _sources: list[dict[str, Any]], _citation_style: str = "APA"
 ) -> list[str]:
     """
     Create a properly formatted citation list from research sources.
@@ -59,7 +59,7 @@ def create_citation_list(
 
 
 def generate_bibliography(
-    sources: list[dict[str, Any]], categorize: bool = True
+    _sources: list[dict[str, Any]], _categorize: bool = True
 ) -> dict[str, list[str]]:
     """
     Generate a comprehensive bibliography from research sources.
@@ -76,7 +76,7 @@ def generate_bibliography(
 
 
 def identify_knowledge_gaps(
-    synthesized_info: dict[str, Any], original_query: str
+    _synthesized_info: dict[str, Any], _original_query: str
 ) -> list[str]:
     """
     Identify gaps in knowledge coverage based on the original research query.
@@ -92,7 +92,7 @@ def identify_knowledge_gaps(
     return []
 
 
-def resolve_contradictions(conflicting_info: list[dict[str, Any]]) -> dict[str, Any]:
+def resolve_contradictions(_conflicting_info: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Attempt to resolve contradictions between sources.
 
@@ -107,7 +107,7 @@ def resolve_contradictions(conflicting_info: list[dict[str, Any]]) -> dict[str, 
 
 
 def create_executive_summary(
-    synthesized_info: dict[str, Any], max_length: int = 500
+    _synthesized_info: dict[str, Any], _max_length: int = 500
 ) -> str:
     """
     Create an executive summary of research findings.
