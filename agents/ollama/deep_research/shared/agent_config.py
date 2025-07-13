@@ -40,7 +40,7 @@ class AgentConfig:
             custom_options (Optional[Dict[str, Any]]): Additional model options
         """
         self.agent_type = agent_type
-        self.model_name = model_name or "deep_research"
+        self.model_name = model_name or "research_coordinator"
 
         # Load base configuration
         base_model = get_model_by_name(self.model_name)
@@ -77,8 +77,9 @@ class MultiAgentConfigManager:
     """
 
     # Default configurations for each agent type
-    DEFAULT_AGENT_CONFIGS = {
+    DEFAULT_AGENT_CONFIGS: dict[str, dict[str, Any]] = {
         "coordinator": {
+            "model_name": "research_coordinator",  # Use dedicated coordinator model
             "temperature": 0.3,  # Lower temperature for coordination decisions
             "max_tokens": 4000,
         },

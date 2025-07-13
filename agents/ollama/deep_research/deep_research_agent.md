@@ -113,6 +113,53 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
   - [x] Create specialized prompt for query decomposition in `query_decomposition/prompt.py`
   - [x] Add dependency identification and research prioritization capabilities
 
+- [x] 4.3.1 **Legacy Deep Research Agent Refactoring and Replacement**
+  - [x] **Analysis and Planning**:
+    - [x] Analyze current usage patterns of legacy `deep_research_agent` across the codebase
+    - [x] Identify all import statements and references that need to be updated
+    - [x] Map legacy functionality to equivalent coordinator agent capabilities
+    - [x] Plan migration strategy to avoid breaking existing workflows
+  - [x] **Module Import and Export Updates**:
+    - [x] Update `agents/ollama/deep_research/__init__.py` to export coordinator agent instead of legacy agent
+    - [x] Replace `deep_research_agent` and `deep_research_agent_tool` exports with `research_coordinator_agent` and `research_coordinator_tool`
+    - [x] Update module docstring to reflect coordinator-centric approach
+    - [x] Ensure backward compatibility through function aliases if needed during transition
+  - [x] **External Import Updates**:
+    - [x] Update `agents/ollama/message_handler.py` to import and use `research_coordinator_agent` instead of `deep_research_agent`
+    - [x] Update `agents/ollama/root_agent.py` to import and use `research_coordinator_tool` instead of `deep_research_agent_tool`
+    - [x] Verify that all agent tools array references are updated correctly
+    - [x] Test that message handling maintains the same interface expectations
+  - [x] **Configuration Updates**:
+    - [x] Rename `deep_research` model configuration in `config.yaml` to `research_coordinator` for clarity
+    - [x] Update any model references in coordinator agent configuration to use the renamed config
+    - [x] Ensure model settings and options are preserved during transition
+    - [x] Verify that agent-specific configurations are properly applied
+  - [x] **Legacy Code Removal**:
+    - [x] Delete `agents/ollama/deep_research/agent.py` (legacy single-agent implementation)
+    - [x] Delete `agents/ollama/deep_research/backward_compatibility.py` (no longer needed)
+    - [x] Delete `agents/ollama/deep_research/inter_agent_communication.py` (delegation tools no longer needed)
+    - [x] Delete `agents/ollama/deep_research/prompt.py` (replaced by coordinator prompt)
+    - [x] Delete `agents/ollama/deep_research/tools.py` (functionality moved to specialized agents)
+    - [x] Delete `agents/ollama/deep_research/tracked_tools.py` (replaced by agent-specific tools)
+    - [x] Delete `agents/ollama/deep_research/source_tracker.py` (replaced by shared source tracking)
+    - [x] Delete `agents/ollama/deep_research/source_analysis.py` (moved to analysis agent)
+    - [x] Delete `agents/ollama/deep_research/types.py` (consolidated into shared types)
+  - [x] **Directory Structure Cleanup**:
+    - [x] Remove any unused `__pycache__` directories from deleted modules
+    - [x] Verify that all import statements in remaining modules are valid
+    - [x] Clean up any circular import issues that may arise from restructuring
+    - [x] Ensure that test files don't reference deleted modules
+  - [x] **Functionality Verification**:
+    - [x] Test that `message_handler.py` continues to work with coordinator agent
+    - [x] Verify that `root_agent.py` can successfully delegate to research coordinator
+    - [x] Ensure that all research capabilities are accessible through coordinator interface
+    - [x] Validate that multi-agent workflows are initiated correctly from external entry points
+  - [x] **Documentation Updates**:
+    - [x] Update package docstrings to reflect coordinator-centric architecture
+    - [x] Remove references to legacy single-agent approach in comments
+    - [x] Update any inline documentation that references deleted modules
+    - [x] Ensure that coordinator agent is properly documented as the primary interface
+
 - [ ] 4.4 Implement Web Research Agent
   - [ ] Create Web Research Agent in `web_research/agent.py`
   - [ ] Integrate migrated web tools in `web_research/web_tools.py`
@@ -342,63 +389,17 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
   - **Maintained Backward Compatibility**: Query Decomposition Agent follows the same SDK pattern as other agents while providing advanced decomposition capabilities
 
 ### 2025-01-13 (Latest)
-- **COMPLETED Phase 3.3: Source Tracker Refactors**:
-  - **Implemented Source Tracker Serialization for Workflow Persistence**:
-    - Enhanced `SharedSourceRegistry` with `to_dict()`, `from_dict()`, `to_json()`, and `from_json()` methods for complete serialization support
-    - Added `AgentSourceTracker` serialization with `to_dict()` and `from_dict()` methods for agent-specific state persistence
-    - Enhanced `WorkflowStorage` with comprehensive source tracking persistence including file I/O capabilities
-    - Added `save_workflow_to_file()` and `load_workflow_from_file()` methods for complete workflow and source data persistence
-    - Implemented `export_workflow_data()` and `import_workflow_data()` for flexible data exchange between workflows
-  - **Created Source Tracker Utility Functions**:
-    - Implemented `shared/source_tracker_utils.py` with convenience functions for source tracker management
-    - Added `create_agent_source_tracker()` for easy agent tracker creation linked to workflow registries
-    - Created `get_workflow_source_summary()` for comprehensive source tracking analytics and reporting
-    - Added `export_workflow_sources()` and `import_workflow_sources()` for granular source data management
-    - Implemented `clear_workflow_sources()` for workflow cleanup and resource management
-  - **Enhanced Workflow Integration**:
-    - Updated `ResearchWorkflow` type with `source_tracking_enabled` and `source_registry_id` fields for metadata tracking
-    - Enhanced workflow coordinator to automatically initialize source registries for new workflows
-    - Added comprehensive test suite in `test_source_tracker_persistence.py` for all serialization functionality
-    - Integrated source tracking utilities into shared module exports for easy access across agents
-  - **Implemented Complete Source Tracking Lifecycle**: Now supports full workflow source tracking from creation through persistence, with cross-agent deduplication and comprehensive analytics
+- **COMPLETED Phase 4.3.1: Legacy Deep Research Agent Refactoring and Replacement**:
+  - **Complete Legacy Agent Replacement**: Successfully replaced the legacy single-agent `deep_research_agent` with the `research_coordinator_agent` as the primary interface
+  - **Updated All External References**: Updated `message_handler.py` and `root_agent.py` to use the new research coordinator agent and tool
+  - **Configuration Migration**: Renamed `deep_research` model configuration to `research_coordinator` for clarity and consistency
+  - **Comprehensive Legacy Code Removal**: Deleted 9 legacy files including `agent.py`, `backward_compatibility.py`, `inter_agent_communication.py`, `prompt.py`, `tools.py`, `tracked_tools.py`, `source_tracker.py`, `source_analysis.py`, and `types.py`
+  - **Type System Consolidation**: Moved all type definitions to `shared/types.py` including `CredibilityAssessment`, `SourceCategorization`, `WebpageMetadata`, `ResearchSource`, and `ResearchCitation`
+  - **Functionality Migration**: Successfully migrated source analysis functions to `AnalysisTools` class with proper integration in `WebResearchTools`
+  - **Import Resolution**: Fixed all import dependencies and circular references after major restructuring
+  - **Backward Compatibility**: Maintained backward compatibility through aliases in `__init__.py` for smooth transition
+  - **Verification Complete**: All imports, external references, and functionality verified to work correctly with the new coordinator-centric architecture
+  - **Clean Directory Structure**: Achieved clean multi-agent directory structure with only specialized agent modules and shared infrastructure
+  - **Test File Cleanup**: Removed obsolete test files and updated remaining tests to use new type system and agent structure
 
-- **COMPLETED Phase 3.3: Legacy Code Cleanup**:
-  - **Migrated Citation Manager functionality to Web and Social Research Agents**:
-    - Added comprehensive citation generation functionality to `web_research/web_tools.py`
-    - Implemented `generate_web_citation()` with support for APA, MLA, and Chicago styles
-    - Added citation formatting methods (`_format_apa_citation`, `_format_mla_citation`, `_format_chicago_citation`)
-    - Created `get_citation_guidelines()` for web source citation best practices
-    - Added `generate_reddit_citation()` to `social_research/social_tools.py` for social media sources
-    - Implemented Reddit-specific citation formatting for different academic styles
-    - Created `get_social_citation_guidelines()` for social media citation practices
-  - **Moved Credibility Evaluator tools to Analysis Agent**:
-    - Enhanced `analysis/analysis_tools.py` with comprehensive credibility assessment functionality
-    - Implemented `perform_comprehensive_credibility_assessment()` for multi-source analysis
-    - Added `analyze_reddit_credibility()` with advanced social media credibility metrics
-    - Created credibility recommendation systems with context-aware suggestions
-    - Added `evaluate_source_consistency()` for cross-source information verification
-    - Implemented consistency scoring algorithms and contradiction detection
-  - **Split Research Planner functionality between Coordinator and Query Decomposition Agents**:
-    - Enhanced Query Decomposition Agent (completed in Phase 4.3) with research strategy planning
-    - Added `create_research_coordination_plan()` to `coordinator/coordination_tools.py`
-    - Implemented agent assignment optimization based on query characteristics
-    - Created execution phase planning with dependency management and parallel processing
-    - Added resource estimation, quality checkpoints, and risk assessment capabilities
-    - Developed contingency planning for various research workflow scenarios
-  - **Migrated Cross-Reference Verifier to Analysis Agent**:
-    - Implemented comprehensive `verify_cross_references()` functionality in `analysis/analysis_tools.py`
-    - Added single claim verification with support level analysis (`_verify_single_claim`)
-    - Created claim support analysis with evidence extraction and context assessment
-    - Implemented verification strength calculation and consensus level determination
-    - Added citation network identification and source relationship mapping
-    - Created cross-reference scoring with quality assessment and recommendations
-  - **Moved Knowledge Graph Builder to Synthesis Agent**:
-    - Implemented comprehensive `build_knowledge_graph()` functionality in `synthesis/synthesis_tools.py`
-    - Added entity extraction with importance scoring and credibility assessment
-    - Created relationship extraction with co-occurrence analysis and relationship type classification
-    - Implemented graph structure building with nodes, edges, and visualization data
-    - Added graph analysis with centrality metrics, connectivity analysis, and insight generation
-    - Created knowledge gap identification (`identify_knowledge_gaps`) with gap scoring and recommendations
-    - Implemented graph visualization data generation for interactive knowledge representation
-  - **All legacy functionality successfully migrated to appropriate specialized agents with enhanced capabilities**
 - **Enhanced Agent Capabilities**: All specialized agents now have comprehensive domain-specific functionality beyond their original scope, providing a robust foundation for multi-agent research workflows

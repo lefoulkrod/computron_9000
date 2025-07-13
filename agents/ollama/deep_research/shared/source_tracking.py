@@ -13,7 +13,7 @@ from typing import Any
 
 import pydantic
 
-from agents.ollama.deep_research.types import ResearchCitation, ResearchSource
+from .types import ResearchCitation, ResearchSource
 
 logger = logging.getLogger(__name__)
 
@@ -317,9 +317,9 @@ class AgentSourceTracker:
             source = self.get_source(url)
             if source:
                 # Generate citation text (basic APA format)
-                citation_text = f"{source.author or 'Unknown Author'}. "
-                if source.publication_date:
-                    citation_text += f"({source.publication_date}). "
+                citation_text = f"{source.metadata.get('author', 'Unknown Author')}. "
+                if source.metadata.get("publication_date"):
+                    citation_text += f"({source.metadata.get('publication_date')}). "
                 citation_text += f"{source.title}. Retrieved from {source.url}"
 
                 citation = ResearchCitation(

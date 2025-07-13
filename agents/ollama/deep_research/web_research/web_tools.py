@@ -8,15 +8,13 @@ Migrated from tracked_tools.py as part of Phase 3.2 tool migration refactors.
 import logging
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
-from agents.ollama.deep_research.source_analysis import (
+from agents.ollama.deep_research.shared.types import (
     CredibilityAssessment,
     SourceCategorization,
     WebpageMetadata,
-    assess_webpage_credibility,
-    categorize_source,
-    extract_webpage_metadata,
 )
 from tools.web import (
     GoogleSearchResults,
@@ -50,6 +48,11 @@ class WebResearchTools:
             source_tracker (AgentSourceTracker): The agent-specific source tracker to use
         """
         self.source_tracker = source_tracker
+
+        # Initialize analysis tools for credibility assessment and metadata extraction
+        from agents.ollama.deep_research.analysis.analysis_tools import AnalysisTools
+
+        self.analysis_tools = AnalysisTools(source_tracker)
 
     async def search_google(
         self, query: str, max_results: int = 5
@@ -161,7 +164,7 @@ class WebResearchTools:
         self.source_tracker.register_access(
             url=url, tool_name="assess_webpage_credibility"
         )
-        return await assess_webpage_credibility(url=url)
+        return await self.analysis_tools.assess_webpage_credibility(url=url)
 
     async def extract_webpage_metadata(self, url: str) -> WebpageMetadata:
         """
@@ -176,7 +179,7 @@ class WebResearchTools:
         self.source_tracker.register_access(
             url=url, tool_name="extract_webpage_metadata"
         )
-        return await extract_webpage_metadata(url=url)
+        return await self.analysis_tools.extract_webpage_metadata(url=url)
 
     async def categorize_source(
         self, url: str, metadata: WebpageMetadata | None = None
@@ -197,7 +200,7 @@ class WebResearchTools:
         if metadata is None:
             metadata = await self.extract_webpage_metadata(url)
 
-        return categorize_source(url=url, metadata=metadata)
+        return self.analysis_tools.categorize_source(url=url, metadata=metadata)
 
     # Citation management functionality (migrated from legacy Citation Manager)
     async def generate_web_citation(
@@ -246,11 +249,13 @@ class WebResearchTools:
 
     def _format_apa_citation(self, metadata: WebpageMetadata) -> str:
         """Format citation in APA style."""
-        author = metadata["author"] or ""
-        title = metadata["title"] or "Untitled"
-        publisher = metadata["publisher"] or metadata["domain"]
-        date = metadata["publication_date"] or "n.d."
-        url = metadata["url"]
+        author = metadata.author or ""
+        title = metadata.title or "Untitled"
+        publisher = (
+            getattr(metadata, "publisher", None) or urlparse(metadata.url).netloc
+        )
+        date = metadata.publication_date or "n.d."
+        url = metadata.url
 
         if author:
             return f"{author}. ({date}). {title}. {publisher}. {url}"
@@ -258,11 +263,13 @@ class WebResearchTools:
 
     def _format_mla_citation(self, metadata: WebpageMetadata) -> str:
         """Format citation in MLA style."""
-        author = metadata["author"] or ""
-        title = metadata["title"] or "Untitled"
-        publisher = metadata["publisher"] or metadata["domain"]
-        date = metadata["publication_date"] or ""
-        url = metadata["url"]
+        author = metadata.author or ""
+        title = metadata.title or "Untitled"
+        publisher = (
+            getattr(metadata, "publisher", None) or urlparse(metadata.url).netloc
+        )
+        date = metadata.publication_date or ""
+        url = metadata.url
         access_date = datetime.now().strftime("%d %b %Y")
 
         if author:
@@ -271,11 +278,13 @@ class WebResearchTools:
 
     def _format_chicago_citation(self, metadata: WebpageMetadata) -> str:
         """Format citation in Chicago style."""
-        author = metadata["author"] or ""
-        title = metadata["title"] or "Untitled"
-        publisher = metadata["publisher"] or metadata["domain"]
-        date = metadata["publication_date"] or ""
-        url = metadata["url"]
+        author = metadata.author or ""
+        title = metadata.title or "Untitled"
+        publisher = (
+            getattr(metadata, "publisher", None) or urlparse(metadata.url).netloc
+        )
+        date = metadata.publication_date or ""
+        url = metadata.url
         access_date = datetime.now().strftime("%B %d, %Y")
 
         if author:

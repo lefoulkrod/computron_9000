@@ -6,7 +6,7 @@ from ollama import AsyncClient, Image
 from agents.types import Data, UserMessageEvent
 from config import load_config
 
-from .deep_research.agent import deep_research_agent
+from .deep_research import research_coordinator_agent
 from .sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 config = load_config()
 
-agent = deep_research_agent
+agent = research_coordinator_agent
 
 # Module-level message history for chat session, initialized with system message
 _message_history: list[dict[str, str]] = [

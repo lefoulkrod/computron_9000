@@ -5,7 +5,7 @@ from config import load_config
 from models import get_default_model
 
 from .computron_agent import run_computron_agent_as_tool
-from .deep_research import deep_research_agent_tool
+from .deep_research import research_coordinator_tool
 from .web_agent import web_agent_tool
 
 config = load_config()
@@ -23,5 +23,5 @@ root_agent: Agent = Agent(
     """,
     model=model.model,
     options=model.options,
-    tools=[deep_research_agent_tool, run_computron_agent_as_tool, web_agent_tool],
+    tools=[research_coordinator_tool, run_computron_agent_as_tool, web_agent_tool],
 )
