@@ -20,6 +20,7 @@ from ..shared import (
     get_agent_config,
 )
 from .prompt import SYNTHESIS_PROMPT
+from .synthesis_tools import SynthesisAgentTools
 
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
@@ -33,6 +34,9 @@ synthesis_source_tracker = AgentSourceTracker(
     agent_id="synthesis", shared_registry=SharedSourceRegistry()
 )
 
+# Initialize synthesis tools
+synthesis_tools = SynthesisAgentTools(synthesis_source_tracker)
+
 # Define the Synthesis Agent
 synthesis_agent: Agent = Agent(
     name="SYNTHESIS_AGENT",
@@ -41,13 +45,39 @@ synthesis_agent: Agent = Agent(
     model=model,
     options=options,
     tools=[
-        # Synthesis tools will be implemented in Phase 3.2
+        synthesis_tools.synthesize_research_findings,
+        synthesis_tools.generate_comprehensive_report,
+        synthesis_tools.create_citations_and_bibliography,
+        synthesis_tools.build_research_knowledge_graph,
+        synthesis_tools.identify_research_gaps,
+        synthesis_tools.resolve_contradictions,
     ],
 )
 
 # Create standard callbacks for logging
 synthesis_before_callback = make_log_before_model_call(synthesis_agent)
 synthesis_after_callback = make_log_after_model_call(synthesis_agent)
+
+# Create tool function for use by other agents
+synthesis_tool = make_run_agent_as_tool_function(
+    agent=synthesis_agent,
+    tool_description="""
+    Run the SYNTHESIS_AGENT to synthesize information from multiple sources and generate comprehensive research reports.
+    The agent combines findings, creates citations, builds knowledge graphs, and identifies gaps.
+
+    Use this tool when:
+    1. Multiple research findings need to be synthesized into a coherent report
+    2. Citation lists and bibliographies are needed
+    3. Knowledge graphs should be built from research data
+    4. Knowledge gaps and contradictions need identification
+    5. Comprehensive research reports are required
+
+    Input should include research findings from multiple agents and sources.
+    The agent will return synthesized information, reports, and analysis.
+    """,
+    before_model_callbacks=[synthesis_before_callback],
+    after_model_callbacks=[synthesis_after_callback],
+)
 
 # Create the tool function for use by other agents
 synthesis_tool = make_run_agent_as_tool_function(
