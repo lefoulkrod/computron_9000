@@ -6,6 +6,8 @@ Migrated from tracked_tools.py as part of Phase 3.2 tool migration refactors.
 """
 
 import logging
+from datetime import datetime
+from typing import Any
 
 from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
 from agents.ollama.deep_research.source_analysis import (
@@ -196,6 +198,124 @@ class WebResearchTools:
             metadata = await self.extract_webpage_metadata(url)
 
         return categorize_source(url=url, metadata=metadata)
+
+    # Citation management functionality (migrated from legacy Citation Manager)
+    async def generate_web_citation(
+        self, url: str, style: str = "APA"
+    ) -> dict[str, Any]:
+        """
+        Generate a properly formatted citation for a web source.
+
+        Args:
+            url (str): The URL to generate citation for
+            style (str): Citation style (APA, MLA, Chicago)
+
+        Returns:
+            Dict[str, Any]: Formatted citation information
+        """
+        try:
+            metadata = await self.extract_webpage_metadata(url)
+
+            # Format citation based on style
+            if style.upper() == "APA":
+                citation = self._format_apa_citation(metadata)
+            elif style.upper() == "MLA":
+                citation = self._format_mla_citation(metadata)
+            elif style.upper() == "CHICAGO":
+                citation = self._format_chicago_citation(metadata)
+            else:
+                citation = self._format_apa_citation(metadata)  # Default to APA
+
+            return {
+                "url": url,
+                "style": style,
+                "formatted_citation": citation,
+                "metadata": metadata,
+                "access_date": datetime.now().strftime("%Y-%m-%d"),
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating citation for {url}: {e}")
+            return {
+                "url": url,
+                "style": style,
+                "formatted_citation": f"Error generating citation: {str(e)}",
+                "metadata": {},
+                "access_date": datetime.now().strftime("%Y-%m-%d"),
+            }
+
+    def _format_apa_citation(self, metadata: WebpageMetadata) -> str:
+        """Format citation in APA style."""
+        author = metadata["author"] or ""
+        title = metadata["title"] or "Untitled"
+        publisher = metadata["publisher"] or metadata["domain"]
+        date = metadata["publication_date"] or "n.d."
+        url = metadata["url"]
+
+        if author:
+            return f"{author}. ({date}). {title}. {publisher}. {url}"
+        return f"{title}. ({date}). {publisher}. {url}"
+
+    def _format_mla_citation(self, metadata: WebpageMetadata) -> str:
+        """Format citation in MLA style."""
+        author = metadata["author"] or ""
+        title = metadata["title"] or "Untitled"
+        publisher = metadata["publisher"] or metadata["domain"]
+        date = metadata["publication_date"] or ""
+        url = metadata["url"]
+        access_date = datetime.now().strftime("%d %b %Y")
+
+        if author:
+            return f'{author}. "{title}." {publisher}, {date}, {url}. Accessed {access_date}.'
+        return f'"{title}." {publisher}, {date}, {url}. Accessed {access_date}.'
+
+    def _format_chicago_citation(self, metadata: WebpageMetadata) -> str:
+        """Format citation in Chicago style."""
+        author = metadata["author"] or ""
+        title = metadata["title"] or "Untitled"
+        publisher = metadata["publisher"] or metadata["domain"]
+        date = metadata["publication_date"] or ""
+        url = metadata["url"]
+        access_date = datetime.now().strftime("%B %d, %Y")
+
+        if author:
+            return f'{author}. "{title}." {publisher}. {date}. {url} (accessed {access_date}).'
+        return f'"{title}." {publisher}. {date}. {url} (accessed {access_date}).'
+
+    async def get_citation_guidelines(self) -> str:
+        """
+        Get guidelines for properly citing web sources.
+
+        Returns:
+            str: Citation guidelines and best practices
+        """
+        return """# Citation Guidelines for Web Sources
+
+## APA Style (7th Edition)
+For webpages with author:
+Author, A. A. (Year, Month Day). Title of webpage. Website Name. URL
+
+For webpages without author:
+Title of webpage. (Year, Month Day). Website Name. URL
+
+## MLA Style (9th Edition)
+For webpages with author:
+Author. "Title of Webpage." Website Name, Date published, URL. Accessed Day Month Year.
+
+For webpages without author:
+"Title of Webpage." Website Name, Date published, URL. Accessed Day Month Year.
+
+## Chicago Style
+For webpages with author:
+Author. "Title of Webpage." Website Name. Date published. URL (accessed Month Day, Year).
+
+## Best Practices
+1. Always include access dates for web content
+2. Verify author and publication date information
+3. Use consistent formatting throughout your bibliography
+4. Prefer primary sources when available
+5. Include DOI when available instead of URL
+"""
 
 
 # Module exports

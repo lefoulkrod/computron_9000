@@ -85,13 +85,13 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
     - [x] Create agent-specific source trackers to avoid global state conflicts
     - [x] Implement shared source registry for cross-agent source deduplication
     - [x] Add source tracker serialization for workflow persistence
-  - [ ] **Legacy Code Cleanup**:
-    - [ ] Migrate Citation Manager functionality to Web and Social Research Agents
-    - [ ] Move Credibility Evaluator tools to Analysis Agent
-    - [ ] Split Research Planner functionality between Coordinator and Query Decomposition Agents
-    - [ ] Migrate Cross-Reference Verifier to Analysis Agent
-    - [ ] Move Knowledge Graph Builder to Synthesis Agent
-    - [ ] Optimize existing tools for multi-agent context management
+  - [x] **Legacy Code Cleanup**:
+    - [x] Migrate Citation Manager functionality to Web and Social Research Agents
+    - [x] Move Credibility Evaluator tools to Analysis Agent
+    - [x] Split Research Planner functionality between Coordinator and Query Decomposition Agents
+    - [x] Migrate Cross-Reference Verifier to Analysis Agent
+    - [x] Move Knowledge Graph Builder to Synthesis Agent
+    - [x] Optimize existing tools for multi-agent context management
 
 ### Phase 4: Multi-Agent System Implementation
 
@@ -361,3 +361,44 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
     - Added comprehensive test suite in `test_source_tracker_persistence.py` for all serialization functionality
     - Integrated source tracking utilities into shared module exports for easy access across agents
   - **Implemented Complete Source Tracking Lifecycle**: Now supports full workflow source tracking from creation through persistence, with cross-agent deduplication and comprehensive analytics
+
+- **COMPLETED Phase 3.3: Legacy Code Cleanup**:
+  - **Migrated Citation Manager functionality to Web and Social Research Agents**:
+    - Added comprehensive citation generation functionality to `web_research/web_tools.py`
+    - Implemented `generate_web_citation()` with support for APA, MLA, and Chicago styles
+    - Added citation formatting methods (`_format_apa_citation`, `_format_mla_citation`, `_format_chicago_citation`)
+    - Created `get_citation_guidelines()` for web source citation best practices
+    - Added `generate_reddit_citation()` to `social_research/social_tools.py` for social media sources
+    - Implemented Reddit-specific citation formatting for different academic styles
+    - Created `get_social_citation_guidelines()` for social media citation practices
+  - **Moved Credibility Evaluator tools to Analysis Agent**:
+    - Enhanced `analysis/analysis_tools.py` with comprehensive credibility assessment functionality
+    - Implemented `perform_comprehensive_credibility_assessment()` for multi-source analysis
+    - Added `analyze_reddit_credibility()` with advanced social media credibility metrics
+    - Created credibility recommendation systems with context-aware suggestions
+    - Added `evaluate_source_consistency()` for cross-source information verification
+    - Implemented consistency scoring algorithms and contradiction detection
+  - **Split Research Planner functionality between Coordinator and Query Decomposition Agents**:
+    - Enhanced Query Decomposition Agent (completed in Phase 4.3) with research strategy planning
+    - Added `create_research_coordination_plan()` to `coordinator/coordination_tools.py`
+    - Implemented agent assignment optimization based on query characteristics
+    - Created execution phase planning with dependency management and parallel processing
+    - Added resource estimation, quality checkpoints, and risk assessment capabilities
+    - Developed contingency planning for various research workflow scenarios
+  - **Migrated Cross-Reference Verifier to Analysis Agent**:
+    - Implemented comprehensive `verify_cross_references()` functionality in `analysis/analysis_tools.py`
+    - Added single claim verification with support level analysis (`_verify_single_claim`)
+    - Created claim support analysis with evidence extraction and context assessment
+    - Implemented verification strength calculation and consensus level determination
+    - Added citation network identification and source relationship mapping
+    - Created cross-reference scoring with quality assessment and recommendations
+  - **Moved Knowledge Graph Builder to Synthesis Agent**:
+    - Implemented comprehensive `build_knowledge_graph()` functionality in `synthesis/synthesis_tools.py`
+    - Added entity extraction with importance scoring and credibility assessment
+    - Created relationship extraction with co-occurrence analysis and relationship type classification
+    - Implemented graph structure building with nodes, edges, and visualization data
+    - Added graph analysis with centrality metrics, connectivity analysis, and insight generation
+    - Created knowledge gap identification (`identify_knowledge_gaps`) with gap scoring and recommendations
+    - Implemented graph visualization data generation for interactive knowledge representation
+  - **All legacy functionality successfully migrated to appropriate specialized agents with enhanced capabilities**
+- **Enhanced Agent Capabilities**: All specialized agents now have comprehensive domain-specific functionality beyond their original scope, providing a robust foundation for multi-agent research workflows

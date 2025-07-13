@@ -46,9 +46,7 @@ class SynthesisTools:
         try:
             # Extract entities and relationships
             entities = await self._extract_entities(research_findings, topic)
-            relationships = await self._extract_relationships(
-                research_findings, entities
-            )
+            relationships = await self._extract_relationships(research_findings, entities)
 
             # Build graph structure
             knowledge_graph = self._build_graph_structure(entities, relationships)
@@ -104,9 +102,7 @@ class SynthesisTools:
             weak_connections = self._identify_weak_connections(nodes, edges)
 
             # Find missing relationships based on query context
-            missing_relationships = self._identify_missing_relationships(
-                nodes, edges, query
-            )
+            missing_relationships = self._identify_missing_relationships(nodes, edges, query)
 
             # Generate recommendations
             recommendations = self._generate_gap_recommendations(
@@ -114,9 +110,7 @@ class SynthesisTools:
             )
 
             # Calculate overall gap score
-            gap_score = self._calculate_gap_score(
-                isolated_nodes, weak_connections, missing_relationships
-            )
+            gap_score = self._calculate_gap_score(isolated_nodes, weak_connections, missing_relationships)
 
             return {
                 "gap_score": gap_score,
@@ -173,9 +167,9 @@ class SynthesisTools:
 
         # Calculate entity credibility and importance
         for entity in entities.values():
-            entity["credibility"] = sum(
-                m["credibility"] for m in entity["mentions"]
-            ) / len(entity["mentions"])
+            entity["credibility"] = sum(m["credibility"] for m in entity["mentions"]) / len(
+                entity["mentions"]
+            )
             entity["importance"] = entity["frequency"] * entity["credibility"]
 
         # Filter and rank entities
@@ -187,9 +181,7 @@ class SynthesisTools:
 
         return sorted(significant_entities, key=lambda x: x["importance"], reverse=True)
 
-    def _identify_entity_candidates(
-        self, content: str, _topic: str
-    ) -> list[dict[str, Any]]:
+    def _identify_entity_candidates(self, content: str, _topic: str) -> list[dict[str, Any]]:
         """Identify potential entities in content."""
         if not content:
             return []
@@ -209,9 +201,7 @@ class SynthesisTools:
                 entity_type = self._classify_entity_type(noun)
                 context = self._extract_entity_context(content, noun)
 
-                candidates.append(
-                    {"text": noun, "type": entity_type, "context": context}
-                )
+                candidates.append({"text": noun, "type": entity_type, "context": context})
 
         # Numbers and dates
         number_pattern = r"\b\d{4}\b|\b\d+\.\d+\b|\b\d+%\b"
@@ -230,17 +220,16 @@ class SynthesisTools:
         # Simple classification rules
         if any(word in entity_lower for word in ["university", "college", "institute"]):
             return "organization"
-        if any(word in entity_lower for word in ["dr", "prof", "mr", "ms"]):
+        elif any(word in entity_lower for word in ["dr", "prof", "mr", "ms"]):
             return "person"
-        if entity_text.isupper() and len(entity_text) <= 5:
+        elif entity_text.isupper() and len(entity_text) <= 5:
             return "acronym"
-        if any(char.isdigit() for char in entity_text):
+        elif any(char.isdigit() for char in entity_text):
             return "metric"
-        if any(
-            word in entity_lower for word in ["company", "corporation", "inc", "ltd"]
-        ):
+        elif any(word in entity_lower for word in ["company", "corporation", "inc", "ltd"]):
             return "organization"
-        return "concept"
+        else:
+            return "concept"
 
     def _extract_entity_context(self, content: str, entity: str) -> str:
         """Extract context around an entity mention."""
@@ -265,18 +254,16 @@ class SynthesisTools:
             # Look for relationships between pairs of entities
             for i, entity1 in enumerate(entity_texts):
                 for entity2 in entity_texts[i + 1 :]:
-                    relationship = self._analyze_entity_relationship(
-                        content, entity1, entity2
-                    )
+                    relationship = self._analyze_entity_relationship(content, entity1, entity2)
                     if relationship:
                         relationship["source"] = finding.get("url", "")
-                        relationship["credibility"] = finding.get(
-                            "credibility_score", 0.5
-                        )
+                        relationship["credibility"] = finding.get("credibility_score", 0.5)
                         relationships.append(relationship)
 
         # Consolidate duplicate relationships
-        return self._consolidate_relationships(relationships)
+        consolidated_relationships = self._consolidate_relationships(relationships)
+
+        return consolidated_relationships
 
     def _analyze_entity_relationship(
         self, content: str, entity1: str, entity2: str
@@ -289,20 +276,11 @@ class SynthesisTools:
             if entity1 in sentence and entity2 in sentence:
                 # Determine relationship type based on context
                 relationship_type = "related"
-                if any(
-                    word in sentence.lower()
-                    for word in ["causes", "leads to", "results in"]
-                ):
+                if any(word in sentence.lower() for word in ["causes", "leads to", "results in"]):
                     relationship_type = "causal"
-                elif any(
-                    word in sentence.lower()
-                    for word in ["part of", "includes", "contains"]
-                ):
+                elif any(word in sentence.lower() for word in ["part of", "includes", "contains"]):
                     relationship_type = "hierarchical"
-                elif any(
-                    word in sentence.lower()
-                    for word in ["similar", "like", "compared to"]
-                ):
+                elif any(word in sentence.lower() for word in ["similar", "like", "compared to"]):
                     relationship_type = "similarity"
 
                 return {
@@ -379,9 +357,7 @@ class SynthesisTools:
 
         return {"nodes": nodes, "edges": edges}
 
-    def _analyze_graph_properties(
-        self, knowledge_graph: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _analyze_graph_properties(self, knowledge_graph: dict[str, Any]) -> dict[str, Any]:
         """Analyze properties of the knowledge graph."""
         nodes = knowledge_graph["nodes"]
         edges = knowledge_graph["edges"]
@@ -400,9 +376,7 @@ class SynthesisTools:
             node_degrees[edge["target"]] = node_degrees.get(edge["target"], 0) + 1
 
         # Find most connected nodes
-        most_connected = sorted(node_degrees.items(), key=lambda x: x[1], reverse=True)[
-            :5
-        ]
+        most_connected = sorted(node_degrees.items(), key=lambda x: x[1], reverse=True)[:5]
 
         # Relationship type distribution
         relationship_types: dict[str, int] = {}
@@ -413,17 +387,11 @@ class SynthesisTools:
         return {
             "node_count": node_count,
             "edge_count": edge_count,
-            "avg_degree": (
-                sum(node_degrees.values()) / len(node_degrees) if node_degrees else 0
-            ),
+            "avg_degree": sum(node_degrees.values()) / len(node_degrees) if node_degrees else 0,
             "max_degree": max(node_degrees.values()) if node_degrees else 0,
             "most_connected_nodes": most_connected,
             "relationship_types": relationship_types,
-            "density": (
-                (2 * edge_count) / (node_count * (node_count - 1))
-                if node_count > 1
-                else 0
-            ),
+            "density": (2 * edge_count) / (node_count * (node_count - 1)) if node_count > 1 else 0,
         }
 
     def _identify_key_insights(
@@ -432,6 +400,7 @@ class SynthesisTools:
         """Identify key insights from the knowledge graph."""
         insights = []
         nodes = knowledge_graph["nodes"]
+        edges = knowledge_graph["edges"]
 
         # Most important entities
         top_entities = sorted(nodes, key=lambda x: x["importance"], reverse=True)[:3]
@@ -444,17 +413,13 @@ class SynthesisTools:
         if most_connected:
             central_entity = most_connected[0][0]
             degree = most_connected[0][1]
-            insights.append(
-                f"'{central_entity}' is a central concept with {degree} connections"
-            )
+            insights.append(f"'{central_entity}' is a central concept with {degree} connections")
 
         # Relationship patterns
         rel_types = graph_analysis.get("relationship_types", {})
         if rel_types:
             dominant_type = max(rel_types.items(), key=lambda x: x[1])
-            insights.append(
-                f"Primary relationship type: {dominant_type[0]} ({dominant_type[1]} instances)"
-            )
+            insights.append(f"Primary relationship type: {dominant_type[0]} ({dominant_type[1]} instances)")
 
         # Entity type distribution
         entity_types: dict[str, int] = {}
@@ -464,9 +429,7 @@ class SynthesisTools:
 
         if entity_types:
             dominant_entity_type = max(entity_types.items(), key=lambda x: x[1])
-            insights.append(
-                f"Primary entity type: {dominant_entity_type[0]} ({dominant_entity_type[1]} entities)"
-            )
+            insights.append(f"Primary entity type: {dominant_entity_type[0]} ({dominant_entity_type[1]} entities)")
 
         return insights
 
@@ -535,12 +498,8 @@ class SynthesisTools:
             node_connections[node["id"]] = 0
 
         for edge in edges:
-            node_connections[edge["source"]] = (
-                node_connections.get(edge["source"], 0) + 1
-            )
-            node_connections[edge["target"]] = (
-                node_connections.get(edge["target"], 0) + 1
-            )
+            node_connections[edge["source"]] = node_connections.get(edge["source"], 0) + 1
+            node_connections[edge["target"]] = node_connections.get(edge["target"], 0) + 1
 
         # Find isolated or weakly connected nodes
         isolated = []
@@ -558,7 +517,7 @@ class SynthesisTools:
         return sorted(isolated, key=lambda x: x["importance"], reverse=True)
 
     def _identify_weak_connections(
-        self, _nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
+        self, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Identify weak connections that might indicate gaps."""
         weak_connections = []
@@ -602,8 +561,7 @@ class SynthesisTools:
                             "source_entity": node1["label"],
                             "target_entity": node2["label"],
                             "reason": "Both entities mentioned in query but not connected",
-                            "priority": node1.get("importance", 0)
-                            + node2.get("importance", 0),
+                            "priority": node1.get("importance", 0) + node2.get("importance", 0),
                         }
                     )
 
@@ -642,9 +600,7 @@ class SynthesisTools:
 
         # General recommendations
         if not recommendations:
-            recommendations.append(
-                "Knowledge graph appears well-connected. Consider expanding scope of research."
-            )
+            recommendations.append("Knowledge graph appears well-connected. Consider expanding scope of research.")
 
         return recommendations
 
@@ -747,11 +703,8 @@ async def build_knowledge_graph(
         Dict[str, Any]: Knowledge graph representation
     """
     # Create a temporary tools instance for the module-level function
-    from agents.ollama.deep_research.shared.source_tracking import (
-        AgentSourceTracker,
-        SharedSourceRegistry,
-    )
-
+    from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker, SharedSourceRegistry
+    
     temp_tracker = AgentSourceTracker("temp", SharedSourceRegistry())
     tools = SynthesisTools(temp_tracker)
     return await tools.build_knowledge_graph(research_findings, topic)
@@ -771,11 +724,8 @@ async def identify_knowledge_gaps(
         Dict[str, Any]: Knowledge gaps analysis
     """
     # Create a temporary tools instance for the module-level function
-    from agents.ollama.deep_research.shared.source_tracking import (
-        AgentSourceTracker,
-        SharedSourceRegistry,
-    )
-
+    from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker, SharedSourceRegistry
+    
     temp_tracker = AgentSourceTracker("temp", SharedSourceRegistry())
     tools = SynthesisTools(temp_tracker)
     return await tools.identify_knowledge_gaps(knowledge_graph, query)
