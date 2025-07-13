@@ -89,7 +89,7 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 line-length = 88
 target-version = ['py312']
 include = '\.pyi?$'
-extend-exclude = '''
+force-exclude = '''
 /(
   # directories
   \.eggs
@@ -104,29 +104,35 @@ extend-exclude = '''
 '''
 
 [tool.mypy]
-python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
-show_error_codes = true
+python_version = "3.12"                    # Target Python version for type checking
+warn_return_any = true                     # Warn when a non-Any return is inferred as Any
+warn_unused_configs = true                # Alert on unused config flags or overrides (catch typos)
+disallow_untyped_defs = true              # Prevent any function defs without type annotations
+disallow_incomplete_defs = true           # Forbid partially typed defs (e.g., missing return/param)
+check_untyped_defs = true                 # Type-check bodies of even untyped functions
+disallow_untyped_decorators = true        # Disallow using untyped decorators on typed functions
+no_implicit_optional = true               # Don’t treat default None as Optional unless explicit
+warn_redundant_casts = true               # Warn for pointless casts to same type
+warn_unused_ignores = true                # Warn about unnecessary `# type: ignore` comments
+warn_no_return = true                     # Warn when a non-None function might not return on all paths
+warn_unreachable = true                   # Catch code that can never be reached
+strict_equality = true                    # Enforce strict comparison (e.g., no comparing incompatible types)
+show_error_codes = true                   # Display mypy error codes (e.g., `[no-any-return]`)
 
-# Per-module options
+# 🎯 Extra strict flags common in large open-source/enterprise projects:
+disallow_any_unimported = true            # Prevent silent Any from missing imports; encourages stubs
+disallow_any_generics = true              # Require explicit type parameters for generics (e.g., list[int])
+disallow_untyped_calls = true             # Disallow calling untyped functions from typed code
+no_implicit_reexport = true               # Disallow implicit star re-exports (e.g., via `from module import *`)
+
+# ▶️ Per-module exceptions:
 [[tool.mypy.overrides]]
 module = "tests.*"
-disallow_untyped_defs = false
+disallow_untyped_defs = false             # Allow untyped defs in tests for flexibility
 
 [[tool.mypy.overrides]]
 module = ["playwright.*", "podman.*", "ollama.*", "asyncpraw.*"]
-ignore_missing_imports = true
+ignore_missing_imports = true             # Skip errors for missing types in these libraries
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

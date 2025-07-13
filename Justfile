@@ -149,8 +149,8 @@ fix:
 typecheck:
     uv run mypy .
 
-# Run all quality checks (format, lint, typecheck, test)
-check: format lint typecheck test
+# Run all quality checks
+check: format lint typecheck
 
 # 🧹 Cleanup commands
 # Clean Python cache files

@@ -28,7 +28,7 @@ class ModelConfig(BaseModel):
 
     name: str
     model: str
-    options: dict
+    options: dict[str, Any]
 
 
 class SearchGoogleConfig(BaseModel):

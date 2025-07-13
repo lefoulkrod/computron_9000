@@ -416,7 +416,9 @@ class TrackedRedditTools:
 # Wrapped functions to get tracked tools
 
 
-def get_tracked_web_tools(source_tracker: SourceTracker) -> dict[str, Callable]:
+def get_tracked_web_tools(
+    source_tracker: SourceTracker,
+) -> dict[str, Callable[..., Any]]:
     """
     Get a dictionary of web tools with source tracking.
 
@@ -424,7 +426,7 @@ def get_tracked_web_tools(source_tracker: SourceTracker) -> dict[str, Callable]:
         source_tracker (SourceTracker): The source tracker to use
 
     Returns:
-        Dict[str, Callable]: Dictionary of tracked web tool functions
+        Dict[str, Callable[..., Any]]: Dictionary of tracked web tool functions
     """
     tracked_web_tools = TrackedWebTools(source_tracker)
 
@@ -441,7 +443,9 @@ def get_tracked_web_tools(source_tracker: SourceTracker) -> dict[str, Callable]:
     }
 
 
-def get_tracked_reddit_tools(source_tracker: SourceTracker) -> dict[str, Callable]:
+def get_tracked_reddit_tools(
+    source_tracker: SourceTracker,
+) -> dict[str, Callable[..., Any]]:
     """
     Get a dictionary of Reddit tools with source tracking.
 
@@ -449,7 +453,7 @@ def get_tracked_reddit_tools(source_tracker: SourceTracker) -> dict[str, Callabl
         source_tracker (SourceTracker): The source tracker to use
 
     Returns:
-        Dict[str, Callable]: Dictionary of tracked Reddit tool functions
+        Dict[str, Callable[..., Any]]: Dictionary of tracked Reddit tool functions
     """
     tracked_reddit_tools = TrackedRedditTools(source_tracker)
 

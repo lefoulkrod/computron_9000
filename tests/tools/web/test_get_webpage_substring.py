@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tools.web.get_webpage import GetWebpageError, get_webpage_substring
+from tools.web import GetWebpageError, get_webpage_substring
 
 
 @pytest.mark.unit
