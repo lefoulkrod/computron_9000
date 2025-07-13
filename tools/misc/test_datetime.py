@@ -1,7 +1,9 @@
 """Tests for the datetime tool in tools.misc.datetime."""
+
 import pytest
 
-from tools.misc.datetime import datetime_tool, DateTimeResult
+from tools.misc.datetime import datetime_tool
+
 
 @pytest.mark.unit
 def test_datetime_tool_success():

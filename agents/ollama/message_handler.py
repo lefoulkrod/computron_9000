@@ -1,14 +1,18 @@
 import logging
-from typing import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Sequence
 
 from ollama import AsyncClient, Image
 
-from agents.types import UserMessageEvent, Data
+from agents.types import Data, UserMessageEvent
 from config import load_config
-from .computron_agent import computron
-from .root_agent import root_agent
+
 from .deep_research import deep_research_agent
-from .sdk import run_tool_call_loop, split_think_content, make_log_before_model_call, make_log_after_model_call
+from .sdk import (
+    make_log_after_model_call,
+    make_log_before_model_call,
+    run_tool_call_loop,
+    split_think_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +22,12 @@ agent = deep_research_agent
 
 # Module-level message history for chat session, initialized with system message
 _message_history: list[dict[str, str]] = [
-    {'role': 'system', 'content': agent.instruction}
+    {"role": "system", "content": agent.instruction}
 ]
 
 log_before_model_call = make_log_before_model_call(agent)
 log_after_model_call = make_log_after_model_call(agent)
+
 
 async def _handle_image_message(
     message: str,
@@ -41,33 +46,31 @@ async def _handle_image_message(
     log_after_model_call = make_log_after_model_call()
     log_before_model_call = make_log_before_model_call()
     for d in data:
-        _message_history.append({
-            'role': 'user',
-            'content': f"<image/base64>{d.base64_encoded}"
-        })
-    _message_history.append({'role': 'user', 'content': message})
+        _message_history.append(
+            {"role": "user", "content": f"<image/base64>{d.base64_encoded}"}
+        )
+    _message_history.append({"role": "user", "content": message})
     log_before_model_call(_message_history)
     response = await AsyncClient().generate(
         model=agent.model,
         prompt=message,
         options=agent.options,
-        images=[Image(value=d.base64_encoded) for d in data]
+        images=[Image(value=d.base64_encoded) for d in data],
     )
     main_text, thinking = split_think_content(response.response)
-    _message_history.append({
-        'role': 'assistant',
-        'content': main_text,
-    })
-    log_after_model_call(response)
-    yield UserMessageEvent(
-        message=main_text,
-        final=True,
-        thinking=thinking
+    _message_history.append(
+        {
+            "role": "assistant",
+            "content": main_text,
+        }
     )
+    log_after_model_call(response)
+    yield UserMessageEvent(message=main_text, final=True, thinking=thinking)
+
 
 async def handle_user_message(
     message: str,
-    data: Sequence[Data] | None = None, 
+    data: Sequence[Data] | None = None,
 ) -> AsyncGenerator[UserMessageEvent, None]:
     """
     Handles a user message by sending it to the LLM and yielding events.
@@ -84,22 +87,24 @@ async def handle_user_message(
             async for event in _handle_image_message(message, data):
                 yield event
             return
-        _message_history.append({'role': 'user', 'content': message})
+        _message_history.append({"role": "user", "content": message})
         async for content in run_tool_call_loop(
             messages=_message_history,
             tools=agent.tools,
             model=agent.model,
             model_options=agent.options,
             before_model_callbacks=[log_before_model_call],
-            after_model_callbacks=[log_after_model_call]
+            after_model_callbacks=[log_after_model_call],
         ):
             if content is not None:
                 main_text, thinking = split_think_content(content)
                 yield UserMessageEvent(
-                    message=main_text,
-                    final=False,
-                    thinking=thinking
+                    message=main_text, final=False, thinking=thinking
                 )
     except Exception as exc:
         logger.exception(f"Error handling user message: {exc}")
-        yield UserMessageEvent(message="An error occurred while processing your message.", final=True, thinking=None)
+        yield UserMessageEvent(
+            message="An error occurred while processing your message.",
+            final=True,
+            thinking=None,
+        )

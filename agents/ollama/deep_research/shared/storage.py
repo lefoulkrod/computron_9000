@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
 
 from .types import ResearchWorkflow
 
@@ -14,13 +13,13 @@ class WorkflowStorage:
     """In-memory storage for :class:`ResearchWorkflow` objects."""
 
     def __init__(self) -> None:
-        self._workflows: Dict[str, ResearchWorkflow] = {}
+        self._workflows: dict[str, ResearchWorkflow] = {}
 
     def create_workflow(self, workflow: ResearchWorkflow) -> None:
         logger.debug("Creating workflow %s", workflow.workflow_id)
         self._workflows[workflow.workflow_id] = workflow
 
-    def get_workflow(self, workflow_id: str) -> Optional[ResearchWorkflow]:
+    def get_workflow(self, workflow_id: str) -> ResearchWorkflow | None:
         return self._workflows.get(workflow_id)
 
     def update_workflow(self, workflow: ResearchWorkflow) -> None:

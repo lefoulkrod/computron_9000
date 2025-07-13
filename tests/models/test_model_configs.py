@@ -2,20 +2,23 @@
 Tests for the models module.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from config import ModelConfig
-from models import get_default_model, get_model_by_name, ModelNotFoundError
+from models import ModelNotFoundError, get_default_model, get_model_by_name
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    return MagicMock(models=[
-        ModelConfig(name="gemma3", model="gemma:3b", options={}),
-        ModelConfig(name="llama", model="llama:7b", options={})
-    ])
+    return MagicMock(
+        models=[
+            ModelConfig(name="gemma3", model="gemma:3b", options={}),
+            ModelConfig(name="llama", model="llama:7b", options={}),
+        ]
+    )
 
 
 @pytest.mark.unit

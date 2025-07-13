@@ -1,10 +1,12 @@
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 from ollama import ChatResponse
 
 from agents.types import Agent
+
 from .extract_thinking import split_think_content
 from .tool_loop import run_tool_call_loop
+
 
 def make_run_agent_as_tool_function(
     agent: Agent,
@@ -33,6 +35,7 @@ Args:
 Returns:
     str: The result returned by the agent after processing the instructions.
 """
+
     async def run_agent_as_tool(instructions: str) -> str:
         # DONT PROVIDE A DOCSTRING HERE
         messages = [

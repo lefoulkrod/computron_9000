@@ -1,11 +1,13 @@
 """Common models for agent message streaming and agent configuration."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
 
 class Agent(BaseModel):
     """
@@ -19,12 +21,14 @@ class Agent(BaseModel):
         options (Dict[str, Any]): Model options (e.g., num_ctx).
         tools (List[Callable[..., Any]]): List of callable tools available to the agent.
     """
+
     name: str
     description: str
     instruction: str
     model: str
-    options: Dict[str, Any]
-    tools: List[Callable[..., Any]]
+    options: dict[str, Any]
+    tools: list[Callable[..., Any]]
+
 
 class UserMessageEvent(BaseModel):
     """
@@ -35,9 +39,11 @@ class UserMessageEvent(BaseModel):
         final (bool): Whether this is the final response in the sequence.
         thinking (Optional[str]): The agent's internal reasoning or thought process, if available.
     """
+
     message: str
     final: bool
-    thinking: Optional[str] = None
+    thinking: str | None = None
+
 
 class Data(BaseModel):
     """
@@ -47,6 +53,6 @@ class Data(BaseModel):
         base64_encoded (str): The base64-encoded data payload.
         content_type (str): The MIME type of the data (e.g., 'image/png').
     """
+
     base64_encoded: str
     content_type: str
-

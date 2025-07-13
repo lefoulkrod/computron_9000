@@ -5,7 +5,6 @@ This tool provides functions to execute code snippets in either Python or Node.j
 """
 
 import logging
-from typing import Dict, List, Optional
 
 from tools.code.container_core import (
     _run_code_in_container,
@@ -13,7 +12,10 @@ from tools.code.container_core import (
 
 logger = logging.getLogger(__name__)
 
-def execute_python_program(program_text: str, packages: Optional[List[str]] = None) -> Dict[str, Optional[str]]:
+
+def execute_python_program(
+    program_text: str, packages: list[str] | None = None
+) -> dict[str, str | None]:
     """
     Execute a Python program in a containerized Python 3.12 environment, installing specified packages first.
 
@@ -39,7 +41,10 @@ def execute_python_program(program_text: str, packages: Optional[List[str]] = No
         packages=packages,
     )
 
-def execute_nodejs_program(program_text: str, packages: Optional[List[str]] = None) -> Dict[str, Optional[str]]:
+
+def execute_nodejs_program(
+    program_text: str, packages: list[str] | None = None
+) -> dict[str, str | None]:
     """
     Execute a Node.js script in a containerized Node.js environment, installing specified packages first.
 
@@ -65,7 +70,10 @@ def execute_nodejs_program(program_text: str, packages: Optional[List[str]] = No
         packages=packages,
     )
 
-def execute_nodejs_program_with_playwright(program_text: str, packages: Optional[List[str]] = None) -> Dict[str, Optional[str]]:
+
+def execute_nodejs_program_with_playwright(
+    program_text: str, packages: list[str] | None = None
+) -> dict[str, str | None]:
     """
     Execute a Node.js program in a container that has Playwright and browsers preinstalled, suitable for web navigation tasks.
     This tool can alos be used to execute any arbitrary Node.js code, not just Playwright scripts.

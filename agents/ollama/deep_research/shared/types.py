@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -10,15 +11,17 @@ class AgentTask(BaseModel):
     """Represents a task assigned to a specific agent."""
 
     task_id: str
-    agent_type: str  # query_decomposition, web_research, social_research, analysis, synthesis
+    agent_type: (
+        str  # query_decomposition, web_research, social_research, analysis, synthesis
+    )
     task_type: str  # decompose_query, search_web, analyze_sources, synthesize_findings
-    input_data: Dict[str, Any]
+    input_data: dict[str, Any]
     priority: int = 5
-    dependencies: List[str] = []
+    dependencies: list[str] = []
     status: str = "pending"  # pending, in_progress, completed, failed
     created_at: str
-    assigned_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    assigned_at: str | None = None
+    completed_at: str | None = None
 
 
 class AgentResult(BaseModel):
@@ -26,11 +29,11 @@ class AgentResult(BaseModel):
 
     task_id: str
     agent_type: str
-    result_data: Dict[str, Any]
+    result_data: dict[str, Any]
     success: bool
-    error_message: Optional[str] = None
-    sources_used: List[str] = []
-    follow_up_tasks: List[AgentTask] = []
+    error_message: str | None = None
+    sources_used: list[str] = []
+    follow_up_tasks: list[AgentTask] = []
     completion_time: str
 
 
@@ -40,8 +43,8 @@ class ResearchWorkflow(BaseModel):
     workflow_id: str
     original_query: str
     current_phase: str  # decomposition, research, analysis, synthesis
-    active_tasks: List[AgentTask] = []
-    completed_tasks: List[AgentResult] = []
-    workflow_state: Dict[str, Any] = {}
+    active_tasks: list[AgentTask] = []
+    completed_tasks: list[AgentResult] = []
+    workflow_state: dict[str, Any] = {}
     created_at: str
     updated_at: str

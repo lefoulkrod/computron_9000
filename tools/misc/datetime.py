@@ -2,18 +2,19 @@
 """Tool for retrieving the current system date and time in human-readable 12-hour format."""
 import datetime
 import logging
-from typing import Optional
 
 # Third-party imports
 from pydantic import BaseModel
 
+
 class DateTimeResult(BaseModel):
     """Result model for the datetime tool."""
-    
+
     status: str
-    datetime: Optional[str] = None
-    timezone: Optional[str] = None
-    error_message: Optional[str] = None
+    datetime: str | None = None
+    timezone: str | None = None
+    error_message: str | None = None
+
 
 def datetime_tool() -> DateTimeResult:
     """
@@ -23,9 +24,9 @@ def datetime_tool() -> DateTimeResult:
         DateTimeResult: Result object containing the formatted date and time string, timezone, or error details.
     """
     try:
-        now = datetime.datetime.now(datetime.timezone.utc).astimezone()
-        formatted = now.strftime('%I:%M:%S %p, %B %d, %Y')
-        tzname = now.tzname() or 'Unknown'
+        now = datetime.datetime.now(datetime.UTC).astimezone()
+        formatted = now.strftime("%I:%M:%S %p, %B %d, %Y")
+        tzname = now.tzname() or "Unknown"
         return DateTimeResult(status="success", datetime=formatted, timezone=tzname)
     except Exception as e:
         logging.error(f"Failed to get system datetime: {e}")

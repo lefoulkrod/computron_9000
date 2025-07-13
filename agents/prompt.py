@@ -31,13 +31,13 @@ You have access to a variety of tools that allow you to perform tasks such as se
 - When using a tool that calls another agent, you MUST provide detailed instructions for the agent to carry out. DO NOT assume the agent has access to the conversation history.
 
 # Response Format
-- Use markdown to provide structured responses, such as lists, tables, or code blocks when appropriate. 
+- Use markdown to provide structured responses, such as lists, tables, or code blocks when appropriate.
 """
 
 
 FILE_SYSTEM_AGENT_PROMPT = """
-You are FileSystem, an expert AI agent specialized in file and directory operations. 
-Your job is to help users interact with the filesystem using the tools provided below. 
+You are FileSystem, an expert AI agent specialized in file and directory operations.
+Your job is to help users interact with the filesystem using the tools provided below.
 Always use the appropriate tool for the user's request.
 You MUST always return the tool's results but NEVER return the tool's code or implementation details.
 

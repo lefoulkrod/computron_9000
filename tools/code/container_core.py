@@ -7,18 +7,20 @@ This module provides container management, code upload, and package installation
 import io
 import logging
 import tarfile
-from typing import List
 
 from podman import PodmanClient
 from podman.domain.containers import Container
 
 logger = logging.getLogger(__name__)
 
+
 class CodeExecutionError(Exception):
     """
     Custom exception for code execution errors.
     """
+
     pass
+
 
 def _create_and_start_container(image: str) -> Container:
     """
@@ -41,7 +43,8 @@ def _create_and_start_container(image: str) -> Container:
             return ctr
     except Exception as e:
         logger.error(f"Failed to create/start container: {e}")
-        raise CodeExecutionError(f"Failed to create/start container: {e}")
+        raise CodeExecutionError(f"Failed to create/start container: {e}") from e
+
 
 def _upload_code_to_container(ctr: Container, filename: str, program_text: str) -> None:
     """
@@ -66,7 +69,8 @@ def _upload_code_to_container(ctr: Container, filename: str, program_text: str) 
     if not success:
         raise CodeExecutionError("Failed to upload script")
 
-def _install_packages(ctr: Container, language: str, packages: List[str]) -> None:
+
+def _install_packages(ctr: Container, language: str, packages: list[str]) -> None:
     """
     Install packages in the running container.
 
@@ -85,12 +89,19 @@ def _install_packages(ctr: Container, language: str, packages: List[str]) -> Non
     elif language == "node":
         install_cmd = ["npm", "--prefix", "/root", "install"] + packages
     else:
-        raise CodeExecutionError(f"Unsupported language for package install: {language}")
+        raise CodeExecutionError(
+            f"Unsupported language for package install: {language}"
+        )
     exit_code, output = ctr.exec_run(install_cmd, stdout=True, stderr=True, demux=True)
     logger.debug(f"Package install output: {output} Exit code: {exit_code}")
     if exit_code != 0:
-        stderr = output[1].decode().strip() if output and isinstance(output, tuple) and output[1] else ""
+        stderr = (
+            output[1].decode().strip()
+            if output and isinstance(output, tuple) and output[1]
+            else ""
+        )
         raise CodeExecutionError(f"Package installation failed: {stderr}")
+
 
 def _parse_container_output(exit_code: int, output) -> dict:
     """
@@ -115,6 +126,7 @@ def _parse_container_output(exit_code: int, output) -> dict:
         "stderr": stderr,
         "exit_code": str(exit_code) if exit_code is not None else None,
     }
+
 
 def _run_code_in_container(
     image: str,
@@ -143,7 +155,9 @@ def _run_code_in_container(
     """
     ctr = None
     packages = packages or []
-    logger.debug(f"Running code in container: image={image}, filename={filename}, language={language}, packages={packages}\n--- Code Start ---\n{program_text}\n--- Code End ---")
+    logger.debug(
+        f"Running code in container: image={image}, filename={filename}, language={language}, packages={packages}\n--- Code Start ---\n{program_text}\n--- Code End ---"
+    )
     try:
         ctr = _create_and_start_container(image)
         _install_packages(ctr, language, packages)
@@ -155,7 +169,7 @@ def _run_code_in_container(
         return result
     except Exception as e:
         logger.error(f"Execution in container failed: {e}")
-        raise CodeExecutionError(f"Execution in container failed: {e}")
+        raise CodeExecutionError(f"Execution in container failed: {e}") from e
     finally:
         if ctr is not None:
             try:

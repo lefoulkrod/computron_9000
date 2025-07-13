@@ -1,6 +1,7 @@
-import logging
-from typing import Callable, Awaitable, Any, Dict
 import functools
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import cachetools
 from cachetools.keys import hashkey
@@ -8,7 +9,7 @@ from cachetools.keys import hashkey
 logger = logging.getLogger(__name__)
 
 # Module-level cache registry
-_cache_registry: Dict[str, cachetools.LRUCache] = {}
+_cache_registry: dict[str, cachetools.LRUCache] = {}
 
 
 def async_lru_cache(maxsize: int = 10) -> Callable:
@@ -21,6 +22,7 @@ def async_lru_cache(maxsize: int = 10) -> Callable:
     Returns:
         Callable: Decorated async function.
     """
+
     def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
         cache_key = f"{func.__module__}.{func.__qualname__}"
         if cache_key not in _cache_registry:
@@ -37,5 +39,7 @@ def async_lru_cache(maxsize: int = 10) -> Callable:
             result = await func(*args, **kwargs)
             cache[key] = result
             return result
+
         return wrapper
+
     return decorator

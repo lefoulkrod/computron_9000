@@ -1,16 +1,20 @@
 import logging
-from typing import List
 
 import bs4
-from tools.web.summarize import _summarize_text_full, summarize_text_sections, SectionSummary
 
 from config import load_config
 from tools.web.get_webpage_raw import _get_webpage_raw
-from tools.web.types import GetWebpageError, ReducedWebpage, LinkInfo
+from tools.web.summarize import (
+    SectionSummary,
+    _summarize_text_full,
+    summarize_text_sections,
+)
+from tools.web.types import GetWebpageError, LinkInfo, ReducedWebpage
 from utils.cache import async_lru_cache
 
 logger = logging.getLogger(__name__)
 config = load_config()
+
 
 def _reduce_webpage_context(html: str) -> ReducedWebpage:
     """
@@ -25,7 +29,7 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
     soup = bs4.BeautifulSoup(html, "html.parser")
 
     # Extract all <a> elements in order
-    links: List[LinkInfo] = []
+    links: list[LinkInfo] = []
     for a in soup.find_all("a"):
         if isinstance(a, bs4.element.Tag):
             href = str(a.get("href", "")) if a.has_attr("href") else ""
@@ -33,9 +37,20 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
             links.append(LinkInfo(href=href, text=text))
 
     # Remove all script/style/noscript/head/meta/link/base/iframe/svg/canvas tags
-    for tag in soup([
-        "script", "style", "noscript", "iframe", "svg", "canvas", "head", "meta", "link", "base"
-    ]):
+    for tag in soup(
+        [
+            "script",
+            "style",
+            "noscript",
+            "iframe",
+            "svg",
+            "canvas",
+            "head",
+            "meta",
+            "link",
+            "base",
+        ]
+    ):
         tag.decompose()
     for comment in soup.find_all(string=lambda text: isinstance(text, bs4.Comment)):
         comment.extract()
@@ -44,6 +59,7 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
     page_text = soup.get_text(separator=" ", strip=True)
 
     return ReducedWebpage(page_text=page_text, links=links)
+
 
 @async_lru_cache(maxsize=10)
 async def get_webpage(url: str) -> ReducedWebpage:
@@ -68,8 +84,9 @@ async def get_webpage(url: str) -> ReducedWebpage:
             reduced = ReducedWebpage(page_text="", links=[])
     except Exception as e:
         logger.error(f"Error reducing webpage content for {url}: {e}")
-        raise GetWebpageError(f"Error reducing webpage content: {e}")
+        raise GetWebpageError(f"Error reducing webpage content: {e}") from e
     return reduced
+
 
 async def get_webpage_summary(url: str) -> str:
     """
@@ -91,7 +108,8 @@ async def get_webpage_summary(url: str) -> str:
         return await _summarize_text_full(reduced.page_text)
     except Exception as e:
         logger.error(f"Error summarizing webpage for {url}: {e}")
-        raise GetWebpageError(f"Error summarizing webpage: {e}")
+        raise GetWebpageError(f"Error summarizing webpage: {e}") from e
+
 
 async def get_webpage_substring(url: str, start: int, end: int) -> str:
     """
@@ -114,14 +132,19 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
         reduced = await get_webpage(url)
         page_text = reduced.page_text
         if not (0 <= start <= end <= len(page_text)):
-            logger.error(f"Invalid substring indices: start={start}, end={end}, text length={len(page_text)}")
-            raise ValueError(f"Invalid substring indices: start={start}, end={end}, text length={len(page_text)}")
+            logger.error(
+                f"Invalid substring indices: start={start}, end={end}, text length={len(page_text)}"
+            )
+            raise ValueError(
+                f"Invalid substring indices: start={start}, end={end}, text length={len(page_text)}"
+            )
         return page_text[start:end]
     except Exception as e:
         logger.error(f"Error getting webpage substring for {url}: {e}")
-        raise GetWebpageError(f"Error getting webpage substring: {e}")
+        raise GetWebpageError(f"Error getting webpage substring: {e}") from e
 
-async def get_webpage_summary_sections(url: str) -> List[SectionSummary]:
+
+async def get_webpage_summary_sections(url: str) -> list[SectionSummary]:
     """
     Downloads the web page at the given URL and summarizes its content in sections.
 
@@ -141,4 +164,4 @@ async def get_webpage_summary_sections(url: str) -> List[SectionSummary]:
         return await summarize_text_sections(reduced.page_text)
     except Exception as e:
         logger.error(f"Error summarizing webpage in sections for {url}: {e}")
-        raise GetWebpageError(f"Error summarizing webpage in sections: {e}")
+        raise GetWebpageError(f"Error summarizing webpage in sections: {e}") from e

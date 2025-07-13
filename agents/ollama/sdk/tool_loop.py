@@ -1,8 +1,8 @@
+import inspect
 import json
 import logging
-import inspect
-from collections.abc import AsyncGenerator, Callable
-from typing import Mapping, Any, Optional, Sequence
+from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from typing import Any
 
 from ollama import AsyncClient, ChatResponse
 
@@ -11,6 +11,7 @@ from agents.ollama.sdk.extract_thinking import split_think_content
 logger = logging.getLogger(__name__)
 
 # --- Utility Functions ---
+
 
 def _to_serializable(obj: Any) -> Any:
     """
@@ -22,20 +23,21 @@ def _to_serializable(obj: Any) -> Any:
     Returns:
         Any: JSON-serializable representation.
     """
-    if hasattr(obj, 'model_dump'):
+    if hasattr(obj, "model_dump"):
         return _to_serializable(obj.model_dump())
-    if hasattr(obj, 'dict'):
+    if hasattr(obj, "dict"):
         return _to_serializable(obj.dict())
     if isinstance(obj, dict):
         return {k: _to_serializable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple, set)):
-        return [ _to_serializable(i) for i in obj ]
+    if isinstance(obj, list | tuple | set):
+        return [_to_serializable(i) for i in obj]
     return obj
+
 
 async def run_tool_call_loop(
     messages: list[dict[str, str]],
-    tools: Optional[Sequence[Callable[..., Any]]] = None,
-    model: str = '',
+    tools: Sequence[Callable[..., Any]] | None = None,
+    model: str = "",
     model_options: Mapping[str, Any] | None = None,
     before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
@@ -77,9 +79,9 @@ async def run_tool_call_loop(
             # Remove thinking content from the response before storing in chat history
             content_without_think = split_think_content(content)[0] if content else None
             assistant_message = {
-                'role': 'assistant',
-                'content': content_without_think,
-                'tool_calls': tool_calls
+                "role": "assistant",
+                "content": content_without_think,
+                "tool_calls": tool_calls,
             }
             messages.append(assistant_message)
             if content:
@@ -87,13 +89,20 @@ async def run_tool_call_loop(
             if not tool_calls:
                 break
             for tool_call in tool_calls:
-                function = getattr(tool_call, 'function', None)
+                function = getattr(tool_call, "function", None)
                 if not function:
                     logger.warning("Tool call missing function: %s", tool_call)
                     continue
-                tool_name = getattr(function, 'name', None)
-                arguments = getattr(function, 'arguments', {})
-                tool_func = next((tool for tool in tools if getattr(tool, '__name__', None) == tool_name), None)
+                tool_name = getattr(function, "name", None)
+                arguments = getattr(function, "arguments", {})
+                tool_func = next(
+                    (
+                        tool
+                        for tool in tools
+                        if getattr(tool, "__name__", None) == tool_name
+                    ),
+                    None,
+                )
                 if not tool_func:
                     logger.error("Tool '%s' not found in tools.", tool_name)
                     tool_result = {"error": "Tool not found"}
@@ -110,9 +119,9 @@ async def run_tool_call_loop(
                         logger.exception(f"Error running tool '{tool_name}': {exc}")
                         tool_result = {"error": str(exc)}
                 tool_message = {
-                    'role': 'tool',
-                    'tool_name': tool_name,
-                    'content': json.dumps(tool_result)
+                    "role": "tool",
+                    "tool_name": tool_name,
+                    "content": json.dumps(tool_result),
                 }
                 messages.append(tool_message)
             # Do not yield tool results, just continue looping
