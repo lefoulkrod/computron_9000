@@ -104,7 +104,7 @@ force-exclude = '''
 '''
 
 [tool.mypy]
-python_version = "3.12"                    # Target Python version for type checking
+python_version = "3.12"                         # Target Python version for type checking
 warn_return_any = true                     # Warn when a non-Any return is inferred as Any
 warn_unused_configs = true                # Alert on unused config flags or overrides (catch typos)
 disallow_untyped_defs = true              # Prevent any function defs without type annotations
