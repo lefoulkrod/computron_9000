@@ -13,7 +13,11 @@ import logging
 
 from dotenv import load_dotenv
 
-from tools.reddit import get_reddit_comments_tree_shallow, search_reddit, RedditSubmission
+from tools.reddit import (
+    RedditSubmission,
+    get_reddit_comments_tree_shallow,
+    search_reddit,
+)
 
 # Load environment variables from .env file
 load_dotenv()

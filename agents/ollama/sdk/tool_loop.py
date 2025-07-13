@@ -35,11 +35,11 @@ def _to_serializable(obj: Any) -> Any:
 
 
 async def run_tool_call_loop(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     tools: Sequence[Callable[..., Any]] | None = None,
     model: str = "",
     model_options: Mapping[str, Any] | None = None,
-    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
+    before_model_callbacks: list[Callable[[list[dict[str, Any]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
@@ -47,11 +47,11 @@ async def run_tool_call_loop(
     This function mutates the messages list in place by appending assistant and tool messages to maintain chat history.
 
     Args:
-        messages (list[dict[str, str]]): The chat history (including system message). This list is mutated in place.
+        messages (list[dict[str, Any]]): The chat history (including system message). This list is mutated in place.
         tools (Optional[Sequence[Callable[..., Any]]]): Sequence of tool functions to use for tool calls.
         model (str): The model name to use for the LLM.
         model_options (Mapping[str, Any] | None): Options to pass to the LLM.
-        before_model_callbacks (list[Callable[[list[dict[str, str]]], None]] | None): List of callbacks before model call.
+        before_model_callbacks (list[Callable[[list[dict[str, Any]]], None]] | None): List of callbacks before model call.
         after_model_callbacks (list[Callable[[ChatResponse], None]] | None): List of callbacks after model call.
 
     Yields:
@@ -61,8 +61,8 @@ async def run_tool_call_loop(
     tools = tools or []
     while True:
         if before_model_callbacks:
-            for cb in before_model_callbacks:
-                cb(list(messages))
+            for before_cb in before_model_callbacks:
+                before_cb(list(messages))
         try:
             response = await client.chat(
                 model=model,
@@ -72,8 +72,8 @@ async def run_tool_call_loop(
                 stream=False,
             )
             if after_model_callbacks:
-                for cb in after_model_callbacks:
-                    cb(response)
+                for after_cb in after_model_callbacks:
+                    after_cb(response)
             content = response.message.content or None
             tool_calls = response.message.tool_calls or None
             # Remove thinking content from the response before storing in chat history

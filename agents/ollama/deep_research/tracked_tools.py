@@ -89,7 +89,8 @@ class TrackedWebTools:
             ReducedWebpage: The webpage content
         """
         self.source_tracker.register_access(url=url, tool_name="get_webpage")
-        return await get_webpage(url=url)
+        webpage_result: ReducedWebpage = await get_webpage(url=url)
+        return webpage_result
 
     async def get_webpage_summary(self, url: str) -> str:
         """

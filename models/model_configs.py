@@ -7,7 +7,6 @@ import logging
 from config import ModelConfig, load_config
 
 logger = logging.getLogger(__name__)
-config = load_config()
 
 
 class ModelNotFoundError(Exception):
@@ -25,6 +24,7 @@ def get_default_model() -> ModelConfig:
     Returns:
         ModelConfig: The default model configuration.
     """
+    config = load_config()
     default_model = config.settings.default_model
     return get_model_by_name(default_model)
 

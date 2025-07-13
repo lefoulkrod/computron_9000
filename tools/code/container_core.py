@@ -7,7 +7,7 @@ This module provides container management, code upload, and package installation
 import io
 import logging
 import tarfile
-from typing import Any, Union
+from typing import Any
 
 from podman import PodmanClient
 from podman.domain.containers import Container

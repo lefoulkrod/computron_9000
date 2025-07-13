@@ -359,7 +359,9 @@ def _extract_publication_date(soup: bs4.BeautifulSoup, html_content: str) -> str
     for pattern in DATE_PATTERNS:
         matches = re.findall(pattern, html_content)
         if matches:
-            return matches[0]
+            # Since each pattern has exactly one capture group, matches[0] is a string
+            match_result: str = matches[0]
+            return match_result
 
     return None
 
@@ -498,11 +500,17 @@ def _calculate_credibility_score(factors: CredibilityFactors) -> float:
 
     score = 0.0
     for factor, weight in weights.items():
-        if factor in factors:
-            value = factors[factor]
-            if isinstance(value, bool):
-                value = 1.0 if value else 0.0
-            score += value * weight
+        # Use getattr-style access to handle TypedDict key access safely
+        if hasattr(factors, factor) or factor in factors:
+            value = factors.get(factor)
+            if value is not None:
+                if isinstance(value, bool):
+                    numeric_value = 1.0 if value else 0.0
+                elif isinstance(value, int | float):
+                    numeric_value = float(value)
+                else:
+                    continue  # Skip non-numeric values
+                score += numeric_value * weight
 
     return min(1.0, max(0.0, score))
 

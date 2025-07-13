@@ -79,7 +79,9 @@ async def analyze_sentiment_with_llm(
                 for key in required_keys:
                     if key not in result:
                         result[key] = "Not provided"
-                return result
+                # Ensure we return a properly typed dict
+                typed_result: dict[str, Any] = result
+                return typed_result
             except json.JSONDecodeError:
                 logger.warning("Could not parse JSON from LLM response")
 
