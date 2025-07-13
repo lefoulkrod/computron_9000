@@ -9,6 +9,8 @@ import json
 import logging
 from typing import Any
 
+# Import specialized agents for task execution
+from ..query_decomposition.agent import query_decomposition_tool
 from ..shared import (
     AgentResult,
     AgentSourceTracker,
@@ -16,6 +18,7 @@ from ..shared import (
     SharedSourceRegistry,
     WorkflowStorage,
 )
+from ..web_research.agent import web_research_tool
 from .workflow_coordinator import ConcreteResearchWorkflowCoordinator
 
 logger = logging.getLogger(__name__)
@@ -172,6 +175,65 @@ class CoordinationTools:
                 "workflow_id": workflow_id,
             }
             logger.error(f"Failed to complete workflow: {e}")
+            return json.dumps(error_result, indent=2)
+
+    async def execute_agent_task(
+        self, task_id: str, agent_type: str, task_input: str
+    ) -> str:
+        """
+        Execute a task using the appropriate specialized agent.
+
+        Args:
+            task_id: The ID of the task to execute
+            agent_type: The type of agent to use (web_research, social_research, etc.)
+            task_input: JSON string with task input data
+
+        Returns:
+            JSON string with task execution results
+        """
+        try:
+            # Parse task input
+            input_data = (
+                json.loads(task_input) if isinstance(task_input, str) else task_input
+            )
+            query = input_data.get("query", "")
+
+            # Execute task based on agent type
+            result: Any
+            if agent_type == "query_decomposition":
+                result = await query_decomposition_tool(query)
+            elif agent_type == "web_research":
+                result = await web_research_tool(query)
+            else:
+                # For agents not yet implemented, return a placeholder
+                result = {
+                    "success": False,
+                    "error": f"Agent type '{agent_type}' not yet implemented",
+                    "agent_type": agent_type,
+                    "task_id": task_id,
+                }
+
+            # Format the response
+            execution_result = {
+                "success": True,
+                "task_id": task_id,
+                "agent_type": agent_type,
+                "result": result,
+                "message": f"Successfully executed {agent_type} task",
+            }
+
+            logger.info(f"Executed task {task_id} using {agent_type} agent")
+            return json.dumps(execution_result, indent=2)
+
+        except Exception as e:
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "task_id": task_id,
+                "agent_type": agent_type,
+                "message": f"Failed to execute {agent_type} task",
+            }
+            logger.error(f"Failed to execute task {task_id}: {e}")
             return json.dumps(error_result, indent=2)
 
     def get_coordination_guidelines(self) -> str:

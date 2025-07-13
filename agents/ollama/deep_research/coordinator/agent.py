@@ -40,6 +40,7 @@ research_coordinator_agent: Agent = Agent(
         coordination_tools.get_workflow_status,
         coordination_tools.process_agent_result,
         coordination_tools.complete_workflow,
+        coordination_tools.execute_agent_task,
         coordination_tools.get_coordination_guidelines,
     ],
 )
