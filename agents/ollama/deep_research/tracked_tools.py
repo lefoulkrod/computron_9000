@@ -5,13 +5,11 @@ This module wraps standard web tools to automatically track source usage
 for citation and credibility assessment.
 """
 
+import json
 import logging
 from collections.abc import Callable
 from typing import Any
 
-from agents.ollama.deep_research.sentiment_analyzer import (
-    analyze_reddit_comments_sentiment,
-)
 from agents.ollama.deep_research.source_analysis import (
     CredibilityAssessment,
     SourceCategorization,
@@ -39,8 +37,25 @@ from tools.web import (
 )
 from tools.web.summarize import SectionSummary
 from tools.web.types import ReducedWebpage
+from utils.generate_completion import generate_completion
 
 logger = logging.getLogger(__name__)
+
+# System prompt for sentiment analysis (migrated from sentiment_analyzer.py)
+SENTIMENT_SYSTEM_PROMPT = """
+You are an advanced sentiment analysis system. Your task is to analyze the sentiment,
+emotional tone, and consensus of text content (such as comments from social media).
+
+Provide your analysis with these components:
+1. Overall sentiment (Very Negative, Negative, Slightly Negative, Neutral, Slightly Positive, Positive, Very Positive)
+2. Emotional tones present (e.g., anger, happiness, sadness, etc.)
+3. Level of consensus if multiple comments are provided (Strong agreement, Moderate agreement, Mixed opinions, Moderate disagreement, Strong disagreement)
+4. Key topics or themes discussed
+5. Confidence level in your assessment (High, Medium, Low)
+
+Format your response as a JSON object with these keys:
+sentiment, emotional_tones, consensus_level, key_topics, confidence_level, and brief_summary.
+"""
 
 
 class TrackedWebTools:
@@ -340,8 +355,106 @@ class TrackedRedditTools:
                 url=url, tool_name="analyze_comment_sentiment"
             )
 
-        # Use the LLM-powered sentiment analyzer
-        return await analyze_reddit_comments_sentiment(comments)
+        # Use the LLM-powered sentiment analyzer (migrated from sentiment_analyzer.py)
+        if not comments:
+            return {
+                "sentiment": "Neutral",
+                "emotional_tones": [],
+                "consensus_level": "No comments",
+                "key_topics": [],
+                "confidence_level": "None",
+                "brief_summary": "No comments to analyze",
+                "total_comments_analyzed": 0,
+                "top_comment_score": 0,
+                "average_comment_score": 0,
+            }
+
+        # Prepare text for analysis
+        comments_text = "\n\n".join(
+            [
+                f"Comment (Score: {comment.score}): {comment.body}"
+                for comment in comments[
+                    :15
+                ]  # Limit to top 15 comments for context window
+            ]
+        )
+
+        # Add context about the source
+        context = f"Reddit thread with {len(comments)} comments, analysis of top {min(15, len(comments))} comments"
+
+        # Prepare the prompt
+        prompt = f"{SENTIMENT_SYSTEM_PROMPT}\n\nAnalyze the sentiment of the following text (Context: {context}):\n\n{comments_text}\n\nProvide a detailed sentiment analysis."
+
+        try:
+            # Use LLM for advanced sentiment analysis
+            response = await generate_completion(prompt=prompt)
+
+            try:
+                result: dict[str, Any] = json.loads(response)
+                # Ensure required fields exist
+                required_fields = [
+                    "sentiment",
+                    "emotional_tones",
+                    "consensus_level",
+                    "key_topics",
+                    "confidence_level",
+                    "brief_summary",
+                ]
+                for field in required_fields:
+                    if field not in result:
+                        result[field] = "Unknown"
+
+                # Add Reddit-specific metrics
+                result["total_comments_analyzed"] = len(comments)
+                result["top_comment_score"] = (
+                    max(comment.score for comment in comments) if comments else 0
+                )
+                result["average_comment_score"] = (
+                    sum(comment.score for comment in comments) / len(comments)
+                    if comments
+                    else 0
+                )
+
+                return result
+            except json.JSONDecodeError:
+                # Fallback if JSON parsing fails
+                return {
+                    "sentiment": "Neutral",
+                    "emotional_tones": ["mixed"],
+                    "consensus_level": "Unknown",
+                    "key_topics": ["analysis_error"],
+                    "confidence_level": "Low",
+                    "brief_summary": "Could not parse LLM response for sentiment analysis",
+                    "total_comments_analyzed": len(comments),
+                    "top_comment_score": (
+                        max(comment.score for comment in comments) if comments else 0
+                    ),
+                    "average_comment_score": (
+                        sum(comment.score for comment in comments) / len(comments)
+                        if comments
+                        else 0
+                    ),
+                }
+
+        except Exception as e:
+            logger.error(f"Error in LLM sentiment analysis: {e}")
+            return {
+                "sentiment": "Error",
+                "emotional_tones": [],
+                "consensus_level": "Error",
+                "key_topics": [],
+                "confidence_level": "None",
+                "brief_summary": f"Error analyzing sentiment: {str(e)}",
+                "total_comments_analyzed": len(comments),
+                "top_comment_score": (
+                    max(comment.score for comment in comments) if comments else 0
+                ),
+                "average_comment_score": (
+                    sum(comment.score for comment in comments) / len(comments)
+                    if comments
+                    else 0
+                ),
+            }
 
     async def analyze_comment_sentiment_basic(
         self, comments: list[RedditComment]

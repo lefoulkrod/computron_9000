@@ -9,38 +9,10 @@ import logging
 import time
 from datetime import datetime
 
-import pydantic
-
+from agents.ollama.deep_research.shared.source_tracking import SourceAccess
 from agents.ollama.deep_research.types import ResearchCitation, ResearchSource
 
 logger = logging.getLogger(__name__)
-
-
-class SourceAccess(pydantic.BaseModel):
-    """
-    Represents an access to a source during research.
-
-    Attributes:
-        url (str): The URL of the source.
-        tool_name (str): The name of the tool used to access the source.
-        timestamp (float): Unix timestamp of when the source was accessed.
-        query (Optional[str]): The query or parameters used to access the source, if applicable.
-    """
-
-    url: str
-    tool_name: str
-    timestamp: float
-    query: str | None = None
-
-    @property
-    def access_datetime(self) -> datetime:
-        """Convert Unix timestamp to datetime object."""
-        return datetime.fromtimestamp(self.timestamp)
-
-    @property
-    def formatted_access_time(self) -> str:
-        """Return formatted access time string."""
-        return self.access_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
 
 class SourceTracker:
@@ -71,7 +43,11 @@ class SourceTracker:
         """
         # Create source access record
         access = SourceAccess(
-            url=url, tool_name=tool_name, timestamp=time.time(), query=query
+            url=url,
+            tool_name=tool_name,
+            timestamp=time.time(),
+            agent_id="legacy_deep_research",
+            query=query,
         )
 
         # Add to access log
