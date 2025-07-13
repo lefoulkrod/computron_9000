@@ -14,5 +14,5 @@
 - Use minimal, well-maintained libraries; avoid hardcoded secrets
 - Use Pydantic for data validation; ensure JSON-serializable API responses
 - Private fields/methods get a single leading underscore
-- Always include `__init__.py` for public re-exports, avoid exporting private members
+- Always include `__init__.py` for public re-exports, avoid exporting private members, do not export internal functions/classes
 - Ensure all code passes `black --check`, `ruff check .` (with project’s select/ignore/per-file rules), and `mypy --strict` before completing; use `just check` to run all checks
