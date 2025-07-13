@@ -2,6 +2,8 @@
 Deep Research Agent implementation.
 
 This module contains the Deep Research Agent class and associated tool function.
+This is the legacy single-agent interface that maintains backward compatibility
+while internally using the new multi-agent infrastructure.
 """
 
 import logging
@@ -12,58 +14,59 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
-from config import load_config
-from models import get_model_by_name
 
+from .backward_compatibility import (
+    LegacyAgentConfig,
+    create_legacy_source_tracker,
+    get_legacy_tracked_tools,
+)
+from .inter_agent_communication import (
+    check_multi_agent_workflow_status,
+    delegate_to_multi_agent_research,
+    get_multi_agent_capabilities,
+)
 from .prompt import DEEP_RESEARCH_AGENT_PROMPT
-from .source_tracker import SourceTracker
 from .tools import (
     get_citation_practices,
     get_tool_documentation,
     search_tool_documentation,
 )
-from .tracked_tools import get_tracked_reddit_tools, get_tracked_web_tools
 
 # Load configuration and set up logger
-config = load_config()
 logger = logging.getLogger(__name__)
 
-# Initialize source tracker
-source_tracker = SourceTracker()
+# Use legacy configuration for backward compatibility
+legacy_config = LegacyAgentConfig()
 
-model = get_model_by_name("deep_research")
+# Initialize legacy source tracker (maintains backward compatibility)
+source_tracker = create_legacy_source_tracker()
 
-# Get tracked tools with source tracking capability
-tracked_web_tools = get_tracked_web_tools(source_tracker)
-tracked_reddit_tools = get_tracked_reddit_tools(source_tracker)
+# Get tracked tools with legacy interface
+tracked_tools = get_legacy_tracked_tools(source_tracker)
 
-# Define the agent with enhanced capabilities
+# Extract specific tool categories for readability
+tracked_web_tools = {k: v for k, v in tracked_tools.items() if k in [
+    "search_google", "get_webpage", "get_webpage_summary", 
+    "get_webpage_summary_sections", "get_webpage_substring", "html_find_elements",
+    "assess_webpage_credibility", "extract_webpage_metadata", "categorize_source"
+]}
+
+tracked_reddit_tools = {k: v for k, v in tracked_tools.items() if k in [
+    "search_reddit", "get_reddit_comments_tree_shallow", 
+    "analyze_reddit_credibility", "analyze_comment_sentiment"
+]}
+
+# Define the agent with enhanced capabilities (legacy interface)
 deep_research_agent: Agent = Agent(
     name="DEEP_RESEARCH_AGENT",
     description="Specialized agent for conducting thorough research across multiple sources to provide comprehensive, well-sourced answers to complex queries",
     instruction=DEEP_RESEARCH_AGENT_PROMPT,
-    model=model.model,
-    options=model.options,  # Using the options from the dedicated model configuration
+    model=legacy_config.model,
+    options=legacy_config.options,
     tools=[
-        # Web research tools with source tracking
-        tracked_web_tools["search_google"],
-        tracked_web_tools["get_webpage"],
-        tracked_web_tools["get_webpage_summary"],
-        tracked_web_tools["get_webpage_summary_sections"],
-        tracked_web_tools["get_webpage_substring"],
-        tracked_web_tools["html_find_elements"],
-        tracked_web_tools["assess_webpage_credibility"],
-        tracked_web_tools["extract_webpage_metadata"],
-        tracked_web_tools["categorize_source"],
-        # Reddit research tools with source tracking
-        tracked_reddit_tools["search_reddit"],
-        tracked_reddit_tools["get_reddit_comments_tree_shallow"],
-        tracked_reddit_tools["analyze_reddit_credibility"],
-        tracked_reddit_tools["analyze_comment_sentiment"],
-        # Tool documentation access
-        get_tool_documentation,
-        search_tool_documentation,
-        get_citation_practices,
+        delegate_to_multi_agent_research,
+        check_multi_agent_workflow_status,
+        get_multi_agent_capabilities,
     ],
 )
 
