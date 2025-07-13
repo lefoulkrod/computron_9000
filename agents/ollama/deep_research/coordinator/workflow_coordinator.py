@@ -39,6 +39,8 @@ class ConcreteResearchWorkflowCoordinator(ResearchWorkflowCoordinator):
             workflow_id=workflow_id,
             original_query=query,
             current_phase="decomposition",
+            source_tracking_enabled=True,
+            source_registry_id=workflow_id,  # Use workflow_id as registry identifier
             created_at=timestamp,
             updated_at=timestamp,
         )

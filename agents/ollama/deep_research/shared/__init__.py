@@ -19,7 +19,14 @@ from .source_tracking import (
     SharedSourceRegistry,
     SourceAccess,
 )
-from .storage import WorkflowStorage
+from .source_tracker_utils import (
+    clear_workflow_sources,
+    create_agent_source_tracker,
+    export_workflow_sources,
+    get_workflow_source_summary,
+    import_workflow_sources,
+)
+from .storage import WorkflowStorage, get_storage
 from .tool_interface import (
     AgentTool,
     AnalysisTool,
@@ -64,4 +71,10 @@ __all__ = [
     "StandardErrorHandling",
     "get_tool_registry",
     "register_agent_tool",
+    "clear_workflow_sources",
+    "create_agent_source_tracker",
+    "export_workflow_sources",
+    "get_workflow_source_summary",
+    "import_workflow_sources",
+    "get_storage",
 ]
