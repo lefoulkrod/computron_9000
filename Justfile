@@ -29,9 +29,7 @@ setup:
     
     # Install dependencies
     echo "📚 Installing dependencies..."
-    uv pip install -e .
-    uv pip install -e .[test]
-    uv pip install -e .[dev]
+    uv sync --all-extras
     
     # Check if Ollama is running
     echo "🧠 Checking Ollama status..."
@@ -60,10 +58,6 @@ run:
 dev:
     uv run python main.py --dev
 
-# Start the server with hot reload (if implemented)
-serve:
-    uv run python main.py
-
 # 📦 Dependency management
 # Add a new dependency to the project
 add package:
@@ -83,15 +77,11 @@ outdated:
 
 # Sync dependencies (useful after pulling changes)
 sync:
-    uv pip sync
+    uv sync --all-extras
 
 # Show dependency tree
 tree:
     uv tree
-
-# Check for security vulnerabilities
-security-check:
-    uv pip audit
 
 # 🧪 Testing commands
 # Run all tests with coverage
@@ -169,18 +159,55 @@ clean: clean-cache clean-venv
 # 🔄 Maintenance
 # Upgrade all packages to latest compatible versions
 upgrade:
-    uv pip install --upgrade -e .[test,dev]
+    uv sync --upgrade
 
 # Security audit of dependencies
 audit:
-    uv pip audit
+    uv tool run safety check
 
 # Show project info
 info:
     @echo "📊 COMPUTRON_9000 Project Info"
     @echo "Python version: $(cat .python-version)"
     @echo "Dependencies:"
-    @uv pip list
+    @uv tree --depth=1
     @echo ""
     @echo "📁 Project structure:"
     @tree -I '__pycache__|*.pyc|.venv' -L 2
+
+# 🐍 Python version management
+# Show current Python version and path
+python-info:
+    @echo "📍 Current Python Info:"
+    @echo "Required version: $(cat .python-version)"
+    @echo "Active Python: $(uv run python --version)"
+    @echo "Python path: $(uv python find)"
+    @echo ""
+    @echo "📋 Available Python versions:"
+    @uv python list
+
+# Install a specific Python version
+python-install version:
+    uv python install {{version}}
+
+# List all available Python versions (including downloadable)
+python-list-all:
+    uv python list --all-versions
+
+# Switch to a different Python version for this project
+python-switch version:
+    echo "{{version}}" > .python-version
+    uv sync
+
+# Validate Python version consistency across config files
+python-validate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PYTHON_VERSION=$(cat .python-version)
+    MAJOR_MINOR=$(echo $PYTHON_VERSION | cut -d. -f1,2)
+    echo "🔍 Validating Python version consistency..."
+    echo "📄 .python-version: $PYTHON_VERSION"
+    echo "🐍 Active Python: $(uv run python --version | awk '{print $2}')"
+    echo "⚙️  mypy target: $(grep 'python_version' pyproject.toml | cut -d'"' -f2)"
+    echo "📦 requires-python: $(grep 'requires-python' pyproject.toml | cut -d'"' -f2)"
+
