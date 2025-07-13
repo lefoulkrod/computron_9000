@@ -28,7 +28,6 @@ logs/
 *.log
 
 # Editor-specific files
-.vscode/
 .idea/
 
 # OS generated files
