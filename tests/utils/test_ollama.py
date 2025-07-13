@@ -4,12 +4,12 @@ import pytest
 
 
 class DummyAsyncClient:
-    def __init__(self):
-        self._response = None
+    def __init__(self) -> None:
+        self._response: str | None = None
 
     async def generate(self, model: str, prompt: str, think: bool = False) -> Any:
         class Response:
-            def __init__(self, response):
+            def __init__(self, response: str) -> None:
                 self.response = response
 
         return Response(self._response or f"Summary for: {prompt[:20]}...")

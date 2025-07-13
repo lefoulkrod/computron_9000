@@ -1,53 +1,18 @@
-````instructions
 # Copilot Custom Instructions
 
-- Format Python imports per PEP 8: standard first, then third-party, then local (blank line between groups)
-- Use Google-style docstrings with Args/Returns/Raises sections
-- Add type hints to all function signatures
-- Prefer async/await for I/O-bound operations
-- Use f-strings for string formatting
-- Maintain existing directory structure
-- Place business logic in appropriate packages (e.g., agents/adk/)
-- Keep functions/classes small and focused
-- Handle exceptions with context-aware logging
-- Use custom exceptions when appropriate
-- Write tests for new features/bug fixes
-- Use descriptive test names and docstrings
-- Document all public APIs
-- Update README/doc files with new features
-- Add dependencies to pyproject.toml
-- Use minimal well-maintained libraries
-- Validate API inputs
-- Avoid hardcoded secrets
-- Use Pydantic for data validation
-- Ensure JSON serializable API responses
-- Use single leading underscore for private fields/methods
-- Use module-level logger (logger = logging.getLogger(__name__))
-- Always use __init__.py for public re-exports to provide a clean package API.
-- Never re-export private functions, classes, or variables (those starting with a single underscore) in public re-exports.
-- Place tests in tests/ directory matching source structure
-
-Example import order:
-```python
-import os
-import sys
-
-import aiohttp
-import pydantic
-
-from myproject.module import MyClass
-```
-
-Example Google style docstring:
-```python
-def foo(bar: int) -> str:
-    """
-    Brief description of the function.
-
-    Args:
-        bar (int): Description of the argument.
-
-    Returns:
-        str: Description of the return value.
-    """
-````
+- Format imports per PEP 8: standard → third-party → local, with blank line separators
+- Use Google‑style docstrings with Args/Returns/Raises
+- Add type hints to all function signatures; enforce mypy `--strict` (full annotations, no untyped defs/calls, explicit Optional, generics, missing-imports, re-exports)
+- Prefer async/await for I/O operations
+- Use f‑strings for formatting
+- Keep functions/classes small, focused
+- Handle exceptions with context‑aware logging; use module-level logger (`logger = logging.getLogger(__name__)`)
+- Use custom exceptions where appropriate
+- Write tests for new features/bugs; descriptive names, Google-style docstrings; place in `tests/` mirroring source structure
+- Document public APIs and update README/docs
+- Include new deps in pyproject.toml
+- Use minimal, well-maintained libraries; avoid hardcoded secrets
+- Use Pydantic for data validation; ensure JSON-serializable API responses
+- Private fields/methods get a single leading underscore
+- Always include `__init__.py` for public re-exports, avoid exporting private members
+- Ensure all code passes `black --check`, `ruff check .` (with project’s select/ignore/per-file rules), and `mypy --strict` before completing; use `just check` to run all checks

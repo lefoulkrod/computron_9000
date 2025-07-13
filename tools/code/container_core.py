@@ -104,7 +104,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
         raise CodeExecutionError(f"Package installation failed: {stderr}")
 
 
-def _parse_container_output(exit_code: int, output: Any) -> dict:
+def _parse_container_output(exit_code: int, output: Any) -> dict[str, str | None]:
     """
     Parse the output from a container exec_run call.
 
@@ -113,7 +113,7 @@ def _parse_container_output(exit_code: int, output: Any) -> dict:
         output: The output from exec_run (tuple or bytes).
 
     Returns:
-        dict: Dictionary with 'stdout', 'stderr', and 'exit_code'.
+        dict[str, str | None]: Dictionary with 'stdout', 'stderr', and 'exit_code'.
     """
     stdout = None
     stderr = None
@@ -136,7 +136,7 @@ def _run_code_in_container(
     program_text: str,
     language: str,
     packages: list[str] | None = None,
-) -> dict:
+) -> dict[str, str | None]:
     """
     Run code in a container, handling package install, upload, execution, and cleanup.
 
@@ -149,7 +149,7 @@ def _run_code_in_container(
         packages (list[str] | None): Packages to install.
 
     Returns:
-        dict: Dictionary with 'stdout', 'stderr', and 'exit_code'.
+        dict[str, str | None]: Dictionary with 'stdout', 'stderr', and 'exit_code'.
 
     Raises:
         CodeExecutionError: On any failure.

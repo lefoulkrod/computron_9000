@@ -9,10 +9,12 @@ from cachetools.keys import hashkey
 logger = logging.getLogger(__name__)
 
 # Module-level cache registry
-_cache_registry: dict[str, cachetools.LRUCache] = {}
+_cache_registry: dict[str, cachetools.LRUCache[Any, Any]] = {}
 
 
-def async_lru_cache(maxsize: int = 10) -> Callable:
+def async_lru_cache(
+    maxsize: int = 10,
+) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """
     Decorator to cache async function results using cachetools. If no cache is provided, creates one per function.
 
