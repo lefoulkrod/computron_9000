@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 # Import specialized agents for task execution
+from ..analysis.agent import analysis_tool
 from ..query_decomposition.agent import query_decomposition_tool
 from ..shared import (
     AgentResult,
@@ -207,6 +208,8 @@ class CoordinationTools:
                 result = await web_research_tool(query)
             elif agent_type == "social_research":
                 result = await social_research_tool(query)
+            elif agent_type == "analysis":
+                result = await analysis_tool(query)
             else:
                 # For agents not yet implemented, return a placeholder
                 result = {

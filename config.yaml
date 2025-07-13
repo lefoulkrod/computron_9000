@@ -36,6 +36,13 @@ models:
       temperature: 0.3
       top_p: 0.95
       top_k: 40
+  - name: analysis
+    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
+    options:
+      num_ctx: 119808
+      temperature: 0.2
+      top_p: 0.95
+      top_k: 40
 settings:
   home_dir: "/home/larry/.computron_9000"
   default_model: "qwen3"
