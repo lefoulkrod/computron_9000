@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from config import ModelConfig
+from config import ModelConfig, Settings
 from models import ModelNotFoundError, get_default_model, get_model_by_name
 
 
@@ -17,7 +17,8 @@ def mock_config():
         models=[
             ModelConfig(name="gemma3", model="gemma:3b", options={}),
             ModelConfig(name="llama", model="llama:7b", options={}),
-        ]
+        ],
+        settings=Settings(default_model="gemma3", home_dir="not/used"),
     )
 
 
