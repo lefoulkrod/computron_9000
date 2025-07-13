@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        
+        {
+            "type": "debugpy",
+            "request": "launch",
+            "name": "Launch main.py (Aiohttp Server)",
+            "program": "${workspaceFolder}/main.py",
+            "env": {
+                "AGENT_SDK": "ollama"
+            }
+        }
+    ]
+}
