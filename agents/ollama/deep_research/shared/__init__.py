@@ -4,12 +4,6 @@ This module contains internal infrastructure components used across the
 deep_research package. These are not intended for external use.
 """
 
-from .agent_config import (
-    AgentConfig,
-    MultiAgentConfigManager,
-    get_agent_config,
-    register_custom_agent_config,
-)
 from .agent_task_tools import (
     get_analysis_task_data,
     get_query_decomposition_task_data,
@@ -85,11 +79,7 @@ __all__ = [
     "MultiAgentError",
     "AgentTaskError",
     "WorkflowCoordinationError",
-    # Configuration
-    "AgentConfig",
-    "MultiAgentConfigManager",
-    "get_agent_config",
-    "register_custom_agent_config",
+    # Configuration has been removed - agents now use main app config
     # Research types (kept for future use)
     "ResearchSource",
     "ResearchCitation",

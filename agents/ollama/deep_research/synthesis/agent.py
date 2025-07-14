@@ -13,8 +13,8 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
+from models import ModelNotFoundError, get_model_by_name
 
-from ..shared import get_agent_config
 from ..shared.agent_task_tools import get_synthesis_task_data
 from .prompt import SYNTHESIS_PROMPT
 from .synthesis_tools import synthesize_multi_source_findings
@@ -22,9 +22,15 @@ from .synthesis_tools import synthesize_multi_source_findings
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
 
-# Get agent-specific configuration
-config = get_agent_config("synthesis")
-model, options = config.get_model_settings()
+# Get agent-specific configuration from main config
+try:
+    model_config = get_model_by_name("synthesis")
+except ModelNotFoundError:
+    logger.warning("Synthesis model not found, falling back to qwen3")
+    model_config = get_model_by_name("qwen3")
+
+model = model_config.model
+options = model_config.options.copy() if model_config.options else {}
 
 # Define the Synthesis Agent
 synthesis_agent: Agent = Agent(

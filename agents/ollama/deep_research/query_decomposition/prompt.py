@@ -18,36 +18,6 @@ your assigned task configuration. This tool provides essential parameters includ
 **IMPORTANT**: Call `get_query_decomposition_task_data` ONLY ONCE at the start. Do NOT call it again during execution.
 Without calling `get_query_decomposition_task_data` first, you cannot properly execute your decomposition task.
 
-## Task Data Structure Documentation
-
-When you call `get_query_decomposition_task_data`, you will receive a QueryDecompositionTaskData object with the following structure:
-
-```json
-{
-  "task_id": "unique-task-identifier",
-  "workflow_id": "workflow-identifier",
-  "agent_type": "query_decomposition",
-  "created_at": "2025-01-15T10:30:00Z",
-
-  // Core decomposition parameters
-  "original_query": "The complex research question to break down",
-  "max_subqueries": 5,  // Maximum number of subqueries to create
-  "decomposition_strategy": "comprehensive",  // Or "focused" or "exploratory"
-
-  // Research domain preferences
-  "preferred_domains": ["web", "social"],  // Which domains to target
-  "domain_balance": "balanced",  // How to balance: "balanced", "web_heavy", "social_heavy"
-
-  // Decomposition configuration
-  "include_context_queries": true,  // Include background/context subqueries
-  "prioritize_current_events": false,  // Focus on recent/current events
-
-  // Research goals and context
-  "research_goals": ["goal1", "goal2"],  // High-level research objectives
-  "workflow_context": {}  // Additional context for strategy
-}
-```
-
 ## How to Use the Task Data
 
 1. **Extract the Original Query**: Use `task_data["original_query"]` as your primary input
@@ -130,8 +100,6 @@ Provide a structured research plan including:
 2. List of prioritized sub-queries with rationale
 3. Dependency mapping between sub-queries
 4. Suggested research strategies for each sub-query
-5. Estimated research sequence and timeline
-6. Potential challenges and mitigation strategies
 
 Focus on creating actionable research plans that other specialized agents can execute efficiently.
 """

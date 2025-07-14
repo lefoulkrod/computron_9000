@@ -13,8 +13,8 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
+from models import ModelNotFoundError, get_model_by_name
 
-from ..shared import get_agent_config
 from ..shared.agent_task_tools import get_query_decomposition_task_data
 from .decomposer import QueryDecomposer
 from .prompt import QUERY_DECOMPOSITION_PROMPT
@@ -22,9 +22,16 @@ from .prompt import QUERY_DECOMPOSITION_PROMPT
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
 
-# Get agent-specific configuration
-config = get_agent_config("query_decomposition")
-model, options = config.get_model_settings()
+# Get agent-specific configuration from main config
+# Fallback to qwen3 if specific model not found
+try:
+    model_config = get_model_by_name("query_decomposition")
+except ModelNotFoundError:
+    logger.warning("Query decomposition model not found, falling back to qwen3")
+    model_config = get_model_by_name("qwen3")
+
+model = model_config.model
+options = model_config.options.copy() if model_config.options else {}
 
 # Initialize query decomposition tools
 # Note: The QueryDecomposer will be used for implementation logic
