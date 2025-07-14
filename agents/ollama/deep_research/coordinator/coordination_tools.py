@@ -34,8 +34,12 @@ logger = logging.getLogger(__name__)
 class WorkflowInitiationResponse(BaseModel):
     """Response from initiating a research workflow."""
 
-    success: bool = Field(..., description="Whether the workflow was successfully initiated")
-    workflow_id: str = Field(..., description="Unique identifier for the created workflow")
+    success: bool = Field(
+        ..., description="Whether the workflow was successfully initiated"
+    )
+    workflow_id: str = Field(
+        ..., description="Unique identifier for the created workflow"
+    )
     message: str = Field(..., description="Human-readable status message")
     initial_phase: str = Field(..., description="The first phase of the workflow")
 
@@ -43,7 +47,9 @@ class WorkflowInitiationResponse(BaseModel):
 class WorkflowStatusResponse(BaseModel):
     """Response containing workflow status information."""
 
-    success: bool = Field(..., description="Whether the status was successfully retrieved")
+    success: bool = Field(
+        ..., description="Whether the status was successfully retrieved"
+    )
     workflow_id: str = Field(..., description="The workflow identifier")
     current_phase: str = Field(..., description="Current workflow phase")
     completed_tasks: int = Field(..., description="Number of completed tasks")
@@ -54,17 +60,25 @@ class WorkflowStatusResponse(BaseModel):
 class AgentResultProcessingResponse(BaseModel):
     """Response from processing an agent's task result."""
 
-    success: bool = Field(..., description="Whether the result was successfully processed")
+    success: bool = Field(
+        ..., description="Whether the result was successfully processed"
+    )
     processed_task_id: str = Field(..., description="ID of the task that was processed")
-    follow_up_tasks_created: int = Field(..., description="Number of follow-up tasks created")
-    follow_up_task_ids: list[str] = Field(..., description="IDs of created follow-up tasks")
+    follow_up_tasks_created: int = Field(
+        ..., description="Number of follow-up tasks created"
+    )
+    follow_up_task_ids: list[str] = Field(
+        ..., description="IDs of created follow-up tasks"
+    )
     message: str = Field(..., description="Human-readable processing summary")
 
 
 class WorkflowCompletionResponse(BaseModel):
     """Response from completing a workflow."""
 
-    success: bool = Field(..., description="Whether the workflow was successfully completed")
+    success: bool = Field(
+        ..., description="Whether the workflow was successfully completed"
+    )
     workflow_id: str = Field(..., description="The completed workflow identifier")
     final_report: str = Field(..., description="Final research report or summary")
     total_sources: int = Field(..., description="Total number of sources processed")
@@ -87,7 +101,9 @@ class ErrorResponse(BaseModel):
     success: bool = Field(False, description="Always false for error responses")
     error: str = Field(..., description="Error message describing what went wrong")
     error_code: str = Field(..., description="Machine-readable error code")
-    context: dict[str, Any] = Field(default_factory=dict, description="Additional error context")
+    context: dict[str, Any] = Field(
+        default_factory=dict, description="Additional error context"
+    )
 
 
 class CoordinationTools:
@@ -110,7 +126,9 @@ class CoordinationTools:
         self.bus = MessageBus()
         self.coordinator = ConcreteResearchWorkflowCoordinator(self.storage, self.bus)
 
-    async def initiate_research_workflow(self, query: str) -> WorkflowInitiationResponse:
+    async def initiate_research_workflow(
+        self, query: str
+    ) -> WorkflowInitiationResponse:
         """Initiate a new multi-agent research workflow.
 
         Args:
