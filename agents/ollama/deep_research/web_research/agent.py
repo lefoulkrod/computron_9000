@@ -13,6 +13,7 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
+from models import ModelNotFoundError, get_model_by_name
 from tools.web import (
     get_webpage,
     get_webpage_substring,
@@ -22,16 +23,21 @@ from tools.web import (
     search_google,
 )
 
-from ..shared import get_agent_config
 from ..shared.agent_task_tools import get_web_research_task_data
 from .prompt import WEB_RESEARCH_PROMPT
 
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
 
-# Get agent-specific configuration
-config = get_agent_config("web_research")
-model, options = config.get_model_settings()
+# Get agent-specific configuration from main config
+try:
+    model_config = get_model_by_name("web_research")
+except ModelNotFoundError:
+    logger.warning("Web research model not found, falling back to qwen3")
+    model_config = get_model_by_name("qwen3")
+
+model = model_config.model
+options = model_config.options.copy() if model_config.options else {}
 
 # Define the Web Research Agent
 web_research_agent: Agent = Agent(

@@ -13,18 +13,24 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
+from models import ModelNotFoundError, get_model_by_name
 from tools.reddit import get_reddit_comments_tree_shallow, search_reddit
 
-from ..shared import get_agent_config
 from ..shared.agent_task_tools import get_social_research_task_data
 from .prompt import SOCIAL_RESEARCH_PROMPT
 
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
 
-# Get agent-specific configuration
-config = get_agent_config("social_research")
-model, options = config.get_model_settings()
+# Get agent-specific configuration from main config
+try:
+    model_config = get_model_by_name("social_research")
+except ModelNotFoundError:
+    logger.warning("Social research model not found, falling back to qwen3")
+    model_config = get_model_by_name("qwen3")
+
+model = model_config.model
+options = model_config.options.copy() if model_config.options else {}
 
 # Define the Social Research Agent
 social_research_agent: Agent = Agent(

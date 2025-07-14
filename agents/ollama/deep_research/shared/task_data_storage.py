@@ -85,17 +85,17 @@ class TaskDataStorage:
             raise ValueError("task_id cannot be empty")
 
         logger.debug(f"Attempting to retrieve task data for task_id: {task_id}")
-        
+
         with self._storage_lock:
             if task_id not in self._task_data:
                 logger.error(f"Task ID {task_id} not found in storage")
                 raise KeyError(f"Task ID {task_id} not found")
 
             task_data = self._task_data[task_id]
-            
+
             # Log the entire task data object for debugging
             logger.debug(f"Retrieved task data for task {task_id}: {task_data}")
-                    
+
             return task_data
 
     def delete_task_data(self, task_id: str) -> bool:

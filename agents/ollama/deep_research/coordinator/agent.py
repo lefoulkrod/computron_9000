@@ -13,17 +13,23 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
+from models import ModelNotFoundError, get_model_by_name
 
-from ..shared import get_agent_config
 from .coordination_tools import CoordinationTools
 from .prompt import RESEARCH_COORDINATOR_PROMPT
 
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
 
-# Get agent-specific configuration
-config = get_agent_config("coordinator")
-model, options = config.get_model_settings()
+# Get agent-specific configuration from main config
+try:
+    model_config = get_model_by_name("research_coordinator")
+except ModelNotFoundError:
+    logger.warning("Research coordinator model not found, falling back to qwen3")
+    model_config = get_model_by_name("qwen3")
+
+model = model_config.model
+options = model_config.options.copy() if model_config.options else {}
 
 # Initialize coordination tools
 coordination_tools = CoordinationTools("research_coordinator")
