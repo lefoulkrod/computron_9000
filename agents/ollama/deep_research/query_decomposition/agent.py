@@ -15,7 +15,7 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 
 from ..shared import get_agent_config
-from ..shared.agent_task_tools import get_task_data
+from ..shared.agent_task_tools import get_query_decomposition_task_data
 from .decomposer import QueryDecomposer
 from .prompt import QUERY_DECOMPOSITION_PROMPT
 
@@ -39,7 +39,7 @@ query_decomposition_agent: Agent = Agent(
     model=model,
     options=options,
     tools=[
-        get_task_data,
+        get_query_decomposition_task_data,
         # Additional tools will be added in future implementation phases
         # For now, the agent provides query decomposition through conversation
     ],
