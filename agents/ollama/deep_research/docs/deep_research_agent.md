@@ -1,3 +1,5 @@
+# THIS DOCUMENT IS NOW OBSOLETE. A NEW PLAN DOCUMENT WILL BE CREATED IN deep_research_agent_plan.md. DO NOT USE THIS DOCUMENT TO MAKE CHANGES
+
 # Deep Research Agent Implementation Plan
 
 ## How to Use This Document
@@ -209,20 +211,34 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
     - [ ] Add better error handling for failed agent executions
     - [ ] Implement workflow recovery mechanisms for partial failures
 
-- [ ] 4.8.2 **Simplified Synthesis Tools Integration**
+- [ ] 4.8.2 **Agent Tool Usage Integration (Critical Fix)**
+  - [ ] **Analysis Agent Tool Usage**:
+    - [ ] **CRITICAL**: Analysis agent has 7 comprehensive tools but prompt doesn't explicitly instruct usage:
+      - `assess_webpage_credibility` - credibility scoring for web sources
+      - `extract_webpage_metadata` - extracting publication info and metadata
+      - `categorize_source` - classifying sources by type and quality
+      - `verify_cross_references` - cross-referencing claims between sources
+      - `evaluate_source_consistency` - detecting contradictions and inconsistencies
+      - `perform_comprehensive_credibility_assessment` - overall credibility analysis
+      - `analyze_reddit_credibility` - social media credibility assessment
+    - [ ] Update analysis agent prompt to explicitly instruct tool usage for each analysis task
+    - [ ] Add step-by-step tool invocation guidance in analysis prompt
+    - [ ] Test that analysis agent actually calls its tools when processing research data
   - [ ] **Synthesis Agent Tool Usage**:
     - [ ] Ensure synthesis agent actually calls its available tools (currently has 6 tools but may not be using them)
     - [ ] Verify that `synthesize_research_findings` tool is invoked with proper data structure
     - [ ] Test that `generate_comprehensive_report` produces actual formatted reports
     - [ ] Validate that citations and bibliography generation works end-to-end
   - [ ] **Agent Prompt Optimization**:
+    - [ ] **PRIORITY**: Update analysis agent prompt to explicitly reference and instruct use of all 7 available tools
     - [ ] Review and optimize synthesis agent prompt to ensure it uses its tools effectively
     - [ ] Add explicit guidance for synthesis agent to use its comprehensive report generation tools
     - [ ] Ensure analysis agent prompt guides it to structure output for synthesis consumption
+    - [ ] Add tool usage examples and step-by-step guidance in both agent prompts
   - [ ] **Tool Error Handling**:
-    - [ ] Add better error handling in synthesis tools for malformed input data
-    - [ ] Implement fallback behaviors when synthesis tools fail
-    - [ ] Add logging to track which synthesis tools are actually being called
+    - [ ] Add better error handling in analysis and synthesis tools for malformed input data
+    - [ ] Implement fallback behaviors when agent tools fail
+    - [ ] Add logging to track which tools are actually being called by each agent
 
 - [ ] 4.8.3 **Complete Workflow Integration Test**
   - [ ] **End-to-End Validation**:
@@ -504,13 +520,17 @@ The Deep Research Agent will be a specialized agent within COMPUTRON_9000 focuse
 - **ADDED Phase 4.8: Interim End-to-End Working System**:
   - **Analysis**: Examined current multi-agent system implementation and identified workflow execution issues
   - **Architecture Validation**: Confirmed that multi-agent architecture is sound with all 6 agents fully implemented and functional
-  - **Issue Identification**: Determined that the synthesis agent has comprehensive tools but workflow execution has gaps:
+  - **Critical Tool Usage Issue Identified**: Both Analysis and Synthesis agents have comprehensive tools but are not using them:
+    - **Analysis Agent**: Has 7 comprehensive tools (credibility assessment, metadata extraction, cross-reference verification, etc.) but prompt doesn't explicitly instruct tool usage
+    - **Synthesis Agent**: Has 6 comprehensive tools (report generation, citation formatting, knowledge graphs, etc.) but may not be invoking them properly
+    - **Root Cause**: Agent prompts focus on high-level guidance but don't explicitly instruct agents to use their available tools
+  - **Workflow Execution Issues**: Determined that the synthesis agent has comprehensive tools but workflow execution has gaps:
     - Analysis agent may not be called consistently due to workflow coordination logic
     - Data flow between agents needs standardization and validation
-    - Synthesis agent tools are available but may not be invoked properly due to prompt or data format issues
+    - Agent tools are available but may not be invoked properly due to prompt optimization issues
   - **Implementation Plan**: Created comprehensive Phase 4.8 plan to address workflow execution before advanced features:
     - **4.8.1**: Debug and fix workflow execution issues, particularly analysis agent integration
-    - **4.8.2**: Ensure synthesis agent properly uses its available tools for report generation
+    - **4.8.2**: **CRITICAL**: Fix agent tool usage by updating prompts to explicitly instruct tool invocation
     - **4.8.3**: Create end-to-end integration tests to validate complete workflow execution
     - **4.8.4**: Establish minimum viable research report output standards
   - **Success Criteria**: Defined clear success criteria for complete working system before Phase 5 advanced features
