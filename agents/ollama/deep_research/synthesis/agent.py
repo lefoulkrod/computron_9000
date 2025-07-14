@@ -15,6 +15,7 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 
 from ..shared import get_agent_config
+from ..shared.agent_task_tools import get_task_data
 from .prompt import SYNTHESIS_PROMPT
 from .synthesis_tools import synthesize_multi_source_findings
 
@@ -33,6 +34,7 @@ synthesis_agent: Agent = Agent(
     model=model,
     options=options,
     tools=[
+        get_task_data,
         synthesize_multi_source_findings,
     ],
 )

@@ -23,6 +23,7 @@ from tools.web import (
 )
 
 from ..shared import get_agent_config
+from ..shared.agent_task_tools import get_task_data
 from .prompt import ANALYSIS_PROMPT
 
 # Load configuration and set up logger
@@ -40,6 +41,7 @@ analysis_agent: Agent = Agent(
     model=model,
     options=options,
     tools=[
+        get_task_data,
         search_google,
         get_webpage,
         get_webpage_summary,

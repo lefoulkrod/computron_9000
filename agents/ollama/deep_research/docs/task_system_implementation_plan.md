@@ -60,36 +60,36 @@
 ### Phase 2: Agent Integration
 
 #### Step 5: Update Web Research Agent
-- [ ] Add `get_task_data` to web research agent tools list
-- [ ] Update web research agent prompt with mandatory instruction
+- [x] Add `get_task_data` to web research agent tools list
+- [x] Update web research agent prompt with mandatory instruction
 - [ ] Test web research agent can retrieve task data
 - [ ] Test web research agent uses structured configuration
 - [ ] Verify agent returns structured results
 
 #### Step 6: Update Social Research Agent  
-- [ ] Add `get_task_data` to social research agent tools list
-- [ ] Update social research agent prompt with mandatory instruction
+- [x] Add `get_task_data` to social research agent tools list
+- [x] Update social research agent prompt with mandatory instruction
 - [ ] Test social research agent can retrieve task data
 - [ ] Test social research agent uses structured configuration
 - [ ] Verify agent returns structured results
 
 #### Step 7: Update Analysis Agent
-- [ ] Add `get_task_data` to analysis agent tools list
-- [ ] Update analysis agent prompt with mandatory instruction
+- [x] Add `get_task_data` to analysis agent tools list
+- [x] Update analysis agent prompt with mandatory instruction
 - [ ] Test analysis agent can retrieve task data
 - [ ] Test analysis agent uses structured configuration
 - [ ] Verify agent returns structured results
 
 #### Step 8: Update Synthesis Agent
-- [ ] Add `get_task_data` to synthesis agent tools list
-- [ ] Update synthesis agent prompt with mandatory instruction
+- [x] Add `get_task_data` to synthesis agent tools list
+- [x] Update synthesis agent prompt with mandatory instruction
 - [ ] Test synthesis agent can retrieve task data
 - [ ] Test synthesis agent uses structured configuration
 - [ ] Verify agent returns structured results
 
 #### Step 9: Update Query Decomposition Agent
-- [ ] Add `get_task_data` to query decomposition agent tools list
-- [ ] Update query decomposition agent prompt with mandatory instruction
+- [x] Add `get_task_data` to query decomposition agent tools list
+- [x] Update query decomposition agent prompt with mandatory instruction
 - [ ] Test query decomposition agent can retrieve task data
 - [ ] Test query decomposition agent uses structured configuration
 - [ ] Verify agent returns structured results
@@ -147,9 +147,9 @@
 ## Critical Requirements Checklist
 
 - [x] Only coordinator can create and delete tasks
-- [ ] Agents can only retrieve their assigned task data
-- [ ] All agents have `get_task_data` as their only task-related tool
-- [ ] All agents have mandatory task data retrieval in their prompts
+- [x] Agents can only retrieve their assigned task data
+- [x] All agents have `get_task_data` as their only task-related tool
+- [x] All agents have mandatory task data retrieval in their prompts
 - [x] Coordinator has single `execute_deep_research_workflow` tool
 - [x] LLM does not decide workflow steps - all automated in tool
 - [x] Workflow executes imperatively: decomposition → research → analysis → synthesis
@@ -169,8 +169,8 @@
 - [x] Coordinator tools create and manage tasks correctly
 
 ### Phase 2 Complete When:
-- [ ] All agents updated with task data tools
-- [ ] All agent prompts include mandatory instruction
+- [x] All agents updated with task data tools
+- [x] All agent prompts include mandatory instruction
 - [ ] All agents can retrieve and use task data
 - [ ] Task ID execution flow working for all agent types
 
@@ -197,6 +197,37 @@
 - Files modified
 - Testing results
 - Any issues encountered
+
+### [2025-01-15] - Added Comprehensive Task Data Documentation
+- Enhanced all agent prompts with detailed task data structure documentation
+- Added JSON schema examples showing exact task data format for each agent type
+- Provided specific usage instructions for extracting and using task data fields
+- Query Decomposition Agent now has extensive documentation on task parameters
+- All agents now understand their expected inputs and how to process them
+- Documentation includes field descriptions, data types, and usage examples
+- Files modified: All prompt.py files in web_research/, social_research/, analysis/, synthesis/, query_decomposition/ directories
+- Testing: Agents should now better understand and utilize their task configurations
+- Note: This addresses confusion about task data structure and usage
+
+### [2025-01-15] - Enhanced Agent Task Data Instructions
+- Updated all agent prompts to require EXACTLY ONCE call to `get_task_data`
+- Added explicit "Do NOT call it again during execution" instruction to prevent multiple calls
+- Fixed issue where decomposition agent was querying task data multiple times
+- Agents updated: Web Research, Social Research, Analysis, Synthesis, Query Decomposition
+- All prompts now emphasize single-call requirement with stronger language
+- Files modified: All prompt.py files in web_research/, social_research/, analysis/, synthesis/, query_decomposition/ directories
+- Testing: Single-call behavior ready for validation
+- Note: This prevents agents from repeatedly calling get_task_data during execution
+
+### [2025-01-15] - Phase 2 Agent Integration Complete
+- Completed Steps 5-9: All agents updated with task system integration
+- Agent tool integration: Added `get_task_data` as first tool in all 5 agent tool lists
+- Agent prompt updates: Added mandatory task data retrieval instruction to all agent prompts
+- Agents updated: Web Research, Social Research, Analysis, Synthesis, Query Decomposition
+- All agents now require calling `get_task_data` as first action to retrieve task configuration
+- Files modified: All agent.py and prompt.py files in web_research/, social_research/, analysis/, synthesis/, query_decomposition/ directories
+- Testing: Agent integration ready for testing with task system (Phase 3)
+- Note: Testing validation still needed but agent integration implementation is complete
 
 ### [2025-01-15] - Phase 1 Core Infrastructure Complete
 - Completed Steps 1-4: All core infrastructure components implemented
