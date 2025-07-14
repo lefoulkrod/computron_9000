@@ -16,7 +16,7 @@ from agents.types import Agent
 from tools.reddit import get_reddit_comments_tree_shallow, search_reddit
 
 from ..shared import get_agent_config
-from ..shared.agent_task_tools import get_task_data
+from ..shared.agent_task_tools import get_social_research_task_data
 from .prompt import SOCIAL_RESEARCH_PROMPT
 
 # Load configuration and set up logger
@@ -34,7 +34,7 @@ social_research_agent: Agent = Agent(
     model=model,
     options=options,
     tools=[
-        get_task_data,
+        get_social_research_task_data,
         search_reddit,
         get_reddit_comments_tree_shallow,
     ],

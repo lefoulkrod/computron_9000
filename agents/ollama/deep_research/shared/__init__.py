@@ -10,7 +10,14 @@ from .agent_config import (
     get_agent_config,
     register_custom_agent_config,
 )
-from .agent_task_tools import get_task_data, get_task_data_tool_schema
+from .agent_task_tools import (
+    get_analysis_task_data,
+    get_query_decomposition_task_data,
+    get_social_research_task_data,
+    get_synthesis_task_data,
+    get_task_data,
+    get_web_research_task_data,
+)
 from .communication import MessageBus
 from .logging_infrastructure import (
     AgentTaskError,
@@ -66,7 +73,11 @@ __all__ = [
     "clear_workflow_tasks",
     # Agent task tools
     "get_task_data",
-    "get_task_data_tool_schema",
+    "get_web_research_task_data",
+    "get_social_research_task_data",
+    "get_analysis_task_data",
+    "get_synthesis_task_data",
+    "get_query_decomposition_task_data",
     # Communication
     "MessageBus",
     # Logging infrastructure
