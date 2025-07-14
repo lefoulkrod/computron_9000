@@ -12,12 +12,7 @@ def setup_logging() -> None:
     """
 
     logging.basicConfig(level=logging.WARN, stream=sys.stdout)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-    logging.getLogger("agents.pydantic_ai").setLevel(logging.DEBUG)
-    logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
-    logging.getLogger("tools").setLevel(logging.DEBUG)
-    logging.getLogger("agents.adk").setLevel(logging.DEBUG)
-    logging.getLogger("google.adk").setLevel(logging.DEBUG)
-    logging.getLogger("ollama").setLevel(logging.DEBUG)
-    logging.getLogger("agents.ollama").setLevel(logging.DEBUG)
+    logging.getLogger("tools").setLevel(logging.WARNING)
+    logging.getLogger("ollama").setLevel(logging.WARNING)
+    logging.getLogger("agents.ollama").setLevel(logging.WARNING)
+    logging.getLogger("agents.ollama.deep_research").setLevel(logging.DEBUG)
