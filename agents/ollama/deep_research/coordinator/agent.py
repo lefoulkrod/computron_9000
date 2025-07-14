@@ -31,17 +31,13 @@ coordination_tools = CoordinationTools("research_coordinator")
 # Define the Research Coordinator Agent
 research_coordinator_agent: Agent = Agent(
     name="RESEARCH_COORDINATOR_AGENT",
-    description="Orchestrates multi-agent research workflows, delegates tasks to specialized agents, and coordinates overall research process",
+    description="Orchestrates automated deep research workflows with single-tool execution",
     instruction=RESEARCH_COORDINATOR_PROMPT,
     model=model,
     options=options,
     tools=[
-        coordination_tools.initiate_research_workflow,
-        coordination_tools.get_workflow_status,
-        coordination_tools.process_agent_result,
-        coordination_tools.complete_workflow,
-        coordination_tools.execute_agent_task,
-        coordination_tools.get_coordination_guidelines,
+        coordination_tools.execute_deep_research_workflow,
+        coordination_tools.cleanup_completed_tasks,
     ],
 )
 

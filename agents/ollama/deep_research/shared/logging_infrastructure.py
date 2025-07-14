@@ -53,12 +53,6 @@ class WorkflowCoordinationError(MultiAgentError):
     pass
 
 
-class SourceTrackingError(MultiAgentError):
-    """Exception raised when source tracking fails."""
-
-    pass
-
-
 def log_agent_task_start(
     agent_type: str, task_id: str, task_details: dict[str, Any]
 ) -> None:
@@ -114,7 +108,6 @@ __all__ = [
     "MultiAgentError",
     "AgentTaskError",
     "WorkflowCoordinationError",
-    "SourceTrackingError",
     "log_agent_task_start",
     "log_agent_task_completion",
     "log_workflow_event",

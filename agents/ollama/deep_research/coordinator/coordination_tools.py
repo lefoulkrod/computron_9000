@@ -1,98 +1,52 @@
 """
 Coordination tools for the Research Coordinator Agent.
 
-This module provides simple, serializable tools for workflow coordination
-in the multi-agent research system.
+This module provides the automated workflow execution tool for the
+enhanced task system with centralized task data management.
 """
 
 import json
 import logging
+import uuid
 from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 # Import specialized agents for task execution
-from ..analysis.agent import analysis_tool
+# NOTE: analysis_tool import kept for future re-enablement
 from ..query_decomposition.agent import query_decomposition_tool
 from ..shared import (
-    AgentResult,
-    AgentSourceTracker,
-    MessageBus,
-    SharedSourceRegistry,
-    WorkflowStorage,
+    AnalysisTaskData,
+    QueryDecompositionTaskData,
+    SocialResearchTaskData,
+    SynthesisTaskData,
+    WebResearchTaskData,
+    clear_workflow_tasks,
+    store_task_data,
 )
 from ..social_research.agent import social_research_tool
 from ..synthesis.agent import synthesis_tool
 from ..web_research.agent import web_research_tool
-from .workflow_coordinator import ConcreteResearchWorkflowCoordinator
 
 logger = logging.getLogger(__name__)
 
 
-# Pydantic response models for strongly typed, documented API responses
-class WorkflowInitiationResponse(BaseModel):
-    """Response from initiating a research workflow."""
-
-    success: bool = Field(
-        ..., description="Whether the workflow was successfully initiated"
-    )
-    workflow_id: str = Field(
-        ..., description="Unique identifier for the created workflow"
-    )
-    message: str = Field(..., description="Human-readable status message")
-    initial_phase: str = Field(..., description="The first phase of the workflow")
-
-
-class WorkflowStatusResponse(BaseModel):
-    """Response containing workflow status information."""
-
-    success: bool = Field(
-        ..., description="Whether the status was successfully retrieved"
-    )
-    workflow_id: str = Field(..., description="The workflow identifier")
-    current_phase: str = Field(..., description="Current workflow phase")
-    completed_tasks: int = Field(..., description="Number of completed tasks")
-    pending_tasks: int = Field(..., description="Number of pending tasks")
-    status: str = Field(..., description="Overall workflow status")
-
-
-class AgentResultProcessingResponse(BaseModel):
-    """Response from processing an agent's task result."""
-
-    success: bool = Field(
-        ..., description="Whether the result was successfully processed"
-    )
-    processed_task_id: str = Field(..., description="ID of the task that was processed")
-    follow_up_tasks_created: int = Field(
-        ..., description="Number of follow-up tasks created"
-    )
-    follow_up_task_ids: list[str] = Field(
-        ..., description="IDs of created follow-up tasks"
-    )
-    message: str = Field(..., description="Human-readable processing summary")
-
-
-class WorkflowCompletionResponse(BaseModel):
-    """Response from completing a workflow."""
+class DeepResearchWorkflowResponse(BaseModel):
+    """Response from executing the automated deep research workflow."""
 
     success: bool = Field(
         ..., description="Whether the workflow was successfully completed"
     )
-    workflow_id: str = Field(..., description="The completed workflow identifier")
-    final_report: str = Field(..., description="Final research report or summary")
-    total_sources: int = Field(..., description="Total number of sources processed")
-    completion_time: str = Field(..., description="Workflow completion timestamp")
-
-
-class TaskExecutionResponse(BaseModel):
-    """Response from executing an agent task."""
-
-    success: bool = Field(..., description="Whether the task was successfully executed")
-    task_id: str = Field(..., description="The executed task identifier")
-    agent_type: str = Field(..., description="Type of agent that executed the task")
-    result: str = Field(..., description="JSON string containing the agent's results")
-    message: str = Field(..., description="Human-readable execution summary")
+    workflow_id: str = Field(..., description="Unique identifier for the workflow")
+    final_report: str = Field(..., description="Complete research report")
+    research_summary: str = Field(..., description="Executive summary of findings")
+    sources_analyzed: int = Field(..., description="Total number of sources analyzed")
+    subqueries_processed: int = Field(..., description="Number of subqueries processed")
+    execution_time_seconds: float = Field(
+        ..., description="Total workflow execution time"
+    )
+    completion_timestamp: str = Field(..., description="Workflow completion time")
 
 
 class ErrorResponse(BaseModel):
@@ -107,7 +61,7 @@ class ErrorResponse(BaseModel):
 
 
 class CoordinationTools:
-    """Simple coordination tools for research workflow management."""
+    """Automated coordination tools for deep research workflows."""
 
     def __init__(self, agent_id: str) -> None:
         """Initialize coordination tools.
@@ -117,240 +71,430 @@ class CoordinationTools:
         """
         self.agent_id = agent_id
 
-        # Initialize source tracking for this agent
-        source_registry = SharedSourceRegistry()
-        self.source_tracker = AgentSourceTracker(agent_id, source_registry)
+    async def execute_deep_research_workflow(
+        self,
+        research_query: str,
+        research_domains: list[str] | None = None,
+        output_format: str = "comprehensive_report",
+        max_sources: int = 15,
+    ) -> str:
+        """Execute complete automated deep research workflow.
 
-        # Initialize workflow infrastructure
-        self.storage = WorkflowStorage()
-        self.bus = MessageBus()
-        self.coordinator = ConcreteResearchWorkflowCoordinator(self.storage, self.bus)
-
-    async def initiate_research_workflow(
-        self, query: str
-    ) -> WorkflowInitiationResponse:
-        """Initiate a new multi-agent research workflow.
+        This is the single entry point for automated deep research. The workflow
+        executes imperatively without LLM decision-making:
+        1. Query decomposition
+        2. Parallel web and social research
+        3. Analysis of research results
+        4. Synthesis into final report
+        5. Cleanup of task data
 
         Args:
-            query: The research query to investigate.
+            research_query: The main research question to investigate
+            research_domains: Domains to include (default: ["web", "social"])
+            output_format: Format for final report (default: "comprehensive_report")
+            max_sources: Maximum sources per research domain (default: 15)
 
         Returns:
-            WorkflowInitiationResponse with workflow ID and status information.
+            JSON string containing complete workflow results and final report
 
         Raises:
-            Exception: If workflow initiation fails.
+            ValueError: If research_query is empty
+            RuntimeError: If workflow execution fails
         """
-        try:
-            workflow_id = await self.coordinator.start_research_workflow(query)
+        start_time = datetime.now()
 
-            logger.info(f"Initiated workflow {workflow_id} for query: {query}")
-            return WorkflowInitiationResponse(
+        try:
+            # Validate input
+            if not research_query or not research_query.strip():
+                raise ValueError("research_query cannot be empty")
+
+            if research_domains is None:
+                research_domains = ["web", "social"]
+
+            # Generate workflow ID
+            workflow_id = f"deep_research_{uuid.uuid4().hex[:8]}"
+            logger.info(f"Starting deep research workflow {workflow_id}")
+
+            # Step 1: Query decomposition
+            decomp_result = await self._execute_query_decomposition(
+                workflow_id, research_query
+            )
+            subqueries = self._extract_subqueries(decomp_result)
+            logger.info(f"Decomposed query into {len(subqueries)} subqueries")
+
+            # Step 2: Parallel research execution
+            all_research_results = {}
+            total_sources = 0
+
+            if "web" in research_domains:
+                web_results = await self._execute_web_research_tasks(
+                    workflow_id, subqueries, max_sources
+                )
+                all_research_results["web_research"] = web_results
+                total_sources += self._count_sources(web_results)
+
+            if "social" in research_domains:
+                social_results = await self._execute_social_research_tasks(
+                    workflow_id, subqueries, max_sources
+                )
+                all_research_results["social_research"] = social_results
+                total_sources += self._count_sources(social_results)
+
+            logger.info(f"Completed research across {len(research_domains)} domains")
+
+            # Step 3: Analysis - TEMPORARILY DISABLED
+            # TODO: Re-enable when analysis agent capabilities are enhanced
+            # analysis_result = await self._execute_analysis_task(
+            #     workflow_id, research_query, all_research_results
+            # )
+            # logger.info("Completed cross-source analysis")
+
+            # Create empty analysis result for synthesis
+            analysis_result = {
+                "analysis_summary": "Analysis step temporarily disabled",
+                "verification_status": "skipped",
+                "credibility_scores": {},
+                "inconsistencies": [],
+                "recommendations": [],
+            }
+            logger.info("Skipped analysis step (temporarily disabled)")
+
+            # Step 4: Synthesis
+            synthesis_result = await self._execute_synthesis_task(
+                workflow_id,
+                research_query,
+                analysis_result,
+                all_research_results,
+                output_format,
+            )
+            logger.info("Completed synthesis")
+
+            # Step 5: Cleanup
+            self._cleanup_workflow_tasks(workflow_id)
+
+            # Calculate execution time
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+
+            # Create response
+            response = DeepResearchWorkflowResponse(
                 success=True,
                 workflow_id=workflow_id,
-                message=f"Started research workflow for: {query}",
-                initial_phase="decomposition",
+                final_report=synthesis_result.get("final_report", ""),
+                research_summary=synthesis_result.get("executive_summary", ""),
+                sources_analyzed=total_sources,
+                subqueries_processed=len(subqueries),
+                execution_time_seconds=execution_time,
+                completion_timestamp=end_time.isoformat(),
             )
-
-        except Exception as e:
-            logger.error(f"Failed to initiate workflow: {e}")
-            raise
-
-    async def get_workflow_status(self, workflow_id: str) -> WorkflowStatusResponse:
-        """Get the current status of a research workflow.
-
-        Args:
-            workflow_id: The ID of the workflow to check.
-
-        Returns:
-            WorkflowStatusResponse containing workflow status information.
-
-        Raises:
-            Exception: If status retrieval fails.
-        """
-        try:
-            status = await self.coordinator.get_workflow_status(workflow_id)
-
-            logger.info(f"Retrieved status for workflow {workflow_id}")
-            return WorkflowStatusResponse(
-                success=True,
-                workflow_id=workflow_id,
-                current_phase=status.get("current_phase", "unknown"),
-                completed_tasks=status.get("completed_tasks", 0),
-                pending_tasks=status.get("pending_tasks", 0),
-                status=status.get("status", "unknown"),
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to get workflow status: {e}")
-            raise
-
-    async def process_agent_result(
-        self, task_id: str, agent_type: str, result_data: str, success: bool
-    ) -> AgentResultProcessingResponse:
-        """Process results from a specialized agent.
-
-        Args:
-            task_id: The ID of the completed task.
-            agent_type: The type of agent that completed the task.
-            result_data: JSON string containing the agent's results.
-            success: Whether the task completed successfully.
-
-        Returns:
-            AgentResultProcessingResponse containing follow-up task information.
-
-        Raises:
-            Exception: If result processing fails.
-        """
-        try:
-            # Parse result data
-            parsed_data = (
-                json.loads(result_data) if isinstance(result_data, str) else result_data
-            )
-
-            # Create agent result object
-            agent_result = AgentResult(
-                task_id=task_id,
-                agent_type=agent_type,
-                result_data=parsed_data,
-                success=success,
-                completion_time=self._get_current_timestamp(),
-            )
-
-            # Process the result and get follow-up tasks
-            follow_up_tasks = await self.coordinator.process_agent_result(agent_result)
 
             logger.info(
-                f"Processed result for task {task_id}, created {len(follow_up_tasks)} follow-up tasks"
+                f"Completed workflow {workflow_id} in {execution_time:.2f} seconds"
             )
-            return AgentResultProcessingResponse(
-                success=True,
-                processed_task_id=task_id,
-                follow_up_tasks_created=len(follow_up_tasks),
-                follow_up_task_ids=[task.task_id for task in follow_up_tasks],
-                message=f"Processed result from {agent_type} agent",
-            )
+            return response.model_dump_json(indent=2)
 
         except Exception as e:
-            logger.error(f"Failed to process agent result: {e}")
-            raise
+            logger.error(f"Workflow {workflow_id} failed: {e}")
+            # Cleanup on failure
+            try:
+                self._cleanup_workflow_tasks(workflow_id)
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Failed to cleanup workflow {workflow_id}: {cleanup_error}"
+                )
 
-    async def complete_workflow(self, workflow_id: str) -> WorkflowCompletionResponse:
-        """Mark a workflow as complete and get final results.
+            error_response = ErrorResponse(
+                success=False,
+                error=str(e),
+                error_code="WORKFLOW_EXECUTION_FAILED",
+                context={"workflow_id": workflow_id, "research_query": research_query},
+            )
+            return error_response.model_dump_json(indent=2)
+
+    def cleanup_completed_tasks(self, workflow_id: str) -> str:
+        """Clean up completed tasks for a workflow.
 
         Args:
-            workflow_id: The ID of the workflow to complete.
+            workflow_id: Workflow ID to clean up
 
         Returns:
-            WorkflowCompletionResponse containing final workflow results.
-
-        Raises:
-            Exception: If workflow completion fails.
+            JSON string with cleanup results
         """
         try:
-            result = await self.coordinator.complete_workflow(workflow_id)
-
-            logger.info(f"Completed workflow {workflow_id}")
-            return WorkflowCompletionResponse(
-                success=True,
-                workflow_id=workflow_id,
-                final_report=result.get("final_report", ""),
-                total_sources=result.get("total_sources", 0),
-                completion_time=self._get_current_timestamp(),
-            )
+            cleaned_count = clear_workflow_tasks(workflow_id)
+            result = {
+                "success": True,
+                "workflow_id": workflow_id,
+                "tasks_cleaned": cleaned_count,
+                "message": f"Cleaned up {cleaned_count} tasks for workflow {workflow_id}",
+            }
+            logger.info(f"Cleaned up {cleaned_count} tasks for workflow {workflow_id}")
+            return json.dumps(result, indent=2)
 
         except Exception as e:
-            logger.error(f"Failed to complete workflow: {e}")
-            raise
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "workflow_id": workflow_id,
+            }
+            logger.error(f"Failed to cleanup workflow {workflow_id}: {e}")
+            return json.dumps(error_result, indent=2)
 
-    async def execute_agent_task(
-        self, task_id: str, agent_type: str, query: str
-    ) -> TaskExecutionResponse:
-        """Execute a task using the appropriate specialized agent.
+    async def _execute_query_decomposition(
+        self, workflow_id: str, research_query: str
+    ) -> dict[str, Any]:
+        """Execute query decomposition task."""
+        task_id = f"{workflow_id}_decomp"
 
-        Args:
-            task_id: The ID of the task to execute.
-            agent_type: The type of agent to use (web_research, social_research, etc.).
-            query: The research query for the agent to process.
-
-        Returns:
-            TaskExecutionResponse containing task execution results.
-
-        Raises:
-            ValueError: If query is empty or agent_type is not supported.
-            Exception: If task execution fails.
-        """
-        # Validate input
-        if not query.strip():
-            raise ValueError("Empty query provided")
-
-        # Log task execution details
-        logger.info(f"Executing {agent_type} task {task_id} with query: '{query}'")
-
-        # Execute task based on agent type
-        if agent_type == "query_decomposition":
-            result = await query_decomposition_tool(query)
-        elif agent_type == "web_research":
-            result = await web_research_tool(query)
-        elif agent_type == "social_research":
-            result = await social_research_tool(query)
-        elif agent_type == "analysis":
-            result = await analysis_tool(query)
-        elif agent_type == "synthesis":
-            result = await synthesis_tool(query)
-        else:
-            raise ValueError(f"Agent type '{agent_type}' not yet implemented")
-
-        logger.info(f"Executed task {task_id} using {agent_type} agent")
-        return TaskExecutionResponse(
-            success=True,
+        # Create task data
+        task_data = QueryDecompositionTaskData(
             task_id=task_id,
-            agent_type=agent_type,
-            result=json.dumps(result) if not isinstance(result, str) else result,
-            message=f"Successfully executed {agent_type} task",
+            workflow_id=workflow_id,
+            original_query=research_query,
+            max_subqueries=5,
+            decomposition_strategy="comprehensive",
+            created_at=datetime.now().isoformat(),
         )
 
-    def get_coordination_guidelines(self) -> str:
-        """Get guidelines for coordinating multi-agent research workflows.
+        # Store task data
+        store_task_data(task_data)
 
-        Returns:
-            String containing workflow coordination guidelines.
-        """
-        guidelines = """
-# Research Coordination Guidelines
+        # Execute agent with task ID
+        return await self._execute_agent_with_task("query_decomposition", task_id)
 
-## Workflow Phases
-1. **Decomposition**: Break down complex queries into manageable sub-queries
-2. **Research**: Parallel execution of web and social research tasks
-3. **Analysis**: Cross-reference verification and source credibility assessment
-4. **Synthesis**: Combine findings into comprehensive report with citations
+    async def _execute_web_research_tasks(
+        self, workflow_id: str, subqueries: list[str], max_sources: int
+    ) -> dict[str, Any]:
+        """Execute web research tasks for all subqueries."""
+        results = {}
 
-## Best Practices
-- **Task Delegation**: Assign tasks to specialized agents based on their capabilities
-- **Parallel Processing**: Execute independent research tasks concurrently
-- **Progress Tracking**: Monitor workflow status and agent completion
-- **Error Handling**: Gracefully handle agent failures and retry failed tasks
-- **Resource Management**: Track sources across agents to avoid duplication
+        for i, subquery in enumerate(subqueries):
+            task_id = f"{workflow_id}_web_{i}"
 
-## Coordination Strategies
-- Start with query decomposition to identify research scope
-- Launch web and social research tasks in parallel after decomposition
-- Begin analysis only after sufficient research data is collected
-- Initiate synthesis when analysis and all research tasks are complete
-- Maintain workflow state for progress tracking and recovery
+            # Create task data
+            task_data = WebResearchTaskData(
+                task_id=task_id,
+                workflow_id=workflow_id,
+                search_query=subquery,
+                max_sources=max_sources // len(subqueries),
+                search_depth="comprehensive",
+                created_at=datetime.now().isoformat(),
+            )
 
-## Quality Assurance
-- Verify task completion before proceeding to next phase
-- Validate agent results for completeness and accuracy
-- Ensure proper source tracking and citation management
-- Monitor for contradictions or inconsistencies across sources
-"""
+            # Store task data
+            store_task_data(task_data)
 
-        return guidelines.strip()
+            # Execute agent
+            result = await self._execute_agent_with_task("web_research", task_id)
+            results[f"subquery_{i}"] = result
+
+        return results
+
+    async def _execute_social_research_tasks(
+        self, workflow_id: str, subqueries: list[str], max_sources: int
+    ) -> dict[str, Any]:
+        """Execute social research tasks for all subqueries."""
+        results = {}
+
+        for i, subquery in enumerate(subqueries):
+            task_id = f"{workflow_id}_social_{i}"
+
+            # Create task data
+            task_data = SocialResearchTaskData(
+                task_id=task_id,
+                workflow_id=workflow_id,
+                search_query=subquery,
+                max_posts=max_sources // len(subqueries),
+                platforms=["reddit"],
+                created_at=datetime.now().isoformat(),
+            )
+
+            # Store task data
+            store_task_data(task_data)
+
+            # Execute agent
+            result = await self._execute_agent_with_task("social_research", task_id)
+            results[f"subquery_{i}"] = result
+
+        return results
+
+    async def _execute_analysis_task(
+        self, workflow_id: str, original_query: str, research_results: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Execute analysis task."""
+        task_id = f"{workflow_id}_analysis"
+
+        # Create task data
+        task_data = AnalysisTaskData(
+            task_id=task_id,
+            workflow_id=workflow_id,
+            original_query=original_query,
+            research_results=research_results,
+            analysis_type="comprehensive",
+            cross_verification=True,
+            created_at=datetime.now().isoformat(),
+        )
+
+        # Store task data
+        store_task_data(task_data)
+
+        # Execute agent
+        return await self._execute_agent_with_task("analysis", task_id)
+
+    async def _execute_synthesis_task(
+        self,
+        workflow_id: str,
+        original_query: str,
+        analysis_results: dict[str, Any],
+        research_findings: dict[str, Any],
+        output_format: str,
+    ) -> dict[str, Any]:
+        """Execute synthesis task."""
+        task_id = f"{workflow_id}_synthesis"
+
+        # Create task data
+        task_data = SynthesisTaskData(
+            task_id=task_id,
+            workflow_id=workflow_id,
+            original_query=original_query,
+            analysis_results=analysis_results,
+            research_findings=research_findings,
+            output_format=output_format,
+            include_citations=True,
+            created_at=datetime.now().isoformat(),
+        )
+
+        # Store task data
+        store_task_data(task_data)
+
+        # Execute agent
+        return await self._execute_agent_with_task("synthesis", task_id)
+
+    async def _execute_agent_with_task(
+        self, agent_type: str, task_id: str
+    ) -> dict[str, Any]:
+        """Execute an agent with the specified task ID."""
+        try:
+            logger.info(f"Executing {agent_type} agent with task {task_id}")
+
+            result_raw: Any
+            if agent_type == "query_decomposition":
+                result_raw = await query_decomposition_tool(task_id)
+            elif agent_type == "web_research":
+                result_raw = await web_research_tool(task_id)
+            elif agent_type == "social_research":
+                result_raw = await social_research_tool(task_id)
+            elif agent_type == "analysis":
+                # Analysis agent temporarily disabled
+                logger.warning("Analysis agent called but temporarily disabled")
+                return {
+                    "analysis_summary": "Analysis step temporarily disabled",
+                    "verification_status": "skipped",
+                    "credibility_scores": {},
+                    "inconsistencies": [],
+                    "recommendations": [],
+                }
+                # result_raw = await analysis_tool(task_id)  # Commented out
+            elif agent_type == "synthesis":
+                result_raw = await synthesis_tool(task_id)
+            else:
+                raise ValueError(f"Unsupported agent type: {agent_type}")
+
+            # Parse result if it's a JSON string
+            result: dict[str, Any]
+            if isinstance(result_raw, str):
+                try:
+                    parsed_result = json.loads(result_raw)
+                    result = parsed_result
+                except json.JSONDecodeError:
+                    # If it's not valid JSON, wrap it
+                    result = {"raw_result": result_raw}
+            elif isinstance(result_raw, dict):
+                result = result_raw
+            else:
+                # Ensure we always return a dict
+                result = {"result": result_raw}
+
+            logger.info(f"Completed {agent_type} task {task_id}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to execute {agent_type} task {task_id}: {e}")
+            raise RuntimeError(f"Agent execution failed: {e}") from e
+
+    def _extract_subqueries(self, decomp_result: dict[str, Any]) -> list[str]:
+        """Extract subqueries from decomposition result."""
+        try:
+            subqueries: list[str] = []
+
+            # Handle different possible result structures
+            if "subqueries" in decomp_result:
+                raw_subqueries = decomp_result["subqueries"]
+            elif "sub_queries" in decomp_result:
+                raw_subqueries = decomp_result["sub_queries"]
+            elif "queries" in decomp_result:
+                raw_subqueries = decomp_result["queries"]
+            else:
+                # Fallback: look for list structures
+                raw_subqueries = None
+                for value in decomp_result.values():
+                    if isinstance(value, list) and len(value) > 0:
+                        if isinstance(value[0], str):
+                            raw_subqueries = value
+                            break
+                        if isinstance(value[0], dict) and "query" in value[0]:
+                            raw_subqueries = [item["query"] for item in value]
+                            break
+
+                if raw_subqueries is None:
+                    raise ValueError(
+                        "Could not extract subqueries from decomposition result"
+                    )
+
+            # Ensure we have strings
+            if isinstance(raw_subqueries, list) and len(raw_subqueries) > 0:
+                if isinstance(raw_subqueries[0], dict):
+                    subqueries = [
+                        q.get("query", q.get("text", str(q))) for q in raw_subqueries
+                    ]
+                else:
+                    subqueries = [str(q) for q in raw_subqueries]
+            else:
+                subqueries = []
+
+            return subqueries[:5]  # Limit to 5 subqueries
+
+        except Exception as e:
+            logger.error(f"Failed to extract subqueries: {e}")
+            # Fallback to original query if decomposition parsing fails
+            original_query = decomp_result.get("original_query", "research query")
+            return [str(original_query)]
+
+    def _count_sources(self, research_results: dict[str, Any]) -> int:
+        """Count total sources in research results."""
+        total = 0
+        for result in research_results.values():
+            if isinstance(result, dict):
+                # Look for common source count fields
+                if "sources_count" in result:
+                    total += result["sources_count"]
+                elif "total_sources" in result:
+                    total += result["total_sources"]
+                elif "sources" in result:
+                    if isinstance(result["sources"], list):
+                        total += len(result["sources"])
+                elif "source_count" in result:
+                    total += result["source_count"]
+        return total
+
+    def _cleanup_workflow_tasks(self, workflow_id: str) -> None:
+        """Clean up all tasks for a workflow."""
+        try:
+            cleared_count = clear_workflow_tasks(workflow_id)
+            logger.info(f"Cleaned up {cleared_count} tasks for workflow {workflow_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup workflow {workflow_id}: {e}")
 
     def _get_current_timestamp(self) -> str:
-        """Get current timestamp in ISO format.
-
-        Returns:
-            ISO formatted timestamp string.
-        """
+        """Get current timestamp in ISO format."""
         return datetime.now().isoformat()

@@ -2,7 +2,7 @@
 Synthesis Agent for combining findings and generating reports.
 
 This module contains the Synthesis Agent specialized for synthesizing information
-from multiple sources and generating comprehensive research reports.
+from multiple sources and generating research reports.
 """
 
 import logging
@@ -14,13 +14,9 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 
-from ..shared import (
-    AgentSourceTracker,
-    SharedSourceRegistry,
-    get_agent_config,
-)
+from ..shared import get_agent_config
 from .prompt import SYNTHESIS_PROMPT
-from .synthesis_tools import SynthesisAgentTools
+from .synthesis_tools import synthesize_multi_source_findings
 
 # Load configuration and set up logger
 logger = logging.getLogger(__name__)
@@ -29,28 +25,15 @@ logger = logging.getLogger(__name__)
 config = get_agent_config("synthesis")
 model, options = config.get_model_settings()
 
-# Initialize source tracking for synthesis
-synthesis_source_tracker = AgentSourceTracker(
-    agent_id="synthesis", shared_registry=SharedSourceRegistry()
-)
-
-# Initialize synthesis tools
-synthesis_tools = SynthesisAgentTools(synthesis_source_tracker)
-
 # Define the Synthesis Agent
 synthesis_agent: Agent = Agent(
     name="SYNTHESIS_AGENT",
-    description="Specialized agent for synthesizing information from multiple sources and generating comprehensive research reports with citations",
+    description="Specialized agent for synthesizing information from multiple sources and generating research reports",
     instruction=SYNTHESIS_PROMPT,
     model=model,
     options=options,
     tools=[
-        synthesis_tools.synthesize_research_findings,
-        synthesis_tools.generate_comprehensive_report,
-        synthesis_tools.create_citations_and_bibliography,
-        synthesis_tools.build_research_knowledge_graph,
-        synthesis_tools.identify_research_gaps,
-        synthesis_tools.resolve_contradictions,
+        synthesize_multi_source_findings,
     ],
 )
 
@@ -84,13 +67,12 @@ synthesis_tool = make_run_agent_as_tool_function(
     agent=synthesis_agent,
     tool_description="""
     Run the SYNTHESIS_AGENT to synthesize research findings into comprehensive reports.
-    The agent combines information from multiple sources and creates structured reports with citations.
+    The agent combines information from multiple sources and creates structured reports.
 
     Use this tool when:
     1. Multiple research findings need to be combined
-    2. Comprehensive reports with citations are required
-    3. Knowledge gaps and contradictions need to be identified
-    4. Final research summaries are needed
+    2. Research summaries are needed
+    3. Information from different sources needs to be organized
 
     Input should be research findings from multiple agents and sources.
     """,

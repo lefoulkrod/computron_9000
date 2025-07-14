@@ -2,7 +2,7 @@
 Web Research Agent module.
 
 This module provides the Web Research Agent specialized for conducting
-research using web sources with source tracking and credibility assessment.
+research using web sources.
 
 This module is internal to the deep_research package.
 """

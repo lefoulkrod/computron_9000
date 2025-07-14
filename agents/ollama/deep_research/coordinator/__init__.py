@@ -16,7 +16,6 @@ from .agent import (
     research_coordinator_tool,
 )
 from .coordination_tools import CoordinationTools
-from .workflow_coordinator import ConcreteResearchWorkflowCoordinator
 
 # Internal module - exports available for use within deep_research package only
 __all__ = [
@@ -26,5 +25,4 @@ __all__ = [
     "research_coordinator_before_callback",
     "research_coordinator_tool",
     "CoordinationTools",
-    "ConcreteResearchWorkflowCoordinator",
 ]
