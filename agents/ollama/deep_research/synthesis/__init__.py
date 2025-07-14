@@ -2,7 +2,7 @@
 Synthesis Agent module.
 
 This module provides the Synthesis Agent specialized for synthesizing information
-from multiple sources and generating comprehensive research reports.
+from multiple sources and generating research reports.
 
 This module is internal to the deep_research package.
 """

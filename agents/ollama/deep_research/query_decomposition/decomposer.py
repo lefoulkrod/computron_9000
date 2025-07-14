@@ -8,8 +8,6 @@ import logging
 import re
 from typing import Any
 
-from agents.ollama.deep_research.shared.source_tracking import AgentSourceTracker
-
 logger = logging.getLogger(__name__)
 
 
@@ -18,9 +16,9 @@ class QueryDecomposer:
     Core class for query decomposition and analysis functionality.
     """
 
-    def __init__(self, source_tracker: AgentSourceTracker | None = None):
+    def __init__(self) -> None:
         """Initialize the QueryDecomposer."""
-        self.source_tracker = source_tracker
+        pass
 
     def get_tools(self) -> list[dict[str, Any]]:
         """Get all query decomposition tools."""

@@ -140,7 +140,7 @@ typecheck:
     uv run mypy .
 
 # Run all quality checks
-check: format lint typecheck
+check: format fix lint typecheck
 
 # 🧹 Cleanup commands
 # Clean Python cache files

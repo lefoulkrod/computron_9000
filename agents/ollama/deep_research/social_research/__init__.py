@@ -2,7 +2,7 @@
 Social Research Agent module.
 
 This module provides the Social Research Agent specialized for conducting
-research using social media and forum sources with sentiment analysis.
+research using social media and forum sources.
 
 This module is internal to the deep_research package.
 """

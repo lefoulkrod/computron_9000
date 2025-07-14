@@ -1,8 +1,8 @@
 """
 Analysis Agent for source analysis and credibility assessment.
 
-This module contains the Analysis Agent specialized for performing deep analysis
-of sources, credibility assessment, and cross-reference verification.
+This module contains the Analysis Agent specialized for performing analysis
+of sources using basic web research tools.
 """
 
 import logging
@@ -13,13 +13,16 @@ from agents.ollama.sdk import (
     make_run_agent_as_tool_function,
 )
 from agents.types import Agent
-
-from ..shared import (
-    AgentSourceTracker,
-    SharedSourceRegistry,
-    get_agent_config,
+from tools.web import (
+    get_webpage,
+    get_webpage_substring,
+    get_webpage_summary,
+    get_webpage_summary_sections,
+    html_find_elements,
+    search_google,
 )
-from .analysis_tools import AnalysisTools
+
+from ..shared import get_agent_config
 from .prompt import ANALYSIS_PROMPT
 
 # Load configuration and set up logger
@@ -29,29 +32,20 @@ logger = logging.getLogger(__name__)
 config = get_agent_config("analysis")
 model, options = config.get_model_settings()
 
-# Initialize source tracking for analysis
-analysis_source_tracker = AgentSourceTracker(
-    agent_id="analysis", shared_registry=SharedSourceRegistry()
-)
-
-# Initialize analysis tools with agent-specific source tracker
-analysis_tools = AnalysisTools(source_tracker=analysis_source_tracker)
-
 # Define the Analysis Agent
 analysis_agent: Agent = Agent(
     name="ANALYSIS_AGENT",
-    description="Specialized agent for deep analysis of sources, credibility assessment, cross-reference verification, and inconsistency detection",
+    description="Specialized agent for analysis of sources using web research tools",
     instruction=ANALYSIS_PROMPT,
     model=model,
     options=options,
     tools=[
-        analysis_tools.assess_webpage_credibility,
-        analysis_tools.extract_webpage_metadata,
-        analysis_tools.categorize_source,
-        analysis_tools.verify_cross_references,
-        analysis_tools.evaluate_source_consistency,
-        analysis_tools.perform_comprehensive_credibility_assessment,
-        analysis_tools.analyze_reddit_credibility,
+        search_google,
+        get_webpage,
+        get_webpage_summary,
+        get_webpage_summary_sections,
+        get_webpage_substring,
+        html_find_elements,
     ],
 )
 
@@ -84,6 +78,4 @@ __all__ = [
     "analysis_before_callback",
     "analysis_after_callback",
     "analysis_tool",
-    "analysis_source_tracker",
-    "analysis_tools",
 ]

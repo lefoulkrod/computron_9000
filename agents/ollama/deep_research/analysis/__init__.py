@@ -1,8 +1,8 @@
 """
 Analysis Agent module.
 
-This module provides the Analysis Agent specialized for deep analysis of sources,
-credibility assessment, and cross-reference verification.
+This module provides the Analysis Agent specialized for analysis of sources
+using basic web research tools.
 
 This module is internal to the deep_research package.
 """
