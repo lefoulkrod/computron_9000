@@ -26,7 +26,9 @@ test = [
 ]
 dev = [
     "ruff",
-    "mypy"
+    "mypy",
+    "types-cachetools",
+    "types-PyYAML"
 ]
 
 [tool.uv]
@@ -40,9 +42,22 @@ extend-exclude = ["tests/*"]
 [tool.ruff.lint]
 select = [
     "ALL",
+    "D",
 ]
 ignore = [
+    # Ignore all complexity rules
+    "C90",  # McCabe complexity
+    "C901",  # Function is too complex
+    "PLR0911",  # Too many return statements
+    "PLR0912",  # Too many branches
+    "PLR0913",  # Too many arguments
+    "PLR0915",  # Too many statements
+    "PLR1702",  # Too many nested blocks
+    "COM812"    # Missing trailing comma in Python 3.6+
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"  # Use Google-style docstrings
 
 [tool.mypy]
 python_version = "3.12"                         # Target Python version for type checking
@@ -66,15 +81,14 @@ disallow_any_generics = true              # Require explicit type parameters for
 disallow_untyped_calls = true             # Disallow calling untyped functions from typed code
 no_implicit_reexport = true               # Disallow implicit star re-exports (e.g., via `from module import *`)
 
-# ▶️ Per-module exceptions:
 [[tool.mypy.overrides]]
-module = "tests.*"
+module = "tests/*"
 disallow_untyped_defs = false             # Allow untyped defs in tests for flexibility
 no_implicit_reexport = false              # Allow tests to import from internal modules
 
 [[tool.mypy.overrides]]
-module = ["playwright.*", "podman.*", "ollama.*", "asyncpraw.*"]
-ignore_missing_imports = true             # Skip errors for missing types in these libraries
+module = ["asyncpraw.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
