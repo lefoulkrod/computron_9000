@@ -1,5 +1,6 @@
 # Standard library imports
 """Tool for retrieving the current system date and time in human-readable 12-hour format."""
+
 import datetime
 import logging
 
@@ -17,11 +18,11 @@ class DateTimeResult(BaseModel):
 
 
 def datetime_tool() -> DateTimeResult:
-    """
-    Get the current system date and time in human-readable 12-hour format (up to seconds), including timezone.
+    """Get the current system date and time in human-readable 12-hour format (up to seconds), including timezone.
 
     Returns:
         DateTimeResult: Result object containing the formatted date and time string, timezone, or error details.
+
     """
     try:
         now = datetime.datetime.now(datetime.UTC).astimezone()
@@ -29,5 +30,5 @@ def datetime_tool() -> DateTimeResult:
         tzname = now.tzname() or "Unknown"
         return DateTimeResult(status="success", datetime=formatted, timezone=tzname)
     except Exception as e:
-        logging.error(f"Failed to get system datetime: {e}")
+        logging.exception(f"Failed to get system datetime: {e}")
         return DateTimeResult(status="error", error_message=str(e))

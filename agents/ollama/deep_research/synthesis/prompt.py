@@ -1,6 +1,4 @@
-"""
-Prompt templates for the Synthesis Agent.
-"""
+"""Prompt templates for the Synthesis Agent."""
 
 # Main instruction prompt for the Synthesis Agent
 SYNTHESIS_PROMPT = """

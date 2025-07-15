@@ -8,8 +8,8 @@ from .execute_code import (
 )
 
 __all__ = [
-    "execute_python_program",
+    "CodeExecutionError",
     "execute_nodejs_program",
     "execute_nodejs_program_with_playwright",
-    "CodeExecutionError",
+    "execute_python_program",
 ]

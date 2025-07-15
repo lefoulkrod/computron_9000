@@ -1,5 +1,4 @@
-"""
-Interactive REPL for searching Reddit using search_reddit.
+"""Interactive REPL for searching Reddit using search_reddit.
 
 Usage:
     From the project root, run:
@@ -26,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    """
-    Interactive REPL for searching Reddit and viewing comments.
-    """
+    """Interactive REPL for searching Reddit and viewing comments."""
     print("Reddit Search REPL. Type 'exit' to quit.")
     results: list[RedditSubmission] = []
     while True:
@@ -44,11 +41,11 @@ async def main() -> None:
                     print(f"{i}. {submission.title} (r/{submission.subreddit})")
                     print(f"   URL: {submission.url}")
                     print(
-                        f"   Author: {submission.author} | Score: {submission.score} | Comments: {submission.num_comments} | Created: {submission.created_utc}"
+                        f"   Author: {submission.author} | Score: {submission.score} | Comments: {submission.num_comments} | Created: {submission.created_utc}",
                     )
                     print(f"   Permalink: https://reddit.com{submission.permalink}")
                     print(
-                        f"   Selftext: {submission.selftext[:1000]}{'...' if len(submission.selftext) > 1000 else ''}"
+                        f"   Selftext: {submission.selftext[:1000]}{'...' if len(submission.selftext) > 1000 else ''}",
                     )
                     print()
             except Exception as e:
@@ -57,7 +54,7 @@ async def main() -> None:
                 results = []
                 continue
         print(
-            "Options: [number] to view comments, 'search' for new search, 'exit' to quit."
+            "Options: [number] to view comments, 'search' for new search, 'exit' to quit.",
         )
         choice = input("Select option: ").strip()
         if choice.lower() in {"exit", "quit"}:
@@ -70,7 +67,7 @@ async def main() -> None:
             idx = int(choice) - 1
             submission = results[idx]
             print(
-                f"Fetching comments for: {submission.title} (r/{submission.subreddit})"
+                f"Fetching comments for: {submission.title} (r/{submission.subreddit})",
             )
             try:
                 comments = await get_reddit_comments_tree_shallow(submission.url)
@@ -78,15 +75,15 @@ async def main() -> None:
                 for j, comment in enumerate(comments, 1):
                     print(f"{j}. Author: {comment.author} | Score: {comment.score}")
                     print(
-                        f"   {comment.body[:1000]}{'...' if len(comment.body) > 1000 else ''}"
+                        f"   {comment.body[:1000]}{'...' if len(comment.body) > 1000 else ''}",
                     )
                     if comment.replies:
                         print(
-                            f"   Replies: {len(comment.replies)} (showing first reply)"
+                            f"   Replies: {len(comment.replies)} (showing first reply)",
                         )
                         reply = comment.replies[0]
                         print(
-                            f"      ↳ {reply.author}: {reply.body[:1000]}{'...' if len(reply.body) > 1000 else ''}"
+                            f"      ↳ {reply.author}: {reply.body[:1000]}{'...' if len(reply.body) > 1000 else ''}",
                         )
                     print()
             except Exception as e:

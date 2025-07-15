@@ -1,6 +1,4 @@
-"""
-Prompt templates for the Social Research Agent.
-"""
+"""Prompt templates for the Social Research Agent."""
 
 # Main instruction prompt for the Social Research Agent
 SOCIAL_RESEARCH_PROMPT = """

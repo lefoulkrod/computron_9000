@@ -119,28 +119,19 @@ test-quick:
 # 🔧 Development tools
 # Format code with black and ruff (for imports)
 format:
-    uv run ruff check --select I --fix .
-    uv run black .
+    uv run ruff format .
+    uv run ruff check --fix .
 
 # Lint code with ruff
 lint:
     uv run ruff check .
-
-# Fix linting issues automatically (including import sorting)
-lint-fix:
-    uv run ruff check --fix .
-
-# Auto-fix everything possible (format + lint fixes)
-fix:
-    uv run ruff check --fix .
-    uv run black .
 
 # Type check with mypy
 typecheck:
     uv run mypy .
 
 # Run all quality checks
-check: format fix lint typecheck
+check: format lint typecheck
 
 # 🧹 Cleanup commands
 # Clean Python cache files
@@ -185,19 +176,6 @@ python-info:
     @echo ""
     @echo "📋 Available Python versions:"
     @uv python list
-
-# Install a specific Python version
-python-install version:
-    uv python install {{version}}
-
-# List all available Python versions (including downloadable)
-python-list-all:
-    uv python list --all-versions
-
-# Switch to a different Python version for this project
-python-switch version:
-    echo "{{version}}" > .python-version
-    uv sync
 
 # Validate Python version consistency across config files
 python-validate:

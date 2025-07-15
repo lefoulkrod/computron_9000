@@ -1,5 +1,4 @@
-"""
-Simplified synthesis tools without source tracking dependencies.
+"""Simplified synthesis tools without source tracking dependencies.
 
 This module provides basic synthesis functionality for combining information
 from multiple research sources.
@@ -14,14 +13,14 @@ logger = logging.getLogger(__name__)
 async def synthesize_multi_source_findings(
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """
-    Synthesize information from multiple research sources and agents.
+    """Synthesize information from multiple research sources and agents.
 
     Args:
         findings (List[Dict[str, Any]]): List of research findings from different sources/agents.
 
     Returns:
         Dict[str, Any]: Synthesized information organized by topic.
+
     """
     try:
         # Group findings by topic and source type
@@ -47,7 +46,7 @@ async def synthesize_multi_source_findings(
     except Exception as e:
         logger.error(f"Error in synthesis: {e}")
         return {
-            "error": f"Synthesis failed: {str(e)}",
+            "error": f"Synthesis failed: {e!s}",
             "total_sources": len(findings),
             "status": "failed",
         }
@@ -86,14 +85,16 @@ def _extract_key_themes(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # Convert to list format
     theme_list = []
     for theme, data in sorted(
-        themes.items(), key=lambda x: x[1]["count"], reverse=True
+        themes.items(),
+        key=lambda x: x[1]["count"],
+        reverse=True,
     )[:10]:
         theme_list.append(
             {
                 "theme": theme,
                 "frequency": data["count"],
                 "source_types": list(data["sources"]),
-            }
+            },
         )
 
     return theme_list
@@ -131,7 +132,7 @@ def _analyze_consensus_and_contradictions(
                         "topic": topic,
                         "agreement_level": "high",
                         "dominant_stance": dominant_stance[0],
-                    }
+                    },
                 )
             elif agreement_ratio <= 0.5:
                 contradictions.append(
@@ -139,7 +140,7 @@ def _analyze_consensus_and_contradictions(
                         "topic": topic,
                         "agreement_level": "low",
                         "stance_distribution": stances,
-                    }
+                    },
                 )
 
     return {
@@ -162,7 +163,7 @@ def _analyze_temporal_coverage(findings: list[dict[str, Any]]) -> dict[str, Any]
     """Analyze temporal coverage of sources."""
     dates = []
     for finding in findings:
-        if "date" in finding and finding["date"]:
+        if finding.get("date"):
             dates.append(finding["date"])
 
     if not dates:
@@ -178,7 +179,8 @@ def _analyze_temporal_coverage(findings: list[dict[str, Any]]) -> dict[str, Any]
 
 
 def _create_synthesis_summary(
-    findings: list[dict[str, Any]], themes: list[dict[str, Any]]
+    findings: list[dict[str, Any]],
+    themes: list[dict[str, Any]],
 ) -> str:
     """Create a brief synthesis summary."""
     total_sources = len(findings)

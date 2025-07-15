@@ -15,14 +15,14 @@ _cache_registry: dict[str, cachetools.LRUCache[Any, Any]] = {}
 def async_lru_cache(
     maxsize: int = 10,
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
-    """
-    Decorator to cache async function results using cachetools. If no cache is provided, creates one per function.
+    """Decorator to cache async function results using cachetools. If no cache is provided, creates one per function.
 
     Args:
         maxsize (int): Maximum size of the LRU cache. Default is 10.
 
     Returns:
         Callable: Decorated async function.
+
     """
 
     def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:

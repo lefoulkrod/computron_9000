@@ -1,5 +1,4 @@
-"""
-Container core functions for code execution tools (Python, Node.js) using containers.
+"""Container core functions for code execution tools (Python, Node.js) using containers.
 
 This module provides container management, code upload, and package installation utilities for use by code execution tools.
 """
@@ -16,16 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class CodeExecutionError(Exception):
-    """
-    Custom exception for code execution errors.
-    """
-
-    pass
+    """Custom exception for code execution errors."""
 
 
 def _create_and_start_container(image: str) -> Container:
-    """
-    Create and start a Podman container with the specified image.
+    """Create and start a Podman container with the specified image.
 
     Args:
         image (str): The image to use for the container.
@@ -35,6 +29,7 @@ def _create_and_start_container(image: str) -> Container:
 
     Raises:
         CodeExecutionError: If the container cannot be created or started.
+
     """
     try:
         with PodmanClient.from_env() as client:
@@ -48,8 +43,7 @@ def _create_and_start_container(image: str) -> Container:
 
 
 def _upload_code_to_container(ctr: Container, filename: str, program_text: str) -> None:
-    """
-    Upload the code file to the container.
+    """Upload the code file to the container.
 
     Args:
         ctr (Container): The container object.
@@ -58,6 +52,7 @@ def _upload_code_to_container(ctr: Container, filename: str, program_text: str) 
 
     Raises:
         CodeExecutionError: If the upload fails.
+
     """
     buf = io.BytesIO()
     code_bytes = program_text.encode()
@@ -72,8 +67,7 @@ def _upload_code_to_container(ctr: Container, filename: str, program_text: str) 
 
 
 def _install_packages(ctr: Container, language: str, packages: list[str]) -> None:
-    """
-    Install packages in the running container.
+    """Install packages in the running container.
 
     Args:
         ctr (Container): The container object.
@@ -82,6 +76,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
 
     Raises:
         CodeExecutionError: If installation fails.
+
     """
     if not packages:
         return
@@ -91,7 +86,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
         install_cmd = ["npm", "--prefix", "/root", "install"] + packages
     else:
         raise CodeExecutionError(
-            f"Unsupported language for package install: {language}"
+            f"Unsupported language for package install: {language}",
         )
     exit_code, output = ctr.exec_run(install_cmd, stdout=True, stderr=True, demux=True)
     logger.debug(f"Package install output: {output} Exit code: {exit_code}")
@@ -105,8 +100,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
 
 
 def _parse_container_output(exit_code: int, output: Any) -> dict[str, str | None]:
-    """
-    Parse the output from a container exec_run call.
+    """Parse the output from a container exec_run call.
 
     Args:
         exit_code (int): The exit code from the command.
@@ -114,6 +108,7 @@ def _parse_container_output(exit_code: int, output: Any) -> dict[str, str | None
 
     Returns:
         dict[str, str | None]: Dictionary with 'stdout', 'stderr', and 'exit_code'.
+
     """
     stdout = None
     stderr = None
@@ -137,8 +132,7 @@ def _run_code_in_container(
     language: str,
     packages: list[str] | None = None,
 ) -> dict[str, str | None]:
-    """
-    Run code in a container, handling package install, upload, execution, and cleanup.
+    """Run code in a container, handling package install, upload, execution, and cleanup.
 
     Args:
         image (str): Container image.
@@ -153,11 +147,12 @@ def _run_code_in_container(
 
     Raises:
         CodeExecutionError: On any failure.
+
     """
     ctr = None
     packages = packages or []
     logger.debug(
-        f"Running code in container: image={image}, filename={filename}, language={language}, packages={packages}\n--- Code Start ---\n{program_text}\n--- Code End ---"
+        f"Running code in container: image={image}, filename={filename}, language={language}, packages={packages}\n--- Code Start ---\n{program_text}\n--- Code End ---",
     )
     try:
         ctr = _create_and_start_container(image)

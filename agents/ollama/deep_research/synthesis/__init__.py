@@ -1,5 +1,4 @@
-"""
-Synthesis Agent module.
+"""Synthesis Agent module.
 
 This module provides the Synthesis Agent specialized for synthesizing information
 from multiple sources and generating research reports.

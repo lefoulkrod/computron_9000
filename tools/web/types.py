@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
 __all__ = [
-    "GetWebpageResult",
     "GetWebpageError",
+    "GetWebpageResult",
     "LinkInfo",
     "ReducedWebpage",
 ]
@@ -17,6 +17,7 @@ class GetWebpageResult(BaseModel):
         url (str): The URL that was fetched.
         html (str): The full HTML content of the page.
         response_code (int): The HTTP response code returned by the server.
+
     """
 
     url: str
@@ -30,8 +31,6 @@ class GetWebpageError(Exception):
     Used when web page fetching operations fail.
     """
 
-    pass
-
 
 class LinkInfo(BaseModel):
     """Represents a hyperlink found in a web page.
@@ -41,6 +40,7 @@ class LinkInfo(BaseModel):
     Attributes:
         href (str): The URL of the link.
         text (str): The visible text of the link.
+
     """
 
     href: str
@@ -56,6 +56,7 @@ class ReducedWebpage(BaseModel):
     Attributes:
         page_text (str): The visible text content of the page, with all HTML tags removed.
         links (List[LinkInfo]): List of links (anchor tags) found in the page, in order.
+
     """
 
     page_text: str

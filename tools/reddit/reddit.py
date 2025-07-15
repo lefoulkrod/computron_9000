@@ -1,6 +1,4 @@
-"""
-Provides tools for interacting with Reddit using PRAW (Python Reddit API Wrapper).
-"""
+"""Provides tools for interacting with Reddit using PRAW (Python Reddit API Wrapper)."""
 
 import logging
 
@@ -14,8 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class RedditSubmission(BaseModel):
-    """
-    Pydantic model for serializing Reddit submissions.
+    """Pydantic model for serializing Reddit submissions.
 
     Attributes:
         id (str): Submission ID.
@@ -28,6 +25,7 @@ class RedditSubmission(BaseModel):
         num_comments (int): Number of comments.
         created_utc (float): UTC timestamp of creation.
         permalink (str): Relative URL to the post.
+
     """
 
     id: str
@@ -43,8 +41,7 @@ class RedditSubmission(BaseModel):
 
 
 class RedditComment(BaseModel):
-    """
-    Pydantic model for serializing Reddit comments.
+    """Pydantic model for serializing Reddit comments.
 
     Attributes:
         id (str): Comment ID.
@@ -53,6 +50,7 @@ class RedditComment(BaseModel):
         score (int): Comment score.
         created_utc (float): UTC timestamp of creation.
         replies (list["RedditComment"]): List of immediate replies as RedditComment objects.
+
     """
 
     id: str
@@ -68,8 +66,7 @@ class RedditComment(BaseModel):
 
 
 async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
-    """
-    Search Reddit for posts matching the query.
+    """Search Reddit for posts matching the query.
 
     Args:
         query (str): Query string supporting Boolean and field operators:
@@ -87,6 +84,7 @@ async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
 
     Returns:
         list[RedditSubmission]: List of serializable RedditSubmission objects.
+
     """
     async with asyncpraw.Reddit(
         client_id=config.reddit.client_id,
@@ -108,16 +106,16 @@ async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
                     num_comments=submission.num_comments,
                     created_utc=submission.created_utc,
                     permalink=submission.permalink,
-                )
+                ),
             )
         return submissions
 
 
 async def get_reddit_comments_tree_shallow(
-    submission_id: str, limit: int = 10
+    submission_id: str,
+    limit: int = 10,
 ) -> list[RedditComment]:
-    """
-    Retrieve the first N top-level comments for a Reddit submission by submission ID.
+    """Retrieve the first N top-level comments for a Reddit submission by submission ID.
     This function fetches the top-level comments and their immediate replies,
     but does not recursively fetch deeper replies to keep the tree shallow.
 
@@ -127,6 +125,7 @@ async def get_reddit_comments_tree_shallow(
 
     Returns:
         list[RedditComment]: List of RedditComment objects representing the top-level comments and their immediate replies.
+
     """
     try:
         async with asyncpraw.Reddit(

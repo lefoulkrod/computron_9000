@@ -1,6 +1,4 @@
-"""
-Prompt templates for the Query Decomposition Agent.
-"""
+"""Prompt templates for the Query Decomposition Agent."""
 
 # Main instruction prompt for the Query Decomposition Agent
 QUERY_DECOMPOSITION_PROMPT = """

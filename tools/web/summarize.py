@@ -10,13 +10,13 @@ config = load_config()
 
 
 class SectionSummary(pydantic.BaseModel):
-    """
-    Represents a summary of a section of a larger block of text that has been divided for summarization.
+    """Represents a summary of a section of a larger block of text that has been divided for summarization.
 
     Attributes:
         summary (str): The summary of the section.
         starting_char_position (int): The starting character position of the section in the original text.
         ending_char_position (int): The ending character position of the section in the original text.
+
     """
 
     summary: str
@@ -25,14 +25,14 @@ class SectionSummary(pydantic.BaseModel):
 
 
 async def _summarize_text_full(text: str) -> str:
-    """
-    Summarize the text by first dividing it into sections and summarizing each section, then combining those summaries into a final summary.
+    """Summarize the text by first dividing it into sections and summarizing each section, then combining those summaries into a final summary.
 
     Args:
         text (str): The text to summarize.
 
     Returns:
         str: The summarized text.
+
     """
     final_prompt_template = """
         This text is a set of summaries created by summarizing a longer text in sections.\nCreate a single summary from them. /no_think\n{combined_summary}"""
@@ -42,10 +42,11 @@ async def _summarize_text_full(text: str) -> str:
         if len(summaries) > 1:
             combined_summary = " ".join(summaries)
             final_prompt = final_prompt_template.format(
-                combined_summary=combined_summary
+                combined_summary=combined_summary,
             )
             final_response = await generate_summary_with_ollama(
-                prompt=final_prompt, think=False
+                prompt=final_prompt,
+                think=False,
             )
             logger.debug(f"Final summary response: {final_response}")
             return final_response
@@ -56,14 +57,14 @@ async def _summarize_text_full(text: str) -> str:
 
 
 async def summarize_text_sections(text: str) -> list[SectionSummary]:
-    """
-    Summarize the text by dividing it into sections and calling the LLM to generate a concise summary for each section. Returns a list of section summaries with metadata.
+    """Summarize the text by dividing it into sections and calling the LLM to generate a concise summary for each section. Returns a list of section summaries with metadata.
 
     Args:
         text (str): The text to summarize.
 
     Returns:
         List[SectionSummary]: List of section summaries with indices and positions.
+
     """
     part_prompt_template = (
         "The following text is part {part_num} of {total_parts} of a larger document. "
@@ -83,17 +84,19 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
         i += section_size - overlap
 
     logger.debug(
-        f"Divided text length {len(text)} into {len(sections)} parts for summarization."
+        f"Divided text length {len(text)} into {len(sections)} parts for summarization.",
     )
     try:
         summaries: list[SectionSummary] = []
         total_parts = len(sections)
         for idx, (section, (start, end)) in enumerate(
-            zip(sections, positions, strict=False)
+            zip(sections, positions, strict=False),
         ):
             part_num = idx + 1
             prompt = part_prompt_template.format(
-                part_num=part_num, total_parts=total_parts, section=section
+                part_num=part_num,
+                total_parts=total_parts,
+                section=section,
             )
             response = await generate_summary_with_ollama(prompt=prompt, think=False)
             logger.debug(f"Section summary response: {response}")
@@ -102,7 +105,7 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
                     summary=response,
                     starting_char_position=start,
                     ending_char_position=end,
-                )
+                ),
             )
         return summaries
     except Exception as e:

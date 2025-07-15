@@ -32,14 +32,14 @@ class ChatRequest(BaseModel):
 
 
 def _guess_content_type(file_path: str) -> str:
-    """
-    Guess the content type based on file extension.
+    """Guess the content type based on file extension.
 
     Args:
         file_path (str): The file path.
 
     Returns:
         str: The content type.
+
     """
     if file_path.endswith(".css"):
         return "text/css"
@@ -57,27 +57,27 @@ def _guess_content_type(file_path: str) -> str:
 
 
 async def handle_options(_request: Request) -> Response:
-    """
-    Handle CORS preflight requests.
+    """Handle CORS preflight requests.
 
     Args:
         request (Request): The incoming request.
 
     Returns:
         Response: The HTTP response.
+
     """
     return web.Response(status=200, headers=CORS_HEADERS)
 
 
 async def handle_post(request: Request) -> StreamResponse:
-    """
-    Handle chat POST requests from the UI.
+    """Handle chat POST requests from the UI.
 
     Args:
         request (Request): The incoming request.
 
     Returns:
         StreamResponse: The streaming HTTP response.
+
     """
     if request.path == "/api/chat":
         try:
@@ -94,7 +94,9 @@ async def handle_post(request: Request) -> StreamResponse:
         except Exception:
             logger.exception("Failed to parse request JSON")
             return web.json_response(
-                {"error": "Invalid JSON."}, status=400, headers=CORS_HEADERS
+                {"error": "Invalid JSON."},
+                status=400,
+                headers=CORS_HEADERS,
             )
         user_query = data.message.strip()
         if not user_query:
@@ -114,7 +116,9 @@ async def handle_post(request: Request) -> StreamResponse:
             except Exception as exc:
                 logger.warning(f"Invalid data field: {exc}")
                 return web.json_response(
-                    {"error": "Invalid data field."}, status=400, headers=CORS_HEADERS
+                    {"error": "Invalid data field."},
+                    status=400,
+                    headers=CORS_HEADERS,
                 )
         resp = web.StreamResponse(
             status=200,
@@ -140,7 +144,7 @@ async def handle_post(request: Request) -> StreamResponse:
                     break
         except Exception as exc:
             logger.exception("Error in handle_user_message")
-            error_data = {"error": f"Server error: {str(exc)}", "final": True}
+            error_data = {"error": f"Server error: {exc!s}", "final": True}
             await resp.write((json.dumps(error_data) + "\n").encode("utf-8"))
         finally:
             await resp.write_eof()
@@ -149,14 +153,14 @@ async def handle_post(request: Request) -> StreamResponse:
 
 
 async def handle_get(request: Request) -> Response:
-    """
-    Serve the chat UI and static assets.
+    """Serve the chat UI and static assets.
 
     Args:
         request (Request): The incoming request.
 
     Returns:
         Response: The HTTP response.
+
     """
     if request.path in ["", "/"]:
         html_path = STATIC_DIR / "agent_ui.html"
@@ -164,7 +168,9 @@ async def handle_get(request: Request) -> Response:
             with html_path.open("rb") as f:
                 html = f.read()
             return web.Response(
-                body=html, content_type="text/html", headers=CORS_HEADERS
+                body=html,
+                content_type="text/html",
+                headers=CORS_HEADERS,
             )
         logger.warning(f"File not found: {html_path}")
         return web.Response(
@@ -180,7 +186,9 @@ async def handle_get(request: Request) -> Response:
             with file_path.open("rb") as f:
                 data = f.read()
             return web.Response(
-                body=data, content_type=content_type, headers=CORS_HEADERS
+                body=data,
+                content_type=content_type,
+                headers=CORS_HEADERS,
             )
         logger.warning(f"Static file not found: {file_path}")
         return web.Response(status=404)

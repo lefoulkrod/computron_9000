@@ -36,6 +36,7 @@ def get_task_data(task_id: str) -> str:
     Raises:
         KeyError: If task_id is not found in storage.
         ValueError: If task_id is empty or invalid.
+
     """
     try:
         # Validate input
@@ -50,8 +51,7 @@ def get_task_data(task_id: str) -> str:
         result_json = json.dumps(task_data_dict, indent=2)
 
         logger.info(
-            f"Retrieved task data for task {task_id} "
-            f"(agent: {task_data.agent_type})"
+            f"Retrieved task data for task {task_id} (agent: {task_data.agent_type})",
         )
 
         return result_json
@@ -91,6 +91,7 @@ def get_web_research_task_data(task_id: str) -> WebResearchTaskData:
         KeyError: If task_id is not found in storage.
         ValueError: If task_id is empty or invalid.
         TypeError: If the retrieved task is not a WebResearchTaskData instance.
+
     """
     try:
         # Validate input
@@ -104,12 +105,12 @@ def get_web_research_task_data(task_id: str) -> WebResearchTaskData:
         if not isinstance(task_data, WebResearchTaskData):
             raise TypeError(
                 f"Task {task_id} is not a web research task. "
-                f"Got {type(task_data).__name__}"
+                f"Got {type(task_data).__name__}",
             )
 
         logger.info(
             f"Retrieved web research task data for task {task_id} "
-            f"(query: {task_data.search_query})"
+            f"(query: {task_data.search_query})",
         )
 
         return task_data
@@ -146,6 +147,7 @@ def get_social_research_task_data(task_id: str) -> SocialResearchTaskData:
         KeyError: If task_id is not found in storage.
         ValueError: If task_id is empty or invalid.
         TypeError: If the retrieved task is not a SocialResearchTaskData instance.
+
     """
     try:
         # Validate input
@@ -159,12 +161,12 @@ def get_social_research_task_data(task_id: str) -> SocialResearchTaskData:
         if not isinstance(task_data, SocialResearchTaskData):
             raise TypeError(
                 f"Task {task_id} is not a social research task. "
-                f"Got {type(task_data).__name__}"
+                f"Got {type(task_data).__name__}",
             )
 
         logger.info(
             f"Retrieved social research task data for task {task_id} "
-            f"(query: {task_data.search_query}, platforms: {task_data.platforms})"
+            f"(query: {task_data.search_query}, platforms: {task_data.platforms})",
         )
 
         return task_data
@@ -201,6 +203,7 @@ def get_analysis_task_data(task_id: str) -> AnalysisTaskData:
         KeyError: If task_id is not found in storage.
         ValueError: If task_id is empty or invalid.
         TypeError: If the retrieved task is not an AnalysisTaskData instance.
+
     """
     try:
         # Validate input
@@ -214,12 +217,12 @@ def get_analysis_task_data(task_id: str) -> AnalysisTaskData:
         if not isinstance(task_data, AnalysisTaskData):
             raise TypeError(
                 f"Task {task_id} is not an analysis task. "
-                f"Got {type(task_data).__name__}"
+                f"Got {type(task_data).__name__}",
             )
 
         logger.info(
             f"Retrieved analysis task data for task {task_id} "
-            f"(type: {task_data.analysis_type}, query: {task_data.original_query})"
+            f"(type: {task_data.analysis_type}, query: {task_data.original_query})",
         )
 
         return task_data
@@ -254,6 +257,7 @@ def get_synthesis_task_data(task_id: str) -> SynthesisTaskData:
         KeyError: If task_id is not found in storage.
         ValueError: If task_id is empty or invalid.
         TypeError: If the retrieved task is not a SynthesisTaskData instance.
+
     """
     try:
         # Validate input
@@ -267,12 +271,12 @@ def get_synthesis_task_data(task_id: str) -> SynthesisTaskData:
         if not isinstance(task_data, SynthesisTaskData):
             raise TypeError(
                 f"Task {task_id} is not a synthesis task. "
-                f"Got {type(task_data).__name__}"
+                f"Got {type(task_data).__name__}",
             )
 
         logger.info(
             f"Retrieved synthesis task data for task {task_id} "
-            f"(format: {task_data.output_format}, audience: {task_data.target_audience})"
+            f"(format: {task_data.output_format}, audience: {task_data.target_audience})",
         )
 
         return task_data
@@ -309,6 +313,7 @@ def get_query_decomposition_task_data(task_id: str) -> QueryDecompositionTaskDat
         KeyError: If task_id is not found in storage.
         ValueError: If task_id is empty or invalid.
         TypeError: If the retrieved task is not a QueryDecompositionTaskData instance.
+
     """
     try:
         # Validate input
@@ -322,12 +327,12 @@ def get_query_decomposition_task_data(task_id: str) -> QueryDecompositionTaskDat
         if not isinstance(task_data, QueryDecompositionTaskData):
             raise TypeError(
                 f"Task {task_id} is not a query decomposition task. "
-                f"Got {type(task_data).__name__}"
+                f"Got {type(task_data).__name__}",
             )
 
         logger.info(
             f"Retrieved query decomposition task data for task {task_id} "
-            f"(query: {task_data.original_query}, strategy: {task_data.decomposition_strategy})"
+            f"(query: {task_data.original_query}, strategy: {task_data.decomposition_strategy})",
         )
 
         return task_data

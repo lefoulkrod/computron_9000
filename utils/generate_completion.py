@@ -17,8 +17,7 @@ async def generate_completion(
     think: bool = False,
     model_name: str | None = None,
 ) -> str:
-    """
-    Generate a completion using the Ollama AsyncClient.
+    """Generate a completion using the Ollama AsyncClient.
 
     Args:
         prompt (str): The user prompt to send to the LLM.
@@ -30,6 +29,7 @@ async def generate_completion(
 
     Raises:
         RuntimeError: If the LLM call fails.
+
     """
     if model_name:
         try:

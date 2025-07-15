@@ -1,6 +1,4 @@
-"""
-Model configuration management utilities.
-"""
+"""Model configuration management utilities."""
 
 import logging
 
@@ -10,19 +8,15 @@ logger = logging.getLogger(__name__)
 
 
 class ModelNotFoundError(Exception):
-    """
-    Exception raised when a model configuration is not found by name.
-    """
-
-    pass
+    """Exception raised when a model configuration is not found by name."""
 
 
 def get_default_model() -> ModelConfig:
-    """
-    Retrieve the default model configuration.
+    """Retrieve the default model configuration.
 
     Returns:
         ModelConfig: The default model configuration.
+
     """
     config = load_config()
     default_model = config.settings.default_model
@@ -30,8 +24,7 @@ def get_default_model() -> ModelConfig:
 
 
 def get_model_by_name(name: str) -> ModelConfig:
-    """
-    Retrieve a model configuration by name.
+    """Retrieve a model configuration by name.
 
     Args:
         name (str): The name of the model to retrieve.
@@ -41,6 +34,7 @@ def get_model_by_name(name: str) -> ModelConfig:
 
     Raises:
         ModelNotFoundError: If the model with the given name is not found.
+
     """
     config = load_config()
     for model in config.models:

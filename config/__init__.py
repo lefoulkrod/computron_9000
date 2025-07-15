@@ -69,7 +69,7 @@ class RedditConfig(BaseModel):
 
     client_id: str = Field(default_factory=lambda: os.getenv("REDDIT_CLIENT_ID", ""))
     client_secret: str = Field(
-        default_factory=lambda: os.getenv("REDDIT_CLIENT_SECRET", "")
+        default_factory=lambda: os.getenv("REDDIT_CLIENT_SECRET", ""),
     )
     user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
 
@@ -99,6 +99,7 @@ class AppConfig(BaseModel):
 
         Returns:
             The model configuration if found, None otherwise.
+
         """
         return next((model for model in self.models if model.name == name), None)
 
@@ -110,11 +111,12 @@ class AppConfig(BaseModel):
 
         Raises:
             ValueError: If the default model is not found.
+
         """
         model = self.get_model_by_name(self.settings.default_model)
         if model is None:
             raise ValueError(
-                f"Default model '{self.settings.default_model}' not found in configured models"
+                f"Default model '{self.settings.default_model}' not found in configured models",
             )
         return model
 
@@ -131,6 +133,7 @@ def load_config() -> AppConfig:
 
     Raises:
         RuntimeError: If the configuration file cannot be read or parsed.
+
     """
     path = Path(__file__).parent.parent / "config.yaml"
     logger.info(f"Loading configuration from {path}")
@@ -145,7 +148,7 @@ def load_config() -> AppConfig:
 
         config = AppConfig(**data)
         logger.info(
-            f"Successfully loaded configuration with {len(config.models)} models"
+            f"Successfully loaded configuration with {len(config.models)} models",
         )
         return config
 

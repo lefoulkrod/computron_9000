@@ -51,6 +51,7 @@ class TaskDataStorage:
         Raises:
             ValueError: If task_id already exists
             TypeError: If task_data is not a BaseTaskData instance
+
         """
         if not isinstance(task_data, BaseTaskData):
             raise TypeError("task_data must be a BaseTaskData instance")
@@ -65,7 +66,7 @@ class TaskDataStorage:
             self._task_data[task_data.task_id] = task_data
             logger.info(
                 f"Stored task data for task {task_data.task_id} "
-                f"(agent: {task_data.agent_type}, workflow: {task_data.workflow_id})"
+                f"(agent: {task_data.agent_type}, workflow: {task_data.workflow_id})",
             )
 
     def retrieve_task_data(self, task_id: str) -> BaseTaskData:
@@ -80,6 +81,7 @@ class TaskDataStorage:
         Raises:
             KeyError: If task_id is not found
             ValueError: If task_id is empty
+
         """
         if not task_id or not task_id.strip():
             raise ValueError("task_id cannot be empty")
@@ -109,6 +111,7 @@ class TaskDataStorage:
 
         Raises:
             ValueError: If task_id is empty
+
         """
         if not task_id or not task_id.strip():
             raise ValueError("task_id cannot be empty")
@@ -118,7 +121,7 @@ class TaskDataStorage:
                 task_data = self._task_data.pop(task_id)
                 logger.info(
                     f"Deleted task data for task {task_id} "
-                    f"(agent: {task_data.agent_type})"
+                    f"(agent: {task_data.agent_type})",
                 )
                 return True
             logger.warning(f"Attempted to delete non-existent task {task_id}")
@@ -132,6 +135,7 @@ class TaskDataStorage:
 
         Returns:
             List of task IDs
+
         """
         with self._storage_lock:
             if workflow_id is None:
@@ -150,6 +154,7 @@ class TaskDataStorage:
 
         Returns:
             Number of stored tasks
+
         """
         with self._storage_lock:
             if workflow_id is None:
@@ -171,6 +176,7 @@ class TaskDataStorage:
 
         Raises:
             ValueError: If workflow_id is empty
+
         """
         if not workflow_id or not workflow_id.strip():
             raise ValueError("workflow_id cannot be empty")
@@ -196,6 +202,7 @@ class TaskDataStorage:
 
         Returns:
             Dictionary with storage statistics
+
         """
         with self._storage_lock:
             stats: dict[str, Any] = {
@@ -231,6 +238,7 @@ def get_task_data_storage() -> TaskDataStorage:
 
     Returns:
         TaskDataStorage singleton instance
+
     """
     global _storage_instance
     if _storage_instance is None:
@@ -243,6 +251,7 @@ def store_task_data(task_data: BaseTaskData) -> None:
 
     Args:
         task_data: Task data instance to store
+
     """
     storage = get_task_data_storage()
     storage.store_task_data(task_data)
@@ -256,6 +265,7 @@ def retrieve_task_data(task_id: str) -> BaseTaskData:
 
     Returns:
         Task data instance for the specified task
+
     """
     storage = get_task_data_storage()
     return storage.retrieve_task_data(task_id)
@@ -269,6 +279,7 @@ def delete_task_data(task_id: str) -> bool:
 
     Returns:
         True if task was deleted, False if task was not found
+
     """
     storage = get_task_data_storage()
     return storage.delete_task_data(task_id)
@@ -282,6 +293,7 @@ def clear_workflow_tasks(workflow_id: str) -> int:
 
     Returns:
         Number of tasks cleared
+
     """
     storage = get_task_data_storage()
     return storage.clear_workflow_tasks(workflow_id)

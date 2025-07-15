@@ -26,6 +26,7 @@ class BaseTaskData(BaseModel):
         workflow_id: Identifier for the parent research workflow.
         agent_type: Type of agent this task is assigned to (e.g., "web_research").
         created_at: ISO 8601 timestamp string indicating when the task was created.
+
     """
 
     task_id: str = Field(..., description="Unique identifier for the task")
@@ -41,6 +42,7 @@ class BaseTaskData(BaseModel):
 
         Attributes:
             json_encoders: Dictionary mapping types to custom JSON encoder functions.
+
         """
 
         json_encoders: dict[type, type] = {
@@ -65,10 +67,12 @@ class WebResearchTaskData(BaseTaskData):
         content_types: Types of content to prioritize (e.g., articles, reports).
         related_queries: Additional related queries from decomposition.
         workflow_context: Additional contextual information for the task.
+
     """
 
     agent_type: str = Field(
-        default="web_research", description="Agent type for web research"
+        default="web_research",
+        description="Agent type for web research",
     )
 
     # Core research parameters
@@ -78,7 +82,8 @@ class WebResearchTaskData(BaseTaskData):
         description="Specific domains to focus on (e.g., academic, news, government)",
     )
     max_sources: int = Field(
-        default=10, description="Maximum number of sources to collect"
+        default=10,
+        description="Maximum number of sources to collect",
     )
 
     # Search configuration
@@ -87,7 +92,8 @@ class WebResearchTaskData(BaseTaskData):
         description="Search depth: 'quick', 'standard', or 'comprehensive'",
     )
     include_recent_only: bool = Field(
-        default=False, description="Whether to focus only on recent content"
+        default=False,
+        description="Whether to focus only on recent content",
     )
     content_types: list[str] = Field(
         default_factory=lambda: ["articles", "reports", "studies"],
@@ -96,7 +102,8 @@ class WebResearchTaskData(BaseTaskData):
 
     # Context from workflow
     related_queries: list[str] = Field(
-        default_factory=list, description="Related subqueries from query decomposition"
+        default_factory=list,
+        description="Related subqueries from query decomposition",
     )
     workflow_context: dict[str, Any] = Field(
         default_factory=dict,
@@ -122,15 +129,18 @@ class SocialResearchTaskData(BaseTaskData):
         target_subreddits: Specific subreddits to focus on if using Reddit.
         related_queries: Additional related queries from decomposition.
         workflow_context: Additional contextual information for the task.
+
     """
 
     agent_type: str = Field(
-        default="social_research", description="Agent type for social research"
+        default="social_research",
+        description="Agent type for social research",
     )
 
     # Core research parameters
     search_query: str = Field(
-        ..., description="Primary query for social media research"
+        ...,
+        description="Primary query for social media research",
     )
     platforms: list[str] = Field(
         default_factory=lambda: ["reddit"],
@@ -140,13 +150,16 @@ class SocialResearchTaskData(BaseTaskData):
 
     # Search configuration
     sort_by: str = Field(
-        default="relevance", description="Sort order: 'relevance', 'recent', or 'top'"
+        default="relevance",
+        description="Sort order: 'relevance', 'recent', or 'top'",
     )
     include_comments: bool = Field(
-        default=True, description="Whether to include comment analysis"
+        default=True,
+        description="Whether to include comment analysis",
     )
     sentiment_analysis: bool = Field(
-        default=True, description="Whether to perform sentiment analysis"
+        default=True,
+        description="Whether to perform sentiment analysis",
     )
 
     # Subreddit targeting
@@ -157,7 +170,8 @@ class SocialResearchTaskData(BaseTaskData):
 
     # Context from workflow
     related_queries: list[str] = Field(
-        default_factory=list, description="Related subqueries from query decomposition"
+        default_factory=list,
+        description="Related subqueries from query decomposition",
     )
     workflow_context: dict[str, Any] = Field(
         default_factory=dict,
@@ -183,6 +197,7 @@ class AnalysisTaskData(BaseTaskData):
         confidence_scoring: Whether to provide confidence scores for findings.
         original_query: The original research query being addressed.
         workflow_context: Additional contextual information for the task.
+
     """
 
     agent_type: str = Field(default="analysis", description="Agent type for analysis")
@@ -193,12 +208,14 @@ class AnalysisTaskData(BaseTaskData):
         description="Type of analysis: 'comprehensive', 'comparative', or 'focused'",
     )
     analysis_questions: list[str] = Field(
-        default_factory=list, description="Specific questions to address in analysis"
+        default_factory=list,
+        description="Specific questions to address in analysis",
     )
 
     # Source data for analysis
     research_results: dict[str, Any] = Field(
-        default_factory=dict, description="Results from web and social research agents"
+        default_factory=dict,
+        description="Results from web and social research agents",
     )
     source_metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -207,13 +224,16 @@ class AnalysisTaskData(BaseTaskData):
 
     # Analysis configuration
     cross_verification: bool = Field(
-        default=True, description="Whether to perform cross-source verification"
+        default=True,
+        description="Whether to perform cross-source verification",
     )
     bias_detection: bool = Field(
-        default=True, description="Whether to analyze for potential bias"
+        default=True,
+        description="Whether to analyze for potential bias",
     )
     confidence_scoring: bool = Field(
-        default=True, description="Whether to provide confidence scores for findings"
+        default=True,
+        description="Whether to provide confidence scores for findings",
     )
 
     # Context from workflow
@@ -243,6 +263,7 @@ class SynthesisTaskData(BaseTaskData):
         executive_summary: Whether to include an executive summary.
         original_query: The original research query being addressed.
         workflow_context: Additional contextual information for the task.
+
     """
 
     agent_type: str = Field(default="synthesis", description="Agent type for synthesis")
@@ -257,27 +278,32 @@ class SynthesisTaskData(BaseTaskData):
         description="Target audience: 'general', 'academic', 'technical', or 'executive'",
     )
     synthesis_focus: list[str] = Field(
-        default_factory=list, description="Key aspects to emphasize in synthesis"
+        default_factory=list,
+        description="Key aspects to emphasize in synthesis",
     )
 
     # Input data for synthesis
     analysis_results: dict[str, Any] = Field(
-        default_factory=dict, description="Results from analysis agents"
+        default_factory=dict,
+        description="Results from analysis agents",
     )
     research_findings: dict[str, Any] = Field(
-        default_factory=dict, description="Raw research findings from all agents"
+        default_factory=dict,
+        description="Raw research findings from all agents",
     )
 
     # Synthesis configuration
     include_citations: bool = Field(
-        default=True, description="Whether to include detailed citations"
+        default=True,
+        description="Whether to include detailed citations",
     )
     confidence_indicators: bool = Field(
         default=True,
         description="Whether to include confidence indicators for findings",
     )
     executive_summary: bool = Field(
-        default=True, description="Whether to include an executive summary"
+        default=True,
+        description="Whether to include an executive summary",
     )
 
     # Context from workflow
@@ -306,16 +332,19 @@ class QueryDecompositionTaskData(BaseTaskData):
         prioritize_current_events: Whether to emphasize recent developments.
         research_goals: High-level goals for the overall research.
         workflow_context: Additional contextual information for the task.
+
     """
 
     agent_type: str = Field(
-        default="query_decomposition", description="Agent type for query decomposition"
+        default="query_decomposition",
+        description="Agent type for query decomposition",
     )
 
     # Decomposition parameters
     original_query: str = Field(..., description="Original complex query to decompose")
     max_subqueries: int = Field(
-        default=5, description="Maximum number of subqueries to create"
+        default=5,
+        description="Maximum number of subqueries to create",
     )
     decomposition_strategy: str = Field(
         default="comprehensive",
@@ -334,15 +363,18 @@ class QueryDecompositionTaskData(BaseTaskData):
 
     # Decomposition configuration
     include_context_queries: bool = Field(
-        default=True, description="Whether to include background/context subqueries"
+        default=True,
+        description="Whether to include background/context subqueries",
     )
     prioritize_current_events: bool = Field(
-        default=False, description="Whether to prioritize recent/current event aspects"
+        default=False,
+        description="Whether to prioritize recent/current event aspects",
     )
 
     # Workflow context
     research_goals: list[str] = Field(
-        default_factory=list, description="High-level goals for the research"
+        default_factory=list,
+        description="High-level goals for the research",
     )
     workflow_context: dict[str, Any] = Field(
         default_factory=dict,
@@ -376,6 +408,7 @@ def create_task_data(agent_type: str, **kwargs: Any) -> BaseTaskData:
 
     Raises:
         ValueError: If agent_type is not supported or recognized.
+
     """
     if agent_type not in TASK_DATA_TYPES:
         raise ValueError(f"Unsupported agent type: {agent_type}")
@@ -403,6 +436,7 @@ def validate_task_data(task_data: dict[str, Any], agent_type: str) -> BaseTaskDa
     Raises:
         ValueError: If validation fails (missing fields, wrong types) or if agent_type
             is not supported.
+
     """
     if agent_type not in TASK_DATA_TYPES:
         raise ValueError(f"Unsupported agent type: {agent_type}")

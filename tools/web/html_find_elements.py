@@ -7,21 +7,22 @@ logger = logging.getLogger(__name__)
 
 
 class HtmlElementResult(BaseModel):
-    """
-    Pydantic model representing a found HTML element.
+    """Pydantic model representing a found HTML element.
 
     Args:
         html_element (str): The HTML string of the matching element.
+
     """
 
     html_element: str
 
 
 async def html_find_elements(
-    html: str, selectors: str | list[str], text: str | None = None
+    html: str,
+    selectors: str | list[str],
+    text: str | None = None,
 ) -> list[HtmlElementResult]:
-    """
-    Find elements in HTML matching given CSS selector(s), optionally filtering by contained text.
+    """Find elements in HTML matching given CSS selector(s), optionally filtering by contained text.
 
     Args:
         html (str): The HTML string to parse.
@@ -30,6 +31,7 @@ async def html_find_elements(
 
     Returns:
         List[HtmlElementResult]: List of matching elements as HTML strings.
+
     """
     try:
         soup = BeautifulSoup(html, "html.parser")

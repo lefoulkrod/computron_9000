@@ -1,5 +1,4 @@
-"""
-Synthesis Agent for combining findings and generating reports.
+"""Synthesis Agent for combining findings and generating reports.
 
 This module contains the Synthesis Agent specialized for synthesizing information
 from multiple sources and generating research reports.
@@ -90,8 +89,8 @@ synthesis_tool = make_run_agent_as_tool_function(
 
 # Module exports
 __all__ = [
+    "synthesis_after_callback",
     "synthesis_agent",
     "synthesis_before_callback",
-    "synthesis_after_callback",
     "synthesis_tool",
 ]

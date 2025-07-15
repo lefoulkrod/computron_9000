@@ -1,5 +1,4 @@
-"""
-Query Decomposition Agent module.
+"""Query Decomposition Agent module.
 
 This module provides the Query Decomposition Agent that analyzes complex
 research questions and breaks them into manageable sub-queries.

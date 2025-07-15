@@ -1,5 +1,6 @@
 # Standard library imports
 """Utility functions for interacting with the local filesystem."""
+
 import stat
 from pathlib import Path
 from typing import Any, Literal
@@ -42,12 +43,9 @@ class SearchResults(BaseFSResult):
 class WriteResults(BaseFSResult):
     """Result model for file write operations."""
 
-    pass
-
 
 def list_directory_contents(path: str) -> DirectoryContents:
-    """
-    List files and directories at a given path.
+    """List files and directories at a given path.
 
     Args:
         path (str): The directory path to list contents of.
@@ -66,6 +64,7 @@ def list_directory_contents(path: str) -> DirectoryContents:
             "contents": [],
             "error_message": "Directory not found."
         }
+
     """
     try:
         path_obj = Path(path)
@@ -76,8 +75,7 @@ def list_directory_contents(path: str) -> DirectoryContents:
 
 
 def get_path_details(path: str) -> PathDetails:
-    """
-    Get details about a file or directory at the given path.
+    """Get details about a file or directory at the given path.
 
     Args:
         path (str): The file or directory path to get details for.
@@ -101,6 +99,7 @@ def get_path_details(path: str) -> PathDetails:
             "details": {},
             "error_message": "Path not found."
         }
+
     """
     try:
         path_obj = Path(path)
@@ -127,8 +126,7 @@ def get_path_details(path: str) -> PathDetails:
 
 
 def read_file_contents(path: str) -> FileContents:
-    """
-    Read the contents of a file at the given path.
+    """Read the contents of a file at the given path.
 
     Args:
         path (str): The file path to read.
@@ -150,6 +148,7 @@ def read_file_contents(path: str) -> FileContents:
             "contents": "",
             "error_message": "File not found."
         }
+
     """
     try:
         path_obj = Path(path)
@@ -161,8 +160,7 @@ def read_file_contents(path: str) -> FileContents:
 
 
 def search_files(pattern: str) -> SearchResults:
-    """
-    Search for files and directories using a glob pattern (wildcards).
+    """Search for files and directories using a glob pattern (wildcards).
 
     Args:
         pattern (str): The glob pattern to search for (e.g., '*.txt', 'folder/**/*.py').
@@ -181,6 +179,7 @@ def search_files(pattern: str) -> SearchResults:
             "matches": [],
             "error_message": "No matches found."
         }
+
     """
     try:
         # Handle recursive patterns properly with Path.rglob for ** patterns
@@ -202,8 +201,7 @@ def search_files(pattern: str) -> SearchResults:
 
 
 def write_text_file(contents: str, filename: str) -> WriteResults:
-    """
-    Write text to a file with the given filename.
+    """Write text to a file with the given filename.
 
     Args:
         contents (str): The string content to write to the file.
@@ -211,6 +209,7 @@ def write_text_file(contents: str, filename: str) -> WriteResults:
 
     Returns:
         WriteResults: Result of the write operation with status and error_message.
+
     """
     try:
         file_path = Path("/home/larry/.computron_9000") / filename
