@@ -1,5 +1,4 @@
-"""
-Web Research Agent for web-based research tasks.
+"""Web Research Agent for web-based research tasks.
 
 This module contains the Web Research Agent specialized for conducting
 research using web sources.
@@ -82,8 +81,8 @@ web_research_tool = make_run_agent_as_tool_function(
 
 # Module exports
 __all__ = [
+    "web_research_after_callback",
     "web_research_agent",
     "web_research_before_callback",
-    "web_research_after_callback",
     "web_research_tool",
 ]

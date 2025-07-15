@@ -1,5 +1,4 @@
-"""
-Social Research Agent module.
+"""Social Research Agent module.
 
 This module provides the Social Research Agent specialized for conducting
 research using social media and forum sources.

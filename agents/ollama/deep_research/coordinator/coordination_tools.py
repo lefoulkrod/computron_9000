@@ -1,5 +1,4 @@
-"""
-Coordination tools for the Research Coordinator Agent.
+"""Coordination tools for the Research Coordinator Agent.
 
 This module provides the automated workflow execution tool for the
 enhanced task system with centralized task data management.
@@ -36,7 +35,8 @@ class DeepResearchWorkflowResponse(BaseModel):
     """Response from executing the automated deep research workflow."""
 
     success: bool = Field(
-        ..., description="Whether the workflow was successfully completed"
+        ...,
+        description="Whether the workflow was successfully completed",
     )
     workflow_id: str = Field(..., description="Unique identifier for the workflow")
     final_report: str = Field(..., description="Complete research report")
@@ -44,7 +44,8 @@ class DeepResearchWorkflowResponse(BaseModel):
     sources_analyzed: int = Field(..., description="Total number of sources analyzed")
     subqueries_processed: int = Field(..., description="Number of subqueries processed")
     execution_time_seconds: float = Field(
-        ..., description="Total workflow execution time"
+        ...,
+        description="Total workflow execution time",
     )
     completion_timestamp: str = Field(..., description="Workflow completion time")
 
@@ -56,7 +57,8 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error message describing what went wrong")
     error_code: str = Field(..., description="Machine-readable error code")
     context: dict[str, Any] = Field(
-        default_factory=dict, description="Additional error context"
+        default_factory=dict,
+        description="Additional error context",
     )
 
 
@@ -68,6 +70,7 @@ class CoordinationTools:
 
         Args:
             agent_id: Unique identifier for this agent instance.
+
         """
         self.agent_id = agent_id
 
@@ -100,6 +103,7 @@ class CoordinationTools:
         Raises:
             ValueError: If research_query is empty
             RuntimeError: If workflow execution fails
+
         """
         start_time = datetime.now()
 
@@ -117,7 +121,8 @@ class CoordinationTools:
 
             # Step 1: Query decomposition
             decomp_result = await self._execute_query_decomposition(
-                workflow_id, research_query
+                workflow_id,
+                research_query,
             )
             subqueries = self._extract_subqueries(decomp_result)
             logger.info(f"Decomposed query into {len(subqueries)} subqueries")
@@ -128,14 +133,18 @@ class CoordinationTools:
 
             if "web" in research_domains:
                 web_results = await self._execute_web_research_tasks(
-                    workflow_id, subqueries, max_sources
+                    workflow_id,
+                    subqueries,
+                    max_sources,
                 )
                 all_research_results["web_research"] = web_results
                 total_sources += self._count_sources(web_results)
 
             if "social" in research_domains:
                 social_results = await self._execute_social_research_tasks(
-                    workflow_id, subqueries, max_sources
+                    workflow_id,
+                    subqueries,
+                    max_sources,
                 )
                 all_research_results["social_research"] = social_results
                 total_sources += self._count_sources(social_results)
@@ -189,7 +198,7 @@ class CoordinationTools:
             )
 
             logger.info(
-                f"Completed workflow {workflow_id} in {execution_time:.2f} seconds"
+                f"Completed workflow {workflow_id} in {execution_time:.2f} seconds",
             )
             return response.model_dump_json(indent=2)
 
@@ -200,7 +209,7 @@ class CoordinationTools:
                 self._cleanup_workflow_tasks(workflow_id)
             except Exception as cleanup_error:
                 logger.warning(
-                    f"Failed to cleanup workflow {workflow_id}: {cleanup_error}"
+                    f"Failed to cleanup workflow {workflow_id}: {cleanup_error}",
                 )
 
             error_response = ErrorResponse(
@@ -219,6 +228,7 @@ class CoordinationTools:
 
         Returns:
             JSON string with cleanup results
+
         """
         try:
             cleaned_count = clear_workflow_tasks(workflow_id)
@@ -241,7 +251,9 @@ class CoordinationTools:
             return json.dumps(error_result, indent=2)
 
     async def _execute_query_decomposition(
-        self, workflow_id: str, research_query: str
+        self,
+        workflow_id: str,
+        research_query: str,
     ) -> dict[str, Any]:
         """Execute query decomposition task."""
         task_id = f"{workflow_id}_decomp"
@@ -263,7 +275,10 @@ class CoordinationTools:
         return await self._execute_agent_with_task("query_decomposition", task_id)
 
     async def _execute_web_research_tasks(
-        self, workflow_id: str, subqueries: list[str], max_sources: int
+        self,
+        workflow_id: str,
+        subqueries: list[str],
+        max_sources: int,
     ) -> dict[str, Any]:
         """Execute web research tasks for all subqueries."""
         results = {}
@@ -291,7 +306,10 @@ class CoordinationTools:
         return results
 
     async def _execute_social_research_tasks(
-        self, workflow_id: str, subqueries: list[str], max_sources: int
+        self,
+        workflow_id: str,
+        subqueries: list[str],
+        max_sources: int,
     ) -> dict[str, Any]:
         """Execute social research tasks for all subqueries."""
         results = {}
@@ -319,7 +337,10 @@ class CoordinationTools:
         return results
 
     async def _execute_analysis_task(
-        self, workflow_id: str, original_query: str, research_results: dict[str, Any]
+        self,
+        workflow_id: str,
+        original_query: str,
+        research_results: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute analysis task."""
         task_id = f"{workflow_id}_analysis"
@@ -371,7 +392,9 @@ class CoordinationTools:
         return await self._execute_agent_with_task("synthesis", task_id)
 
     async def _execute_agent_with_task(
-        self, agent_type: str, task_id: str
+        self,
+        agent_type: str,
+        task_id: str,
     ) -> dict[str, Any]:
         """Execute an agent with the specified task ID."""
         try:
@@ -448,7 +471,7 @@ class CoordinationTools:
 
                 if raw_subqueries is None:
                     raise ValueError(
-                        "Could not extract subqueries from decomposition result"
+                        "Could not extract subqueries from decomposition result",
                     )
 
             # Ensure we have strings

@@ -1,5 +1,4 @@
-"""
-Web Research Agent module.
+"""Web Research Agent module.
 
 This module provides the Web Research Agent specialized for conducting
 research using web sources.

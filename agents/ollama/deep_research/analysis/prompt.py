@@ -1,6 +1,4 @@
-"""
-Prompt templates for the Analysis Agent.
-"""
+"""Prompt templates for the Analysis Agent."""
 
 # Main instruction prompt for the Analysis Agent
 ANALYSIS_PROMPT = """

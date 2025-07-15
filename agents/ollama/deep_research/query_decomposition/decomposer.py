@@ -1,5 +1,4 @@
-"""
-Query analysis and decomposition functionality.
+"""Query analysis and decomposition functionality.
 
 This module provides tools for analyzing and breaking down complex research queries.
 """
@@ -12,13 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 class QueryDecomposer:
-    """
-    Core class for query decomposition and analysis functionality.
-    """
+    """Core class for query decomposition and analysis functionality."""
 
     def __init__(self) -> None:
         """Initialize the QueryDecomposer."""
-        pass
 
     def get_tools(self) -> list[dict[str, Any]]:
         """Get all query decomposition tools."""
@@ -34,7 +30,7 @@ class QueryDecomposer:
                             "query": {
                                 "type": "string",
                                 "description": "The research query to analyze",
-                            }
+                            },
                         },
                         "required": ["query"],
                     },
@@ -74,7 +70,7 @@ class QueryDecomposer:
                                 "type": "array",
                                 "items": {"type": "object"},
                                 "description": "List of sub-queries to analyze for dependencies",
-                            }
+                            },
                         },
                         "required": ["sub_queries"],
                     },
@@ -131,14 +127,14 @@ class QueryDecomposer:
         ]
 
     def analyze_query_complexity(self, query: str) -> dict[str, Any]:
-        """
-        Analyze the complexity and scope of a research query.
+        """Analyze the complexity and scope of a research query.
 
         Args:
             query (str): The research query to analyze.
 
         Returns:
             Dict[str, Any]: Analysis results including complexity metrics and recommendations.
+
         """
         try:
             # Basic complexity indicators
@@ -147,8 +143,9 @@ class QueryDecomposer:
             question_count = query.count("?")
             and_or_count = len(
                 re.findall(
-                    r"\b(?:and|or|but|however|also|additionally)\b", query.lower()
-                )
+                    r"\b(?:and|or|but|however|also|additionally)\b",
+                    query.lower(),
+                ),
             )
 
             # Identify complex patterns
@@ -156,19 +153,19 @@ class QueryDecomposer:
                 re.findall(
                     r"\b(?:history|historical|timeline|evolution|development|recent|current|future|trend)\b",
                     query.lower(),
-                )
+                ),
             )
             comparison_words = len(
                 re.findall(
                     r"\b(?:compare|contrast|versus|vs|difference|similar|different)\b",
                     query.lower(),
-                )
+                ),
             )
             analysis_words = len(
                 re.findall(
                     r"\b(?:analyze|analysis|evaluate|assessment|impact|effect|cause|reason|why|how)\b",
                     query.lower(),
-                )
+                ),
             )
 
             # Calculate complexity score (0-10)
@@ -186,7 +183,8 @@ class QueryDecomposer:
 
             # Estimate sub-queries needed
             estimated_sub_queries = max(
-                2, min(7, int(complexity_score / 1.5 + question_count))
+                2,
+                min(7, int(complexity_score / 1.5 + question_count)),
             )
 
             # Recommend source types
@@ -228,12 +226,13 @@ class QueryDecomposer:
                     "analysis_indicators": analysis_words,
                 },
                 "recommendations": self._generate_decomposition_recommendations(
-                    complexity_score, query
+                    complexity_score,
+                    query,
                 ),
             }
 
             logger.info(
-                f"Query complexity analysis complete. Score: {complexity_score}, Sub-queries: {estimated_sub_queries}"
+                f"Query complexity analysis complete. Score: {complexity_score}, Sub-queries: {estimated_sub_queries}",
             )
             return result
 
@@ -248,7 +247,9 @@ class QueryDecomposer:
             }
 
     def _generate_decomposition_recommendations(
-        self, complexity_score: float, query: str
+        self,
+        complexity_score: float,
+        query: str,
     ) -> list[str]:
         """Generate recommendations for query decomposition strategy."""
         recommendations = []
@@ -262,28 +263,29 @@ class QueryDecomposer:
 
         if "compare" in query.lower() or "versus" in query.lower():
             recommendations.append(
-                "Comparison detected - create separate sub-queries for each item being compared"
+                "Comparison detected - create separate sub-queries for each item being compared",
             )
 
         if any(
             word in query.lower() for word in ["history", "evolution", "development"]
         ):
             recommendations.append(
-                "Temporal analysis needed - consider chronological sub-queries"
+                "Temporal analysis needed - consider chronological sub-queries",
             )
 
         if "why" in query.lower() or "cause" in query.lower():
             recommendations.append(
-                "Causal analysis required - separate cause and effect sub-queries"
+                "Causal analysis required - separate cause and effect sub-queries",
             )
 
         return recommendations
 
     def decompose_research_query(
-        self, query: str, max_sub_queries: int = 7
+        self,
+        query: str,
+        max_sub_queries: int = 7,
     ) -> list[dict[str, Any]]:
-        """
-        Break down a complex research query into manageable sub-queries.
+        """Break down a complex research query into manageable sub-queries.
 
         Args:
             query (str): The complex research query to decompose.
@@ -291,6 +293,7 @@ class QueryDecomposer:
 
         Returns:
             List[Dict[str, Any]]: List of sub-queries with metadata.
+
         """
         try:
             sub_queries = []
@@ -314,24 +317,26 @@ class QueryDecomposer:
             for i, sub_query in enumerate(limited_queries):
                 sub_query.update(
                     {
-                        "query_id": f"sq_{i+1:02d}",
+                        "query_id": f"sq_{i + 1:02d}",
                         "importance": self._calculate_importance(
-                            sub_query["query_text"], query
+                            sub_query["query_text"],
+                            query,
                         ),
                         "estimated_complexity": self._estimate_complexity(
-                            sub_query["query_text"]
+                            sub_query["query_text"],
                         ),
                         "suggested_sources": self._suggest_sources(
-                            sub_query["query_text"]
+                            sub_query["query_text"],
                         ),
                         "context_requirements": self._identify_context_needs(
-                            sub_query["query_text"], query
+                            sub_query["query_text"],
+                            query,
                         ),
-                    }
+                    },
                 )
 
             logger.info(
-                f"Generated {len(limited_queries)} sub-queries from: {query[:100]}..."
+                f"Generated {len(limited_queries)} sub-queries from: {query[:100]}...",
             )
             return limited_queries
 
@@ -348,7 +353,7 @@ class QueryDecomposer:
                     "suggested_sources": ["web"],
                     "context_requirements": [],
                     "error": str(e),
-                }
+                },
             ]
 
     def _extract_direct_questions(self, query: str) -> list[dict[str, Any]]:
@@ -370,7 +375,7 @@ class QueryDecomposer:
                         "query_text": sentence.rstrip("?") + "?",
                         "description": "Direct question from original query",
                         "research_type": "factual",
-                    }
+                    },
                 )
 
         return questions
@@ -408,7 +413,7 @@ class QueryDecomposer:
                             "description": f"Direct comparison between {item1} and {item2}",
                             "research_type": "analytical",
                         },
-                    ]
+                    ],
                 )
 
         return queries
@@ -459,7 +464,7 @@ class QueryDecomposer:
                             "description": f"Current state and trends for {subject}",
                             "research_type": "factual",
                         },
-                    ]
+                    ],
                 )
 
         return queries
@@ -499,7 +504,7 @@ class QueryDecomposer:
                                 "query_text": f"What are the causes of {phenomenon}?",
                                 "description": f"Identify causes of {phenomenon}",
                                 "research_type": "analytical",
-                            }
+                            },
                         )
                     elif len(match.groups()) == 2:
                         cause, effect = match.group(1).strip(), match.group(2).strip()
@@ -509,8 +514,8 @@ class QueryDecomposer:
                                     "query_text": f"How does {cause} influence {effect}?",
                                     "description": f"Causal relationship between {cause} and {effect}",
                                     "research_type": "analytical",
-                                }
-                            ]
+                                },
+                            ],
                         )
 
         return queries
@@ -528,7 +533,7 @@ class QueryDecomposer:
                     "query_text": f"What is {entity} and why is it significant?",
                     "description": f"Provide context and background for {entity}",
                     "research_type": "factual",
-                }
+                },
             )
 
         return queries
@@ -563,7 +568,8 @@ class QueryDecomposer:
         return list(set(entities))
 
     def _deduplicate_sub_queries(
-        self, sub_queries: list[dict[str, Any]]
+        self,
+        sub_queries: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Remove duplicate sub-queries based on text similarity."""
         unique_queries = []
@@ -635,7 +641,9 @@ class QueryDecomposer:
         return sources
 
     def _identify_context_needs(
-        self, sub_query: str, _original_query: str
+        self,
+        sub_query: str,
+        _original_query: str,
     ) -> list[str]:
         """Identify what context this sub-query needs from other queries."""
         requirements = []
@@ -652,16 +660,17 @@ class QueryDecomposer:
         return requirements
 
     def identify_query_dependencies(
-        self, sub_queries: list[dict[str, Any]]
+        self,
+        sub_queries: list[dict[str, Any]],
     ) -> dict[str, list[str]]:
-        """
-        Identify dependencies between sub-queries.
+        """Identify dependencies between sub-queries.
 
         Args:
             sub_queries (List[Dict[str, Any]]): List of sub-queries to analyze.
 
         Returns:
             Dict[str, List[str]]: Mapping of query IDs to their dependencies.
+
         """
         try:
             dependencies: dict[str, list[str]] = {}
@@ -733,10 +742,11 @@ class QueryDecomposer:
         return "impact" in query_text and "cause" in prereq_text
 
     def prioritize_sub_queries(
-        self, sub_queries: list[dict[str, Any]], dependencies: dict[str, list[str]]
+        self,
+        sub_queries: list[dict[str, Any]],
+        dependencies: dict[str, list[str]],
     ) -> list[str]:
-        """
-        Prioritize sub-queries based on importance and dependencies.
+        """Prioritize sub-queries based on importance and dependencies.
 
         Args:
             sub_queries (List[Dict[str, Any]]): List of sub-queries.
@@ -744,6 +754,7 @@ class QueryDecomposer:
 
         Returns:
             List[str]: Ordered list of query IDs by priority.
+
         """
         try:
             # Calculate priority scores
@@ -781,7 +792,9 @@ class QueryDecomposer:
 
             # Topological sort considering dependencies
             ordered_queries = self._topological_sort(
-                sub_queries, dependencies, priority_scores
+                sub_queries,
+                dependencies,
+                priority_scores,
             )
 
             logger.info(f"Prioritized {len(ordered_queries)} sub-queries")
@@ -848,8 +861,7 @@ class QueryDecomposer:
         sub_queries: list[dict[str, Any]],
         dependencies: dict[str, list[str]],
     ) -> dict[str, Any]:
-        """
-        Create a comprehensive research strategy with sequenced tasks.
+        """Create a comprehensive research strategy with sequenced tasks.
 
         Args:
             query (str): The original research query.
@@ -858,6 +870,7 @@ class QueryDecomposer:
 
         Returns:
             Dict[str, Any]: Comprehensive research strategy.
+
         """
         try:
             from datetime import datetime
@@ -870,7 +883,8 @@ class QueryDecomposer:
                 q.get("estimated_complexity", 3) for q in sub_queries
             )
             estimated_duration = max(
-                30, total_complexity * 5
+                30,
+                total_complexity * 5,
             )  # 5 minutes per complexity point
 
             # Identify potential challenges
@@ -895,13 +909,14 @@ class QueryDecomposer:
                 "success_criteria": success_criteria,
                 "potential_challenges": challenges,
                 "research_phases": self._create_research_phases(
-                    sub_queries, execution_order
+                    sub_queries,
+                    execution_order,
                 ),
                 "created_at": datetime.now().isoformat(),
             }
 
             logger.info(
-                f"Created research strategy with {len(sub_queries)} sub-queries, estimated duration: {estimated_duration} minutes"
+                f"Created research strategy with {len(sub_queries)} sub-queries, estimated duration: {estimated_duration} minutes",
             )
             return strategy
 
@@ -922,7 +937,9 @@ class QueryDecomposer:
             }
 
     def _identify_potential_challenges(
-        self, sub_queries: list[dict[str, Any]], dependencies: dict[str, list[str]]
+        self,
+        sub_queries: list[dict[str, Any]],
+        dependencies: dict[str, list[str]],
     ) -> list[str]:
         """Identify potential challenges in the research strategy."""
         challenges = []
@@ -933,7 +950,7 @@ class QueryDecomposer:
         ]
         if high_complexity:
             challenges.append(
-                f"High complexity queries detected: {len(high_complexity)} queries may require extended research"
+                f"High complexity queries detected: {len(high_complexity)} queries may require extended research",
             )
 
         # Check for long dependency chains
@@ -942,7 +959,7 @@ class QueryDecomposer:
         )
         if max_chain_length > 3:
             challenges.append(
-                f"Long dependency chains detected: some queries depend on {max_chain_length} others"
+                f"Long dependency chains detected: some queries depend on {max_chain_length} others",
             )
 
         # Check for queries requiring multiple source types
@@ -951,7 +968,7 @@ class QueryDecomposer:
         ]
         if multi_source:
             challenges.append(
-                f"Multi-source research needed: {len(multi_source)} queries require diverse source types"
+                f"Multi-source research needed: {len(multi_source)} queries require diverse source types",
             )
 
         # Check for comparative or analytical queries
@@ -962,13 +979,15 @@ class QueryDecomposer:
         ]
         if complex_types:
             challenges.append(
-                f"Complex analysis required: {len(complex_types)} queries need comparative or analytical research"
+                f"Complex analysis required: {len(complex_types)} queries need comparative or analytical research",
             )
 
         return challenges
 
     def _create_research_phases(
-        self, sub_queries: list[dict[str, Any]], execution_order: list[str]
+        self,
+        sub_queries: list[dict[str, Any]],
+        execution_order: list[str],
     ) -> list[dict[str, Any]]:
         """Create research phases for parallel execution where possible."""
         phases = []
@@ -1003,7 +1022,7 @@ class QueryDecomposer:
                             query_map[qid].get("estimated_complexity", 3) * 5
                             for qid in phase_queries
                         ),
-                    }
+                    },
                 )
                 processed.update(phase_queries)
                 phase_num += 1

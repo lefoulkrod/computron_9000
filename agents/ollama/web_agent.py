@@ -67,7 +67,7 @@ web_agent_tool = make_run_agent_as_tool_function(
 
 __all__ = [
     "web_agent",
-    "web_agent_before_callback",
     "web_agent_after_callback",
+    "web_agent_before_callback",
     "web_agent_tool",
 ]

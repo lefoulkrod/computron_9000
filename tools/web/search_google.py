@@ -9,6 +9,8 @@ from typing import Any
 
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
+)
+from playwright.async_api import (
     async_playwright,
 )
 from pydantic import BaseModel, Field, ValidationError
@@ -19,12 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleSearchInput(BaseModel):
-    """
-    Input model for Google search.
+    """Input model for Google search.
 
     Args:
         query (str): The search query string.
         max_results (int): Maximum number of results to return (default: 5).
+
     """
 
     query: str = Field(..., min_length=1)
@@ -32,13 +34,13 @@ class GoogleSearchInput(BaseModel):
 
 
 class GoogleSearchResult(BaseModel):
-    """
-    Output model for a single Google search result.
+    """Output model for a single Google search result.
 
     Args:
         title (str): The result title.
         link (str): The result URL.
         snippet (str): The result snippet/description.
+
     """
 
     title: str
@@ -47,27 +49,22 @@ class GoogleSearchResult(BaseModel):
 
 
 class GoogleSearchResults(BaseModel):
-    """
-    Output model for all Google search results.
+    """Output model for all Google search results.
 
     Args:
         results (List[GoogleSearchResult]): List of search results.
+
     """
 
     results: list[GoogleSearchResult]
 
 
 class GoogleSearchError(Exception):
-    """
-    Custom exception for Google search tool errors.
-    """
-
-    pass
+    """Custom exception for Google search tool errors."""
 
 
 class FingerprintConfig(BaseModel):
-    """
-    Browser fingerprint configuration.
+    """Browser fingerprint configuration.
 
     Args:
         device_name (str): Device name to use.
@@ -76,6 +73,7 @@ class FingerprintConfig(BaseModel):
         color_scheme (str): Color scheme preference.
         reduced_motion (str): Reduced motion preference.
         forced_colors (str): Forced colors preference.
+
     """
 
     device_name: str
@@ -87,12 +85,12 @@ class FingerprintConfig(BaseModel):
 
 
 class SavedState(BaseModel):
-    """
-    Saved browser state configuration.
+    """Saved browser state configuration.
 
     Args:
         fingerprint (Optional[FingerprintConfig]): Browser fingerprint config.
         google_domain (Optional[str]): Preferred Google domain.
+
     """
 
     fingerprint: FingerprintConfig | None = None
@@ -100,14 +98,14 @@ class SavedState(BaseModel):
 
 
 def _get_host_machine_config(user_locale: str | None = None) -> FingerprintConfig:
-    """
-    Get host machine configuration for browser fingerprinting.
+    """Get host machine configuration for browser fingerprinting.
 
     Args:
         user_locale (Optional[str]): User specified locale.
 
     Returns:
         FingerprintConfig: Browser fingerprint configuration.
+
     """
     # Get system locale
     system_locale = user_locale or os.environ.get("LANG") or "en-US"
@@ -154,14 +152,14 @@ def _get_host_machine_config(user_locale: str | None = None) -> FingerprintConfi
 
 
 def _get_device_config(saved_state: SavedState) -> tuple[str, dict[str, Any]]:
-    """
-    Get device configuration for browser context.
+    """Get device configuration for browser context.
 
     Args:
         saved_state (SavedState): Saved browser state.
 
     Returns:
         tuple[str, Dict[str, Any]]: Device name and configuration.
+
     """
     # Available desktop devices (simplified)
     desktop_devices = {
@@ -196,8 +194,7 @@ BROWSER_LOCALE = "en-US"
 
 
 async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults:
-    """
-    Search Google and return the top results.
+    """Search Google and return the top results.
 
     Args:
         query (str): The search query string.
@@ -208,6 +205,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
 
     Raises:
         GoogleSearchError: If search fails.
+
     """
     try:
         validated = GoogleSearchInput(query=query, max_results=max_results)
@@ -263,14 +261,14 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
     ]
 
     async def _perform_search(headless: bool = True) -> GoogleSearchResults:
-        """
-        Internal function to perform the search.
+        """Internal function to perform the search.
 
         Args:
             headless (bool): Whether to run in headless mode.
 
         Returns:
             GoogleSearchResults: Search results.
+
         """
         async with async_playwright() as p:
             # Launch browser with anti-detection arguments
@@ -326,7 +324,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                             "color_scheme": saved_state.fingerprint.color_scheme,
                             "reduced_motion": saved_state.fingerprint.reduced_motion,
                             "forced_colors": saved_state.fingerprint.forced_colors,
-                        }
+                        },
                     )
                     logger.debug("Using saved fingerprint configuration")
                 else:
@@ -339,7 +337,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                             "color_scheme": host_config.color_scheme,
                             "reduced_motion": host_config.reduced_motion,
                             "forced_colors": host_config.forced_colors,
-                        }
+                        },
                     )
                     saved_state.fingerprint = host_config
                     logger.debug("Generated new fingerprint configuration")
@@ -374,7 +372,9 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                 # Navigate to Google
                 logger.debug("Navigating to Google search page...")
                 response = await page.goto(
-                    selected_domain, timeout=timeout, wait_until="networkidle"
+                    selected_domain,
+                    timeout=timeout,
+                    wait_until="networkidle",
                 )
 
                 # Check for captcha/verification page
@@ -387,7 +387,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
 
                 if is_blocked and headless:
                     logger.warning(
-                        "Detected verification page, retrying in headed mode..."
+                        "Detected verification page, retrying in headed mode...",
                     )
                     await page.close()
                     await context.close()
@@ -395,7 +395,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                     return await _perform_search(headless=False)
                 if is_blocked:
                     logger.warning(
-                        "Verification page detected, waiting for manual completion..."
+                        "Verification page detected, waiting for manual completion...",
                     )
                     await page.wait_for_url(
                         lambda url: not any(
@@ -419,7 +419,8 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                 for selector in search_selectors:
                     try:
                         search_input = await page.wait_for_selector(
-                            selector, timeout=5000
+                            selector,
+                            timeout=5000,
                         )
                         logger.debug(f"Found search box with selector: {selector}")
                         break
@@ -433,7 +434,8 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                 # Type search query
                 await search_input.click()
                 await page.keyboard.type(
-                    query, delay=random.randint(10, 30)  # noqa: S311
+                    query,
+                    delay=random.randint(10, 30),  # noqa: S311
                 )
                 await asyncio.sleep(random.uniform(0.1, 0.3))  # noqa: S311
                 await page.keyboard.press("Enter")
@@ -446,7 +448,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                 if any(pattern in search_url for pattern in sorry_patterns):
                     if headless:
                         logger.warning(
-                            "Post-search verification detected, retrying in headed mode..."
+                            "Post-search verification detected, retrying in headed mode...",
                         )
                         await page.close()
                         await context.close()
@@ -562,7 +564,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                         }}
 
                         return results.slice(0, maxResults);
-                    }})()"""
+                    }})()""",
                 )
 
                 logger.debug(f"Successfully extracted {len(results)} search results")
@@ -605,10 +607,8 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                     except Exception:
                         logger.debug("Failed to save state on error")
 
-                if (
-                    "verification" in str(e).lower()
-                    or "captcha" in str(e).lower()
-                    and headless
+                if "verification" in str(e).lower() or (
+                    "captcha" in str(e).lower() and headless
                 ):
                     logger.warning("Verification required, retrying in headed mode...")
                     return await _perform_search(headless=False)

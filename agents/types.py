@@ -10,8 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class Agent(BaseModel):
-    """
-    Represents the configuration for a generic agent.
+    """Represents the configuration for a generic agent.
 
     Args:
         name (str): The agent's name.
@@ -20,6 +19,7 @@ class Agent(BaseModel):
         model (str): The model name to use.
         options (Dict[str, Any]): Model options (e.g., num_ctx).
         tools (List[Callable[..., Any]]): List of callable tools available to the agent.
+
     """
 
     name: str
@@ -31,13 +31,13 @@ class Agent(BaseModel):
 
 
 class UserMessageEvent(BaseModel):
-    """
-    Represents a message event from the agent.
+    """Represents a message event from the agent.
 
     Attributes:
         message (str): The message content from the agent.
         final (bool): Whether this is the final response in the sequence.
         thinking (Optional[str]): The agent's internal reasoning or thought process, if available.
+
     """
 
     message: str
@@ -46,12 +46,12 @@ class UserMessageEvent(BaseModel):
 
 
 class Data(BaseModel):
-    """
-    Represents binary or non-text data sent with a user message.
+    """Represents binary or non-text data sent with a user message.
 
     Attributes:
         base64_encoded (str): The base64-encoded data payload.
         content_type (str): The MIME type of the data (e.g., 'image/png').
+
     """
 
     base64_encoded: str

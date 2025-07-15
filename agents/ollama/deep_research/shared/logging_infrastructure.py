@@ -1,5 +1,4 @@
-"""
-Logging and error handling infrastructure for multi-agent system.
+"""Logging and error handling infrastructure for multi-agent system.
 
 This module provides centralized logging configuration and error handling
 patterns for the multi-agent deep research system.
@@ -12,11 +11,11 @@ from typing import Any
 
 # Configure logger for the multi-agent system
 def setup_multi_agent_logging(log_level: str = "INFO") -> None:
-    """
-    Set up logging configuration for the multi-agent system.
+    """Set up logging configuration for the multi-agent system.
 
     Args:
         log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+
     """
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
@@ -44,41 +43,42 @@ class MultiAgentError(Exception):
 class AgentTaskError(MultiAgentError):
     """Exception raised when an agent task fails."""
 
-    pass
-
 
 class WorkflowCoordinationError(MultiAgentError):
     """Exception raised when workflow coordination fails."""
 
-    pass
-
 
 def log_agent_task_start(
-    agent_type: str, task_id: str, task_details: dict[str, Any]
+    agent_type: str,
+    task_id: str,
+    task_details: dict[str, Any],
 ) -> None:
-    """
-    Log the start of an agent task.
+    """Log the start of an agent task.
 
     Args:
         agent_type (str): Type of agent executing the task.
         task_id (str): Unique task identifier.
         task_details (Dict[str, Any]): Task details and parameters.
+
     """
     logger = logging.getLogger(f"agents.deep_research.{agent_type}")
     logger.info(f"Starting task {task_id}: {task_details.get('task_type', 'unknown')}")
 
 
 def log_agent_task_completion(
-    agent_type: str, task_id: str, success: bool, error_message: str | None = None
+    agent_type: str,
+    task_id: str,
+    success: bool,
+    error_message: str | None = None,
 ) -> None:
-    """
-    Log the completion of an agent task.
+    """Log the completion of an agent task.
 
     Args:
         agent_type (str): Type of agent that executed the task.
         task_id (str): Unique task identifier.
         success (bool): Whether the task completed successfully.
         error_message (Optional[str]): Error message if task failed.
+
     """
     logger = logging.getLogger(f"agents.deep_research.{agent_type}")
     if success:
@@ -88,15 +88,17 @@ def log_agent_task_completion(
 
 
 def log_workflow_event(
-    workflow_id: str, event_type: str, details: dict[str, Any]
+    workflow_id: str,
+    event_type: str,
+    details: dict[str, Any],
 ) -> None:
-    """
-    Log workflow coordination events.
+    """Log workflow coordination events.
 
     Args:
         workflow_id (str): Unique workflow identifier.
         event_type (str): Type of workflow event.
         details (Dict[str, Any]): Event details and context.
+
     """
     logger = logging.getLogger("agents.deep_research.workflow")
     logger.info(f"Workflow {workflow_id} - {event_type}: {details}")
@@ -104,11 +106,11 @@ def log_workflow_event(
 
 # Module exports
 __all__ = [
-    "setup_multi_agent_logging",
-    "MultiAgentError",
     "AgentTaskError",
+    "MultiAgentError",
     "WorkflowCoordinationError",
-    "log_agent_task_start",
     "log_agent_task_completion",
+    "log_agent_task_start",
     "log_workflow_event",
+    "setup_multi_agent_logging",
 ]

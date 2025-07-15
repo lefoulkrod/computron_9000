@@ -14,8 +14,7 @@ def make_run_agent_as_tool_function(
     before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
 ) -> Callable[[str], Awaitable[str]]:
-    """
-    Returns a function that runs the given agent as a tool, with the provided description as its docstring.
+    """Returns a function that runs the given agent as a tool, with the provided description as its docstring.
 
     Args:
         agent (Agent): The agent to be run as a tool.
@@ -25,6 +24,7 @@ def make_run_agent_as_tool_function(
 
     Returns:
         Callable[[str], Awaitable[str]]: An async function that takes a string argument 'instructions' and returns a string, with the given docstring.
+
     """
     docstring = f"""
 {tool_description}

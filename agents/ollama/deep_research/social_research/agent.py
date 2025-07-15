@@ -1,5 +1,4 @@
-"""
-Social Research Agent for social media and forum research.
+"""Social Research Agent for social media and forum research.
 
 This module contains the Social Research Agent specialized for conducting
 research using social media and forum sources.
@@ -70,8 +69,8 @@ social_research_tool = make_run_agent_as_tool_function(
 
 # Module exports
 __all__ = [
+    "social_research_after_callback",
     "social_research_agent",
     "social_research_before_callback",
-    "social_research_after_callback",
     "social_research_tool",
 ]

@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 def make_log_before_model_call(
     agent: Any = None,
 ) -> Callable[[list[dict[str, str]]], None]:
-    """
-    Factory for a callback that logs the chat history before calling the model.
+    """Factory for a callback that logs the chat history before calling the model.
 
     Args:
         agent (Any, optional): The agent object with a 'name' attribute. Defaults to None.
 
     Returns:
         Callable[[list[dict[str, str]]], None]: The logging callback.
+
     """
 
     def log_before_model_call(messages: list[dict[str, str]]) -> None:
@@ -41,14 +41,14 @@ def make_log_before_model_call(
 def make_log_after_model_call(
     agent: Any = None,
 ) -> Callable[[ChatResponse | GenerateResponse], None]:
-    """
-    Factory for a callback that logs the LLM response and stats after the model call.
+    """Factory for a callback that logs the LLM response and stats after the model call.
 
     Args:
         agent (Any, optional): The agent object with a 'name' attribute. Defaults to None.
 
     Returns:
         Callable[[ChatResponse | GenerateResponse], None]: The logging callback.
+
     """
 
     def log_after_model_call(response: ChatResponse | GenerateResponse) -> None:

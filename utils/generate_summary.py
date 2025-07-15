@@ -11,8 +11,7 @@ config = load_config()
 
 
 async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
-    """
-    Generate a summary using the Ollama AsyncClient.
+    """Generate a summary using the Ollama AsyncClient.
 
     Args:
         prompt (str): The prompt to send to the LLM.
@@ -23,11 +22,14 @@ async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
 
     Raises:
         RuntimeError: If the LLM call fails.
+
     """
     model = get_default_model()
     try:
         response = await AsyncClient().generate(
-            model=model.model, prompt=prompt, think=think
+            model=model.model,
+            prompt=prompt,
+            think=think,
         )
         logger.debug(f"Ollama LLM response: {response.response}")
         return re.sub(r"<think>\s*</think>", "", response.response, flags=re.DOTALL)

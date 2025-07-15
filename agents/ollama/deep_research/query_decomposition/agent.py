@@ -1,5 +1,4 @@
-"""
-Query Decomposition Agent for breaking down complex research queries.
+"""Query Decomposition Agent for breaking down complex research queries.
 
 This module contains the Query Decomposition Agent that analyzes complex
 research questions and breaks them into manageable sub-queries.
@@ -54,10 +53,10 @@ query_decomposition_agent: Agent = Agent(
 
 # Create standard callbacks for logging
 query_decomposition_before_callback = make_log_before_model_call(
-    query_decomposition_agent
+    query_decomposition_agent,
 )
 query_decomposition_after_callback = make_log_after_model_call(
-    query_decomposition_agent
+    query_decomposition_agent,
 )
 
 # Create the tool function for use by other agents
@@ -88,9 +87,9 @@ query_decomposition_tool = make_run_agent_as_tool_function(
 
 # Module exports
 __all__ = [
+    "decomposer",
+    "query_decomposition_after_callback",
     "query_decomposition_agent",
     "query_decomposition_before_callback",
-    "query_decomposition_after_callback",
     "query_decomposition_tool",
-    "decomposer",
 ]

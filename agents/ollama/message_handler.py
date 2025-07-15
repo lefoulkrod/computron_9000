@@ -22,7 +22,7 @@ agent = research_coordinator_agent
 
 # Module-level message history for chat session, initialized with system message
 _message_history: list[dict[str, str]] = [
-    {"role": "system", "content": agent.instruction}
+    {"role": "system", "content": agent.instruction},
 ]
 
 log_before_model_call = make_log_before_model_call(agent)
@@ -33,8 +33,7 @@ async def _handle_image_message(
     message: str,
     data: Sequence[Data],
 ) -> AsyncGenerator[UserMessageEvent, None]:
-    """
-    Handles a user message with image data by sending it to the LLM and yielding events.
+    """Handles a user message with image data by sending it to the LLM and yielding events.
 
     Args:
         message (str): The user's message.
@@ -42,12 +41,13 @@ async def _handle_image_message(
 
     Yields:
         UserMessageEvent: Events from the LLM.
+
     """
     log_after_model_call = make_log_after_model_call()
     log_before_model_call = make_log_before_model_call()
     for d in data:
         _message_history.append(
-            {"role": "user", "content": f"<image/base64>{d.base64_encoded}"}
+            {"role": "user", "content": f"<image/base64>{d.base64_encoded}"},
         )
     _message_history.append({"role": "user", "content": message})
     log_before_model_call(_message_history)
@@ -62,7 +62,7 @@ async def _handle_image_message(
         {
             "role": "assistant",
             "content": main_text,
-        }
+        },
     )
     log_after_model_call(response)
     yield UserMessageEvent(message=main_text, final=True, thinking=thinking)
@@ -72,8 +72,7 @@ async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None,
 ) -> AsyncGenerator[UserMessageEvent, None]:
-    """
-    Handles a user message by sending it to the LLM and yielding events.
+    """Handles a user message by sending it to the LLM and yielding events.
 
     Args:
         message (str): The user's message.
@@ -81,6 +80,7 @@ async def handle_user_message(
 
     Yields:
         UserMessageEvent: Events from the LLM.
+
     """
     try:
         if data and len(data) > 0:
@@ -99,7 +99,9 @@ async def handle_user_message(
             if content is not None:
                 main_text, thinking = split_think_content(content)
                 yield UserMessageEvent(
-                    message=main_text, final=False, thinking=thinking
+                    message=main_text,
+                    final=False,
+                    thinking=thinking,
                 )
     except Exception as exc:
         logger.exception(f"Error handling user message: {exc}")

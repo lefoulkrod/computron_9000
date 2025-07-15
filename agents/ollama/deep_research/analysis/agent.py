@@ -1,5 +1,4 @@
-"""
-Analysis Agent for source analysis and credibility assessment.
+"""Analysis Agent for source analysis and credibility assessment.
 
 This module contains the Analysis Agent specialized for performing analysis
 of sources using basic web research tools.
@@ -82,8 +81,8 @@ analysis_tool = make_run_agent_as_tool_function(
 
 # Module exports
 __all__ = [
+    "analysis_after_callback",
     "analysis_agent",
     "analysis_before_callback",
-    "analysis_after_callback",
     "analysis_tool",
 ]

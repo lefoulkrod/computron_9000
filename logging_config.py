@@ -10,8 +10,7 @@ def setup_logging() -> None:
     Sets the root logger to output to ``stdout`` and adjusts log levels for
     specific third‑party libraries and application modules.
     """
-
-    logging.basicConfig(level=logging.WARN, stream=sys.stdout)
+    logging.basicConfig(level=logging.WARNING, stream=sys.stdout)
     logging.getLogger("tools").setLevel(logging.WARNING)
     logging.getLogger("ollama").setLevel(logging.WARNING)
     logging.getLogger("agents.ollama").setLevel(logging.WARNING)

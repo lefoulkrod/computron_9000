@@ -1,5 +1,4 @@
-"""
-Deep Research Agent package.
+"""Deep Research Agent package.
 
 This module provides a multi-agent system for conducting thorough research
 across multiple sources to provide comprehensive, well-sourced answers to

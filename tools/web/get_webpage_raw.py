@@ -9,8 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_url(url: str) -> str:
-    """
-    Validate a string URL and return it if valid.
+    """Validate a string URL and return it if valid.
 
     Args:
         url (str): The URL to validate.
@@ -20,6 +19,7 @@ def _validate_url(url: str) -> str:
 
     Raises:
         GetWebpageError: If validation fails.
+
     """
     try:
         TypeAdapter(HttpUrl).validate_python(url)
@@ -30,8 +30,7 @@ def _validate_url(url: str) -> str:
 
 
 async def _get_webpage_raw(url: str) -> GetWebpageResult:
-    """
-    Fetch the raw HTML content from a web page, simulating a real browser to avoid being blocked.
+    """Fetch the raw HTML content from a web page, simulating a real browser to avoid being blocked.
 
     Args:
         url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
@@ -41,6 +40,7 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
 
     Raises:
         GetWebpageError: For client or unknown errors.
+
     """
     validated_url = _validate_url(url)
     html = ""
@@ -71,7 +71,9 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
             if response_code != 200:
                 logger.debug(f"Non-200 response for {url}: HTTP {response_code}")
         return GetWebpageResult(
-            url=validated_url, html=html, response_code=response_code
+            url=validated_url,
+            html=html,
+            response_code=response_code,
         )
     except aiohttp.ClientError as e:
         logger.error(f"aiohttp error for {url}: {e}")

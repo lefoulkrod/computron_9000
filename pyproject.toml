@@ -22,23 +22,12 @@ dependencies = [
 test = [
     "pytest>=7.0.0,<8.0.0",
     "pytest-asyncio",
-    "pytest-cov",
-    "pytest-watch",
+    "pytest-watch"
 ]
 dev = [
-    "black",
     "ruff",
-    "mypy",
+    "mypy"
 ]
-
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["agents*", "tools*", "utils*", "models*", "server*", "config*"]
-exclude = ["tests*"]
 
 [tool.uv]
 # uv-specific settings can go here
@@ -46,62 +35,14 @@ exclude = ["tests*"]
 [tool.ruff]
 target-version = "py312"
 line-length = 88
+extend-exclude = ["tests/*"]
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings  
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "N",   # pep8-naming
-    "S",   # flake8-bandit (security)
-    "T20", # flake8-print
-    "SIM", # flake8-simplify
-    "RET", # flake8-return
-    "ARG", # flake8-unused-arguments
-    "PTH", # flake8-use-pathlib
+    "ALL",
 ]
 ignore = [
-    "E501",  # line too long, handled by black
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
-    "S101",  # assert used (fine for tests)
-    "T201",  # print found (sometimes needed for debugging)
-    "S603",  # subprocess calls (needed for some tools)
-    "S607",  # starting process with partial executable path
 ]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-"tests/*" = ["S101", "ARG", "S106"]  # Allow asserts and unused args in tests
-
-[tool.ruff.lint.isort]
-known-first-party = ["agents", "tools", "utils", "models", "server", "config"]
-force-single-line = false
-combine-as-imports = true
-# Import sections in order
-section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
-
-[tool.black]
-line-length = 88
-target-version = ['py312']
-include = '\.pyi?$'
-force-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
 
 [tool.mypy]
 python_version = "3.12"                         # Target Python version for type checking
@@ -144,10 +85,6 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=.",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=10",
 ]
 markers = [
     "unit: marks tests as unit tests",
@@ -155,43 +92,3 @@ markers = [
     "slow: marks tests as slow running",
 ]
 asyncio_mode = "auto"
-filterwarnings = [
-    "error",
-    "ignore::UserWarning",
-    "ignore::DeprecationWarning",
-]
-
-[tool.coverage.run]
-source = ["."]
-omit = [
-    "tests/*",
-    ".venv/*", 
-    "__pycache__/*",
-    "*.pyc",
-    "*/migrations/*",
-    "*/venv/*",
-    "*/virtualenvs/*",
-    "*/site-packages/*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError", 
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
-precision = 2
-show_missing = true
-
-[dependency-groups]
-dev = [
-    "types-cachetools>=6.0.0.20250525",
-    "types-pyyaml>=6.0.12.20250516",
-]

@@ -1,6 +1,4 @@
-"""
-Prompt templates for the Web Research Agent.
-"""
+"""Prompt templates for the Web Research Agent."""
 
 # Main instruction prompt for the Web Research Agent
 WEB_RESEARCH_PROMPT = """

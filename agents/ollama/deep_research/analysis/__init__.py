@@ -1,5 +1,4 @@
-"""
-Analysis Agent module.
+"""Analysis Agent module.
 
 This module provides the Analysis Agent specialized for analysis of sources
 using basic web research tools.

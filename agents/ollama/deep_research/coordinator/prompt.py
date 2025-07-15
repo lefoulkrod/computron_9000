@@ -1,6 +1,4 @@
-"""
-Prompt templates for the Research Coordinator Agent.
-"""
+"""Prompt templates for the Research Coordinator Agent."""
 
 # Main instruction prompt for the Research Coordinator Agent
 RESEARCH_COORDINATOR_PROMPT = """

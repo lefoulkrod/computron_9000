@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def _to_serializable(obj: Any) -> Any:
-    """
-    Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
+    """Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
 
     Args:
         obj (Any): The object to convert.
 
     Returns:
         Any: JSON-serializable representation.
+
     """
     if hasattr(obj, "model_dump"):
         return _to_serializable(obj.model_dump())
@@ -42,8 +42,7 @@ async def run_tool_call_loop(
     before_model_callbacks: list[Callable[[list[dict[str, Any]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
 ) -> AsyncGenerator[str, None]:
-    """
-    Executes a chat loop with the LLM, handling tool calls and yielding message content.
+    """Executes a chat loop with the LLM, handling tool calls and yielding message content.
     This function mutates the messages list in place by appending assistant and tool messages to maintain chat history.
 
     Args:
@@ -56,6 +55,7 @@ async def run_tool_call_loop(
 
     Yields:
         str: The message content at each step (never tool call results directly).
+
     """
     client = AsyncClient()
     tools = tools or []

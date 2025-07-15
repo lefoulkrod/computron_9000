@@ -1,5 +1,4 @@
-"""
-Research Coordinator Agent for multi-agent deep research workflow.
+"""Research Coordinator Agent for multi-agent deep research workflow.
 
 This module contains the Research Coordinator Agent that orchestrates the
 multi-agent deep research workflow.
@@ -49,10 +48,10 @@ research_coordinator_agent: Agent = Agent(
 
 # Create standard callbacks for logging
 research_coordinator_before_callback = make_log_before_model_call(
-    research_coordinator_agent
+    research_coordinator_agent,
 )
 research_coordinator_after_callback = make_log_after_model_call(
-    research_coordinator_agent
+    research_coordinator_agent,
 )
 
 # Create the tool function for use by other agents
@@ -75,9 +74,9 @@ research_coordinator_tool = make_run_agent_as_tool_function(
 
 # Module exports
 __all__ = [
+    "coordination_tools",
+    "research_coordinator_after_callback",
     "research_coordinator_agent",
     "research_coordinator_before_callback",
-    "research_coordinator_after_callback",
     "research_coordinator_tool",
-    "coordination_tools",
 ]
