@@ -42,7 +42,6 @@ research_coordinator_agent: Agent = Agent(
     options=options,
     tools=[
         coordination_tools.execute_deep_research_workflow,
-        coordination_tools.cleanup_completed_tasks,
     ],
 )
 

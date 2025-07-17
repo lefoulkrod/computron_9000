@@ -120,8 +120,7 @@ class TaskDataStorage:
             if task_id in self._task_data:
                 task_data = self._task_data.pop(task_id)
                 logger.info(
-                    f"Deleted task data for task {task_id} "
-                    f"(agent: {task_data.agent_type})",
+                    f"Deleted task data for task {task_id} (agent: {task_data.agent_type})",
                 )
                 return True
             logger.warning(f"Attempted to delete non-existent task {task_id}")
@@ -160,9 +159,7 @@ class TaskDataStorage:
             if workflow_id is None:
                 return len(self._task_data)
             return sum(
-                1
-                for task_data in self._task_data.values()
-                if task_data.workflow_id == workflow_id
+                1 for task_data in self._task_data.values() if task_data.workflow_id == workflow_id
             )
 
     def clear_workflow_tasks(self, workflow_id: str) -> int:

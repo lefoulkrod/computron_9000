@@ -266,9 +266,7 @@ class QueryDecomposer:
                 "Comparison detected - create separate sub-queries for each item being compared",
             )
 
-        if any(
-            word in query.lower() for word in ["history", "evolution", "development"]
-        ):
+        if any(word in query.lower() for word in ["history", "evolution", "development"]):
             recommendations.append(
                 "Temporal analysis needed - consider chronological sub-queries",
             )
@@ -625,15 +623,9 @@ class QueryDecomposer:
         query_lower = sub_query.lower()
         sources = ["web"]  # Always include web
 
-        if any(
-            word in query_lower
-            for word in ["opinion", "people think", "popular", "consensus"]
-        ):
+        if any(word in query_lower for word in ["opinion", "people think", "popular", "consensus"]):
             sources.append("social")
-        if any(
-            word in query_lower
-            for word in ["study", "research", "academic", "scholarly"]
-        ):
+        if any(word in query_lower for word in ["study", "research", "academic", "scholarly"]):
             sources.append("academic")
         if any(word in query_lower for word in ["recent", "current", "latest", "news"]):
             sources.append("news")
@@ -695,10 +687,7 @@ class QueryDecomposer:
 
         except Exception as e:
             logger.error(f"Error identifying query dependencies: {e}")
-            return {
-                query.get("query_id", f"sq_{i:02d}"): []
-                for i, query in enumerate(sub_queries)
-            }
+            return {query.get("query_id", f"sq_{i:02d}"): [] for i, query in enumerate(sub_queries)}
 
     def _has_dependency(
         self,
@@ -783,11 +772,7 @@ class QueryDecomposer:
                 }.get(query.get("research_type", "factual"), 2)
 
                 priority_scores[query_id] = (
-                    importance
-                    + prerequisite_bonus
-                    + type_bonus
-                    - dependency_penalty
-                    - complexity
+                    importance + prerequisite_bonus + type_bonus - dependency_penalty - complexity
                 )
 
             # Topological sort considering dependencies
@@ -879,9 +864,7 @@ class QueryDecomposer:
             execution_order = self.prioritize_sub_queries(sub_queries, dependencies)
 
             # Estimate duration
-            total_complexity = sum(
-                q.get("estimated_complexity", 3) for q in sub_queries
-            )
+            total_complexity = sum(q.get("estimated_complexity", 3) for q in sub_queries)
             estimated_duration = max(
                 30,
                 total_complexity * 5,
@@ -945,27 +928,21 @@ class QueryDecomposer:
         challenges = []
 
         # Check for high complexity queries
-        high_complexity = [
-            q for q in sub_queries if q.get("estimated_complexity", 3) > 4
-        ]
+        high_complexity = [q for q in sub_queries if q.get("estimated_complexity", 3) > 4]
         if high_complexity:
             challenges.append(
                 f"High complexity queries detected: {len(high_complexity)} queries may require extended research",
             )
 
         # Check for long dependency chains
-        max_chain_length = (
-            max(len(deps) for deps in dependencies.values()) if dependencies else 0
-        )
+        max_chain_length = max(len(deps) for deps in dependencies.values()) if dependencies else 0
         if max_chain_length > 3:
             challenges.append(
                 f"Long dependency chains detected: some queries depend on {max_chain_length} others",
             )
 
         # Check for queries requiring multiple source types
-        multi_source = [
-            q for q in sub_queries if len(q.get("suggested_sources", [])) > 2
-        ]
+        multi_source = [q for q in sub_queries if len(q.get("suggested_sources", [])) > 2]
         if multi_source:
             challenges.append(
                 f"Multi-source research needed: {len(multi_source)} queries require diverse source types",
@@ -973,9 +950,7 @@ class QueryDecomposer:
 
         # Check for comparative or analytical queries
         complex_types = [
-            q
-            for q in sub_queries
-            if q.get("research_type") in ["comparative", "analytical"]
+            q for q in sub_queries if q.get("research_type") in ["comparative", "analytical"]
         ]
         if complex_types:
             challenges.append(

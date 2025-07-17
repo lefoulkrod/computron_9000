@@ -104,8 +104,7 @@ def get_web_research_task_data(task_id: str) -> WebResearchTaskData:
         # Validate it's the correct type
         if not isinstance(task_data, WebResearchTaskData):
             raise TypeError(
-                f"Task {task_id} is not a web research task. "
-                f"Got {type(task_data).__name__}",
+                f"Task {task_id} is not a web research task. Got {type(task_data).__name__}",
             )
 
         logger.info(
@@ -121,9 +120,7 @@ def get_web_research_task_data(task_id: str) -> WebResearchTaskData:
         raise type(e)(error_msg) from e
 
     except Exception as e:
-        error_msg = (
-            f"Unexpected error retrieving web research task data for {task_id}: {e}"
-        )
+        error_msg = f"Unexpected error retrieving web research task data for {task_id}: {e}"
         logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
@@ -160,8 +157,7 @@ def get_social_research_task_data(task_id: str) -> SocialResearchTaskData:
         # Validate it's the correct type
         if not isinstance(task_data, SocialResearchTaskData):
             raise TypeError(
-                f"Task {task_id} is not a social research task. "
-                f"Got {type(task_data).__name__}",
+                f"Task {task_id} is not a social research task. Got {type(task_data).__name__}",
             )
 
         logger.info(
@@ -177,9 +173,7 @@ def get_social_research_task_data(task_id: str) -> SocialResearchTaskData:
         raise type(e)(error_msg) from e
 
     except Exception as e:
-        error_msg = (
-            f"Unexpected error retrieving social research task data for {task_id}: {e}"
-        )
+        error_msg = f"Unexpected error retrieving social research task data for {task_id}: {e}"
         logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
@@ -216,8 +210,7 @@ def get_analysis_task_data(task_id: str) -> AnalysisTaskData:
         # Validate it's the correct type
         if not isinstance(task_data, AnalysisTaskData):
             raise TypeError(
-                f"Task {task_id} is not an analysis task. "
-                f"Got {type(task_data).__name__}",
+                f"Task {task_id} is not an analysis task. Got {type(task_data).__name__}",
             )
 
         logger.info(
@@ -270,8 +263,7 @@ def get_synthesis_task_data(task_id: str) -> SynthesisTaskData:
         # Validate it's the correct type
         if not isinstance(task_data, SynthesisTaskData):
             raise TypeError(
-                f"Task {task_id} is not a synthesis task. "
-                f"Got {type(task_data).__name__}",
+                f"Task {task_id} is not a synthesis task. Got {type(task_data).__name__}",
             )
 
         logger.info(
@@ -287,9 +279,7 @@ def get_synthesis_task_data(task_id: str) -> SynthesisTaskData:
         raise type(e)(error_msg) from e
 
     except Exception as e:
-        error_msg = (
-            f"Unexpected error retrieving synthesis task data for {task_id}: {e}"
-        )
+        error_msg = f"Unexpected error retrieving synthesis task data for {task_id}: {e}"
         logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
@@ -326,8 +316,7 @@ def get_query_decomposition_task_data(task_id: str) -> QueryDecompositionTaskDat
         # Validate it's the correct type
         if not isinstance(task_data, QueryDecompositionTaskData):
             raise TypeError(
-                f"Task {task_id} is not a query decomposition task. "
-                f"Got {type(task_data).__name__}",
+                f"Task {task_id} is not a query decomposition task. Got {type(task_data).__name__}",
             )
 
         logger.info(
@@ -338,9 +327,7 @@ def get_query_decomposition_task_data(task_id: str) -> QueryDecompositionTaskDat
         return task_data
 
     except (KeyError, ValueError, TypeError) as e:
-        error_msg = (
-            f"Failed to retrieve query decomposition task data for {task_id}: {e}"
-        )
+        error_msg = f"Failed to retrieve query decomposition task data for {task_id}: {e}"
         logger.error(error_msg)
         raise type(e)(error_msg) from e
 

@@ -4,18 +4,15 @@ This module provides the automated workflow execution tool for the
 enhanced task system with centralized task data management.
 """
 
+import datetime
 import json
 import logging
 import uuid
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-# Import specialized agents for task execution
-# NOTE: analysis_tool import kept for future re-enablement
-from ..query_decomposition.agent import query_decomposition_tool
-from ..shared import (
+from agents.ollama.deep_research.shared import (
     AnalysisTaskData,
     QueryDecompositionTaskData,
     SocialResearchTaskData,
@@ -24,9 +21,13 @@ from ..shared import (
     clear_workflow_tasks,
     store_task_data,
 )
-from ..social_research.agent import social_research_tool
-from ..synthesis.agent import synthesis_tool
-from ..web_research.agent import web_research_tool
+from agents.ollama.deep_research.social_research.agent import social_research_tool
+from agents.ollama.deep_research.synthesis.agent import synthesis_tool
+from agents.ollama.deep_research.web_research.agent import web_research_tool
+
+# Import specialized agents for task execution
+# NOTE: analysis_tool import kept for future re-enablement
+from ..query_decomposition.agent import query_decomposition_tool
 
 logger = logging.getLogger(__name__)
 
@@ -83,14 +84,6 @@ class CoordinationTools:
     ) -> str:
         """Execute complete automated deep research workflow.
 
-        This is the single entry point for automated deep research. The workflow
-        executes imperatively without LLM decision-making:
-        1. Query decomposition
-        2. Parallel web and social research
-        3. Analysis of research results
-        4. Synthesis into final report
-        5. Cleanup of task data
-
         Args:
             research_query: The main research question to investigate
             research_domains: Domains to include (default: ["web", "social"])
@@ -103,31 +96,51 @@ class CoordinationTools:
         Raises:
             ValueError: If research_query is empty
             RuntimeError: If workflow execution fails
-
         """
-        start_time = datetime.now()
+        start_time = datetime.datetime.now(tz=datetime.UTC)
 
         try:
-            # Validate input
             if not research_query or not research_query.strip():
                 raise ValueError("research_query cannot be empty")
 
             if research_domains is None:
                 research_domains = ["web", "social"]
 
-            # Generate workflow ID
             workflow_id = f"deep_research_{uuid.uuid4().hex[:8]}"
             logger.info(f"Starting deep research workflow {workflow_id}")
 
-            # Step 1: Query decomposition
-            decomp_result = await self._execute_query_decomposition(
+            # Step 1: High-level summary from web/social agents
+            high_level_summaries = {}
+            if "web" in research_domains:
+                web_summary = await self._execute_agent_with_task(
+                    "web_research",
+                    self._create_high_level_task(workflow_id, research_query, "web", max_sources),
+                )
+                high_level_summaries["web"] = web_summary
+            if "social" in research_domains:
+                social_summary = await self._execute_agent_with_task(
+                    "social_research",
+                    self._create_high_level_task(
+                        workflow_id, research_query, "social", max_sources
+                    ),
+                )
+                high_level_summaries["social"] = social_summary
+            logger.info(f"Obtained high-level summaries for: {list(high_level_summaries.keys())}")
+
+            # Step 2: Create research outline (sub-topics)
+            outline_subtopics = self._create_research_outline(research_query)
+            logger.info(f"Created research outline with {len(outline_subtopics)} sub-topics")
+
+            # Step 3: Query decomposition using original prompt and sub-topics
+            decomp_result = await self._execute_query_decomposition_with_outline(
                 workflow_id,
                 research_query,
+                outline_subtopics,
             )
             subqueries = self._extract_subqueries(decomp_result)
             logger.info(f"Decomposed query into {len(subqueries)} subqueries")
 
-            # Step 2: Parallel research execution
+            # Step 4: Parallel research execution (subqueries)
             all_research_results = {}
             total_sources = 0
 
@@ -151,14 +164,7 @@ class CoordinationTools:
 
             logger.info(f"Completed research across {len(research_domains)} domains")
 
-            # Step 3: Analysis - TEMPORARILY DISABLED
-            # TODO: Re-enable when analysis agent capabilities are enhanced
-            # analysis_result = await self._execute_analysis_task(
-            #     workflow_id, research_query, all_research_results
-            # )
-            # logger.info("Completed cross-source analysis")
-
-            # Create empty analysis result for synthesis
+            # Step 5: Analysis - TEMPORARILY DISABLED
             analysis_result = {
                 "analysis_summary": "Analysis step temporarily disabled",
                 "verification_status": "skipped",
@@ -168,7 +174,7 @@ class CoordinationTools:
             }
             logger.info("Skipped analysis step (temporarily disabled)")
 
-            # Step 4: Synthesis
+            # Step 6: Synthesis
             synthesis_result = await self._execute_synthesis_task(
                 workflow_id,
                 research_query,
@@ -178,14 +184,12 @@ class CoordinationTools:
             )
             logger.info("Completed synthesis")
 
-            # Step 5: Cleanup
+            # Step 7: Cleanup
             self._cleanup_workflow_tasks(workflow_id)
 
-            # Calculate execution time
-            end_time = datetime.now()
+            end_time = datetime.datetime.now(tz=datetime.UTC)
             execution_time = (end_time - start_time).total_seconds()
 
-            # Create response
             response = DeepResearchWorkflowResponse(
                 success=True,
                 workflow_id=workflow_id,
@@ -204,7 +208,6 @@ class CoordinationTools:
 
         except Exception as e:
             logger.error(f"Workflow {workflow_id} failed: {e}")
-            # Cleanup on failure
             try:
                 self._cleanup_workflow_tasks(workflow_id)
             except Exception as cleanup_error:
@@ -220,35 +223,62 @@ class CoordinationTools:
             )
             return error_response.model_dump_json(indent=2)
 
-    def cleanup_completed_tasks(self, workflow_id: str) -> str:
-        """Clean up completed tasks for a workflow.
+    def _create_high_level_task(
+        self,
+        workflow_id: str,
+        research_query: str,
+        domain: str,
+        max_sources: int,
+    ) -> str:
+        """Create a high-level summary task for web/social agents."""
+        if domain == "web":
+            task_data = WebResearchTaskData(
+                task_id=f"{workflow_id}_web_highlevel",
+                workflow_id=workflow_id,
+                search_query=research_query,
+                max_sources=max_sources,
+                search_depth="high_level",
+                created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
+            )
+        elif domain == "social":
+            task_data = SocialResearchTaskData(
+                task_id=f"{workflow_id}_social_highlevel",
+                workflow_id=workflow_id,
+                search_query=research_query,
+                max_posts=max_sources,
+                platforms=["reddit"],
+                created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
+            )
+        else:
+            raise ValueError(f"Unsupported domain for high-level summary: {domain}")
+        store_task_data(task_data)
+        return task_data.task_id
 
-        Args:
-            workflow_id: Workflow ID to clean up
+    def _create_research_outline(self, research_query: str) -> list[str]:
+        """Create a research outline by breaking the original question into up to 5 sub-topics."""
+        # Simple placeholder: split by sentences, limit to 5. Replace with LLM/agent if needed.
+        subtopics = [s.strip() for s in research_query.split(".") if s.strip()]
+        return subtopics[:5] if subtopics else [research_query]
 
-        Returns:
-            JSON string with cleanup results
-
-        """
-        try:
-            cleaned_count = clear_workflow_tasks(workflow_id)
-            result = {
-                "success": True,
-                "workflow_id": workflow_id,
-                "tasks_cleaned": cleaned_count,
-                "message": f"Cleaned up {cleaned_count} tasks for workflow {workflow_id}",
-            }
-            logger.info(f"Cleaned up {cleaned_count} tasks for workflow {workflow_id}")
-            return json.dumps(result, indent=2)
-
-        except Exception as e:
-            error_result = {
-                "success": False,
-                "error": str(e),
-                "workflow_id": workflow_id,
-            }
-            logger.error(f"Failed to cleanup workflow {workflow_id}: {e}")
-            return json.dumps(error_result, indent=2)
+    async def _execute_query_decomposition_with_outline(
+        self,
+        workflow_id: str,
+        research_query: str,
+        outline_subtopics: list[str],
+    ) -> dict[str, Any]:
+        """Execute query decomposition using original prompt and sub-topics as research goals."""
+        task_id = f"{workflow_id}_decomp"
+        task_data = QueryDecompositionTaskData(
+            task_id=task_id,
+            workflow_id=workflow_id,
+            original_query=research_query,
+            max_subqueries=5,
+            decomposition_strategy="outline_guided",
+            research_goals=outline_subtopics,
+            created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
+        )
+        store_task_data(task_data)
+        return await self._execute_agent_with_task("query_decomposition", task_id)
 
     async def _execute_query_decomposition(
         self,
@@ -265,7 +295,7 @@ class CoordinationTools:
             original_query=research_query,
             max_subqueries=5,
             decomposition_strategy="comprehensive",
-            created_at=datetime.now().isoformat(),
+            created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
         )
 
         # Store task data
@@ -293,7 +323,7 @@ class CoordinationTools:
                 search_query=subquery,
                 max_sources=max_sources // len(subqueries),
                 search_depth="comprehensive",
-                created_at=datetime.now().isoformat(),
+                created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
             )
 
             # Store task data
@@ -324,7 +354,7 @@ class CoordinationTools:
                 search_query=subquery,
                 max_posts=max_sources // len(subqueries),
                 platforms=["reddit"],
-                created_at=datetime.now().isoformat(),
+                created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
             )
 
             # Store task data
@@ -353,7 +383,7 @@ class CoordinationTools:
             research_results=research_results,
             analysis_type="comprehensive",
             cross_verification=True,
-            created_at=datetime.now().isoformat(),
+            created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
         )
 
         # Store task data
@@ -382,7 +412,7 @@ class CoordinationTools:
             research_findings=research_findings,
             output_format=output_format,
             include_citations=True,
-            created_at=datetime.now().isoformat(),
+            created_at=datetime.datetime.now(tz=datetime.UTC).isoformat(),
         )
 
         # Store task data
@@ -477,9 +507,7 @@ class CoordinationTools:
             # Ensure we have strings
             if isinstance(raw_subqueries, list) and len(raw_subqueries) > 0:
                 if isinstance(raw_subqueries[0], dict):
-                    subqueries = [
-                        q.get("query", q.get("text", str(q))) for q in raw_subqueries
-                    ]
+                    subqueries = [q.get("query", q.get("text", str(q))) for q in raw_subqueries]
                 else:
                     subqueries = [str(q) for q in raw_subqueries]
             else:
@@ -520,4 +548,4 @@ class CoordinationTools:
 
     def _get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
-        return datetime.now().isoformat()
+        return datetime.datetime.now(tz=datetime.UTC).isoformat()

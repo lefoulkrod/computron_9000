@@ -1,3 +1,5 @@
+"""Message handler for user prompts."""
+
 import logging
 from collections.abc import AsyncGenerator, Sequence
 
@@ -6,7 +8,7 @@ from ollama import AsyncClient, Image
 from agents.types import Data, UserMessageEvent
 from config import load_config
 
-from .deep_research import research_coordinator_agent
+from .deep_researchV2 import coordinator
 from .sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 config = load_config()
 
-agent = research_coordinator_agent
+agent = coordinator
 
 # Module-level message history for chat session, initialized with system message
 _message_history: list[dict[str, str]] = [
@@ -45,10 +47,9 @@ async def _handle_image_message(
     """
     log_after_model_call = make_log_after_model_call()
     log_before_model_call = make_log_before_model_call()
-    for d in data:
-        _message_history.append(
-            {"role": "user", "content": f"<image/base64>{d.base64_encoded}"},
-        )
+    _message_history.extend(
+        [{"role": "user", "content": f"<image/base64>{d.base64_encoded}"} for d in data]
+    )
     _message_history.append({"role": "user", "content": message})
     log_before_model_call(_message_history)
     response = await AsyncClient().generate(

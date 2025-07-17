@@ -179,10 +179,7 @@ def _get_device_config(saved_state: SavedState) -> tuple[str, dict[str, Any]]:
 
     device_list = list(desktop_devices.keys())
 
-    if (
-        saved_state.fingerprint
-        and saved_state.fingerprint.device_name in desktop_devices
-    ):
+    if saved_state.fingerprint and saved_state.fingerprint.device_name in desktop_devices:
         device_name = saved_state.fingerprint.device_name
     else:
         device_name = random.choice(device_list)  # noqa: S311
@@ -354,8 +351,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                     "**/*",
                     lambda route: (
                         asyncio.create_task(route.abort())
-                        if route.request.resource_type
-                        in ["image", "font", "media", "stylesheet"]
+                        if route.request.resource_type in ["image", "font", "media", "stylesheet"]
                         else asyncio.create_task(route.continue_())
                     ),
                 )
@@ -398,9 +394,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                         "Verification page detected, waiting for manual completion...",
                     )
                     await page.wait_for_url(
-                        lambda url: not any(
-                            pattern in url for pattern in sorry_patterns
-                        ),
+                        lambda url: not any(pattern in url for pattern in sorry_patterns),
                         timeout=timeout * 2,
                     )
 
@@ -456,9 +450,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                         return await _perform_search(headless=False)
                     logger.warning("Post-search verification detected, waiting...")
                     await page.wait_for_url(
-                        lambda url: not any(
-                            pattern in url for pattern in sorry_patterns
-                        ),
+                        lambda url: not any(pattern in url for pattern in sorry_patterns),
                         timeout=timeout * 2,
                     )
                     await page.wait_for_load_state("networkidle", timeout=timeout)
@@ -607,9 +599,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
                     except Exception:
                         logger.debug("Failed to save state on error")
 
-                if "verification" in str(e).lower() or (
-                    "captcha" in str(e).lower() and headless
-                ):
+                if "verification" in str(e).lower() or ("captcha" in str(e).lower() and headless):
                     logger.warning("Verification required, retrying in headed mode...")
                     return await _perform_search(headless=False)
 
