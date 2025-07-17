@@ -56,9 +56,7 @@ def llm_runtime_stats(response: ChatResponse | GenerateResponse) -> LLMRuntimeSt
         if (prompt_eval_count and prompt_eval_duration)
         else None
     )
-    eval_tokens_per_sec = (
-        eval_count / eval_duration if (eval_count and eval_duration) else None
-    )
+    eval_tokens_per_sec = eval_count / eval_duration if (eval_count and eval_duration) else None
     return LLMRuntimeStats(
         total_duration=total_duration,
         load_duration=load_duration,

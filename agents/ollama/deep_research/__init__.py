@@ -20,9 +20,9 @@ deep_research_agent = research_coordinator_agent
 deep_research_agent_tool = research_coordinator_tool
 
 __all__ = [
-    "research_coordinator_tool",
-    "research_coordinator_agent",
+    "deep_research_agent",
     # Backward compatibility exports
     "deep_research_agent_tool",
-    "deep_research_agent",
+    "research_coordinator_agent",
+    "research_coordinator_tool",
 ]

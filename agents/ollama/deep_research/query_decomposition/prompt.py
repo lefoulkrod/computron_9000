@@ -34,10 +34,31 @@ Without calling `get_query_decomposition_task_data` first, you cannot properly e
 ## Expected Output Format
 
 Your decomposition should return a structured list of subqueries, each specifying:
-- The subquery text
-- Recommended research domain (web/social)
-- Priority level (high/medium/low)
-- Any special instructions or context
+
+### Example Output
+
+```json
+{
+  "subqueries": [
+    {
+      "subquery_text": "How did major social media platforms influence voter turnout in the 2024 election?",
+      "recommended_domain": "social"
+    },
+    {
+      "subquery_text": "What were the most shared news articles about the election on web platforms?",
+      "recommended_domain": "web"
+    },
+    {
+      "subquery_text": "How did online discussions reflect changes in public sentiment before and after election day?",
+      "recommended_domain": "social"
+    },
+    {
+      "subquery_text": "Which web sources provided the most accurate election forecasts?",
+      "recommended_domain": "web"
+    }
+  ]
+}
+```
 
 # Role and Responsibilities
 As the Query Decomposition Agent, you:

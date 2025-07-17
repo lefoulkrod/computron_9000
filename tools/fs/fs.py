@@ -186,9 +186,7 @@ def search_files(pattern: str) -> SearchResults:
         if "**" in pattern:
             # For recursive patterns, use rglob
             base_pattern = (
-                pattern.split("**/")[-1]
-                if "**/" in pattern
-                else pattern.replace("**", "*")
+                pattern.split("**/")[-1] if "**/" in pattern else pattern.replace("**", "*")
             )
             path_matches = list(Path().rglob(base_pattern))
         else:

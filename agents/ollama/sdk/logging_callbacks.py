@@ -54,9 +54,7 @@ def make_log_after_model_call(
     def log_after_model_call(response: ChatResponse | GenerateResponse) -> None:
         agent_name = getattr(agent, "name", "unknown") if agent is not None else None
         if agent_name:
-            log_text = (
-                f"\n========== [after_model_call] for agent: {agent_name} =========="
-            )
+            log_text = f"\n========== [after_model_call] for agent: {agent_name} =========="
         else:
             log_text = "\n========== [after_model_call] =========="
         # Log LLM stats if present

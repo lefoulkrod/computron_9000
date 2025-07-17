@@ -6,6 +6,9 @@ research questions and breaks them into manageable sub-queries.
 
 import logging
 
+from agents.ollama.deep_research.shared.agent_task_tools import (
+    get_query_decomposition_task_data,
+)
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -14,7 +17,6 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 from models import ModelNotFoundError, get_model_by_name
 
-from ..shared.agent_task_tools import get_query_decomposition_task_data
 from .decomposer import QueryDecomposer
 from .prompt import QUERY_DECOMPOSITION_PROMPT
 
@@ -63,8 +65,9 @@ query_decomposition_after_callback = make_log_after_model_call(
 query_decomposition_tool = make_run_agent_as_tool_function(
     agent=query_decomposition_agent,
     tool_description="""
-    Run the QUERY_DECOMPOSITION_AGENT to break down complex research queries into manageable sub-queries.
-    The agent analyzes research questions and creates prioritized research plans.
+    Run the QUERY_DECOMPOSITION_AGENT to break down complex research queries into
+    manageable sub-queries. The agent analyzes research questions and creates
+    prioritized research plans.
 
     Use this tool when:
     1. Complex research queries need to be broken down

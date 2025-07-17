@@ -13,5 +13,5 @@ def setup_logging() -> None:
     logging.basicConfig(level=logging.WARNING, stream=sys.stdout)
     logging.getLogger("tools").setLevel(logging.WARNING)
     logging.getLogger("ollama").setLevel(logging.WARNING)
-    logging.getLogger("agents.ollama").setLevel(logging.WARNING)
-    logging.getLogger("agents.ollama.deep_research").setLevel(logging.DEBUG)
+    logging.getLogger("agents.ollama").setLevel(logging.DEBUG)
+    logging.getLogger("agents.ollama.deep_researchV2").setLevel(logging.DEBUG)

@@ -92,9 +92,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
     logger.debug(f"Package install output: {output} Exit code: {exit_code}")
     if exit_code != 0:
         stderr = (
-            output[1].decode().strip()
-            if output and isinstance(output, tuple) and output[1]
-            else ""
+            output[1].decode().strip() if output and isinstance(output, tuple) and output[1] else ""
         )
         raise CodeExecutionError(f"Package installation failed: {stderr}")
 
