@@ -23,9 +23,16 @@ config = load_config()
 agent = coordinator
 
 # Module-level message history for chat session, initialized with system message
-_message_history: list[dict[str, str]] = [
-    {"role": "system", "content": agent.instruction},
-]
+_message_history: list[dict[str, str]] = []
+
+
+def reset_message_history() -> None:
+    """Resets the message history to the initial system message."""
+    _message_history.clear()
+    _message_history.append({"role": "system", "content": agent.instruction})
+
+
+reset_message_history()
 
 log_before_model_call = make_log_before_model_call(agent)
 log_after_model_call = make_log_after_model_call(agent)
