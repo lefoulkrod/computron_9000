@@ -12,7 +12,7 @@ from aiohttp.web_request import Request
 from aiohttp.web_response import Response, StreamResponse
 from pydantic import BaseModel, ValidationError
 
-from agents.ollama import handle_user_message
+from agents import handle_user_message, reset_message_history
 from agents.types import Data
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,15 @@ CORS_HEADERS = {
 
 
 class ChatRequest(BaseModel):
+    """Request model for chat API.
+
+    Args:
+        message (str): The user message to process.
+        data (list[dict[str, Any]] | None): Optional list of data objects,
+        each with base64 and content_type.
+
+    """
+
     message: str
     data: list[dict[str, Any]] | None = None
 
@@ -195,9 +204,24 @@ async def handle_get(request: Request) -> Response:
     return web.Response(status=404)
 
 
+async def handle_delete_history(_request: Request) -> Response:
+    """Handle DELETE request to clear chat history.
+
+    Args:
+        request (Request): The incoming request.
+
+    Returns:
+        Response: The HTTP response.
+
+    """
+    reset_message_history()
+    return web.Response(status=204)
+
+
 # Set client_max_size to 10 MB (adjust as needed)
 app = web.Application(client_max_size=10 * 1024**2)
 app.router.add_route("OPTIONS", "/api/chat", handle_options)
 app.router.add_route("POST", "/api/chat", handle_post)
 app.router.add_route("GET", "/", handle_get)
 app.router.add_route("GET", "/static/{tail:.*}", handle_get)
+app.router.add_route("DELETE", "/api/chat/history", handle_delete_history)
