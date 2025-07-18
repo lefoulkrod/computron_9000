@@ -1,614 +1,715 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COMPUTRON AI 🤖</title>
-    <style>
-        :root {
-            --primary: #fafafa; /* matches .input-area background */
-            --secondary: #0078fe; /* matches .input-area button background */
-        }
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COMPUTRON AI 🤖</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            min-height: 100vh;
-            background: var(--primary);
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .header {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 0.5rem 2.5rem 0.5rem 2.5rem;
-            border-bottom: 1px solid #e5e7eb;
-            background: #fff;
-            box-sizing: border-box;
-            max-width: 100rem; /* added */
-            margin-left: auto; /* added */
-            margin-right: auto; /* added */
-        }
-        .logo {
-            height: 60px;
-        }
-        .app-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-            letter-spacing: 0.03em;
-            font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
-            color: #222;
-            
-        }
-        .main-layout {
-            display: flex;
-            flex-direction: row;
-            width: 100vw;
-            height: calc(100vh - 7.5rem);
-            margin: 0;
-            gap: 0;
-            background: none;
-            box-sizing: border-box;
-            max-width: 100rem; /* added */
-            margin-left: auto; /* added */
-            margin-right: auto; /* added */
-        }
-        .column {
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            height: 100%;
-            border: none;
-            padding: 2.5rem;
-            box-sizing: border-box;
-            width: 100%;
-        }
-        .column:first-child {
-            flex: 0 0 40%;
-            max-width: 40%;
-            border-right: 1px solid #e5e7eb;
-        }
-        .column:last-child {
-            flex: 1 1 0;
-            max-width: 60%;
-            border-left: none;
-        }
-        .input-area-col {
-            display: flex;
-            flex-direction: column;
-            height: 20%;
-            box-sizing: border-box;
-            justify-content: flex-start;
-        }
-        .input-area {
-            display: flex;
-            flex-direction: column;
-            border-radius: 0.25rem;
-            border: 1px solid #eee;
-            background: var(--primary); /* was #fafafa */
-            padding: 0.5rem;
-            align-items: stretch;
-        }
-        .custom-input-wrapper {
-            position: relative;
-            width: 100%;
-        }
-        .custom-input {
-            min-height: 2rem;
-            max-height: 8rem;
-            overflow-y: auto;
-            font-size: 1rem;
-            padding: 0.5rem 0.75rem;
-            outline: none;
-            width: 100%;
-            box-sizing: border-box;
-            margin-bottom: 0.5rem;
-        }
-        .input-area button {
-            margin-left: 0;
-            margin-top: 0.25rem;
-            padding: 0.5rem 1.2rem;
-            border-radius: 0.25rem;
-            border: none;
-            background: var(--secondary); /* was #0078fe */
-            color: #fff;
-            font-size: 1rem;
-            cursor: pointer;
-            align-self: flex-end;
-        }
-        .input-area button:disabled { background: #aaa; }
-        .input-area-buttons {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            justify-content: flex-end;
-            margin-bottom: 0.5rem;
-        }
-        .chat-messages {
-            flex: 1;
-            padding: 0 0 0 0;
-            overflow-y: auto;
-            background: none;
-            display: flex;
-            flex-direction: column;
-        }
-        .message {
-            margin-bottom: 1.125rem;
-            display: flex;
-        }
-        .assistant {
-            justify-content: flex-start;
-        }
-        .user {
-            justify-content: flex-end;
-        }
-        .assistant .bubble {
-            background: none;
-            color: #222;
-            margin-right: auto;
-            min-width: 80%;
-        }
-        .user .bubble {
-            background: #f5f5f5;
-            color: #222;
-            margin-left: auto;
-        }
-        .bubble {
-            display: inline-block;
-            padding: 0.6rem 1rem;
-            border-radius: 0.25rem;
-            max-width: 80%;
-        }
-        /* Style code blocks in markdown */
-        .bubble pre, .bubble code {
-            background: #f5f5f5 !important;
-            color: #222;
-            border-radius: 0.25rem;
-            font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
-            font-size: 0.98em;
-            position: relative;
-        }
-        .bubble pre {
-            padding: 0.7em 1em 1em 1em;
-            overflow-x: auto;
-            margin: 1em 0;
-            border-radius: 0.75em;
-            background: #f5f5f5 !important;
-            position: relative;
-        }
-        .code-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0;
-            font-size: 0.95em;
-            color: #888;
-            font-family: inherit;
-            background: none;
-            border-radius: 0.75em 0.75em 0 0;
-            user-select: none;
-            margin-bottom: 2em;
-        }
-        .copy-btn {
-            background: none;
-            border: none;
-            color: #888;
-            font-size: 0.95em;
-            cursor: pointer;
-            z-index: 2;
-            display: flex;
-            align-items: center;
-            gap: 0.3em;
-        }
-        .code-lang-label {
-            font-family: inherit;
-        }
-        .context-section {
-            min-height: 2.2em;
-            margin-top: 0.5em;
-            margin-bottom: 0.5em;
-            font-size: 0.98em;
-            color: #555;
-        }
-        .context-pill {
-            display: inline-block;
-            background: #e0e7ff;
-            color: #3730a3;
-            border-radius: 999px;
-            padding: 0.2em 0.9em;
-            font-size: 0.98em;
-            margin-right: 0.5em;
-            margin-bottom: 0.2em;
-            border: 1px solid #a5b4fc;
-        }
-        @media (max-width: 700px) {
-            .main-layout {
-                flex-direction: column;
-                width: 100vw;
-                height: auto;
-                min-height: 100vh;
-            }
-            .column {
-                width: 100vw !important;
-                max-width: 100vw !important;
-                padding: 1rem 0.5rem;
-                border-right: none !important;
-                border-bottom: 1px solid #e5e7eb;
-            }
-            .column:last-child {
-                border-bottom: none;
-            }
-            .bubble {
-                max-width: 95vw;
-                font-size: 1rem;
-                word-break: break-word;
-            }
-        }
-        /* Loading indicator CSS */
-        .loading-indicator {
-            color: #888;
-            font-style: italic;
-            font-size: 1rem;
-            letter-spacing: 0.1em;
-        }
-        .loading-indicator .dot {
-            animation: blink 1.2s infinite both;
-        }
-        .loading-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
-        .loading-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes blink {
-            0%, 20% { opacity: 0; }
-            50% { opacity: 1; }
-            100% { opacity: 0; }
-        }
-        think {
-            white-space: pre-line;
-            display: block;
-            background: var(--primary);
-            border-left: 4px solid var(--secondary);
-            padding: 0.75em 1em;
-            margin: 1em 0;
-            border-radius: 0.25em;
-            font-style: italic;
-        }
-        /* Collapsible think block styles */
-        .collapsible-think {
-            margin: 1em 0;
-            border-left: 4px solid var(--secondary);
-            border-radius: 0.25em;
-            background: var(--primary);
-            font-style: italic;
-        }
-        .collapsible-think-header {
-            cursor: pointer;
-            padding: 0.5em 1em;
-            background: #f0f4ff;
-            color: #3730a3;
-            font-weight: bold;
-            border-radius: 0.25em 0.25em 0 0;
-            user-select: none;
-        }
-        .collapsible-think-content {
-            padding: 0.75em 1em;
-            display: none;
-        }
-        .collapsible-think.expanded .collapsible-think-content {
-            display: block;
-        }
-        .collapsible-think.expanded .collapsible-think-header::after {
-            content: '▲';
-            float: right;
-            font-size: 0.9em;
-        }
-        .collapsible-think .collapsible-think-header::after {
-            content: '▼';
-            float: right;
-            font-size: 0.9em;
-        }
-        
-    </style>
+    :root {
+      --primary: #fafafa;
+      --secondary: #f3f3f3;
+      --button: #ababab;
+      --text: #222;
+      --radius: 0.25rem;
+    }
+
+    /* Dark theme variables */
+    .dark-theme {
+      --primary: #0b0b0c;
+      --secondary: #4a4a4a;
+      --button: #727272;
+      --text: #f3f3f3;
+      --radius: 0.25rem;
+    }
+
+
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      width: 100vw;
+      background: var(--primary);
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+    }
+
+    .header {
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.5rem 2.5rem 0.5rem 2.5rem;
+      border-bottom: 1px solid var(--secondary);
+      box-sizing: border-box;
+    }
+
+    .logo {
+      height: 60px;
+    }
+
+    .logo-dark {
+      display: none;
+    }
+
+    .dark-theme .logo-light {
+      display: none;
+    }
+
+    .dark-theme .logo-dark {
+      display: inline;
+    }
+
+    .app-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+      font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    .main-layout {
+      display: flex;
+      flex-direction: row;
+      width: 100vw;
+      height: calc(100vh - 7.5rem);
+      margin: 0;
+      gap: 0;
+      background: none;
+      box-sizing: border-box;
+    }
+
+    .column {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      height: 100%;
+      border: none;
+      padding: 2.5rem;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .column:first-child {
+      flex: 0 0 40%;
+      max-width: 40%;
+      border-right: 1px solid var(--secondary);
+    }
+
+    .column:last-child {
+      flex: 1 1 0;
+      max-width: 60%;
+      border-left: none;
+    }
+
+    .input-area-wrapper {
+      background-color: var(--secondary);
+      border-radius: var(--radius);
+      border: 1px solid var(--secondary);
+      padding: 0.5rem;
+    }
+
+    .custom-input-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .custom-input {
+      min-height: 2rem;
+      max-height: 8rem;
+      overflow-y: auto;
+      font-size: 1rem;
+      padding: 0.5rem 0.75rem;
+      outline: none;
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 0.5rem;
+    }
+
+    .input-area button {
+      margin-left: 0;
+      margin-top: 0.25rem;
+      padding: 0.5rem 1.2rem;
+      border-radius: var(--radius);
+      border: none;
+      background: var(--button);
+      color: var(--text);
+      font-size: 1rem;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    .input-area button:disabled {
+      background: #aaa;
+    }
+
+    .input-area-buttons {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: flex-end;
+      margin-bottom: 0.5rem;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 0 0 0 0;
+      overflow-y: auto;
+      background: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message {
+      margin-bottom: 1.125rem;
+      display: flex;
+    }
+
+    .assistant {
+      justify-content: flex-start;
+    }
+
+    .user {
+      justify-content: flex-end;
+    }
+
+    .assistant .bubble {
+      background: none;
+      color: var(--text);
+      margin-right: auto;
+      min-width: 80%;
+    }
+
+    .user .bubble {
+      background: var(--secondary);
+      color: var(--text);
+      margin-left: auto;
+    }
+
+    .bubble {
+      display: inline-block;
+      padding: 0.6rem 1rem;
+      border-radius: var(--radius);
+      max-width: 80%;
+      color: var(--text);
+    }
+
+    /* Style code blocks in markdown */
+    .bubble pre,
+    .bubble code {
+      background: var(--secondary) !important;
+      color: var(--text);
+      border-radius: var(--radius);
+      font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+      font-size: 0.98em;
+      position: relative;
+    }
+
+    .bubble pre {
+      padding: 0.7em 1em 1em 1em;
+      overflow-x: auto;
+      margin: 1em 0;
+      border-radius: var(--radius);
+      background: var(--secondary) !important;
+      color: var(--text);
+      position: relative;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0;
+      font-size: 0.95em;
+      color: #888;
+      font-family: inherit;
+      background: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+      user-select: none;
+      margin-bottom: 2em;
+    }
+
+    .copy-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 0.95em;
+      cursor: pointer;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 0.3em;
+    }
+
+    .code-lang-label {
+      font-family: inherit;
+    }
+
+
+
+    @media (max-width: 700px) {
+      .main-layout {
+        flex-direction: column;
+        width: 100vw;
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .column {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        padding: 1rem 0.5rem;
+        border-right: none !important;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .column:last-child {
+        border-bottom: none;
+      }
+
+      .bubble {
+        max-width: 95vw;
+        font-size: 1rem;
+        word-break: break-word;
+      }
+    }
+
+    /* Loading indicator CSS */
+    .loading-indicator {
+      color: #888;
+      font-style: italic;
+      font-size: 1rem;
+      letter-spacing: 0.1em;
+    }
+
+    .loading-indicator .dot {
+      animation: blink 1.2s infinite both;
+    }
+
+    .loading-indicator .dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .loading-indicator .dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes blink {
+
+      0%,
+      20% {
+        opacity: 0;
+      }
+
+      50% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+
+
+
+    /* Collapsible think block styles */
+    .collapsible-think {
+      margin: 1em 0;
+      border-left: 4px solid var(--button);
+      border-radius: var(--radius);
+      background: var(--secondary);
+      font-style: italic;
+    }
+
+    .collapsible-think-header {
+      cursor: pointer;
+      padding: 0.5em 1em;
+      background: var(--button);
+      color: var(--text);
+      font-weight: bold;
+      border-radius: 0 var(--radius) 0 0;
+      user-select: none;
+    }
+
+    .collapsible-think-content {
+      padding: 0.75em 1em;
+      display: none;
+    }
+
+    .collapsible-think.expanded .collapsible-think-content {
+      display: block;
+    }
+
+    .collapsible-think.expanded .collapsible-think-header::after {
+      content: '▲';
+      float: right;
+      font-size: 0.9em;
+    }
+
+    .collapsible-think .collapsible-think-header::after {
+      content: '▼';
+      float: right;
+      font-size: 0.9em;
+    }
+  </style>
 </head>
+
 <body>
-    <div class="header">
-        <img src="/static/computron_logo.png" alt="Computron Logo" class="logo" />
-        <div class="app-title">COMPUTRON_9000</div>
-    </div>
-    <div class="main-layout">
-        <div class="column">
-            <div class="input-area-col">
-                <form class="input-area" id="chatForm">
-                    <div id="customInputWrapper" class="custom-input-wrapper">
-                        <div id="customInput" class="custom-input" contenteditable="true" role="textbox" aria-multiline="true"></div>
-                        <textarea id="userInput" name="userInput" style="display:none;"></textarea>
-                    </div>
-                    <div class="input-area-buttons">
-                        <button type="button" id="fileButton">File</button>
-                        <input type="file" id="fileInput" style="display: none;" />
-                        <button type="submit">Send</button>
-                    </div>
-                </form>
+  <div class="header">
+    <img src="/static/computron_logo.png" alt="Computron Logo" class="logo logo-light" />
+    <img src="/static/computron_logo_dark.png" alt="Computron Logo Dark" class="logo logo-dark" />
+    <div class="app-title">COMPUTRON_9000</div>
+    <button id="themeToggle"
+      style="margin-left:auto;padding:0.5em 1em;border-radius:0.25em;border:none;background:var(--button);color:var(--text);font-size:1em;cursor:pointer;">🌙
+      Dark</button>
+  </div>
+  <div class="main-layout">
+    <div class="column">
+      <div class="input-area-wrapper">
+        <form class="input-area" id="chatForm">
+          <div id="customInputWrapper" class="custom-input-wrapper">
+            <div id="customInput" class="custom-input" contenteditable="true" role="textbox" aria-multiline="true">
             </div>
-        </div>
-        <div class="column">
-            <div class="chat-messages" id="chatMessages"></div>
-        </div>
+            <textarea id="userInput" name="userInput" style="display:none;"></textarea>
+          </div>
+          <div class="input-area-buttons">
+            <button type="button" id="fileButton">File</button>
+            <input type="file" id="fileInput" style="display: none;" />
+            <button type="submit">Send</button>
+          </div>
+        </form>
+      </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script>
-        const chatMessages = document.getElementById('chatMessages');
-        const chatForm = document.getElementById('chatForm');
-        const userInput = document.getElementById('userInput');
-        // Remove conversation history storage
-        // let conversation = [];
-        let selectedFileBase64 = null;
-        let selectedFileName = null;
-        let selectedFileContentType = null;
-        // const contextSection = document.getElementById('contextSection'); // removed
+    <div class="column">
+      <div class="chat-messages" id="chatMessages"></div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    // --- Theme Management ---
+    const themeToggle = document.getElementById('themeToggle');
 
-        // Enhance code blocks in assistant messages with copy button and language label
-        function enhanceCodeBlocks(container) {
-            const pres = container.querySelectorAll('pre');
-            pres.forEach(pre => {
-                const codeBlock = pre.querySelector('code');
-                if (!codeBlock) return;
-                // Avoid duplicate headers
-                if (pre.querySelector('.code-header')) return;
-                // Extract language from class name
-                let lang = codeBlock.className.match(/language-([a-zA-Z0-9]+)/);
-                lang = lang ? lang[1] : '';
-                // Create header for code block
-                const header = document.createElement('div');
-                header.className = 'code-header';
-                const langLabel = document.createElement('span');
-                langLabel.className = 'code-lang-label';
-                langLabel.textContent = lang;
-                // Add copy button to code block
-                const copyBtn = document.createElement('button');
-                copyBtn.className = 'copy-btn';
-                copyBtn.type = 'button';
-                copyBtn.innerHTML = '<span>Copy</span>';
-                copyBtn.onclick = (e) => {
-                    e.preventDefault();
-                    // Always copy the code inside this pre's code element
-                    const code = pre.querySelector('code');
-                    if (code) {
-                        navigator.clipboard.writeText(code.innerText);
-                        copyBtn.innerHTML = '<span>Copied!</span>';
-                        setTimeout(() => { copyBtn.innerHTML = '<span>Copy</span>'; }, 1200);
-                    }
-                };
-                header.appendChild(langLabel);
-                header.appendChild(copyBtn);
-                pre.insertAdjacentElement('afterbegin', header);
-                pre.style.position = 'relative';
-            });
+    function isSystemDark() {
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function applyTheme(dark) {
+      document.body.classList.toggle('dark-theme', dark);
+      themeToggle.textContent = dark ? '☀️ Light' : '🌙 Dark';
+    }
+
+    function getThemePreference() {
+      const manual = localStorage.getItem('themeManual') === 'true';
+      const darkPref = localStorage.getItem('darkTheme');
+      if (manual && darkPref !== null) {
+        return darkPref === 'true';
+      }
+      return isSystemDark();
+    }
+
+    function setThemePreference(dark, manual = false) {
+      applyTheme(dark);
+      if (manual) {
+        localStorage.setItem('darkTheme', dark);
+        localStorage.setItem('themeManual', 'true');
+      } else {
+        localStorage.setItem('darkTheme', dark);
+        localStorage.removeItem('themeManual');
+      }
+    }
+
+    // Initial theme setup
+    applyTheme(getThemePreference());
+
+    // Listen for system theme changes if not manually overridden
+    if (localStorage.getItem('themeManual') !== 'true') {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        setThemePreference(e.matches, false);
+      });
+    }
+
+    // Manual toggle
+    themeToggle.onclick = () => {
+      const isDark = !document.body.classList.contains('dark-theme');
+      setThemePreference(isDark, true);
+    };
+    const chatMessages = document.getElementById('chatMessages');
+    const chatForm = document.getElementById('chatForm');
+    const userInput = document.getElementById('userInput');
+    // Remove conversation history storage
+    // let conversation = [];
+    let selectedFileBase64 = null;
+    let selectedFileName = null;
+    let selectedFileContentType = null;
+    // const contextSection = document.getElementById('contextSection'); // removed
+
+    // Enhance code blocks in assistant messages with copy button and language label
+    function enhanceCodeBlocks(container) {
+      const pres = container.querySelectorAll('pre');
+      pres.forEach(pre => {
+        const codeBlock = pre.querySelector('code');
+        if (!codeBlock) return;
+        // Avoid duplicate headers
+        if (pre.querySelector('.code-header')) return;
+        // Extract language from class name
+        let lang = codeBlock.className.match(/language-([a-zA-Z0-9]+)/);
+        lang = lang ? lang[1] : '';
+        // Create header for code block
+        const header = document.createElement('div');
+        header.className = 'code-header';
+        const langLabel = document.createElement('span');
+        langLabel.className = 'code-lang-label';
+        langLabel.textContent = lang;
+        // Add copy button to code block
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.type = 'button';
+        copyBtn.innerHTML = '<span>Copy</span>';
+        copyBtn.onclick = (e) => {
+          e.preventDefault();
+          // Always copy the code inside this pre's code element
+          const code = pre.querySelector('code');
+          if (code) {
+            navigator.clipboard.writeText(code.innerText);
+            copyBtn.innerHTML = '<span>Copied!</span>';
+            setTimeout(() => { copyBtn.innerHTML = '<span>Copy</span>'; }, 1200);
+          }
+        };
+        header.appendChild(langLabel);
+        header.appendChild(copyBtn);
+        pre.insertAdjacentElement('afterbegin', header);
+        pre.style.position = 'relative';
+      });
+    }
+
+    // Helper: Render content with optional thinking block
+    // If present, the 'thinking' string is rendered as collapsible blocks, followed by Markdown for the response
+    function renderAssistantContent(thinking, response) {
+      let result = '';
+      if (thinking) {
+        const thinkId = `think-block-${Date.now()}`;
+        result += `\n<div class="collapsible-think" id="${thinkId}">\n  <div class="collapsible-think-header">Show thoughts</div>\n  <div class="collapsible-think-content">${thinking.replace(/\n/g, '<br>')}</div>\n</div>\n`;
+      }
+      if (response) {
+        result += marked.parse(response);
+      }
+      return result;
+    }
+
+    // Add a chat message to the UI
+    function addMessage(role, content, thinking = null) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      if (role === 'assistant') {
+        // Render thinking (if present) as collapsible, rest as Markdown
+        let rendered = renderAssistantContent(thinking, content);
+        bubble.innerHTML = rendered;
+        enhanceCodeBlocks(bubble)
+        // Attach expand/collapse logic for all think blocks in this message
+        const thinkBlocks = bubble.querySelectorAll('.collapsible-think');
+        thinkBlocks.forEach(block => {
+          const header = block.querySelector('.collapsible-think-header');
+          // Collapsed by default
+          block.classList.remove('expanded');
+          header.textContent = 'Show thoughts';
+          header.onclick = () => {
+            const expanded = block.classList.toggle('expanded');
+            header.textContent = expanded ? 'Hide thoughts' : 'Show thoughts';
+          };
+        });
+      } else {
+        bubble.textContent = content;
+      }
+      msgDiv.appendChild(bubble);
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return msgDiv;
+    }
+
+    // Remove all loading indicators from the chat
+    function removeLoadingIndicators() {
+      const indicators = chatMessages.querySelectorAll('.loading-indicator');
+      indicators.forEach(ind => ind.remove());
+    }
+
+    // Handle File button click
+    document.getElementById('fileButton').addEventListener('click', function () {
+      document.getElementById('fileInput').click();
+    });
+
+    // Handle file selection and convert to base64, update context
+    document.getElementById('fileInput').addEventListener('change', function (event) {
+      const file = event.target.files[0];
+      const customInput = document.getElementById('customInput');
+      if (!file) {
+        selectedFileBase64 = null;
+        selectedFileName = null;
+        selectedFileContentType = null;
+        // Remove any image preview in the content area
+        const imgDiv = customInput.querySelector('.input-image-wrapper');
+        if (imgDiv) imgDiv.remove();
+        document.getElementById('fileInput').value = '';
+        return;
+      }
+      selectedFileName = file.name;
+      selectedFileContentType = file.type;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        selectedFileBase64 = e.target.result.split(',')[1];
+        // Remove any previous image
+        const oldImgDiv = customInput.querySelector('.input-image-wrapper');
+        if (oldImgDiv) oldImgDiv.remove();
+        // Only show if image
+        if (selectedFileContentType && selectedFileContentType.startsWith('image/')) {
+          const imgDiv = document.createElement('div');
+          imgDiv.className = 'input-image-wrapper';
+          imgDiv.style.display = 'flex';
+          imgDiv.style.justifyContent = 'flex-start';
+          imgDiv.style.marginBottom = '0.5em';
+          imgDiv.style.cursor = 'pointer';
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.alt = 'selected';
+          img.style.maxWidth = '120px';
+          img.style.maxHeight = '80px';
+          img.style.borderRadius = '8px';
+          img.style.border = '1px solid #eee';
+          img.style.boxShadow = '0 1px 2px #ddd';
+          imgDiv.appendChild(img);
+          // Remove image on click
+          imgDiv.onclick = function () {
+            imgDiv.remove();
+            selectedFileBase64 = null;
+            selectedFileName = null;
+            selectedFileContentType = null;
+            document.getElementById('fileInput').value = '';
+          };
+          // Insert at top of content area
+          customInput.insertBefore(imgDiv, customInput.firstChild);
         }
+      };
+      reader.readAsDataURL(file);
+    });
 
-        // Helper: Render content with optional thinking block
-        // If present, the 'thinking' string is rendered as collapsible blocks, followed by Markdown for the response
-        function renderAssistantContent(thinking, response) {
-            let result = '';
-            if (thinking) {
-                const thinkId = `think-block-${Date.now()}`;
-                result += `\n<div class="collapsible-think" id="${thinkId}">\n  <div class="collapsible-think-header">Show thoughts</div>\n  <div class="collapsible-think-content">${thinking.replace(/\n/g, '<br>')}</div>\n</div>\n`;
-            }
-            if (response) {
-                result += marked.parse(response);
-            }
-            return result;
-        }
+    // Send a user message to the backend and handle the streaming response
+    async function sendMessage(message) {
+      // If a file is attached, show the image above the user message
+      if (selectedFileBase64 && selectedFileContentType && selectedFileContentType.startsWith('image/')) {
+        const imgDiv = document.createElement('div');
+        imgDiv.className = 'message user';
+        const img = document.createElement('img');
+        img.src = `data:${selectedFileContentType};base64,${selectedFileBase64}`;
+        img.style.maxWidth = '200px';
+        img.style.maxHeight = '200px';
+        img.style.display = 'block';
+        img.style.margin = '0 0 0.5em auto';
+        imgDiv.appendChild(img);
+        chatMessages.appendChild(imgDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+      addMessage('user', message);
 
-        // Add a chat message to the UI
-        function addMessage(role, content, thinking = null) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${role}`;
-            const bubble = document.createElement('div');
-            bubble.className = 'bubble';
-            if (role === 'assistant') {
-                // Render thinking (if present) as collapsible, rest as Markdown
-                let rendered = renderAssistantContent(thinking, content);
-                bubble.innerHTML = rendered;
-                enhanceCodeBlocks(bubble)
-                // Attach expand/collapse logic for all think blocks in this message
-                const thinkBlocks = bubble.querySelectorAll('.collapsible-think');
-                thinkBlocks.forEach(block => {
-                    const header = block.querySelector('.collapsible-think-header');
-                    // Collapsed by default
-                    block.classList.remove('expanded');
-                    header.textContent = 'Show thoughts';
-                    header.onclick = () => {
-                        const expanded = block.classList.toggle('expanded');
-                        header.textContent = expanded ? 'Hide thoughts' : 'Show thoughts';
-                    };
-                });
-            } else {
-                bubble.textContent = content;
+      // Show initial loading indicator
+      let loadingIndicator = document.createElement('span');
+      loadingIndicator.className = 'loading-indicator';
+      loadingIndicator.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
+      chatMessages.appendChild(loadingIndicator);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      const body = {
+        message: message,
+      };
+
+      if (selectedFileBase64 && selectedFileContentType) {
+        body.data = [
+          {
+            base64: selectedFileBase64,
+            content_type: selectedFileContentType
+          }
+        ];
+      }
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!response.body) throw new Error('No response body');
+        const reader = response.body.getReader();
+        let decoder = new TextDecoder();
+        loadingIndicator.remove();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            removeLoadingIndicators();
+            break;
+          }
+          const chunk = decoder.decode(value, { stream: true });
+          if (!chunk.trim()) continue;
+          try {
+            const data = JSON.parse(chunk);
+            addMessage('assistant', data.response, data.thinking);
+            // Remove previous loading indicator if present
+            removeLoadingIndicators();
+            if (data.final !== true && data.final !== 'true') {
+              let newLoading = document.createElement('span');
+              newLoading.className = 'loading-indicator';
+              newLoading.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
+              chatMessages.appendChild(newLoading);
             }
-            msgDiv.appendChild(bubble);
-            chatMessages.appendChild(msgDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
-            return msgDiv;
+          } catch (e) { /* ignore parse errors */ }
         }
+      } catch (err) {
+        // Show error in chat bubble if request fails
+        removeLoadingIndicators();
+        addMessage('assistant', '[Error: ' + err.message + ']');
+      } finally {
+        // Reset file after sending
+        selectedFileBase64 = null;
+        selectedFileName = null;
+        selectedFileContentType = null;
+        document.getElementById('fileInput').value = '';
+        // updateContextSection(); // removed
+      }
+    }
 
-        // Remove all loading indicators from the chat
-        function removeLoadingIndicators() {
-            const indicators = chatMessages.querySelectorAll('.loading-indicator');
-            indicators.forEach(ind => ind.remove());
-        }
+    // Handle form submission for sending user messages
+    chatForm.addEventListener('submit', e => {
+      e.preventDefault();
+      // Sync contenteditable div to hidden textarea on form submit
+      const customInput = document.getElementById('customInput');
+      const userInput = document.getElementById('userInput');
+      // Copy plain text from contenteditable to textarea for backend
+      userInput.value = customInput.innerText.trim();
+      const message = userInput.value;
+      if (!message) return;
+      customInput.innerHTML = '';
+      sendMessage(message);
+    });
 
-        // Handle File button click
-        document.getElementById('fileButton').addEventListener('click', function() {
-            document.getElementById('fileInput').click();
-        });
-
-        // Handle file selection and convert to base64, update context
-        document.getElementById('fileInput').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            const customInput = document.getElementById('customInput');
-            if (!file) {
-                selectedFileBase64 = null;
-                selectedFileName = null;
-                selectedFileContentType = null;
-                // Remove any image preview in the content area
-                const imgDiv = customInput.querySelector('.input-image-wrapper');
-                if (imgDiv) imgDiv.remove();
-                document.getElementById('fileInput').value = '';
-                return;
-            }
-            selectedFileName = file.name;
-            selectedFileContentType = file.type;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                selectedFileBase64 = e.target.result.split(',')[1];
-                // Remove any previous image
-                const oldImgDiv = customInput.querySelector('.input-image-wrapper');
-                if (oldImgDiv) oldImgDiv.remove();
-                // Only show if image
-                if (selectedFileContentType && selectedFileContentType.startsWith('image/')) {
-                    const imgDiv = document.createElement('div');
-                    imgDiv.className = 'input-image-wrapper';
-                    imgDiv.style.display = 'flex';
-                    imgDiv.style.justifyContent = 'flex-start';
-                    imgDiv.style.marginBottom = '0.5em';
-                    imgDiv.style.cursor = 'pointer';
-                    const img = document.createElement('img');
-                    img.src = e.target.result;
-                    img.alt = 'selected';
-                    img.style.maxWidth = '120px';
-                    img.style.maxHeight = '80px';
-                    img.style.borderRadius = '8px';
-                    img.style.border = '1px solid #eee';
-                    img.style.boxShadow = '0 1px 2px #ddd';
-                    imgDiv.appendChild(img);
-                    // Remove image on click
-                    imgDiv.onclick = function() {
-                        imgDiv.remove();
-                        selectedFileBase64 = null;
-                        selectedFileName = null;
-                        selectedFileContentType = null;
-                        document.getElementById('fileInput').value = '';
-                    };
-                    // Insert at top of content area
-                    customInput.insertBefore(imgDiv, customInput.firstChild);
-                }
-            };
-            reader.readAsDataURL(file);
-        });
-
-        // Send a user message to the backend and handle the streaming response
-        async function sendMessage(message) {
-            // If a file is attached, show the image above the user message
-            if (selectedFileBase64 && selectedFileContentType && selectedFileContentType.startsWith('image/')) {
-                const imgDiv = document.createElement('div');
-                imgDiv.className = 'message user';
-                const img = document.createElement('img');
-                img.src = `data:${selectedFileContentType};base64,${selectedFileBase64}`;
-                img.style.maxWidth = '200px';
-                img.style.maxHeight = '200px';
-                img.style.display = 'block';
-                img.style.margin = '0 0 0.5em auto';
-                imgDiv.appendChild(img);
-                chatMessages.appendChild(imgDiv);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
-            addMessage('user', message);
-
-            // Show initial loading indicator
-            let loadingIndicator = document.createElement('span');
-            loadingIndicator.className = 'loading-indicator';
-            loadingIndicator.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
-            chatMessages.appendChild(loadingIndicator);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            const body = {
-                message: message,
-            };
-
-            if (selectedFileBase64 && selectedFileContentType) {
-                body.data = [
-                    {
-                        base64: selectedFileBase64,
-                        content_type: selectedFileContentType
-                    }
-                ];
-            }
-            
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                if (!response.body) throw new Error('No response body');
-                const reader = response.body.getReader();
-                let decoder = new TextDecoder();
-                loadingIndicator.remove();
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) {
-                        removeLoadingIndicators();
-                        break;
-                    }
-                    const chunk = decoder.decode(value, { stream: true });
-                    if (!chunk.trim()) continue;
-                    try {
-                        const data = JSON.parse(chunk);
-                        addMessage('assistant', data.response, data.thinking);
-                        // Remove previous loading indicator if present
-                        removeLoadingIndicators();
-                        if (data.final !== true && data.final !== 'true') {
-                            let newLoading = document.createElement('span');
-                            newLoading.className = 'loading-indicator';
-                            newLoading.innerHTML = 'Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>';
-                            chatMessages.appendChild(newLoading);
-                        }
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
-                    } catch (e) { /* ignore parse errors */ }
-                }
-            } catch (err) {
-                // Show error in chat bubble if request fails
-                removeLoadingIndicators();
-                addMessage('assistant', '[Error: ' + err.message + ']');
-            } finally {
-                // Reset file after sending
-                selectedFileBase64 = null;
-                selectedFileName = null;
-                selectedFileContentType = null;
-                document.getElementById('fileInput').value = '';
-                // updateContextSection(); // removed
-            }
-        }
-
-        // Handle form submission for sending user messages
-        chatForm.addEventListener('submit', e => {
-            e.preventDefault();
-            // Sync contenteditable div to hidden textarea on form submit
-            const customInput = document.getElementById('customInput');
-            const userInput = document.getElementById('userInput');
-            // Copy plain text from contenteditable to textarea for backend
-            userInput.value = customInput.innerText.trim();
-            const message = userInput.value;
-            if (!message) return;
-            customInput.innerHTML = '';
-            sendMessage(message);
-        });
-
-        // Optional: allow Enter for newline, Shift+Enter for submit
-        customInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                chatForm.requestSubmit();
-            }
-        });
-    </script>
+    // Optional: allow Enter for newline, Shift+Enter for submit
+    customInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        chatForm.requestSubmit();
+      }
+    });
+  </script>
 </body>
+
 </html>
