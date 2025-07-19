@@ -17,7 +17,7 @@ class SectionSummary(pydantic.BaseModel):
         starting_char_position (int): The starting character position of the section in the original text.
         ending_char_position (int): The ending character position of the section in the original text.
 
-    """
+    """  # noqa: E501
 
     summary: str
     starting_char_position: int
