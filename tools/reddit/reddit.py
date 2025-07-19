@@ -11,6 +11,10 @@ config = load_config()
 logger = logging.getLogger(__name__)
 
 
+config = load_config()
+logger = logging.getLogger(__name__)
+
+
 class RedditSubmission(BaseModel):
     """Pydantic model for serializing Reddit submissions.
 
@@ -116,7 +120,8 @@ async def get_reddit_comments_tree_shallow(
     limit: int = 10,
 ) -> list[RedditComment]:
     """Retrieve the first N top-level comments for a Reddit submission by submission ID.
-    This function fetches the top-level comments and their immediate replies,
+
+    This function fetches the top-level comments sorted by "top" and their immediate replies,
     but does not recursively fetch deeper replies to keep the tree shallow.
 
     Args:
@@ -124,7 +129,8 @@ async def get_reddit_comments_tree_shallow(
         limit (int): Maximum number of top-level comments to return.
 
     Returns:
-        list[RedditComment]: List of RedditComment objects representing the top-level comments and their immediate replies.
+        list[RedditComment]: List of RedditComment objects representing the top-level comments
+        and their immediate replies.
 
     """
     try:
@@ -162,4 +168,40 @@ async def get_reddit_comments_tree_shallow(
             return comments_tree
     except Exception:
         logger.exception(f"Failed to fetch comments for submission id: {submission_id}")
+        raise
+
+
+async def get_reddit_submission(submission_id: str) -> RedditSubmission:
+    """Fetch a single Reddit submission by its ID.
+
+    Args:
+        submission_id (str): The Reddit submission ID.
+
+    Returns:
+        RedditSubmission: Serializable RedditSubmission object for the post.
+
+    Raises:
+        Exception: If fetching the submission fails.
+    """
+    try:
+        async with asyncpraw.Reddit(
+            client_id=config.reddit.client_id,
+            client_secret=config.reddit.client_secret,
+            user_agent=config.reddit.user_agent,
+        ) as reddit:
+            submission = await reddit.submission(id=submission_id, fetch=True)
+            return RedditSubmission(
+                id=submission.id,
+                title=submission.title,
+                selftext=submission.selftext,
+                url=submission.url,
+                author=str(submission.author) if submission.author else None,
+                subreddit=str(submission.subreddit),
+                score=submission.score,
+                num_comments=submission.num_comments,
+                created_utc=submission.created_utc,
+                permalink=submission.permalink,
+            )
+    except Exception:
+        logger.exception("Failed to fetch submission with id: %s", submission_id)
         raise

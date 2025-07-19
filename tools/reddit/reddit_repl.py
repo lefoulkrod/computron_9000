@@ -6,6 +6,7 @@ Usage:
 
 This ensures the 'tools' package is available for import.
 """
+# flake8: noqa: T201
 
 import asyncio
 import logging
@@ -17,6 +18,8 @@ from tools.reddit import (
     get_reddit_comments_tree_shallow,
     search_reddit,
 )
+
+# ...existing code...
 
 # Load environment variables from .env file
 load_dotenv()
