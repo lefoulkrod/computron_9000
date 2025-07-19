@@ -34,6 +34,7 @@ computron: Agent = Agent(
         read_file_contents,
         search_files,
         write_text_file,
+        execute_python_program,
     ],
 )
 
