@@ -10,14 +10,15 @@ config = load_config()
 
 
 class SectionSummary(pydantic.BaseModel):
-    """Represents a summary of a section of a larger block of text that has been divided for summarization.
+    """Represents a summary of a section of a larger block of text.
 
     Attributes:
         summary (str): The summary of the section.
-        starting_char_position (int): The starting character position of the section in the original text.
-        ending_char_position (int): The ending character position of the section in the original text.
-
-    """  # noqa: E501
+        starting_char_position (int): The starting character position of the section in the
+            original text.
+        ending_char_position (int): The ending character position of the section in the
+            original text.
+    """
 
     summary: str
     starting_char_position: int

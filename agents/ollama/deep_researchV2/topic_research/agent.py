@@ -2,6 +2,7 @@
 
 import logging
 
+from agents.ollama.deep_researchV2.website_reader.agent import website_reader_agent_tool
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -10,7 +11,6 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 from models import get_default_model
 from tools.reddit import get_reddit_comments_tree_shallow, get_reddit_submission
-from tools.web import get_webpage_substring, get_webpage_summary_sections
 
 from .prompt import PROMPT
 
@@ -25,8 +25,7 @@ topic_research_agent = Agent(
     model=model.model,
     options=model.options,
     tools=[
-        get_webpage_summary_sections,
-        get_webpage_substring,
+        website_reader_agent_tool,
         get_reddit_comments_tree_shallow,
         get_reddit_submission,
     ],

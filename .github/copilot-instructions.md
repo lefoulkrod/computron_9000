@@ -4,7 +4,6 @@
 - Use Google‑style docstrings with Args/Returns/Raises
 - Add type hints to all function signatures; enforce mypy `--strict` (full annotations, no untyped defs/calls, explicit Optional, generics, missing-imports, re-exports)
 - Prefer async/await for I/O operations
-- Use f‑strings for formatting
 - Do not use f-strings for logging; use `logger.info("message %s", var)` instead
 - Keep functions/classes small, focused
 - Handle exceptions with context‑aware logging; use module-level logger (`logger = logging.getLogger(__name__)`)
