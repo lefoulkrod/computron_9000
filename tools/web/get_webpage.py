@@ -78,13 +78,10 @@ async def get_webpage(url: str) -> ReducedWebpage:
     raw_result = await _get_webpage_raw(url)
     html = raw_result.html
     try:
-        if html:
-            reduced = _reduce_webpage_context(html)
-        else:
-            reduced = ReducedWebpage(page_text="", links=[])
+        reduced = _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
     except Exception as e:
-        logger.error(f"Error reducing webpage content for {url}: {e}")
-        raise GetWebpageError(f"Error reducing webpage content: {e}") from e
+        logger.exception("Error reducing webpage content for %s", url)
+        raise GetWebpageError(e) from e
     return reduced
 
 
