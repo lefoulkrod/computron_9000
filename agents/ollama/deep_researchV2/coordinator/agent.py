@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 model = get_default_model()
 
 
-async def execute_research(research_topic: str) -> str:
+async def execute_research_tool(research_topic: str) -> str:
     """Execute a deep research on the provided research topic.
 
     Args:
@@ -148,5 +148,5 @@ coordinator = Agent(
     instruction=PROMPT,
     model=model.model,
     options=model.options,
-    tools=[execute_research],
+    tools=[execute_research_tool],
 )
