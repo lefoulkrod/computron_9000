@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>COMPUTRON AI 🤖</title>
+  <title>COMPUTRON_9000</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
@@ -25,8 +26,6 @@
       --radius: 0.25rem;
     }
 
-
-
     html,
     body {
       height: 100%;
@@ -43,6 +42,10 @@
       color: var(--text);
       margin: 0;
       padding: 0;
+    }
+
+    i {
+      color: var(--text);
     }
 
     .header {
@@ -137,16 +140,17 @@
       margin-bottom: 0.5rem;
     }
 
+    button {
+      background: var(--button);
+      border-radius: var(--radius);
+      color: var(--text);
+      border: none;
+      padding: 0.5rem 1.2rem;
+    }
+
     .input-area button {
       margin-left: 0;
       margin-top: 0.25rem;
-      padding: 0.5rem 1.2rem;
-      border-radius: var(--radius);
-      border: none;
-      background: var(--button);
-      color: var(--text);
-      font-size: 1rem;
-      cursor: pointer;
       align-self: flex-end;
     }
 
@@ -370,12 +374,8 @@
     <img src="/static/computron_logo.png" alt="Computron Logo" class="logo logo-light" />
     <img src="/static/computron_logo_dark.png" alt="Computron Logo Dark" class="logo logo-dark" />
     <div class="app-title">COMPUTRON_9000</div>
-    <button id="themeToggle"
-      style="margin-left:auto;padding:0.5em 1em;border-radius:0.25em;border:none;background:var(--button);color:var(--text);font-size:1em;cursor:pointer;">🌙
-      Dark</button>
-    <button id="newSessionBtn"
-      style="margin-left:0.5em;padding:0.5em 1em;border-radius:0.25em;border:none;background:var(--button);color:var(--text);font-size:1em;cursor:pointer;">🆕
-      New Session</button>
+    <button id="themeToggle"><i class="bi bi-lamp"></i> Dark</button>
+    <button id="newSessionBtn"><i class="bi bi-plus-circle"></i> New Session</button>
   </div>
   <div class="main-layout">
     <div class="column">
@@ -409,7 +409,7 @@
 
     function applyTheme(dark) {
       document.body.classList.toggle('dark-theme', dark);
-      themeToggle.textContent = dark ? '☀️ Light' : '🌙 Dark';
+      themeToggle.innerHTML = dark ? '<i class="bi bi-lamp"></i> Light' : '<i class="bi bi-lamp"></i> Dark';
     }
 
     function getThemePreference() {
