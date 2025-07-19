@@ -11,14 +11,25 @@ the research process; do not summarize or change the original prompt.
 3. Format the results of the `execute_research` tool into a structured summary,
 do not further summarize the results, just organize the results into the required format.
 
-# Research Summary Format:
-- **Research Topic**: The main topic being researched.
-- **Subtopic Summary**: A list of subtopics that were returned.
-- **Subtopic Details**: For each subtopic, include:
-  - **Title**: The title of the subtopic.
-  - **Summary**: A brief summary of the subtopic.
-  - **Details**: The detailed, unsummarized information returned for the subtopic.
-  - **Citations**: A list of links or other citations to the sources used to research that subtopic.
-- **Overall Summary**: A final summary of the research findings, including any conclusions or insights
-drawn from the subtopics.
+# Research Summary RequiredFormat
+The following markdown demonstrates the required format for the research summary.
+Use this format exactly is it is but replace the `<markers>` with the actual research content.
+```markdown
+# Research Summary For <research topic>
+## Subtopics Overview
+- <subtopic 1 title>
+- <subtopic 2 title>
+- <subtopic n title>
+## Subtopic Details
+### <subtopic 1 title>
+#### Summary
+<subtopic 1 summary>
+#### Details
+<subtopic 1 details>
+#### Citations
+<subtopic 1 citations>
+## Overall Summary
+<A final summary of the research findings, including any conclusions or insights
+drawn from the subtopics>
+```
 """
