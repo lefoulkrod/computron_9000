@@ -10,6 +10,7 @@ from agents.types import Agent
 from config import load_config
 from models import get_default_model
 from tools.code.execute_code import execute_python_program
+from tools.fs.fs import list_directory_contents, read_file_contents, search_files, write_text_file
 from tools.misc import datetime_tool
 
 from .web_agent import web_agent_tool
@@ -29,6 +30,10 @@ computron: Agent = Agent(
         web_agent_tool,
         execute_python_program,
         datetime_tool,
+        list_directory_contents,
+        read_file_contents,
+        search_files,
+        write_text_file,
     ],
 )
 
