@@ -96,23 +96,21 @@ async def search_reddit(query: str, limit: int = 10) -> list[RedditSubmission]:
         user_agent=config.reddit.user_agent,
     ) as reddit:
         subreddit = await reddit.subreddit("all")
-        submissions = []
-        async for submission in subreddit.search(query, limit=limit):
-            submissions.append(
-                RedditSubmission(
-                    id=submission.id,
-                    title=submission.title,
-                    selftext=submission.selftext,
-                    url=submission.url,
-                    author=str(submission.author) if submission.author else None,
-                    subreddit=str(submission.subreddit),
-                    score=submission.score,
-                    num_comments=submission.num_comments,
-                    created_utc=submission.created_utc,
-                    permalink=submission.permalink,
-                ),
+        return [
+            RedditSubmission(
+                id=submission.id,
+                title=submission.title,
+                selftext=submission.selftext,
+                url=submission.url,
+                author=str(submission.author) if submission.author else None,
+                subreddit=str(submission.subreddit),
+                score=submission.score,
+                num_comments=submission.num_comments,
+                created_utc=submission.created_utc,
+                permalink=submission.permalink,
             )
-        return submissions
+            async for submission in subreddit.search(query, limit=limit)
+        ]
 
 
 async def get_reddit_comments_tree_shallow(
