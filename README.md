@@ -5,9 +5,9 @@ COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive c
 ![COMPUTRON_9000 Logo](image.png)
 
 ## Features
-- Modern, responsive chat UI (ChatGPT style)
+- Modern, responsive chat UI
 - Multiple agents to attend to your needs
-- **Containerized Code Execution**: Agents can safely execute code in isolated Podman containers
+- **Containerized Code Execution**: Agents can safely execute code in isolated containers
 
 ## Containerized Code Execution
 
@@ -85,23 +85,18 @@ If you prefer to set up manually or don't have Just installed:
    uv pip install -e .[dev]
    ```
 
-6. **Set up pre-commit hooks (optional but recommended):**
-   ```sh
-   uv run pre-commit install
-   ```
-
-7. **Configure Podman (if using containerized features):**
+6. **Configure Podman (if using containerized features):**
    ```sh
    # Enable Podman systemd socket for container operations
    systemctl --user enable --now podman.socket
    ```
 
-8. **Start the application:**
+7. **Start the application:**
    ```sh
    uv run main.py
    ```
 
-9. **Open the chat UI:**
+8. **Open the chat UI:**
    - Visit [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Usage
