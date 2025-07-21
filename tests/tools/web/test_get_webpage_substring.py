@@ -38,7 +38,7 @@ async def test_get_webpage_substring_invalid_indices_raises_valueerror():
                 return_value=type("ReducedWebpage", (), {"page_text": fake_text})()
             ),
         ),
-        pytest.raises(GetWebpageError),
+        pytest.raises(ValueError),
     ):
         await get_webpage_substring(fake_url, 5, 100)
 

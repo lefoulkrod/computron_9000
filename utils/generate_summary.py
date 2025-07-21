@@ -1,3 +1,8 @@
+"""Summary generation utilities for Ollama LLM.
+
+This module provides async functions to generate summaries using Ollama models.
+"""
+
 import logging
 import re
 
@@ -6,11 +11,16 @@ from ollama import AsyncClient
 from config import load_config
 from models import get_default_model
 
+
+class SummaryGenerationError(Exception):
+    """Raised when summary generation with Ollama LLM fails."""
+
+
 logger = logging.getLogger(__name__)
 config = load_config()
 
 
-async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
+async def generate_summary_with_ollama(prompt: str, *, think: bool = False) -> str:
     """Generate a summary using the Ollama AsyncClient.
 
     Args:
@@ -21,7 +31,7 @@ async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
         str: The response from the LLM.
 
     Raises:
-        RuntimeError: If the LLM call fails.
+        SummaryGenerationError: If the LLM call fails.
 
     """
     model = get_default_model()
@@ -32,8 +42,9 @@ async def generate_summary_with_ollama(prompt: str, think: bool = False) -> str:
             think=think,
             options=model.options,
         )
-        logger.debug(f"Ollama LLM response: {response.response}")
+        logger.debug("Ollama LLM response %s", response.response)
         return re.sub(r"<think>\s*</think>", "", response.response, flags=re.DOTALL)
-    except Exception as e:
-        logger.error(f"Error in Ollama AsyncClient.generate: {e}")
-        raise RuntimeError(f"Failed to generate summary: {e}") from e
+    except Exception as exc:
+        logger.exception("Error in Ollama AsyncClient.generate")
+        msg = "Failed to generate summary"
+        raise SummaryGenerationError(msg) from exc

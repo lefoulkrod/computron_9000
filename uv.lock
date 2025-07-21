@@ -283,7 +283,6 @@ requires-dist = [
     { name = "litellm" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "ollama", specifier = ">=0.5.1" },
-    { name = "playwright" },
     { name = "playwright", specifier = "==1.52.0" },
     { name = "podman", specifier = "==5.4.0.1" },
     { name = "pydantic" },
