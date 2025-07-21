@@ -127,7 +127,12 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
         GetWebpageError: If the page cannot be fetched or processed.
         ValueError: If indices are invalid.
     """
-    reduced: ReducedWebpage = await get_webpage(url)
+    try:
+        reduced: ReducedWebpage = await get_webpage(url)
+    except Exception as exc:
+        logger.exception("Error fetching webpage for substring: %s", url)
+        msg = f"Error fetching webpage: {exc}"
+        raise GetWebpageError(msg) from exc
     page_text: str = reduced.page_text
     if not (0 <= start <= end <= len(page_text)):
         logger.error(

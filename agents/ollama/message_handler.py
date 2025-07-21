@@ -7,7 +7,7 @@ from ollama import AsyncClient, Image
 
 from agents.types import Agent, Data, UserMessageEvent
 from config import load_config
-from models.model_configs import get_default_model
+from models.model_configs import get_model_by_name
 
 from .computron_agent import computron
 from .deep_researchV2 import coordinator
@@ -58,14 +58,14 @@ async def _handle_image_message(
         UserMessageEvent: Events from the LLM.
 
     """
-    log_after_model_call = make_log_after_model_call()
-    log_before_model_call = make_log_before_model_call()
     _message_history.extend(
-        [{"role": "user", "content": f"<image/base64>{d.base64_encoded}"} for d in data]
+        [{"role": "user", "content": "user added a file:<image/base64>"} for d in data]
     )
     _message_history.append({"role": "user", "content": message})
+    log_after_model_call = make_log_after_model_call()
+    log_before_model_call = make_log_before_model_call()
     log_before_model_call(_message_history)
-    model = get_default_model()
+    model = get_model_by_name("vision")
     response = await AsyncClient().generate(
         model=model.model,
         prompt=message,
@@ -98,6 +98,12 @@ async def handle_user_message(
 
     """
     try:
+        if data and len(data) > 0:
+            async for event in _handle_image_message(message, data):
+                yield event
+            return
+
+        _message_history.append({"role": "user", "content": message})
         # Use the handoff agent to process the message and run the appropriate agent
         agent_to_run = await handoff_agent_tool(message)
         logger.debug("Using agent: %s", agent_to_run)
@@ -112,13 +118,6 @@ async def handle_user_message(
         _insert_system_message(agent)
         log_before_model_call = make_log_before_model_call(agent)
         log_after_model_call = make_log_after_model_call(agent)
-
-        if data and len(data) > 0:
-            async for event in _handle_image_message(message, data):
-                yield event
-            return
-
-        _message_history.append({"role": "user", "content": message})
 
         async for content in run_tool_call_loop(
             messages=_message_history,

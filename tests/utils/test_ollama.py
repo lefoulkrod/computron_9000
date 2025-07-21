@@ -7,7 +7,7 @@ class DummyAsyncClient:
     def __init__(self) -> None:
         self._response: str | None = None
 
-    async def generate(self, model: str, prompt: str, think: bool = False) -> Any:
+    async def generate(self, model: str, prompt: str, think: bool = False, options: Any = None, **kwargs) -> Any:
         class Response:
             def __init__(self, response: str) -> None:
                 self.response = response

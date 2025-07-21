@@ -52,8 +52,9 @@ async def generate_completion(
         )
         logger.debug(f"Ollama LLM response: {response.response}")
 
-        # Clean any think tags from the response
-        return re.sub(r"<think>\s*</think>", "", response.response, flags=re.DOTALL)
+        # Clean any think tags from the response and trim leading/trailing newlines
+        cleaned = re.sub(r"<think>([\s\S]*?)</think>", "", response.response, flags=re.DOTALL)
+        return cleaned.strip("\n")
     except Exception as e:
         logger.error(f"Error in Ollama AsyncClient.generate: {e}")
         raise RuntimeError(f"Failed to generate completion: {e}") from e

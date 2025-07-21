@@ -7,7 +7,6 @@ dependencies = [
     "litellm",
     "aiohttp",
     "pydantic",
-    "playwright",
     "playwright==1.52.0",
     "setuptools>=65.0.0",
     "beautifulsoup4",

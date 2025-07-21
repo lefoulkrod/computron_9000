@@ -1,4 +1,8 @@
 models:
+  - name: qwen2.5-coder
+    model: hf.co/unsloth/Qwen2.5-Coder-32B-Instruct-128K-GGUF:Q4_K_M
+    options:
+      num_ctx: 72704
   - name: gemma3
     model: gemma3:27b-it-qat-tools
     options:
@@ -12,44 +16,13 @@ models:
     model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
     options:
       num_ctx: 119808
-  - name: sentiment_analysis
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
+  - name: vision
+    model: qwen2.5vl:32b
     options:
-      num_ctx: 32768
-      temperature: 0.2
-      top_p: 0.9
-      top_k: 40
-  - name: web_research
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
-    options:
-      num_ctx: 119808
-      temperature: 0.4
-      top_p: 0.95
-      top_k: 40
-  - name: social_research
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
-    options:
-      num_ctx: 119808
-      temperature: 0.3
-      top_p: 0.95
-      top_k: 40
-  - name: analysis
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
-    options:
-      num_ctx: 119808
-      temperature: 0.2
-      top_p: 0.95
-      top_k: 40
-  - name: synthesis
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
-    options:
-      num_ctx: 119808
-      temperature: 0.1
-      top_p: 0.95
-      top_k: 40
+      num_ctx: 62464
 settings:
-  home_dir: "/home/larry/.computron_9000"
-  default_model: "qwen3"
+  home_dir: /home/larry/.computron_9000
+  default_model: qwen3
 tools:
   web:
     search_google:
