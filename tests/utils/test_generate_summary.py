@@ -36,8 +36,8 @@ async def test_generate_summary_with_ollama_think_removal(
     """
     Test that generate_summary_with_ollama removes <think>...</think> blocks with whitespace/newlines.
     """
-    import utils.generate_summary as mod
-
+    import importlib
+    mod = importlib.import_module("utils.generate_summary")
     dummy = DummyAsyncClient()
     dummy.set_response(llm_response)
     monkeypatch.setattr(mod, "AsyncClient", lambda: dummy)
@@ -45,3 +45,5 @@ async def test_generate_summary_with_ollama_think_removal(
 
     result = await generate_summary_with_ollama(prompt="test", think=False)
     assert result == expected
+
+
