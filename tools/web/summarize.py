@@ -1,23 +1,26 @@
+"""Text summarization utilities for web tools.
+
+Provides async functions for sectioned and full-text summarization using LLMs.
+"""
+
 import logging
 
 import pydantic
 
 from config import load_config
-from utils import generate_summary_with_ollama
+from models import generate_completion, get_default_model
 
 logger = logging.getLogger(__name__)
 config = load_config()
 
 
 class SectionSummary(pydantic.BaseModel):
-    """Represents a summary of a section of a larger block of text.
+    """Summary of a section of a larger block of text.
 
     Attributes:
-        summary (str): The summary of the section.
-        starting_char_position (int): The starting character position of the section in the
-            original text.
-        ending_char_position (int): The ending character position of the section in the
-            original text.
+        summary: The summary of the section.
+        starting_char_position: The starting character position of the section in the original text.
+        ending_char_position: The ending character position of the section in the original text.
     """
 
     summary: str
@@ -26,47 +29,52 @@ class SectionSummary(pydantic.BaseModel):
 
 
 async def _summarize_text_full(text: str) -> str:
-    """Summarize the text by first dividing it into sections and summarizing each section, then combining those summaries into a final summary.
+    """Summarize the text by dividing it into sections, summarizing each, and combining into a final summary.
 
     Args:
-        text (str): The text to summarize.
+        text: The text to summarize.
 
     Returns:
-        str: The summarized text.
+        The summarized text.
 
     """
-    final_prompt_template = """
-        This text is a set of summaries created by summarizing a longer text in sections.\nCreate a single summary from them. /no_think\n{combined_summary}"""
+    model = get_default_model()
+    final_prompt_template = (
+        "This text is a set of summaries created by summarizing a longer text in sections.\n"
+        "Create a single summary from them. /no_think\n{combined_summary}"
+    )
     try:
         section_summaries = await summarize_text_sections(text)
         summaries = [section.summary for section in section_summaries]
         if len(summaries) > 1:
             combined_summary = " ".join(summaries)
-            final_prompt = final_prompt_template.format(
-                combined_summary=combined_summary,
-            )
-            final_response = await generate_summary_with_ollama(
+            final_prompt = final_prompt_template.format(combined_summary=combined_summary)
+            final_response, _ = await generate_completion(
                 prompt=final_prompt,
+                model=model.model,
                 think=False,
+                system="You are an expert summarizer. Create a concise summary from the provided section summaries.",
+                options=model.options,
             )
-            logger.debug(f"Final summary response: {final_response}")
+            logger.debug("Final summary response: %s", final_response)
             return final_response
         return " ".join(summaries)
-    except Exception as e:
-        logger.error(f"Error summarizing text: {e}")
+    except Exception:
+        logger.exception("Error summarizing text")
         return text
 
 
 async def summarize_text_sections(text: str) -> list[SectionSummary]:
-    """Summarize the text by dividing it into sections and calling the LLM to generate a concise summary for each section. Returns a list of section summaries with metadata.
+    """Summarize the text by dividing it into sections and calling the LLM to generate a concise summary for each section.
 
     Args:
-        text (str): The text to summarize.
+        text: The text to summarize.
 
     Returns:
-        List[SectionSummary]: List of section summaries with indices and positions.
+        List of section summaries with indices and positions.
 
     """
+    model = get_default_model()
     part_prompt_template = (
         "The following text is part {part_num} of {total_parts} of a larger document. "
         "Summarize this part as if it is not the whole. /no_think\n{section}"
@@ -85,7 +93,7 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
         i += section_size - overlap
 
     logger.debug(
-        f"Divided text length {len(text)} into {len(sections)} parts for summarization.",
+        "Divided text length %d into %d parts for summarization.", len(text), len(sections)
     )
     try:
         summaries: list[SectionSummary] = []
@@ -99,8 +107,14 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
                 total_parts=total_parts,
                 section=section,
             )
-            response = await generate_summary_with_ollama(prompt=prompt, think=False)
-            logger.debug(f"Section summary response: {response}")
+            response, _ = await generate_completion(
+                prompt=prompt,
+                model=model.model,
+                think=False,
+                system="You are an expert summarizer. Create a concise summary of the provided text section.",
+                options=model.options,
+            )
+            logger.debug("Section summary response: %s", response)
             summaries.append(
                 SectionSummary(
                     summary=response,
@@ -108,7 +122,8 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
                     ending_char_position=end,
                 ),
             )
-        return summaries
-    except Exception as e:
-        logger.error(f"Error summarizing text sections: {e}")
+    except Exception:
+        logger.exception("Error summarizing text sections")
         raise
+    else:
+        return summaries

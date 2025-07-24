@@ -7,12 +7,11 @@ subtopic, and generate an overview using language model completions.
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from models import generate_completion, get_default_model
 from tools.web.get_webpage import get_webpage_substring, get_webpage_summary_sections
 
 if TYPE_CHECKING:
     from tools.web.summarize import SectionSummary
-
-from utils import generate_completion
 
 logger = getLogger(__name__)
 
@@ -27,6 +26,7 @@ async def website_reader_agent_tool(url: str, research_subtopic: str) -> str:
     Returns:
         str: The generated overview based on the webpage content and the research subtopic.
     """
+    model = get_default_model()
     system_prompt = (
         f"You are conducting in-depth research on the topic: '{research_subtopic}'.\n"
         "You will be provided a summary of a section of a webpage. "
@@ -38,9 +38,12 @@ async def website_reader_agent_tool(url: str, research_subtopic: str) -> str:
     filtered_sections: list[SectionSummary] = []
     for section in sections:
         try:
-            result = await generate_completion(
+            result, _ = await generate_completion(
                 prompt=f"Section summary: {section.summary}\n",
                 system=system_prompt,
+                model=model.model,
+                options=model.options,
+                think=True,
             )
         except Exception:
             logger.exception("Error during relevance check for section")
@@ -61,7 +64,7 @@ async def website_reader_agent_tool(url: str, research_subtopic: str) -> str:
                 start=section.starting_char_position,
                 end=section.ending_char_position,
             )
-            detail = await generate_completion(
+            detail, _ = await generate_completion(
                 prompt=(
                     f"Write a detailed overview of this section for the research subtopic "
                     f"'{research_subtopic}':\n{substring}"
@@ -72,6 +75,9 @@ async def website_reader_agent_tool(url: str, research_subtopic: str) -> str:
                     f"topic:'{research_subtopic}'. Provide a detailed and comprehensive summary. "
                     f"Include code samples when applicable."
                 ),
+                model=model.model,
+                options=model.options,
+                think=False,
             )
             detailed_results.append(detail)
         except Exception:

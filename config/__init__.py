@@ -29,6 +29,7 @@ class ModelConfig(BaseModel):
     name: str
     model: str
     options: dict[str, Any]
+    think: bool = False
 
 
 class SearchGoogleConfig(BaseModel):

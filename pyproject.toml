@@ -53,7 +53,9 @@ ignore = [
     "PLR0913",  # Too many arguments
     "PLR0915",  # Too many statements
     "PLR1702",  # Too many nested blocks
-    "COM812"    # Missing trailing comma in Python 3.6+
+    "COM812",   # Missing trailing comma in Python 3.6+
+    "TD003",    # No issue link TODO
+    "FIX002",   # Consider resolving this issue
 ]
 
 [tool.ruff.lint.pydocstyle]

@@ -1,9 +1,12 @@
+"""Utilities for Computron 9000.
+
+This package provides utility functions such as async LRU caching and completion generation.
+
+"""
+
 from .cache import async_lru_cache
-from .generate_completion import generate_completion
-from .generate_summary import generate_summary_with_ollama
 
 __all__ = [
     "async_lru_cache",
-    "generate_completion",
-    "generate_summary_with_ollama",
 ]
+# "generate_completion",  # Removed from exports

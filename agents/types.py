@@ -19,6 +19,7 @@ class Agent(BaseModel):
         model (str): The model name to use.
         options (Dict[str, Any]): Model options (e.g., num_ctx).
         tools (List[Callable[..., Any]]): List of callable tools available to the agent.
+        think (bool): Whether or not the model should think. Not all models support thinking.
 
     """
 
@@ -28,6 +29,7 @@ class Agent(BaseModel):
     model: str
     options: dict[str, Any]
     tools: list[Callable[..., Any]]
+    think: bool = False
 
 
 class UserMessageEvent(BaseModel):

@@ -3,12 +3,12 @@ import logging
 from agents.ollama.sdk import Agent
 from agents.ollama.sdk.higher_order import make_run_agent_as_tool_function
 from config import load_config
-from models import get_default_model
+from models import get_model_by_name
 
 config = load_config()
 logger = logging.getLogger(__name__)
 
-model = get_default_model()
+model = get_model_by_name("handoff_agent")
 
 handoff_agent: Agent = Agent(
     name="HANDOFF_AGENT",
@@ -25,6 +25,7 @@ handoff_agent: Agent = Agent(
     model=model.model,
     options=model.options,
     tools=[],
+    think=model.think,
 )
 
 handoff_agent_tool = make_run_agent_as_tool_function(

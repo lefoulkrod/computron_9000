@@ -8,7 +8,10 @@ from typing import Any
 
 from ollama import AsyncClient, ChatResponse
 
-from agents.ollama.sdk.extract_thinking import split_think_content
+
+class ToolLoopError(Exception):
+    """Custom exception for errors in the tool loop."""
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +44,10 @@ async def run_tool_call_loop(
     tools: Sequence[Callable[..., Any]] | None = None,
     model: str = "",
     model_options: Mapping[str, Any] | None = None,
+    think: bool = False,
     before_model_callbacks: list[Callable[[list[dict[str, Any]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[tuple[str | None, str | None]]:
     """Executes a chat loop with the LLM, handling tool calls and yielding message content.
 
     This function mutates the messages list in place by appending assistant and tool messages
@@ -54,11 +58,16 @@ async def run_tool_call_loop(
         tools (Optional[Sequence[Callable[..., Any]]]): Sequence of tool functions to use for tool calls.
         model (str): The model name to use for the LLM.
         model_options (Mapping[str, Any] | None): Options to pass to the LLM.
+        think (bool): Whether to enable the 'think' option for the model.
         before_model_callbacks (list[Callable[[list[dict[str, Any]]], None]] | None): List of callbacks before model call.
         after_model_callbacks (list[Callable[[ChatResponse], None]] | None): List of callbacks after model call.
 
+
     Yields:
-        str: The message content at each step (never tool call results directly).
+        tuple[str | None, str | None]: The message content and thinking as they are generated.
+
+    Raises:
+        ToolLoopError: If an unexpected error occurs in the tool loop.
 
     """  # noqa: E501
     client = AsyncClient()
@@ -74,22 +83,23 @@ async def run_tool_call_loop(
                 options=model_options,
                 tools=tools,
                 stream=False,
+                think=think,
             )
             if after_model_callbacks:
                 for after_cb in after_model_callbacks:
                     after_cb(response)
-            content = response.message.content or None
-            tool_calls = response.message.tool_calls or None
-            # Remove thinking content from the response before storing in chat history
-            content_without_think = split_think_content(content)[0] if content else None
+
+            content = response.message.content
+            thinking = response.message.thinking
+            tool_calls = response.message.tool_calls
             assistant_message = {
                 "role": "assistant",
-                "content": content_without_think,
+                "content": content,
                 "tool_calls": tool_calls,
             }
             messages.append(assistant_message)
-            if content:
-                yield content
+            if content is not None or thinking is not None:
+                yield content, thinking
             if not tool_calls:
                 break
             for tool_call in tool_calls:
@@ -107,6 +117,7 @@ async def run_tool_call_loop(
                     logger.error("Tool '%s' not found in tools.", tool_name)
                     tool_result = {"error": "Tool not found"}
                 else:
+                    # TODO(<larry>): refactor this ugly function argument validation logic
                     validated_args = {}
                     sig = inspect.signature(tool_func)
                     validation_error = None
@@ -162,6 +173,5 @@ async def run_tool_call_loop(
                 messages.append(tool_message)
             # Do not yield tool results, just continue looping
         except Exception as exc:
-            logger.exception("Error: %s", exc)
-            yield "An error occurred while processing your message."
-            break
+            logger.exception("Unhandled exception in tool loop: %s", exc)
+            raise ToolLoopError("An error occurred while processing your message.") from exc

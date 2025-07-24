@@ -2,24 +2,27 @@ models:
   - name: qwen2.5-coder
     model: hf.co/unsloth/Qwen2.5-Coder-32B-Instruct-128K-GGUF:Q4_K_M
     options:
-      num_ctx: 72704
+      num_ctx: 73728
   - name: gemma3
     model: gemma3:27b-it-qat-tools
     options:
       num_ctx: 131072
       temperature: .6
   - name: qwen3
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
+    model: qwen3-30B-A3B-128K-GGUF:Q5_K_XL_fix_think
+    think: true
     options:
       num_ctx: 119808
-  - name: research_coordinator
-    model: hf.co/unsloth/Qwen3-30B-A3B-128K-GGUF:Q5_K_XL
+  - name: handoff_agent
+    model: qwen3-30B-A3B-128K-GGUF:Q5_K_XL_fix_think
+    think: false
     options:
       num_ctx: 119808
   - name: vision
     model: qwen2.5vl:32b
     options:
       num_ctx: 62464
+    think: false
 settings:
   home_dir: /home/larry/.computron_9000
   default_model: qwen3

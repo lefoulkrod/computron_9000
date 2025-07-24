@@ -29,6 +29,7 @@ topic_research_agent = Agent(
         get_reddit_comments_tree_shallow,
         get_reddit_submission,
     ],
+    think=model.think,
 )
 
 before_model_call_callback = make_log_before_model_call(topic_research_agent)
