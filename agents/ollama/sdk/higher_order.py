@@ -4,7 +4,6 @@ from ollama import ChatResponse
 
 from agents.types import Agent
 
-from .extract_thinking import split_think_content
 from .tool_loop import run_tool_call_loop
 
 
@@ -52,10 +51,9 @@ Returns:
                 before_model_callbacks=before_model_callbacks,
                 after_model_callbacks=after_model_callbacks,
             )
-            async for output in gen:
-                main_text, _ = split_think_content(output)
-                if main_text:
-                    result += main_text + "\n"
+            async for content, _ in gen:
+                if content:
+                    result += content + "\n"
         except Exception as exc:
             result = f"Error running agent tool loop: {exc}"
         return result.strip()

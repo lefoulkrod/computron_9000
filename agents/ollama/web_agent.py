@@ -53,6 +53,7 @@ web_agent: Agent = Agent(
         search_reddit,
         get_reddit_comments_tree_shallow,
     ],
+    think=model.think,
 )
 
 web_agent_before_callback = make_log_before_model_call(web_agent)

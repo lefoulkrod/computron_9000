@@ -149,4 +149,5 @@ coordinator = Agent(
     model=model.model,
     options=model.options,
     tools=[execute_research_tool],
+    think=model.think,
 )

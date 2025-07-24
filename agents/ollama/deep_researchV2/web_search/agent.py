@@ -30,6 +30,7 @@ web_search_agent = Agent(
         search_google,
         search_reddit,
     ],
+    think=model.think,
 )
 
 before_model_call_callback = make_log_before_model_call(web_search_agent)

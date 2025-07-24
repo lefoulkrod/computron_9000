@@ -36,6 +36,7 @@ computron: Agent = Agent(
         write_text_file,
         execute_python_program,
     ],
+    think=model.think,
 )
 
 agent_before_callback = make_log_before_model_call(computron)

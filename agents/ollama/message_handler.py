@@ -16,7 +16,6 @@ from .sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
     run_tool_call_loop,
-    split_think_content,
 )
 from .web_agent import web_agent
 
@@ -71,16 +70,18 @@ async def _handle_image_message(
         prompt=message,
         options=model.options,
         images=[Image(value=d.base64_encoded) for d in data],
+        think=model.think,
     )
-    main_text, thinking = split_think_content(response.response)
+    content = response.response
+    thinking = response.thinking
     _message_history.append(
         {
             "role": "assistant",
-            "content": main_text,
+            "content": content,
         },
     )
     log_after_model_call(response)
-    yield UserMessageEvent(message=main_text, final=True, thinking=thinking)
+    yield UserMessageEvent(message=content, final=True, thinking=thinking)
 
 
 async def handle_user_message(
@@ -119,21 +120,21 @@ async def handle_user_message(
         log_before_model_call = make_log_before_model_call(agent)
         log_after_model_call = make_log_after_model_call(agent)
 
-        async for content in run_tool_call_loop(
+        async for content, thinking in run_tool_call_loop(
             messages=_message_history,
             tools=agent.tools,
             model=agent.model,
+            think=agent.think,
             model_options=agent.options,
             before_model_callbacks=[log_before_model_call],
             after_model_callbacks=[log_after_model_call],
         ):
-            if content is not None:
-                main_text, thinking = split_think_content(content)
-                yield UserMessageEvent(
-                    message=main_text,
-                    final=False,
-                    thinking=thinking,
-                )
+            yield UserMessageEvent(
+                message=content or "",
+                final=False,
+                thinking=thinking,
+            )
+
     except Exception:
         logger.exception("Error handling user message")
         yield UserMessageEvent(
