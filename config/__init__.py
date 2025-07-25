@@ -75,11 +75,20 @@ class RedditConfig(BaseModel):
     user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
 
 
+class VirtualComputerConfig(BaseModel):
+    """Configuration for the virtual computer environment."""
+
+    container_name: str
+    container_user: str
+    home_dir: str
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
     models: list[ModelConfig]
     settings: Settings
+    virtual_computer: VirtualComputerConfig
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)

@@ -166,26 +166,23 @@ info:
     @echo "📁 Project structure:"
     @tree -I '__pycache__|*.pyc|.venv' -L 2
 
-# 🐍 Python version management
-# Show current Python version and path
-python-info:
-    @echo "📍 Current Python Info:"
-    @echo "Required version: $(cat .python-version)"
-    @echo "Active Python: $(uv run python --version)"
-    @echo "Python path: $(uv python find)"
-    @echo ""
-    @echo "📋 Available Python versions:"
-    @uv python list
 
-# Validate Python version consistency across config files
-python-validate:
+# � Container commands
+container-build:
+    podman build --format docker -f computron_os_dockerfile -t computron_9000:latest .
+
+container-run:
     #!/usr/bin/env bash
     set -euo pipefail
-    PYTHON_VERSION=$(cat .python-version)
-    MAJOR_MINOR=$(echo $PYTHON_VERSION | cut -d. -f1,2)
-    echo "🔍 Validating Python version consistency..."
-    echo "📄 .python-version: $PYTHON_VERSION"
-    echo "🐍 Active Python: $(uv run python --version | awk '{print $2}')"
-    echo "⚙️  mypy target: $(grep 'python_version' pyproject.toml | cut -d'"' -f2)"
-    echo "📦 requires-python: $(grep 'requires-python' pyproject.toml | cut -d'"' -f2)"
+    home_dir=$(grep '^  home_dir:' config.yaml | awk '{print $2}')
+    if [ ! -d "${home_dir}/container_home" ]; then
+        mkdir -p "${home_dir}/container_home"
+    fi
+    podman run -d --rm \
+      --name computron_agent \
+      --userns=keep-id \
+      --group-add keep-groups \
+      -v "${home_dir}/container_home:/home/computron:rw,z" \
+      computron_9000:latest sleep infinity
+    echo "Container 'computron_agent' started in background and ready for exec commands."
 

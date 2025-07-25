@@ -7,18 +7,24 @@ COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive c
 ## Features
 - Modern, responsive chat UI
 - Multiple agents to attend to your needs
-- **Containerized Code Execution**: Agents can safely execute code in isolated containers
 
-## Containerized Code Execution
+## Virtual Computer
 
-COMPUTRON_9000 uses Podman to provide secure, isolated environments for code execution. This allows agents to:
+COMPUTRON_9000 uses Podman to provide secure, isolated environments for code execution. This allows agents to have access to a "virtual computer". The agent can:
+- Read/write files
+- Execute bash commands
 
-- **Run untrusted code safely** - Each execution happens in a fresh, isolated container
-- **Execute different languages** - Support for Python, Node.js, and other runtimes
-- **Playwright automation** - Run browser automation scripts in containerized environments
-- **Clean slate execution** - No persistent state between runs, ensuring consistent results
+The container has a volume mount that is shared with the host computer. This way written files are accessible from the host.
 
-The containerization system prevents code from affecting the host system while providing agents with powerful execution capabilities. See `tools/code/` for implementation details.
+To build the container for the virtual computer run
+```
+just container-build
+```
+
+To run the container 
+```
+just container-run
+```
 
 ## Requirements
 - Python 3.12+ (see `.python-version`)
@@ -108,13 +114,7 @@ This project uses [Just](https://just.systems/) for task running. Install it and
 
 ### Installing Just
 
-```sh
-# On macOS
-brew install just
-
-# On Linux
-curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin
-```
+https://github.com/casey/just
 
 Once installed, run `just` to see all available commands, or check the `Justfile` for the complete list of development tasks.
 
