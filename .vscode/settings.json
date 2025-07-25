@@ -4,5 +4,10 @@
         "**/.mypy_cache": true,
         "**/*.egg-info": true,
         "**/.ruff_cache": true
+    },
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.env.linux": {
+        "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
     }
 }

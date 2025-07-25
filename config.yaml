@@ -26,6 +26,11 @@ models:
 settings:
   home_dir: /home/larry/.computron_9000
   default_model: qwen3
+virtual_computer:
+  container_name: computron_agent
+  container_user: computron
+  home_dir: /home/larry/.computron_9000/container_home
+  
 tools:
   web:
     search_google:
