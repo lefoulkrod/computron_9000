@@ -1,5 +1,6 @@
 """Tool for running bash commands in a container."""
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -45,10 +46,13 @@ class BashCmdResult(BaseModel):
     exit_code: int | None
 
 
+BASH_CMD_TIMEOUT: float = 60.0
+
+
 async def run_bash_cmd(cmd: str) -> BashCmdResult:
     """Execute a bash command in your virtual computer which is Ubuntu LTS.
 
-    Execute any bash command with full access to a virtual computer
+    Execute any bash command with full access to a virtual computer. Times out after 60 seconds.
 
     Args:
         cmd (str): The bash command to execute.
@@ -57,7 +61,7 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
         BashCmdResult: Validated result object containing stdout, stderr, and exit_code.
 
     Raises:
-        RunBashCmdError: If execution fails or container is not found.
+        RunBashCmdError: If execution fails, container is not found, or timeout occurs.
     """
 
     def _raise_container_not_found(container_name: str) -> None:
@@ -79,14 +83,30 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
             return BashCmdResult(stdout=None, stderr=None, exit_code=None)
 
         exec_args = ["bash", "-c", cmd]
-        exec_result = container.exec_run(
-            exec_args,
-            stdout=True,
-            stderr=True,
-            demux=True,
-            tty=False,
-            user=container_user,  # Run as the container's intended user
-        )
+
+        loop = asyncio.get_running_loop()
+
+        def _exec_run_sync() -> tuple[int | None, object]:
+            return container.exec_run(
+                exec_args,
+                stdout=True,
+                stderr=True,
+                demux=True,
+                tty=False,
+                user=container_user,
+            )
+
+        try:
+            exec_result = await asyncio.wait_for(
+                loop.run_in_executor(None, _exec_run_sync), timeout=BASH_CMD_TIMEOUT
+            )
+        except TimeoutError:
+            logger.exception(
+                "Timeout after %s seconds running bash command: %s", BASH_CMD_TIMEOUT, cmd
+            )
+            msg = f"Timeout after {BASH_CMD_TIMEOUT} seconds running bash command: {cmd}"
+            raise RunBashCmdError(msg) from None
+
         logger.debug("exec_result: %r", exec_result)
 
         # Parse the tuple return value
