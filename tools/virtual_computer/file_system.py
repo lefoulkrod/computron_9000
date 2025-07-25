@@ -14,46 +14,32 @@ from config import load_config
 logger = logging.getLogger(__name__)
 
 
-class WriteFileError(Exception):
-    """Custom exception for errors during file writing operations.
+class WriteFileResult(TypedDict):
+    """Return type for write_file_in_home_dir."""
 
-    Args:
-        message (str): Error message describing the failure.
-    """
-
-    def __init__(self, message: str) -> None:
-        """Initialize WriteFileError.
-
-        Args:
-            message (str): Error message describing the failure.
-        """
-        super().__init__(message)
+    success: bool
+    file_path: str
+    error: str | None
 
 
-def write_file_in_home_dir(path: str | Path, content: str | bytes) -> None:
+def write_file_in_home_dir(path: str, content: str | bytes) -> WriteFileResult:
     """Write content to a file in the virtual computer's home dir, overwriting if it exists.
 
     Writes a file at the specified path within the virtual computer's home directory.
     Creates parent directories if they do not exist.
 
-
     Args:
-        path (str | Path): Path to the file to write.
+        path (str): Path to the file to write.
         content (str | bytes): Content to write to the file.
 
-    Raises:
-        WriteFileError: If writing fails.
+    Returns:
+        WriteFileResult: Dict with success True/False and error_code (None if success, str if error).
     """
-
-    def _raise_write_file_error(msg: str) -> None:
-        """Raise WriteFileError with the provided message."""
-        logger.error(msg)
-        raise WriteFileError(msg)
-
+    file_path: Path | None = None
     try:
         config = load_config()
         home_dir = Path(config.virtual_computer.home_dir)
-        rel_path = Path(path) if not isinstance(path, Path) else path
+        rel_path = Path(path)
         file_path = home_dir / rel_path
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,11 +52,21 @@ def write_file_in_home_dir(path: str | Path, content: str | bytes) -> None:
             with file_path.open(mode, encoding="utf-8") as f:
                 f.write(content)
         else:
-            _raise_write_file_error(f"Content must be of type str or bytes, got {type(content)}")
-        logger.debug("Wrote file at path %s", file_path)
+            logger.error("Content must be of type str or bytes, got %s", type(content))
+            return {
+                "success": False,
+                "file_path": path,
+                "error": str(type(content)),
+            }
     except Exception as exc:
         logger.exception("Failed to write file at path %s", path)
-        _raise_write_file_error(f"Failed to write file: {exc}")
+        return {
+            "success": False,
+            "file_path": path,
+            "error": str(exc),
+        }
+    logger.debug("Wrote file at path %s", file_path)
+    return {"success": True, "file_path": path, "error": None}
 
 
 class ReadFileError(Exception):

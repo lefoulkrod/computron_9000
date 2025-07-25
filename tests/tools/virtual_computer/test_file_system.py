@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from tools.virtual_computer.file_system import write_file_in_home_dir, WriteFileError
+from tools.virtual_computer.file_system import write_file_in_home_dir
 
 class DummyConfig:
     class VirtualComputer:
@@ -32,7 +32,7 @@ async def test_write_file_in_home_dir_creates_and_cleans_file():
         AssertionError: If file is not written or not cleaned up.
     """
     with tempfile.TemporaryDirectory() as tmp_home:
-        test_file = Path("test_integration_file.txt")
+        test_file = "test_integration_file.txt"
         test_content = "integration test content"
         file_path = Path(tmp_home) / test_file
         with mock.patch("tools.virtual_computer.file_system.load_config", return_value=DummyConfig(tmp_home)):
