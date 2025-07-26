@@ -174,15 +174,16 @@ container-build:
 container-run:
     #!/usr/bin/env bash
     set -euo pipefail
-    home_dir=$(grep '^  home_dir:' config.yaml | awk '{print $2}')
-    if [ ! -d "${home_dir}/container_home" ]; then
-        mkdir -p "${home_dir}/container_home"
+    # Extract only the virtual_computer.home_dir value
+    home_dir=$(awk '/^virtual_computer:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
+    if [ ! -d "${home_dir}" ]; then
+        mkdir -p "${home_dir}"
     fi
     podman run -d --rm \
-      --name computron_agent \
+      --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
-      -v "${home_dir}/container_home:/home/computron:rw,z" \
+      -v "${home_dir}:/home/computron:rw,z" \
       computron_9000:latest sleep infinity
-    echo "Container 'computron_agent' started in background and ready for exec commands."
+    echo "Container 'computron_virtual_computer' started in background and ready for exec commands."
 
