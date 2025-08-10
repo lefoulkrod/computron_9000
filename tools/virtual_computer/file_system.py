@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from config import load_config
+from tools.virtual_computer.workspace import get_working_directory_name
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,10 @@ class WriteFileResult(TypedDict):
     error: str | None
 
 
-def write_file_in_home_dir(path: str, content: str | bytes) -> WriteFileResult:
-    """Write content to a file in the virtual computer's home dir, overwriting if it exists.
+def write_file(path: str, content: str | bytes) -> WriteFileResult:
+    """Write content to a file in the virtual computer, overwriting if it exists.
 
-    Writes a file at the specified path within the virtual computer's home directory.
+    Writes a file at the specified path within the virtual computer.
     Creates parent directories if they do not exist.
 
     Args:
@@ -36,11 +37,23 @@ def write_file_in_home_dir(path: str, content: str | bytes) -> WriteFileResult:
         WriteFileResult: Dict with success True/False and error_code (None if success, str if error).
     """
     file_path: Path | None = None
+    rel_return_path: str = ""
     try:
         config = load_config()
-        home_dir = Path(config.virtual_computer.home_dir)
-        rel_path = Path(path)
-        file_path = home_dir / rel_path
+        home_dir = Path(config.virtual_computer.home_dir).resolve()
+        workspace = get_working_directory_name()
+        input_path = Path(path)
+        # Always treat input as relative to home_dir/workspace, even if absolute
+        if input_path.is_absolute():
+            # Remove anchor to make it relative
+            input_path = input_path.relative_to(input_path.anchor)
+        rel_path = Path(workspace) / input_path if workspace else input_path
+        file_path = (home_dir / rel_path).resolve()
+        # Compute the path to return, always relative to home_dir
+        try:
+            rel_return_path = str(file_path.relative_to(home_dir))
+        except ValueError:
+            rel_return_path = str(rel_path)
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, bytes):
@@ -55,18 +68,19 @@ def write_file_in_home_dir(path: str, content: str | bytes) -> WriteFileResult:
             logger.error("Content must be of type str or bytes, got %s", type(content))
             return {
                 "success": False,
-                "file_path": path,
+                "file_path": rel_return_path,
                 "error": str(type(content)),
             }
     except Exception as exc:
         logger.exception("Failed to write file at path %s", path)
+        err_path = rel_return_path if rel_return_path else path
         return {
             "success": False,
-            "file_path": path,
+            "file_path": err_path,
             "error": str(exc),
         }
-    logger.debug("Wrote file at path %s", file_path)
-    return {"success": True, "file_path": path, "error": None}
+    logger.debug("Wrote file at path %s", rel_return_path)
+    return {"success": True, "file_path": rel_return_path, "error": None}
 
 
 class ReadFileError(Exception):
@@ -130,11 +144,11 @@ def _is_binary_file(file_path: Path) -> bool:
         return False
 
 
-async def read_file_or_dir_in_home_dir(path: str | Path) -> ReadResult:
-    """Read a file or directory in the virtual computer's home directory.
+async def read_file_directory(path: str) -> ReadResult:
+    """Read a file or directory in the virtual computer.
 
     Args:
-        path (str | Path): Path to the file or directory to read, relative to the virtual home dir.
+        path (str): Path to the file or directory to read.
 
 
     Returns:
@@ -145,11 +159,25 @@ async def read_file_or_dir_in_home_dir(path: str | Path) -> ReadResult:
     """
     try:
         config = load_config()
-        home_dir = Path(config.virtual_computer.home_dir)
-        rel_path = Path(path) if not isinstance(path, Path) else path
-        target_path = home_dir / rel_path
+        home_dir = Path(config.virtual_computer.home_dir).resolve()
+        # Always treat input as relative to home_dir, even if absolute
+        input_path = Path(path)
+        if input_path.is_absolute():
+            input_path = input_path.relative_to(input_path.anchor)
+
+        # Manually handle workspace folder
+        workspace = get_working_directory_name()
+        rel_path = Path(workspace) / input_path if workspace else input_path
+        # Always resolve relative to home_dir
+        target_path = (home_dir / rel_path).resolve()
+        # Compute the path to return, always relative to home_dir
+        try:
+            rel_return_path = str(target_path.relative_to(home_dir))
+        except ValueError:
+            # If for some reason target_path is not under home_dir, fallback to str(rel_path)
+            rel_return_path = str(rel_path)
         if not target_path.exists():
-            msg = f"Path does not exist: {target_path}"
+            msg = f"Path does not exist: {rel_return_path}"
             logger.error(msg)
             raise ReadFileError(msg)
         if target_path.is_file():
@@ -159,7 +187,7 @@ async def read_file_or_dir_in_home_dir(path: str | Path) -> ReadResult:
                 content = base64.b64encode(content_bytes).decode("ascii")
                 return {
                     "type": "file",
-                    "name": target_path.name,
+                    "name": rel_return_path,
                     "content": content,
                     "encoding": "base64",
                 }
@@ -167,7 +195,7 @@ async def read_file_or_dir_in_home_dir(path: str | Path) -> ReadResult:
                 content = f.read()
             return {
                 "type": "file",
-                "name": target_path.name,
+                "name": rel_return_path,
                 "content": content,
                 "encoding": "utf-8",
             }
@@ -182,13 +210,13 @@ async def read_file_or_dir_in_home_dir(path: str | Path) -> ReadResult:
             ]
             return {
                 "type": "directory",
-                "name": target_path.name,
+                "name": rel_return_path,
                 "entries": entries,
             }
-        msg = f"Path is neither file nor directory: {target_path}"
+        msg = f"Path is neither file nor directory: {rel_return_path}"
         logger.error(msg)
         raise ReadFileError(msg)
     except OSError as exc:
         logger.exception("Failed to read file or directory at path %s", path)
-        msg = f"Failed to read file or directory: {exc}"
+        msg = "Failed to read file or directory."
         raise ReadFileError(msg) from exc

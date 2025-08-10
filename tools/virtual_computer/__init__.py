@@ -1,13 +1,16 @@
 """Package of tools to simulate a virtual computer environment."""
 
 from .file_system import (
-    read_file_or_dir_in_home_dir,
-    write_file_in_home_dir,
+    read_file_directory,
+    write_file,
 )
 from .run_bash_cmd import run_bash_cmd
+from .workspace import get_current_working_directory, set_working_directory_name
 
 __all__ = [
-    "read_file_or_dir_in_home_dir",
+    "get_current_working_directory",
+    "read_file_directory",
     "run_bash_cmd",
-    "write_file_in_home_dir",
+    "set_working_directory_name",
+    "write_file",
 ]

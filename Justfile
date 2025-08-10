@@ -171,6 +171,9 @@ info:
 container-build:
     podman build --format docker -f computron_os_dockerfile -t computron_9000:latest .
 
+container-stop:
+    podman stop computron_virtual_computer
+
 container-run:
     #!/usr/bin/env bash
     set -euo pipefail
