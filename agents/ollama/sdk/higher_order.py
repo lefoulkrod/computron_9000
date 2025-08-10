@@ -48,6 +48,7 @@ Returns:
                 tools=agent.tools,
                 model=agent.model,
                 model_options=agent.options,
+                think=agent.think,
                 before_model_callbacks=before_model_callbacks,
                 after_model_callbacks=after_model_callbacks,
             )

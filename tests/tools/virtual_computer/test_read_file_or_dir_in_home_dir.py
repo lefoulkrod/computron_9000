@@ -10,7 +10,7 @@ import pytest
 from typing import cast
 
 from tools.virtual_computer.file_system import (
-    read_file_or_dir_in_home_dir,
+    read_file_directory,
     ReadFileError,
     FileReadResult,
     DirectoryReadResult,
@@ -31,7 +31,7 @@ async def test_read_file_returns_text(tmp_path: Path):
     test_content = "hello world"
     test_file.write_text(test_content, encoding="utf-8")
     with mock.patch("tools.virtual_computer.file_system.load_config", return_value=DummyConfig(str(tmp_path))):
-        result = await read_file_or_dir_in_home_dir("foo.txt")
+        result = await read_file_directory("foo.txt")
         assert isinstance(result, dict)
         assert result["type"] == "file"
         if result["type"] == "file":
@@ -48,7 +48,7 @@ async def test_read_file_returns_base64_for_binary(tmp_path: Path):
     test_bytes = b"\x00\x01\x02\x03"
     test_file.write_bytes(test_bytes)
     with mock.patch("tools.virtual_computer.file_system.load_config", return_value=DummyConfig(str(tmp_path))):
-        result = await read_file_or_dir_in_home_dir("bar.bin")
+        result = await read_file_directory("bar.bin")
         assert isinstance(result, dict)
         assert result["type"] == "file"
         if result["type"] == "file":
@@ -66,7 +66,7 @@ async def test_read_directory_lists_entries(tmp_path: Path):
     (tmp_path / "file1.txt").write_text("abc")
     (tmp_path / "subdir" / "file2.txt").write_text("def")
     with mock.patch("tools.virtual_computer.file_system.load_config", return_value=DummyConfig(str(tmp_path))):
-        result = await read_file_or_dir_in_home_dir(".")
+        result = await read_file_directory(".")
         assert isinstance(result, dict)
         assert result["type"] == "directory"
         if result["type"] == "directory":
@@ -84,4 +84,4 @@ async def test_read_file_or_dir_in_home_dir_not_found(tmp_path: Path):
     """Test that ReadFileError is raised for missing file or directory."""
     with mock.patch("tools.virtual_computer.file_system.load_config", return_value=DummyConfig(str(tmp_path))):
         with pytest.raises(ReadFileError):
-            await read_file_or_dir_in_home_dir("does_not_exist.txt")
+            await read_file_directory("does_not_exist.txt")

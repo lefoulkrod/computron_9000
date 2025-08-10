@@ -10,16 +10,16 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 from models import model_configs
 from tools.virtual_computer import (
-    read_file_or_dir_in_home_dir,
+    read_file_directory,
     run_bash_cmd,
-    write_file_in_home_dir,
+    write_file,
 )
 
 from .prompt import PROMPT
 
 logger = logging.getLogger(__name__)
 
-model = model_configs.get_model_by_name("qwen3")
+model = model_configs.get_model_by_name("coder_architect")
 
 coder_agent = Agent(
     name="CODER_AGENT",
@@ -29,8 +29,8 @@ coder_agent = Agent(
     options=model.options,
     tools=[
         run_bash_cmd,
-        write_file_in_home_dir,
-        read_file_or_dir_in_home_dir,
+        write_file,
+        read_file_directory,
     ],
     think=model.think,
 )

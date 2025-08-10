@@ -9,6 +9,7 @@ from podman.domain.containers import Container
 from pydantic import BaseModel
 
 from config import load_config
+from tools.virtual_computer.workspace import get_working_directory_name
 
 if TYPE_CHECKING:
     from podman.domain.containers import Container
@@ -50,7 +51,7 @@ BASH_CMD_TIMEOUT: float = 60.0
 
 
 async def run_bash_cmd(cmd: str) -> BashCmdResult:
-    """Execute a bash command in your virtual computer which is Ubuntu LTS.
+    """Execute a bash command in your virtual computer.
 
     Execute any bash command with full access to a virtual computer. Times out after 60 seconds.
 
@@ -58,10 +59,10 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
         cmd (str): The bash command to execute.
 
     Returns:
-        BashCmdResult: Validated result object containing stdout, stderr, and exit_code.
+        BashCmdResult: Bash cmd result object containing stdout, stderr, and exit_code.
 
     Raises:
-        RunBashCmdError: If execution fails, container is not found, or timeout occurs.
+        RunBashCmdError: If execution fails or timeout occurs.
     """
 
     def _raise_container_not_found(container_name: str) -> None:
@@ -84,17 +85,22 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
 
         exec_args = ["bash", "-c", cmd]
 
+        workspace = get_working_directory_name()
+        container_working_dir = config.virtual_computer.container_working_dir.rstrip("/")
+        workdir = f"{container_working_dir}/{workspace}" if workspace else container_working_dir
+
         loop = asyncio.get_running_loop()
 
         def _exec_run_sync() -> tuple[int | None, object]:
-            return container.exec_run(
-                exec_args,
-                stdout=True,
-                stderr=True,
-                demux=True,
-                tty=False,
-                user=container_user,
-            )
+            exec_run_kwargs = {
+                "stdout": True,
+                "stderr": True,
+                "demux": True,
+                "tty": False,
+                "user": container_user,
+                "workdir": workdir,
+            }
+            return container.exec_run(exec_args, **exec_run_kwargs)
 
         try:
             exec_result = await asyncio.wait_for(

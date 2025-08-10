@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from tools.virtual_computer.file_system import write_file_in_home_dir
+from tools.virtual_computer.file_system import write_file
 
 class DummyConfig:
     class VirtualComputer:
@@ -37,7 +37,7 @@ async def test_write_file_in_home_dir_creates_and_cleans_file():
         file_path = Path(tmp_home) / test_file
         with mock.patch("tools.virtual_computer.file_system.load_config", return_value=DummyConfig(tmp_home)):
             # Write file
-            write_file_in_home_dir(test_file, test_content)
+            write_file(test_file, test_content)
             assert file_path.exists(), "File was not created in the mocked home dir."
             with file_path.open("r", encoding="utf-8") as f:
                 assert f.read() == test_content, "File content does not match."

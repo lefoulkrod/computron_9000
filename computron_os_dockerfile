@@ -16,9 +16,13 @@ RUN apt-get update && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Create non-sudo user
-RUN useradd --create-home --shell /bin/bash computron && \
-    passwd -d computron
+
+# Install sudo and create user with sudo privileges
+RUN apt-get update && apt-get install -y sudo && \
+    useradd --create-home --shell /bin/bash computron && \
+    passwd -d computron && \
+    usermod -aG sudo computron && \
+    echo 'computron ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # Set permissions: only allow writing to home directory
 RUN chown -R computron:computron /home/computron && \
