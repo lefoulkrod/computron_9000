@@ -9,7 +9,6 @@
 - Handle exceptions with context‑aware logging; use module-level logger (`logger = logging.getLogger(__name__)`)
 - Use custom exceptions where appropriate
 - Write tests for new features/bugs; descriptive names, Google-style docstrings; place in `tests/` mirroring source structure
-- Document public APIs and update README/docs
 - Include new deps in pyproject.toml
 - Use minimal, well-maintained libraries; avoid hardcoded secrets
 - Use Pydantic for data validation; ensure JSON-serializable API responses

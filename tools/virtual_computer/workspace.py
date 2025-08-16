@@ -1,38 +1,23 @@
-"""Workspace folder management for virtual computer tools."""
-
-from pathlib import Path
-
-from config import load_config
+"""Global management of an optional workspace folder name."""
 
 _workspace_folder: str | None = None
 
 
-def set_working_directory_name(name: str) -> None:
-    """Set the name of the workspace for all virtual computer tools.
+def set_workspace_folder(name: str) -> None:
+    """Set the name of the workspace folder for all virtual computer tools.
 
     Args:
-        name (str): The workspace name.
+        name (str): The workspace folder name (directory created under host home_dir and
+            visible in the container under container_working_dir).
     """
     global _workspace_folder
     _workspace_folder = name
 
 
-def get_working_directory_name() -> str | None:
-    """Get the currently set workspace name, if any.
+def get_current_workspace_folder() -> str | None:
+    """Get the currently set workspace folder name, if any.
 
     Returns:
-        str | None: The workspace name, or None if not set.
+        str | None: The workspace folder name, or None if not set.
     """
     return _workspace_folder
-
-
-def get_current_working_directory() -> str:
-    """Get the current working directory for the virtual computer.
-
-    Returns:
-        str: The current working directory path.
-    """
-    config = load_config()
-
-    abs_path = Path(config.virtual_computer.container_working_dir) / _workspace_folder
-    return str(abs_path.resolve())

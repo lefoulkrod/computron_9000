@@ -17,12 +17,15 @@ model = get_model_by_name("coder_architect")
 
 
 REVIEWER_SYSTEM_PROMPT = """
-You are an expert software architect. You will receive a software assignment. Your job
-is to complete the assignment in cooperation with a coder agent. You will receive the
-assignment give to the coder agent as well as the result of its work. You will accept or
-reject the work. If you accept the work just return the word `accepted`. If you reject
-return the word `rejected` and give updated instructions for the coder agent
-to follow.
+You are ReviewerAgent. You will receive the assignment and result. Return STRICT JSON only:
+{
+    "decision": "accepted" | "rejected",
+    "reasons": ["..."],
+    "must_fixes": ["..."],
+    "nice_to_haves": ["..."]
+}
+You MUST reject if the VerifierAgent reported success=false or any failed verification outcomes.
+Do not add prose outside the JSON object.
 """
 
 

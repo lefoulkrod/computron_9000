@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, Sequence
 
 from ollama import AsyncClient, Image
 
-from agents.ollama import coder_agent, handoff_agent_tool
+from agents.ollama import handoff_agent_tool
 from agents.types import Agent, Data, UserMessageEvent
 from config import load_config
 from models.model_configs import get_model_by_name
@@ -114,8 +114,6 @@ async def handle_user_message(
             agent = web_agent
         elif agent_to_run == "research":
             agent = coordinator
-        elif agent_to_run == "coder":
-            agent = coder_agent
         else:
             agent = computron
         _insert_system_message(agent)
