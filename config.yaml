@@ -44,7 +44,7 @@ settings:
 virtual_computer:
   container_name: computron_virtual_computer
   container_user: computron
-  home_dir: /home/larry/.computron_9000/container_home/
+  home_dir: /home/larry/.computron_9000/container_home
   container_working_dir: /home/computron
   
 tools:

@@ -1,6 +1,6 @@
 """Workflow orchestration for the coder agent system.
 
-Coordinates system design, planning, coding, and review steps using multiple agents.
+Coordinates requirements/design, strict planning, coding, verification, and review.
 """
 
 import json
@@ -10,31 +10,33 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, TypedDict
 
-from pydantic import BaseModel
-
-from agents.ollama.coder.coder_dev_agent import coder_dev_agent_tool
+from agents.ollama.coder.coder_agent import coder_agent_tool
+from agents.ollama.coder.models import PlanStep, ReviewerDecision, VerificationReport
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.reviewer_agent import reviewer_agent_tool
 from agents.ollama.coder.system_designer_agent import system_designer_agent_tool
+from agents.ollama.coder.verifier_agent import verifier_agent_tool
 from config import load_config
-from tools.virtual_computer import set_working_directory_name
+from tools.virtual_computer import write_file
+from tools.virtual_computer.workspace import set_workspace_folder
 
 logger = logging.getLogger(__name__)
 
 
-class PlanStep(BaseModel):
-    """Represents a single step in the coder workflow plan.
+def _update_instructions_on_reject(current: str | None, reviewer_feedback: str) -> str:
+    """Append reviewer guidance to step instructions as plain text.
 
-    Attributes:
-        step (Optional[str]): The step identifier or description.
-        instructions (Optional[dict[str, Any] | str]): Instructions for the step,
-            as a dict or string.
-        completed (bool): Whether the step has been completed.
+    Args:
+        current: Existing instructions string.
+        reviewer_feedback: Reviewer guidance to append.
+
+    Returns:
+        Updated instruction string with guidance appended.
     """
-
-    step: str | None = None
-    instructions: dict[str, Any] | str | None = None  # Accepts dict or str for LLM flexibility
-    completed: bool = False
+    base = "" if current is None else str(current)
+    guidance = reviewer_feedback.strip()
+    joiner = "\n\n" if base else ""
+    return f"{base}{joiner}Additional guidance: {guidance}"
 
 
 class CoderWorkflowAgentError(Exception):
@@ -42,12 +44,13 @@ class CoderWorkflowAgentError(Exception):
 
 
 class StepYield(TypedDict):
-    """Type of items yielded by the workflow generator."""
+    """Items yielded by the workflow generator."""
 
-    step: str | None
-    instructions: dict[str, Any] | str | None
+    step_id: str
+    title: str
     completed: bool
     result: str
+    verification: dict[str, Any] | None
 
 
 def _create_workspace_dir() -> str:
@@ -69,7 +72,7 @@ def _create_workspace_dir() -> str:
         logger.exception("Failed to create workspace directory: %s", workspace_path)
         msg = f"Failed to create workspace directory: {workspace_path}"
         raise CoderWorkflowAgentError(msg) from exc
-    set_working_directory_name(workspace_folder)
+    set_workspace_folder(workspace_folder)
     return workspace_folder
 
 
@@ -105,32 +108,7 @@ def _parse_plan(plan_response: str) -> list[PlanStep]:
         raise CoderWorkflowAgentError(msg) from exc
 
 
-def _update_instructions_on_reject(
-    current: dict[str, Any] | str | None,
-    reviewer_feedback: str,
-) -> dict[str, Any] | str:
-    """Augment step instructions with reviewer guidance after rejection.
-
-    Args:
-        current: Existing instructions (dict or str).
-        reviewer_feedback: The reviewer agent's guidance text.
-
-    Returns:
-        dict[str, Any] | str: Updated instructions in the same structure.
-    """
-    guidance = reviewer_feedback.strip()
-    if isinstance(current, dict):
-        new_instructions = dict(current)
-        new_instructions["additional_instructions"] = guidance
-        return new_instructions
-
-    base = "" if current is None else str(current)
-    return base + "\n" + f"additional instructions: {guidance}"
-
-
-async def coder_agent_workflow(
-    prompt: str,
-) -> AsyncGenerator[StepYield, None]:
+async def coder_agent_workflow(prompt: str) -> AsyncGenerator[StepYield, None]:
     """Main workflow for the coder agent using an architect agent for planning.
 
     Args:
@@ -147,6 +125,8 @@ async def coder_agent_workflow(
     design_prompt = f"Create an architecture design for the software assignment: {prompt}."
     design_response = await system_designer_agent_tool(design_prompt)
     logger.debug("Architect design response: %s", design_response)
+    # Persist design
+    _ = write_file("DESIGN.md", design_response)
 
     # Use the planner agent to convert design into an executable plan (JSON)
     plan_prompt = (
@@ -157,48 +137,101 @@ async def coder_agent_workflow(
     plan_response = await planner_agent_tool(plan_prompt)
     logger.debug("Architect plan response: %s", plan_response)
     plan_steps = _parse_plan(plan_response)
+    # Persist plan
+    try:
+        plan_pretty = json.dumps(json.loads(plan_response), indent=2)
+    except json.JSONDecodeError:
+        plan_pretty = plan_response
+    _ = write_file("PLAN.json", plan_pretty)
 
     # 2. Loop through steps, coder agent executes, architect agent reviews
     idx = 0
     while idx < len(plan_steps):
         step = plan_steps[idx]
-        if step.completed:
-            idx += 1
-            continue
         try:
-            # Coder agent executes the plan instructions
-            step_input = f"Execute this coding assignment:{step.instructions}"
-            step_result = await coder_dev_agent_tool(step_input)
-            plan_steps[idx].completed = True
+            # Coder agent executes the plan instructions (tests-first then impl)
+            step_input = (
+                "Follow these instructions in the headless execution environment. Create tests "
+                "listed and run them. Then implement code to pass tests. Keep changes minimal.\n\n"
+                f"Step {step.id} - {step.title}: {step.instructions}"
+            )
+            step_result_msg = await coder_agent_tool(step_input)
 
-            # Review the coder agent's work and accept or reject it
-            review_prompt = f"assignment: {step.instructions}\nresponse: {step_result}"
+            # Verify via VerifierAgent
+            # Build a language-agnostic verification prompt from the plan's commands
+            verify_prompt = json.dumps(
+                {
+                    "commands": [c.model_dump() for c in step.commands],
+                    "instruction": (
+                        "Execute each short-lived verification command in order and return the"
+                        " strict JSON summary specified by your system prompt."
+                    ),
+                }
+            )
+            verify_response = await verifier_agent_tool(verify_prompt)
+            logger.debug("Verifier response: %s", verify_response)
+            verification_dict: dict[str, Any] | None = None
+            verification: VerificationReport | None = None
+            try:
+                verification_dict = json.loads(verify_response)
+                verification = VerificationReport.model_validate(verification_dict)
+            except Exception:
+                logger.exception("Failed to parse verifier JSON")
+                verification = None
+
+            # Review with strict JSON decision
+            review_prompt = json.dumps(
+                {
+                    "assignment": step.instructions,
+                    "result": step_result_msg,
+                    "verifier": verification_dict,
+                }
+            )
             review_response = await reviewer_agent_tool(review_prompt)
-            logger.debug("Architect review response: %s", review_response)
+            logger.debug("Reviewer response: %s", review_response)
+            decision: ReviewerDecision | None = None
+            try:
+                decision = ReviewerDecision.model_validate(json.loads(review_response))
+            except Exception:
+                logger.exception("Reviewer did not return valid JSON")
+                decision = None
 
-            if "accepted" in review_response.lower():
-                plan_steps[idx].completed = True
+            # Decide advancement
+            accepted = bool(
+                decision
+                and decision.decision == "accepted"
+                and verification
+                and verification.success
+            )
+
+            if accepted:
                 idx += 1
-            elif "rejected" in review_response.lower():
-                plan_steps[idx].instructions = _update_instructions_on_reject(
-                    plan_steps[idx].instructions,
-                    review_response,
-                )
-                plan_steps[idx].completed = False
-                # Do not increment idx, repeat this step
+                completed = True
             else:
-                logger.warning(
-                    "Review response did not contain 'accepted' or 'rejected': %s", review_response
-                )
-                idx += 1
-            item: StepYield = {
-                "step": step.step,
-                "instructions": step.instructions,
-                "completed": step.completed,
-                "result": step_result,
+                # Update instructions with must_fixes if present
+                if decision and decision.must_fixes:
+                    plan_steps[idx].instructions = _update_instructions_on_reject(
+                        plan_steps[idx].instructions,
+                        "\n".join(decision.must_fixes),
+                    )
+                completed = False
+
+            # Persist artifacts for this step
+            artifacts: list[str] = []
+            # Save verification report
+            if verification_dict is not None:
+                vr_path = f"TEST_REPORT_{step.id}.json"
+                _ = write_file(vr_path, json.dumps(verification_dict, indent=2))
+                artifacts.append(vr_path)
+
+            yield {
+                "step_id": step.id,
+                "title": step.title,
+                "completed": completed,
+                "result": step_result_msg,
+                "verification": verification_dict,
             }
-            yield item
         except Exception as exc:
-            logger.exception("Coder agent failed on step: %s", step.step)
-            msg = f"Failed on step: {step.step}"
+            logger.exception("Coder agent failed on step: %s", step.id)
+            msg = f"Failed on step: {step.id}"
             raise CoderWorkflowAgentError(msg) from exc

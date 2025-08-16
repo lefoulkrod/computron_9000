@@ -1,0 +1,227 @@
+"""Text patch application utilities (structured + unified diff)."""
+
+from __future__ import annotations
+
+import difflib
+import logging
+
+from .models import ApplyPatchResult, TextPatch
+from .ops_internal import read_text_lines, write_text_lines
+from .path_utils import resolve_under_home
+
+logger = logging.getLogger(__name__)
+
+
+def apply_text_patch(path: str, patches: list[TextPatch]) -> ApplyPatchResult:
+    """Apply structured patches (line or substring) to a text file."""
+    try:
+        abs_path, _home, rel = resolve_under_home(path)
+        if not abs_path.exists() or not abs_path.is_file():
+            return ApplyPatchResult(success=False, file_path=rel, error="File does not exist")
+        before_lines = read_text_lines(abs_path)
+        after_lines = before_lines.copy()
+        for p in patches:
+            if p.mode() == "lines":
+                if p.start_line is None or p.end_line is None:
+                    return ApplyPatchResult(
+                        success=False,
+                        file_path=rel,
+                        error="start_line/end_line required",
+                    )
+                if p.start_line < 1 or p.end_line < p.start_line or p.end_line > len(after_lines):
+                    return ApplyPatchResult(
+                        success=False,
+                        file_path=rel,
+                        error="Invalid line range",
+                    )
+                new_segment = p.replacement.splitlines(keepends=True)
+                after_lines[p.start_line - 1 : p.end_line] = new_segment
+            else:
+                if p.original is None:
+                    return ApplyPatchResult(
+                        success=False,
+                        file_path=rel,
+                        error="original required for substring mode",
+                    )
+                joined = "".join(after_lines)
+                if p.original not in joined:
+                    return ApplyPatchResult(
+                        success=False, file_path=rel, error="original substring not found"
+                    )
+                joined = joined.replace(p.original, p.replacement, 1)
+                after_lines = [joined]
+        if after_lines == before_lines:
+            return ApplyPatchResult(success=True, file_path=rel, diff="")
+        diff_text = "".join(
+            difflib.unified_diff(
+                before_lines,
+                after_lines,
+                fromfile=f"{rel} (before)",
+                tofile=f"{rel} (after)",
+                lineterm="",
+            )
+        )
+        write_text_lines(abs_path, after_lines)
+        return ApplyPatchResult(success=True, file_path=rel, diff=diff_text)
+    except (OSError, ValueError) as exc:  # pragma: no cover
+        logger.exception("Failed to apply text patch to %s", path)
+        return ApplyPatchResult(success=False, file_path=path, error=str(exc))
+
+
+def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
+    """Apply unified diff patches for existing text files."""
+    results: list[ApplyPatchResult] = []
+    lines = patch_text.splitlines(keepends=False)
+    idx = 0
+    current_old: str | None = None
+    current_new: str | None = None
+    hunks: list[tuple[int, int, int, int, list[str]]] = []
+
+    def parse_range(token: str) -> tuple[int, int]:
+        if "," in token:
+            start_s, count_s = token.split(",", 1)
+            return int(start_s), int(count_s)
+        return int(token), 1
+
+    def flush_file() -> None:
+        nonlocal current_old, current_new, hunks
+        if current_new is None:
+            return
+        target = current_new
+        if target.startswith(("a/", "b/")):
+            target = target[2:]
+        if target == "/dev/null":
+            results.append(
+                ApplyPatchResult(
+                    success=False,
+                    file_path=target,
+                    error="File creation/deletion not supported",
+                )
+            )
+        else:
+            try:
+                abs_path, _home, rel = resolve_under_home(target)
+                if not abs_path.exists() or not abs_path.is_file():
+                    results.append(
+                        ApplyPatchResult(
+                            success=False,
+                            file_path=rel,
+                            error="Target file missing",
+                        )
+                    )
+                else:
+                    original = read_text_lines(abs_path)
+                    try:
+                        patched = _apply_hunks(original, hunks)
+                    except ValueError as exc:  # pragma: no cover - error path
+                        results.append(
+                            ApplyPatchResult(success=False, file_path=rel, error=str(exc))
+                        )
+                    else:
+                        diff_text = "".join(
+                            difflib.unified_diff(
+                                original,
+                                patched,
+                                fromfile=f"{rel} (before)",
+                                tofile=f"{rel} (after)",
+                                lineterm="",
+                            )
+                        )
+                        if diff_text:
+                            write_text_lines(abs_path, patched)
+                        results.append(
+                            ApplyPatchResult(
+                                success=True,
+                                file_path=rel,
+                                diff=diff_text,
+                            )
+                        )
+            except (OSError, ValueError) as exc:  # pragma: no cover
+                results.append(ApplyPatchResult(success=False, file_path=target, error=str(exc)))
+        current_old = None
+        current_new = None
+        hunks = []
+
+    while idx < len(lines):
+        line = lines[idx]
+        if line.startswith("--- ") and idx + 1 < len(lines) and lines[idx + 1].startswith("+++ "):
+            flush_file()
+            current_old = line.split(maxsplit=1)[1].strip()
+            current_new = lines[idx + 1].split(maxsplit=1)[1].strip()
+            idx += 2
+            continue
+        if line.startswith("@@ "):
+            header = line
+            try:
+                parts = header.split()
+                old_spec = parts[1]
+                new_spec = parts[2]
+                if not old_spec.startswith("-") or not new_spec.startswith("+"):
+                    msg = "Malformed hunk header"
+                    raise ValueError(msg)
+                old_start, old_count = parse_range(old_spec[1:])
+                new_start, new_count = parse_range(new_spec[1:])
+            except (IndexError, ValueError) as exc:
+                results.append(
+                    ApplyPatchResult(success=False, file_path=current_new or "?", error=str(exc))
+                )
+                idx += 1
+                continue
+            idx += 1
+            hunk_body: list[str] = []
+            while idx < len(lines):
+                l2 = lines[idx]
+                if l2.startswith(("@@ ", "--- ")):
+                    break
+                if l2 and l2[0] in {" ", "+", "-"}:
+                    hunk_body.append(l2)
+                else:
+                    break
+                idx += 1
+            hunks.append((old_start, old_count, new_start, new_count, hunk_body))
+            continue
+        idx += 1
+    flush_file()
+    return results
+
+
+def _apply_hunks(
+    original: list[str], hunks: list[tuple[int, int, int, int, list[str]]]
+) -> list[str]:
+    """Apply parsed hunks to original lines, returning new lines."""
+    result: list[str] = []
+    orig_pos = 0
+    for old_start, _old_count, _new_start, _new_count, body in hunks:
+        pre_index = old_start - 1
+        if pre_index < 0:
+            msg = "Invalid hunk start"
+            raise ValueError(msg)
+        if pre_index > len(original):
+            msg = "Hunk starts beyond EOF"
+            raise ValueError(msg)
+        result.extend(original[orig_pos:pre_index])
+        orig_line_index = pre_index
+        removed = 0
+        for line in body:
+            tag = line[:1]
+            content = line[1:] + "\n" if not line.endswith("\n") else line[1:]
+            if tag == " ":
+                if orig_line_index >= len(original) or original[orig_line_index] != content:
+                    msg = "Context mismatch applying hunk"
+                    raise ValueError(msg)
+                result.append(content)
+                orig_line_index += 1
+            elif tag == "-":
+                if orig_line_index >= len(original) or original[orig_line_index] != content:
+                    msg = "Removal mismatch applying hunk"
+                    raise ValueError(msg)
+                orig_line_index += 1
+                removed += 1
+            elif tag == "+":
+                result.append(content)
+            else:
+                msg = "Unknown hunk line prefix"
+                raise ValueError(msg)
+        orig_pos = orig_line_index
+    result.extend(original[orig_pos:])
+    return result
