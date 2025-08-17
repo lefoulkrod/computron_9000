@@ -9,6 +9,8 @@
 - Handle exceptions with context‑aware logging; use module-level logger (`logger = logging.getLogger(__name__)`)
 - Use custom exceptions where appropriate
 - Write tests for new features/bugs; descriptive names, Google-style docstrings; place in `tests/` mirroring source structure
+- Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
+- run unit tests with `just test-unit`
 - Include new deps in pyproject.toml
 - Use minimal, well-maintained libraries; avoid hardcoded secrets
 - Use Pydantic for data validation; ensure JSON-serializable API responses

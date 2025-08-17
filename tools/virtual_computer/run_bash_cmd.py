@@ -74,7 +74,10 @@ _ALLOWED_PREFIXES: tuple[str, ...] = (
 # Deny substrings indicating long-running servers/watchers
 _DENY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bserve\b", re.IGNORECASE),
-    re.compile(r"\bdev\b", re.IGNORECASE),
+    # Block explicit 'dev' scripts like `npm run dev` but allow flags like '--save-dev'.
+    # Negative lookbehind ensures 'dev' isn't preceded by 'save-' (e.g. --save-dev)
+    # or part of 'saved'.
+    re.compile(r"(?<!save-)\bdev\b", re.IGNORECASE),
     re.compile(r"\bstart\b", re.IGNORECASE),
     re.compile(r"\bwatch\b", re.IGNORECASE),
     re.compile(r"tail\s+-f"),

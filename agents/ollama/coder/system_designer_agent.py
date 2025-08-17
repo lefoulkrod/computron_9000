@@ -2,6 +2,7 @@
 
 import logging
 
+from agents.ollama.coder.system_design_models import generate_schema_summary
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -17,49 +18,47 @@ logger = logging.getLogger(__name__)
 model = get_model_by_name("coder_architect")
 
 
-SYSTEM_DESIGN_PROMPT = """
+_SCHEMA_SUMMARY = generate_schema_summary()
+
+SYSTEM_DESIGN_PROMPT = f"""
 Role: Expert Software Architect
 
-Goal: Produce a concise, basic architecture brief for a software assignment that downstream agents
-(planner, implementer, tester) can consume.
+Goal: Produce a comprehensive structured system design for a software assignment that downstream
+agents (planner, implementer, tester) can consume programmatically.
 
-Output: Markdown only, short and actionable. Use the following sections:
+STRICT OUTPUT: Return ONLY valid JSON matching the SystemDesign schema below. No markdown, no
+explanatory prose outside JSON. Do not add comments. Do not wrap in code fences.
 
-1. Summary
-    - One-paragraph problem statement and success criteria.
+Schema (types) summary:
+{_SCHEMA_SUMMARY}
 
-2. Assumptions
-    - Bullet list of key assumptions made to proceed.
-
-3. Tech Stack
-    - Language/runtime (one) with a brief rationale.
-    - Frameworks/libraries (3-6) with one-line reasons.
-
-4. Project Structure
-    - Directory tree (code block) with key files/folders relevant to the stack.
-
-5. Components
-    - List components; for each: responsibilities, main interfaces (inputs/outputs), dependencies.
-
-6. Data Model
-    - Entities, key fields, relationships; storage choice and why.
-
-7. Key Interactions
-    - One or two primary flows described in 3-5 bullets each.
-
-8. Testing Strategy
-    - Levels (unit/integration/e2e), tools, what to test, minimal coverage target.
-
-9. Constraints & Open Questions
-    - Constraints to respect.
-    - Questions needing clarification.
-
-Guidance:
-- Be brief and opinionated; avoid diagrams, deployment details, CI/CD, and long alternatives.
-- No code or pseudocode; no shell commands.
-- Use relative paths in the project structure.
-- If details are missing, make reasonable assumptions and list them above.
-- Target 300-600 words total.
+Requirements & Guidance:
+- You MUST pick and justify exactly one primary programming language.
+- You MUST pick exactly one dependency manager appropriate
+    for the language (Python: uv or poetry; Node.js: pnpm or npm; Rust: cargo; Go: go-mod).
+- You SHOULD (when applicable) pick exactly one environment/version manager:
+    Python: pyenv (preferred) or asdf; Node.js: nvm (preferred) or asdf; Ruby: rbenv or asdf;
+    Multi-language: asdf. Justify the choice.
+- If the ecosystem rarely needs a separate env manager (e.g. Go) you do not need to include one.
+- Derive reasonable assumptions where details are missing.
+- Avoid code samples, pseudocode, shell commands, deployment details, CI/CD, or extraneous ADRs.
+ - Provide a comprehensive project_structure: include all directories and files
+     needed for implementation, testing, configuration, packaging, and operations (e.g. src/,
+     tests/, docs/, infra/ or deployment/, scripts/, configs/, tooling, linters). Omit only trivial
+     build artifacts.
+ - Provide an exhaustive components list that decomposes the system into cohesive, loosely
+     coupled units.
+ - For EACH component you MUST include a "paths" array listing one or more relative paths
+     drawn from project_structure.path values that the component primarily owns / implements.
+     Every component must map to at least one path and only to paths that appear in
+     project_structure. This mapping enables the planner to group implementation steps.
+- In the packages list include notable frameworks, libraries or tools (runtime & dev) beyond the
+    primary language, dependency manager, environment manager and test framework. Use simple
+    lowercase package names (e.g. fastapi, sqlalchemy, redis, pytest-cov) without versions.
+- For each component supply a comprehensive list covering core and
+    edge interactions. Use the format: "As a <role> I want <goal> so that <reason>". Do not invent
+    obviously duplicate stories across components—place each story with the component that owns
+    fulfilling it.
 """
 
 
