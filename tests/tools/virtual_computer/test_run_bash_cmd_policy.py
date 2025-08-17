@@ -61,3 +61,45 @@ async def test_allowlist_allows_echo(monkeypatch: pytest.MonkeyPatch) -> None:
     res = await run_bash_cmd("echo policy-ok")
     assert res.exit_code == 0
     assert res.stdout is not None and "policy-ok" in res.stdout
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_npm_install_save_dev_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify 'npm install --save-dev jest eslint' not blocked by dev deny pattern."""
+
+    class _VC:
+        container_name = "vc-test"
+        container_user = "tester"
+        container_working_dir = "/work"
+
+    class _Cfg:
+        virtual_computer = _VC()
+
+    rbcm = importlib.import_module("tools.virtual_computer.run_bash_cmd")
+    monkeypatch.setattr(rbcm, "load_config", lambda: _Cfg(), raising=True)
+    monkeypatch.setattr(rbcm, "get_current_workspace_folder", lambda: "ws", raising=True)
+
+    class _FakeContainer:
+        name = "vc-test"
+
+        def exec_run(self, _args, **_kwargs):  # type: ignore[no-untyped-def]
+            return 0, (b"added 2 packages", b"")
+
+    class _FakeContainerMgr:
+        def list(self):  # type: ignore[no-untyped-def]
+            return [_FakeContainer()]
+
+    class _FakePodmanClient:
+        def __init__(self) -> None:
+            self.containers = _FakeContainerMgr()
+
+        def from_env(self):  # type: ignore[no-untyped-def]
+            return self
+
+    monkeypatch.setattr(rbcm, "PodmanClient", _FakePodmanClient, raising=True)
+
+    res = await run_bash_cmd("npm install --save-dev jest eslint")
+    assert res.exit_code == 0
+    assert res.stderr in (None, "")
+    assert res.stdout is not None and "added" in res.stdout

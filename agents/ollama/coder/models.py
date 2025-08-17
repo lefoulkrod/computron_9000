@@ -6,7 +6,7 @@ Defines PlanStep per the planner schema and StepResult for step-level reporting.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any  # (kept if future models need), Optional  # noqa: F401
 
 from pydantic import BaseModel, Field
 
@@ -112,13 +112,70 @@ class VerificationReport(BaseModel):
     ruff_ok: bool | None = None
 
 
-class ReviewerDecision(BaseModel):
-    """Reviewer outcome as strict JSON."""
+class VerifierDecision(BaseModel):
+    """Gating verifier decision JSON replacing the old reviewer model.
 
-    decision: Literal["accepted", "rejected"]
+    Args:
+        accepted: True if the step can advance; False to request rework.
+        reasons: Explanation supporting the decision.
+        fixes: Concrete fix instructions when not accepted.
+    """
+
+    accepted: bool
     reasons: list[str] = Field(default_factory=list)
-    must_fixes: list[str] = Field(default_factory=list)
-    nice_to_haves: list[str] = Field(default_factory=list)
+    fixes: list[str] = Field(default_factory=list)
+
+    class Config:
+        """Pydantic configuration (forbid extras)."""
+
+        extra = "forbid"
+
+
+class QATestFilePlan(BaseModel):
+    """Specification for a test file the QA agent wants created.
+
+    Args:
+        path: Relative path to the test file to create (e.g. tests/module/test_feature.py).
+        purpose: Brief description of what scenarios the test file covers.
+    """
+
+    path: str
+    purpose: str
+
+
+class QATestCommandPlan(BaseModel):
+    """Command the QA agent recommends running to validate the step.
+
+    Args:
+        run: Shell command (short-lived) to execute tests or static analysis.
+        timeout_sec: Upper bound runtime seconds.
+    """
+
+    run: str
+    timeout_sec: int = Field(ge=1, le=600, default=120)
+
+
+class QATestPlan(BaseModel):
+    """Structured QA plan focusing on unit tests for a coder step.
+
+    Returned by the QA agent. The verifier will later execute the listed commands.
+
+    Args:
+        summary: Short natural language summary of the QA approach.
+        test_files: List of test files to create/update.
+        commands: Verification commands (pytest, mypy, ruff, etc.).
+        rationale: Optional reasoning for chosen tests/commands.
+    """
+
+    summary: str
+    test_files: list[QATestFilePlan] = Field(default_factory=list)
+    commands: list[QATestCommandPlan] = Field(default_factory=list)
+    rationale: str | None = None
+
+    class Config:
+        """Pydantic configuration (forbid extras to keep schema strict)."""
+
+        extra = "forbid"
 
 
 class StepResult(BaseModel):
