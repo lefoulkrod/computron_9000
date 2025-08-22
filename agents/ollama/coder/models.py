@@ -6,9 +6,10 @@ Defines PlanStep per the planner schema and StepResult for step-level reporting.
 from __future__ import annotations
 
 import logging
-from typing import Any  # (kept if future models need), Optional  # noqa: F401
 
 from pydantic import BaseModel, Field
+
+from utils.pydantic_schema import JSONValue, schema_summary
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,24 @@ class PlanStep(BaseModel):
     tests: list[TestSpec] = Field(default_factory=list)
     acceptance: list[str] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
-    retries: int | None = Field(default=None, ge=0, le=5)
-    when: str | None = None
+    user_stories: list[str] = Field(default_factory=list)
 
     class Config:
         """Pydantic configuration for PlanStep."""
 
         extra = "forbid"
+
+
+def generate_plan_step_schema_summary() -> str:
+    """Return simplified placeholder JSON schema for PlanStep.
+
+    Uses shared utility with overrides for key scalar examples.
+    """
+    overrides: dict[str, JSONValue] = {
+        "id": "step-1",
+        "title": "Initialize environment",
+    }
+    return schema_summary(PlanStep, overrides=overrides)
 
 
 class CommandOutcome(BaseModel):

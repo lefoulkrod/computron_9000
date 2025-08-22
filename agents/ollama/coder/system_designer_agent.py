@@ -36,10 +36,6 @@ Requirements & Guidance:
 - You MUST pick and justify exactly one primary programming language.
 - You MUST pick exactly one dependency manager appropriate
     for the language (Python: uv or poetry; Node.js: pnpm or npm; Rust: cargo; Go: go-mod).
-- You SHOULD (when applicable) pick exactly one environment/version manager:
-    Python: pyenv (preferred) or asdf; Node.js: nvm (preferred) or asdf; Ruby: rbenv or asdf;
-    Multi-language: asdf. Justify the choice.
-- If the ecosystem rarely needs a separate env manager (e.g. Go) you do not need to include one.
 - Derive reasonable assumptions where details are missing.
 - Avoid code samples, pseudocode, shell commands, deployment details, CI/CD, or extraneous ADRs.
  - Provide a comprehensive project_structure: include all directories and files
@@ -53,12 +49,29 @@ Requirements & Guidance:
      Every component must map to at least one path and only to paths that appear in
      project_structure. This mapping enables the planner to group implementation steps.
 - In the packages list include notable frameworks, libraries or tools (runtime & dev) beyond the
-    primary language, dependency manager, environment manager and test framework. Use simple
+    primary language, dependency manager and test framework. Use simple
     lowercase package names (e.g. fastapi, sqlalchemy, redis, pytest-cov) without versions.
 - For each component supply a comprehensive list covering core and
     edge interactions. Use the format: "As a <role> I want <goal> so that <reason>". Do not invent
     obviously duplicate stories across components—place each story with the component that owns
     fulfilling it.
+    Language-specific tooling guidelines:
+            Python:
+                - Use uv for environment + dependency management.
+                - Create/sync env: `uv venv` then `uv sync` (after pyproject or lock edits).
+                - Add/remove deps: `uv add <pkg>` / `uv remove <pkg>` (updates pyproject + lock).
+                - Regenerate lock (explicit): `uv lock`.
+                - Run inside env: `uv run <cmd>`.
+                - Ephemeral tools: `uvx <tool> [args]`.
+                - Tests: uv run pytest (or another test runner) → run tests inside environment.
+            JavaScript:
+                - Use npm. Init: `npm init -y`. Add: `npm install <pkg>`.
+            Go:
+                - Use modules. Init: `go mod init <module>`.
+                - Manage deps: `go get <pkg>` then `go mod tidy`.
+                    Planning:
+                        - First step: init env/tooling (uv venv+sync, npm init, or go mod init).
+                        - Include only base deps.
 """
 
 

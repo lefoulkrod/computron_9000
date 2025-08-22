@@ -83,38 +83,6 @@ def _create_workspace_dir() -> str:
     return workspace_folder
 
 
-def _parse_plan(plan_response: str) -> list[PlanStep]:
-    """Parse and validate the planner's JSON plan into ``PlanStep`` objects.
-
-    Args:
-        plan_response: Raw JSON string from the planner agent.
-
-    Returns:
-        list[PlanStep]: Validated list of plan steps.
-
-    Raises:
-        CoderWorkflowAgentError: If JSON is invalid or structure is incorrect.
-    """
-    try:
-        plan_data = json.loads(plan_response)
-    except json.JSONDecodeError as exc:
-        msg = "Failed to parse plan response as JSON"
-        logger.exception(msg)
-        raise CoderWorkflowAgentError(msg) from exc
-
-    if not isinstance(plan_data, list):
-        msg = "Plan response is not a list"
-        logger.error("%s: %s", msg, plan_data)
-        raise CoderWorkflowAgentError(msg)
-
-    try:
-        return [PlanStep.model_validate(step) for step in plan_data]
-    except (TypeError, ValueError) as exc:
-        msg = "Failed to validate plan response"
-        logger.exception(msg)
-        raise CoderWorkflowAgentError(msg) from exc
-
-
 async def workflow(prompt: str) -> AsyncGenerator[StepYield, None]:
     """Main workflow for the coder agent using an architect agent for planning.
 
@@ -131,26 +99,16 @@ async def workflow(prompt: str) -> AsyncGenerator[StepYield, None]:
 
     # Create & parse system design
     design = await _run_system_designer_agent(prompt)
-    try:
-        design_json = design.model_dump_json(indent=2)
-    except (TypeError, ValueError):  # pragma: no cover - defensive
-        design_json = json.dumps(design.model_dump(), indent=2)
+    design_json = design.model_dump_json(indent=2)
     _ = write_file("DESIGN.json", design_json)
 
-    # Use the planner agent to convert design into an executable plan (JSON)
-    plan_prompt = (
-        "Create an implementation plan for the software assignment "
-        f'"{prompt}" based on the architectural design:\n{design_json}\n'
-        "Return only valid JSON list of steps as specified."
-    )
-    plan_response = await planner_agent_tool(plan_prompt)
-    logger.debug("Architect plan response: %s", plan_response)
-    plan_steps = _parse_plan(plan_response)
-    # Persist plan
+    # Use the planner agent via wrapper to convert design into an executable plan (JSON)
+    plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
+    # Persist raw plan (pretty-printed if possible)
     try:
-        plan_pretty = json.dumps(json.loads(plan_response), indent=2)
-    except json.JSONDecodeError:
-        plan_pretty = plan_response
+        plan_pretty = json.dumps(json.loads(raw_plan), indent=2)
+    except json.JSONDecodeError:  # pragma: no cover - defensive
+        plan_pretty = raw_plan
     _ = write_file("PLAN.json", plan_pretty)
 
     # 2. Loop through steps:
@@ -161,11 +119,7 @@ async def workflow(prompt: str) -> AsyncGenerator[StepYield, None]:
         step = plan_steps[idx]
         try:
             # Coder agent executes the plan instructions (tests-first then impl)
-            step_input = (
-                "Follow these instructions in the headless execution environment. Create tests "
-                "listed and run them. Then implement code to pass tests. Keep changes minimal.\n\n"
-                f"Step {step.id} - {step.title}: {step.instructions}"
-            )
+            step_input = f"Step {step}"
             step_result_msg = await coder_agent_tool(step_input)
             # Test planner produces test plan
             plan_prompt_payload = json.dumps(
@@ -274,7 +228,7 @@ async def _run_system_designer_agent(task_prompt: str) -> SystemDesign:
         logger.exception("System designer agent call failed")
         msg = "System designer agent call failed"
         raise CoderWorkflowAgentError(msg) from exc
-    logger.debug("Raw system design JSON: %s", raw)
+    logger.debug("system design response: %s", raw)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -283,7 +237,48 @@ async def _run_system_designer_agent(task_prompt: str) -> SystemDesign:
         raise CoderWorkflowAgentError(msg) from exc
     try:
         return SystemDesign.model_validate(data)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - validation path
         logger.exception("System design JSON failed validation")
         msg = "Invalid system design JSON structure"
         raise CoderWorkflowAgentError(msg) from exc
+
+
+async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[PlanStep], str]:
+    """Run the planner agent and return validated plan steps plus raw response.
+
+    Args:
+        prompt: Original high-level assignment / task description.
+        design_json: The serialized system design JSON produced by system designer.
+
+    Returns:
+        A tuple of (list[PlanStep], raw JSON string returned by planner).
+
+    Raises:
+        CoderWorkflowAgentError: If the planner agent call fails or returns invalid JSON
+            or the plan schema is invalid.
+    """
+    plan_prompt = f"software assignment:\n{prompt}\narchitectural design:\n{design_json}\n"
+    try:
+        raw_plan = await planner_agent_tool(plan_prompt)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Planner agent call failed")
+        msg = "Planner agent call failed"
+        raise CoderWorkflowAgentError(msg) from exc
+    logger.debug("planner agent response: %s", raw_plan)
+    try:
+        plan_data = json.loads(raw_plan)
+    except json.JSONDecodeError as exc:
+        msg = "Failed to parse plan response as JSON"
+        logger.exception(msg)
+        raise CoderWorkflowAgentError(msg) from exc
+    if not isinstance(plan_data, list):
+        msg = "Plan response is not a list"
+        logger.error("%s: %s", msg, plan_data)
+        raise CoderWorkflowAgentError(msg)
+    try:
+        plan_steps = [PlanStep.model_validate(step) for step in plan_data]
+    except (TypeError, ValueError) as exc:
+        msg = "Failed to validate plan response"
+        logger.exception(msg)
+        raise CoderWorkflowAgentError(msg) from exc
+    return plan_steps, raw_plan
