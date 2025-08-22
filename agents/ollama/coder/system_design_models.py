@@ -8,12 +8,12 @@ free-form prose.
 
 from __future__ import annotations
 
-import json
 import logging
-from functools import lru_cache
-from typing import Any, Union, get_args, get_origin
+from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
+
+from utils.pydantic_schema import schema_summary
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +76,11 @@ class SystemDesign(BaseModel):
         success_criteria: List of measurable success / acceptance criteria.
         assumptions: List of plain assumption statements (no nesting).
         language: Primary implementation language (optional until chosen).
-        dependency_manager: Tool managing project dependencies (e.g. uv, poetry, pnpm).
-        environment_manager: Version/environment manager (e.g. pyenv, nvm, asdf) when applicable.
+    dependency_manager: Tool managing project dependencies (e.g. uv, poetry, pnpm).
         packages: List of additional runtime or development packages (frameworks,
             libraries, tools) to include.
         project_structure: Proposed high-level directory/file entries with purposes.
-    components: Core components of the architecture (each with comprehensive user stories).
+        components: Core components of the architecture (each with comprehensive user stories).
         test_framework: Primary test framework/tool (e.g. pytest, junit, vitest).
     """
 
@@ -93,7 +92,6 @@ class SystemDesign(BaseModel):
     # Simplified scalar primary selections
     language: str | None = None
     dependency_manager: str | None = None
-    environment_manager: str | None = None
     packages: list[str] = Field(default_factory=list)
     project_structure: list[ProjectStructureNode] = Field(default_factory=list)
     components: list[Component] = Field(default_factory=list)
@@ -104,26 +102,6 @@ class SystemDesign(BaseModel):
         """Pydantic configuration (forbid extras)."""
 
         extra = "forbid"
-
-    @model_validator(mode="after")
-    def _validate_component_paths(self) -> SystemDesign:
-        """Ensure each component declares valid mapped paths.
-
-        Raises:
-            ValueError: If a component omits paths or references unknown paths.
-        """
-        defined_paths = {p.path for p in self.project_structure}
-        for comp in self.components:
-            if not comp.paths:
-                msg = f"Component '{comp.name}' missing required paths mapping"
-                raise ValueError(msg)
-            unknown = [pt for pt in comp.paths if pt not in defined_paths]
-            if unknown:
-                msg = (
-                    f"Component '{comp.name}' references paths not in project_structure: {unknown}"
-                )
-                raise ValueError(msg)
-        return self
 
 
 def generate_json_schema() -> dict[str, Any]:  # pragma: no cover - thin wrapper
@@ -139,102 +117,10 @@ def generate_json_schema() -> dict[str, Any]:  # pragma: no cover - thin wrapper
     return SystemDesign.model_json_schema()
 
 
-type JSONValue = str | int | float | bool | dict[str, "JSONValue"] | list["JSONValue"] | None
-
-PRIMITIVE_PLACEHOLDERS: dict[type[Any], str] = {
-    str: "string",
-    int: "number",
-    float: "number",
-    bool: "boolean",
-}
-
-
-def _placeholder_for_type(tp: object) -> JSONValue:
-    """Return a stable, LLM-friendly placeholder representation for a type.
-
-    Rules:
-        * Scalars -> symbolic string ("string", "number", etc.)
-        * Lists of scalars -> ["string", "..."] pattern
-        * Lists of models -> list with a single example object (recursively rendered)
-        * Optional[T] -> render as T (omit null markers)
-        * Nested models -> dict of their fields
-    """
-    origin = get_origin(tp)
-
-    # Optional[T] -> treat as T
-    if origin is None and isinstance(tp, type) and issubclass(tp, BaseModel):
-        return _model_shape(tp)
-
-    if origin in (list, list[int].__class__):  # list typing generics
-        args = get_args(tp)
-        inner = args[0] if args else str
-        inner_placeholder = _placeholder_for_type(inner)
-        if isinstance(inner_placeholder, str):  # scalar list
-            return [inner_placeholder, "..."]
-        # object / composite list -> single example element
-        return [inner_placeholder]
-
-    # Optional / Union simplification (treat Optionals as underlying type)
-    if origin is Union:  # type: ignore[arg-type]
-        non_none = [a for a in get_args(tp) if a is not type(None)]
-        if non_none:
-            return _placeholder_for_type(non_none[0])
-        return "string"
-
-    if isinstance(tp, type) and tp in PRIMITIVE_PLACEHOLDERS:
-        return PRIMITIVE_PLACEHOLDERS[tp]
-
-    # Fallback
-    return "string"
-
-
-def _model_shape(model_cls: type[BaseModel]) -> dict[str, JSONValue]:
-    """Produce ordered placeholder mapping for a model's fields.
-
-    Iterates deterministically in the order Pydantic stores field definitions
-    to keep output stable across runs.
-    """
-    shape: dict[str, JSONValue] = {}
-    for name, field in model_cls.model_fields.items():  # type: ignore[attr-defined]
-        placeholder = _placeholder_for_type(field.annotation)  # type: ignore[arg-type]
-        shape[name] = placeholder
-    return shape
-
-
-@lru_cache(maxsize=1)
-def _dynamic_schema_shape() -> dict[str, JSONValue]:
-    """Return the dynamic placeholder shape for `SystemDesign` plus tweaks.
-
-    We post-process certain fields to inject example literals mirroring the
-    prior hand-maintained schema so existing prompt templates remain stable.
-    """
-    shape = _model_shape(SystemDesign)
-
-    # Inject curated example literals for key technology selection fields
-    if shape.get("language") == "string":
-        shape["language"] = "python"
-    if shape.get("dependency_manager") == "string":
-        shape["dependency_manager"] = "uv"
-    if shape.get("environment_manager") == "string":
-        shape["environment_manager"] = "pyenv"
-    if shape.get("test_framework") == "string":
-        shape["test_framework"] = "pytest"
-
-    return shape
-
-
 def generate_schema_summary() -> str:
-    """Generate the simplified JSON shape used in LLM prompts dynamically.
+    """Generate simplified JSON placeholder shape for `SystemDesign`.
 
-    This intentionally avoids formal JSON Schema constructs (e.g. `$ref`,
-    `anyOf`, explicit nullability) in favor of a stable, example-oriented
-    placeholder format that large language models reproduce reliably.
-
-    The shape is computed from the Pydantic models to prevent drift when
-    fields are added or renamed.
-
-    Returns:
-        Canonical multi-line string describing the expected JSON structure.
+    Uses shared utility to avoid schema drift and duplication. Injects
+    curated example literals for select scalar fields via overrides.
     """
-    # Pretty-print with sorted keys for stability.
-    return json.dumps(_dynamic_schema_shape(), indent=4, sort_keys=True)
+    return schema_summary(SystemDesign)

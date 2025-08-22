@@ -9,30 +9,25 @@ models:
     think: true
     options:
       num_ctx: 73728
+  - name: gpt
+    model: gpt-oss:120b
+    think: true
   - name: handoff_agent
-    model: qwen3:30b-a3b-thinking-2507-q8_0
+    model: gpt-oss:120b
     think: false
     options:
       num_ctx: 73728
       temperature: 0.1
   - name: coder_architect
-    model: qwen3:30b-a3b-thinking-2507-q8_0
+    model: gpt-oss:120b
     think: true
     options:
       num_ctx: 72704
-      temperature: 0.6
-      min_p: 0.0
-      top_p: 0.95
-      top_k: 20
   - name: coder_developer
-    model: qwen3:30b-a3b-thinking-2507-q8_0
+    model: gpt-oss:120b
     think: true
     options:
       num_ctx: 72704
-      temperature: 0.7
-      min_p: 0.0
-      top_p: 0.8
-      top_k: 20
   - name: vision
     model: qwen2.5vl:32b
     options:
@@ -40,7 +35,7 @@ models:
     think: false
 settings:
   home_dir: /home/larry/.computron_9000
-  default_model: qwen3
+  default_model: gpt
 virtual_computer:
   container_name: computron_virtual_computer
   container_user: computron

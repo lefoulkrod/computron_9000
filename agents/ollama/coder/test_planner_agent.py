@@ -58,6 +58,23 @@ TEST_PLANNER_SYSTEM_PROMPT = (
     "- If coder output indicates failure or bugs, add tests that expose those issues.\n"
     "- Keep commands minimal and deterministic (avoid full rebuilds if incremental ok).\n"
     "- Do not invent tools; only use detectable or widely standard defaults.\n"
+    """Language-specific tooling guidelines:
+            Python:
+                - Use uv for environment + dependency management.
+                - Create/sync env: `uv venv` then `uv sync` (after pyproject or lock edits).
+                - Add/remove deps: `uv add <pkg>` / `uv remove <pkg>` (updates pyproject + lock).
+                - Regenerate lock (explicit): `uv lock`.
+                - Run inside env: `uv run <cmd>`.
+                - Ephemeral tools: `uvx <tool> [args]`.
+                - Tests: uv run pytest (or another test runner) → run tests inside environment.
+            JavaScript:
+                - Use npm. Init: `npm init -y`. Add: `npm install <pkg>`.
+            Go:
+                - Use modules. Init: `go mod init <module>`.
+                - Manage deps: `go get <pkg>` then `go mod tidy`.
+                    Planning:
+                        - First step: init env/tooling (uv venv+sync, npm init, or go mod init).
+                        - Include only base deps."""
 )
 
 test_planner_agent = Agent(

@@ -59,5 +59,13 @@ Returns:
             result = f"Error running agent tool loop: {exc}"
         return result.strip()
 
+    # Give the tool function a deterministic, agent-derived name so the LLM can
+    # distinguish multiple agent tools. We assume agent.name values are unique.
+    safe_agent_name = (
+        "".join(ch.lower() if ch.isalnum() else "_" for ch in agent.name).strip("_") or "agent"
+    )
+    func_name = f"run_{safe_agent_name}_as_tool"
+    run_agent_as_tool.__name__ = func_name  # type: ignore[attr-defined]
+    run_agent_as_tool.__qualname__ = func_name  # type: ignore[attr-defined]
     run_agent_as_tool.__doc__ = docstring
     return run_agent_as_tool

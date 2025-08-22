@@ -174,7 +174,7 @@ container-build:
 container-stop:
     podman stop computron_virtual_computer
 
-container-run:
+container-start:
     #!/usr/bin/env bash
     set -euo pipefail
     # Extract only the virtual_computer.home_dir value
@@ -189,4 +189,15 @@ container-run:
       -v "${home_dir}:/home/computron:rw,z" \
       computron_9000:latest sleep infinity
     echo "Container 'computron_virtual_computer' started in background and ready for exec commands."
+
+container-shell:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if podman container exists computron_virtual_computer; then
+        echo "Opening shell in running container computron_virtual_computer"
+        podman exec -it computron_virtual_computer bash
+    else
+        echo "Container 'computron_virtual_computer' is not running. Start it with: just container-start" >&2
+        exit 1
+    fi
 
