@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from tools.virtual_computer.ops import (
+from tools.virtual_computer.file_ops import (
     write_file,
     append_to_file,
     make_dirs,

@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 from typing import cast
 
-from tools.virtual_computer.ops import read_file_directory
+from tools.virtual_computer.file_ops import read_file_directory
 from tools.virtual_computer.models import ReadFileError, FileReadResult, DirectoryReadResult
 
 class DummyConfig:

@@ -11,6 +11,17 @@ Tests may still import internal modules directly if they need to patch
 internals, but production code should rely on these exports.
 """
 
+from .file_ops import (
+    append_to_file,
+    copy_path,
+    make_dirs,
+    move_path,
+    path_exists,
+    read_file_directory,
+    remove_path,
+    write_file,
+    write_files,
+)
 from .models import (
     ApplyPatchResult,
     DirectoryReadResult,
@@ -24,17 +35,6 @@ from .models import (
     RemovePathResult,
     TextPatch,
     WriteFileResult,
-)
-from .ops import (
-    append_to_file,
-    copy_path,
-    make_dirs,
-    move_path,
-    path_exists,
-    read_file_directory,
-    remove_path,
-    write_file,
-    write_files,
 )
 from .patching import (
     apply_text_patch,

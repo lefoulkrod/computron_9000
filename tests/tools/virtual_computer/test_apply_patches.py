@@ -10,7 +10,7 @@ from tools.virtual_computer.patching import (
     apply_unified_diff,
 )
 from tools.virtual_computer.models import TextPatch, WriteFileResult
-from tools.virtual_computer.ops import write_file
+from tools.virtual_computer.file_ops import write_file
 
 
 class DummyConfig:
