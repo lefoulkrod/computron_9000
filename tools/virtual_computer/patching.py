@@ -11,7 +11,27 @@ logger = logging.getLogger(__name__)
 
 
 def apply_text_patch(path: str, patches: list[TextPatch]) -> ApplyPatchResult:
-    """Apply structured patches (line or substring) to a text file."""
+    """Apply structured text patches to a file.
+
+    Supports two patch modes as defined by ``TextPatch``:
+    - "lines": Replace a range of lines with new content.
+    - "substring": Replace the first occurrence of a substring with another.
+
+    Args:
+        path: Path to the target text file (relative or absolute under the
+            virtual computer home directory).
+        patches: Ordered list of ``TextPatch`` items to apply.
+
+    Returns:
+        ApplyPatchResult: Result indicating success, relative ``file_path``,
+        and a unified ``diff`` string of the changes when applicable. On
+        failure, ``error`` contains a brief message.
+
+    Notes:
+        This function writes changes only when a difference is produced. Errors
+        such as invalid ranges or missing substrings are reported in the result
+        rather than raised.
+    """
     try:
         abs_path, _home, rel = resolve_under_home(path)
         if not abs_path.exists() or not abs_path.is_file():
@@ -67,7 +87,20 @@ def apply_text_patch(path: str, patches: list[TextPatch]) -> ApplyPatchResult:
 
 
 def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
-    """Apply unified diff patches for existing text files."""
+    """Apply unified diff patches to existing text files.
+
+    The given ``patch_text`` may contain hunks for one or more files. File
+    creation and deletion are not supported; attempts to patch non-existent
+    files yield error results for those entries.
+
+    Args:
+        patch_text: Unified diff text covering one or multiple files.
+
+    Returns:
+        list[ApplyPatchResult]: One result per file encountered in the diff,
+        reporting success and an optional unified diff of the applied changes,
+        or an ``error`` message.
+    """
     results: list[ApplyPatchResult] = []
     lines = patch_text.splitlines(keepends=False)
     idx = 0
@@ -186,7 +219,22 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
 def _apply_hunks(
     original: list[str], hunks: list[tuple[int, int, int, int, list[str]]]
 ) -> list[str]:
-    """Apply parsed hunks to original lines, returning new lines."""
+    """Apply parsed hunks to an original list of lines.
+
+    Args:
+        original: The original file content as a list of lines (with newlines).
+        hunks: Parsed hunk tuples of the form ``(old_start, old_count,
+            new_start, new_count, hunk_body)`` where ``hunk_body`` contains
+            lines prefixed with one of ``' '`` (context), ``'-'`` (removal), or
+            ``'+'`` (addition).
+
+    Returns:
+        list[str]: The patched file content as a list of lines.
+
+    Raises:
+        ValueError: If a hunk cannot be applied due to invalid ranges or
+            mismatched context.
+    """
     result: list[str] = []
     orig_pos = 0
     for old_start, _old_count, _new_start, _new_count, body in hunks:
