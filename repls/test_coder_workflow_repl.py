@@ -26,8 +26,8 @@ from pydantic import BaseModel, ValidationError
 
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
-from agents.ollama.coder.system_design_models import SystemDesign
 from agents.ollama.coder.system_designer_agent import system_designer_agent_tool
+from agents.ollama.coder.system_designer_agent.models import SystemDesign
 from agents.ollama.coder.test_executor_agent import test_executor_agent_tool
 from agents.ollama.coder.test_planner_agent import test_planner_agent_tool
 from agents.ollama.coder.verifier_agent import verifier_agent_tool
@@ -176,10 +176,7 @@ async def _run_designer(user_prompt: str) -> None:
 
 
 async def _run_planner(user_prompt: str) -> None:
-    plan_prompt = (
-        "Create an implementation plan for the software assignment "
-        f'"{user_prompt}". Return only the strict JSON array of steps as specified.'
-    )
+    plan_prompt = f"You are given a software assignment and an architectural design:{user_prompt}"
     await _invoke_agent(plan_prompt, planner_agent_tool, "Planner")
 
 

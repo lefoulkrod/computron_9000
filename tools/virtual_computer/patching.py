@@ -1,7 +1,5 @@
 """Text patch application utilities (structured + unified diff)."""
 
-from __future__ import annotations
-
 import difflib
 import logging
 
