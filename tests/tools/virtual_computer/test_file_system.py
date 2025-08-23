@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from tools.virtual_computer.ops import write_file
+from tools.virtual_computer.file_ops import write_file
 
 class DummyConfig:
     class VirtualComputer:

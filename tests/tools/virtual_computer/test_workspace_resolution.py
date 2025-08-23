@@ -7,7 +7,7 @@ import tempfile
 import pytest
 
 from tools.virtual_computer.workspace import set_workspace_folder
-from tools.virtual_computer.ops import write_file, path_exists
+from tools.virtual_computer.file_ops import write_file, path_exists
 
 
 class DummyVC:
