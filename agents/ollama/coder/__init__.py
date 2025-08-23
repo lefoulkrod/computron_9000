@@ -1,4 +1,8 @@
-# __init__.py for coder agent module
+"""Coder package namespace.
 
+Exports are intentionally empty; subpackages expose their own public APIs.
+"""
 
-__all__ = []
+from __future__ import annotations
+
+__all__: list[str] = []

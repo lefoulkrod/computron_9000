@@ -1,6 +1,6 @@
 """Workflow orchestration for the coder agent system.
 
-Coordinates requirements/design, strict planning, coding, verification, and review.
+Coordinates design, planning, and step-wise coding execution.
 """
 
 import json
@@ -11,39 +11,15 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from agents.ollama.coder.coder_agent import coder_agent_tool
-from agents.ollama.coder.models import (
-    PlanStep,
-    QATestPlan,
-    VerificationReport,
-    VerifierDecision,
-)
 from agents.ollama.coder.planner_agent import planner_agent_tool
-from agents.ollama.coder.system_design_models import SystemDesign
+from agents.ollama.coder.planner_agent.models import PlanStep
 from agents.ollama.coder.system_designer_agent import system_designer_agent_tool
-from agents.ollama.coder.test_executor_agent import test_executor_agent_tool
-from agents.ollama.coder.test_planner_agent import test_planner_agent_tool
-from agents.ollama.coder.verifier_agent import verifier_agent_tool
+from agents.ollama.coder.system_designer_agent.models import SystemDesign
 from config import load_config
 from tools.virtual_computer import write_file
 from tools.virtual_computer.workspace import set_workspace_folder
 
 logger = logging.getLogger(__name__)
-
-
-def _augment_instructions_on_failure(current: str | None, notes: str) -> str:
-    """Append failure guidance (e.g., from failed verification) to instructions.
-
-    Args:
-        current: Existing instructions text.
-        notes: Guidance to append detailing fixes required.
-
-    Returns:
-        Updated instructions string.
-    """
-    base = "" if current is None else str(current)
-    guidance = notes.strip()
-    joiner = "\n\n" if base else ""
-    return f"{base}{joiner}Fix guidance: {guidance}"
 
 
 class CoderWorkflowAgentError(Exception):
@@ -111,103 +87,9 @@ async def workflow(prompt: str) -> AsyncGenerator[StepYield, None]:
         plan_pretty = raw_plan
     _ = write_file("PLAN.json", plan_pretty)
 
-    # 2. Loop through steps:
-    #    coder executes -> test planner generates plan -> test executor runs commands
-    #    -> gating verifier decides
-    idx = 0
-    while idx < len(plan_steps):
-        step = plan_steps[idx]
-        try:
-            # Coder agent executes the plan instructions (tests-first then impl)
-            step_input = f"Step {step}"
-            step_result_msg = await coder_agent_tool(step_input)
-            # Test planner produces test plan
-            plan_prompt_payload = json.dumps(
-                {"assignment": step.instructions, "coder_output": step_result_msg}
-            )
-            tp_response = await test_planner_agent_tool(plan_prompt_payload)
-            logger.debug("Test planner response: %s", tp_response)
-            tp_plan: QATestPlan | None = None
-            tp_plan_dict: dict[str, Any] | None = None
-            try:
-                tp_plan_dict = json.loads(tp_response)
-                tp_plan = QATestPlan.model_validate(tp_plan_dict)
-            except Exception:
-                logger.exception("Test planner did not return valid JSON plan")
-                tp_plan = None
-
-            # Commands for test executor
-            if tp_plan and tp_plan.commands:
-                exec_commands = [c.model_dump() for c in tp_plan.commands]
-            else:
-                exec_commands = [c.model_dump() for c in step.commands]
-
-            exec_prompt = json.dumps({"commands": exec_commands})
-            exec_response = await test_executor_agent_tool(exec_prompt)
-            logger.debug("Test executor response: %s", exec_response)
-            execution_dict: dict[str, Any] | None = None
-            execution: VerificationReport | None = None
-            try:
-                execution_dict = json.loads(exec_response)
-                execution = VerificationReport.model_validate(execution_dict)
-            except Exception:
-                logger.exception("Failed to parse test executor JSON")
-                execution = None
-
-            # Gating verifier decision
-            gate_payload = json.dumps(
-                {
-                    "assignment": step.instructions,
-                    "coder_output": step_result_msg,
-                    "test_plan": tp_plan_dict,
-                    "execution_report": execution_dict,
-                }
-            )
-            gate_response = await verifier_agent_tool(gate_payload)
-            logger.debug("Gating verifier response: %s", gate_response)
-            decision: VerifierDecision | None = None
-            try:
-                decision = VerifierDecision.model_validate(json.loads(gate_response))
-            except Exception:
-                logger.exception("Verifier did not return valid decision JSON")
-                decision = None
-
-            accepted = bool(decision and decision.accepted and execution and execution.success)
-            if accepted:
-                idx += 1
-                completed = True
-            else:
-                guidance = "Step failed verification; improve implementation/tests."
-                if decision and decision.fixes:
-                    guidance = "\n".join(decision.fixes)
-                plan_steps[idx].instructions = _augment_instructions_on_failure(
-                    plan_steps[idx].instructions, guidance
-                )
-                completed = False
-
-            # Persist artifacts for this step
-            artifacts: list[str] = []
-            # Save verification report
-            if execution_dict is not None:
-                er_path = f"TEST_EXEC_REPORT_{step.id}.json"
-                _ = write_file(er_path, json.dumps(execution_dict, indent=2))
-                artifacts.append(er_path)
-            if tp_plan_dict is not None:
-                tp_path = f"TEST_PLAN_{step.id}.json"
-                _ = write_file(tp_path, json.dumps(tp_plan_dict, indent=2))
-                artifacts.append(tp_path)
-
-            yield {
-                "step_id": step.id,
-                "title": step.title,
-                "completed": completed,
-                "result": step_result_msg,
-                "verification": execution_dict,
-            }
-        except Exception as exc:
-            logger.exception("Coder agent failed on step: %s", step.id)
-            msg = f"Failed on step: {step.id}"
-            raise CoderWorkflowAgentError(msg) from exc
+    # 2. Execute the plan steps using the coder agent only
+    async for item in _execute_steps_with_coder(plan_steps):
+        yield item
 
 
 async def _run_system_designer_agent(task_prompt: str) -> SystemDesign:
@@ -282,3 +164,99 @@ async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[Pla
         logger.exception(msg)
         raise CoderWorkflowAgentError(msg) from exc
     return plan_steps, raw_plan
+
+
+def _collect_step_dependencies(
+    *, steps_by_id: dict[str, PlanStep], start: PlanStep
+) -> list[PlanStep]:
+    """Collect transitive dependencies for a step.
+
+    Performs a DFS over ``depends_on`` to gather all reachable dependency steps,
+    preserving a stable order by first-seen during traversal. Cycles are
+    guarded against via a visited set.
+
+    Args:
+        steps_by_id: Mapping of step id to ``PlanStep``.
+        start: The step whose dependencies to collect.
+
+    Returns:
+        A list of dependency steps. Missing ids are ignored but logged.
+    """
+    ordered: list[PlanStep] = []
+    visited: set[str] = set()
+
+    def dfs(step_id: str) -> None:
+        if step_id in visited:
+            return
+        visited.add(step_id)
+        dep = steps_by_id.get(step_id)
+        if dep is None:
+            logger.warning("Unknown dependency step id: %s", step_id)
+            return
+        # Traverse its deps first
+        for nxt in dep.depends_on:
+            dfs(nxt)
+        ordered.append(dep)
+
+    for dep_id in start.depends_on:
+        dfs(dep_id)
+    return ordered
+
+
+async def _run_coder_agent(step: PlanStep, *, dependencies: list[PlanStep]) -> str:
+    """Run the coder agent for a single plan step.
+
+    Args:
+        step: The plan step to implement.
+        dependencies: Other steps this step depends on (transitive closure),
+            ordered approximately by dependency depth.
+
+    Returns:
+        The coder agent's textual result/output for the step.
+
+    Raises:
+        CoderWorkflowAgentError: If the coder agent call fails.
+    """
+    # Provide a clear, structured prompt to the coder agent about the current step
+    step_payload = {
+        "step": step.model_dump(),
+        "dependencies": [d.model_dump() for d in dependencies],
+    }
+    try:
+        # Send as formatted JSON string to preserve structure
+        return await coder_agent_tool(json.dumps(step_payload))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Coder agent call failed for step: %s", step.id)
+        msg = f"Coder agent call failed for step: {step.id}"
+        raise CoderWorkflowAgentError(msg) from exc
+
+
+async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[StepYield, None]:
+    """Iterate through plan steps and execute each with the coder agent.
+
+    Args:
+        steps: Ordered list of plan steps to implement.
+
+    Yields:
+        StepYield dictionaries containing per-step results.
+
+    Notes:
+        This function intentionally excludes any tester or verifier agents. Each
+        step is executed directly via the coder agent.
+    """
+    steps_by_id: dict[str, PlanStep] = {s.id: s for s in steps}
+    for step in steps:
+        try:
+            deps = _collect_step_dependencies(steps_by_id=steps_by_id, start=step)
+            step_result_msg = await _run_coder_agent(step, dependencies=deps)
+            yield {
+                "step_id": step.id,
+                "title": step.title,
+                "completed": True,
+                "result": step_result_msg,
+                "verification": None,
+            }
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("Coder agent failed on step: %s", step.id)
+            msg = f"Failed on step: {step.id}"
+            raise CoderWorkflowAgentError(msg) from exc
