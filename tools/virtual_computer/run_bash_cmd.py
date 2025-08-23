@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 class RunBashCmdError(Exception):
-    """Custom exception for errors during bash command execution in container.
+    """Error raised when a bash command execution fails in the container.
 
     Args:
-        message (str): Error message describing the failure.
+        message: Error message describing the failure.
     """
 
     def __init__(self, message: str) -> None:
@@ -42,9 +42,9 @@ class BashCmdResult(BaseModel):
     """Validated result for a bash command executed in a container.
 
     Attributes:
-        stdout (str | None): Standard output from the command.
-        stderr (str | None): Standard error from the command.
-        exit_code (int | None): Exit code from the command execution.
+    stdout: Standard output from the command.
+    stderr: Standard error from the command.
+    exit_code: Exit code from the command execution.
     """
 
     stdout: str | None
@@ -88,10 +88,17 @@ _DENY_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 
 def _is_allowed_command(cmd: str) -> bool:
-    """Return True if the command is allowed by policy.
+    """Check if a command is permitted by execution policy.
 
     Conservative rule: block only when a deny pattern matches; otherwise allow.
-    This avoids breaking legitimate multi-line or compound shell commands used in tests.
+    This avoids breaking legitimate multi-line or compound shell commands used
+    in tests.
+
+    Args:
+        cmd: The command string to evaluate.
+
+    Returns:
+        bool: True if allowed; False if a deny pattern matches or empty input.
     """
     lowered = cmd.strip()
     if not lowered:
@@ -100,7 +107,15 @@ def _is_allowed_command(cmd: str) -> bool:
 
 
 def _timeout_for(cmd: str) -> float:
-    """Compute timeout override based on command content."""
+    """Compute a timeout based on the command content.
+
+    Args:
+        cmd: The command string to evaluate.
+
+    Returns:
+        float: Timeout in seconds. Uses command-specific overrides for common
+        long-running operations; otherwise defaults to ``BASH_CMD_TIMEOUT``.
+    """
     text = cmd.strip()
     if "pip install" in text or "-m venv" in text:
         return 180.0
@@ -112,16 +127,16 @@ def _timeout_for(cmd: str) -> float:
 async def run_bash_cmd(cmd: str) -> BashCmdResult:
     """Execute a bash command in the virtual computer.
 
-    Execute a bash command in the virtual computer.
+    Enforces deny patterns, strict bash flags, and per-command timeouts.
 
     Args:
-        cmd (str): The bash command to execute.
+        cmd: The bash command to execute.
 
     Returns:
-        BashCmdResult: Bash cmd result object containing stdout, stderr, and exit_code.
+        BashCmdResult: Object containing ``stdout``, ``stderr``, and ``exit_code``.
 
     Raises:
-        RunBashCmdError: If execution fails or timeout occurs.
+        RunBashCmdError: If execution fails or a timeout occurs.
     """
 
     def _raise_container_not_found(container_name: str) -> None:

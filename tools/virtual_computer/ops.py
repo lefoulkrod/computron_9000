@@ -26,7 +26,27 @@ logger = logging.getLogger(__name__)
 
 
 def write_file(path: str, content: str | bytes) -> WriteFileResult:
-    """Write content under the workspace, overwriting if it exists."""
+    """Write a file within the virtual computer home directory.
+
+    Overwrites the file if it already exists. Creates parent directories as
+    needed.
+
+    Args:
+        path: Relative or absolute path under the configured home directory.
+            The returned path in the result is normalized to be relative to the
+            home directory.
+        content: The content to write. If a string is provided, it is written
+            using UTF-8 encoding. If bytes are provided, they are written as-is.
+
+    Returns:
+        WriteFileResult: Result object indicating success or failure. On
+        success, ``file_path`` contains the relative path written. On failure,
+        ``error`` contains a message.
+
+    Notes:
+        This function does not raise on I/O errors; failures are reported in
+        the returned ``WriteFileResult``.
+    """
     file_path: Path | None = None
     rel_return_path: str = ""
     try:
@@ -55,7 +75,16 @@ def write_file(path: str, content: str | bytes) -> WriteFileResult:
 
 
 def make_dirs(path: str) -> MakeDirsResult:
-    """Create directories (parents ok)."""
+    """Create a directory (and any missing parents) under the home directory.
+
+    Args:
+        path: Relative or absolute directory path under the configured home
+            directory to create.
+
+    Returns:
+        MakeDirsResult: Result object with ``success`` and the created
+        directory path (relative to home). ``error`` is set on failure.
+    """
     try:
         abs_path, _home, rel = resolve_under_home(path)
         abs_path.mkdir(parents=True, exist_ok=True)
@@ -67,7 +96,16 @@ def make_dirs(path: str) -> MakeDirsResult:
 
 
 def remove_path(path: str) -> RemovePathResult:
-    """Remove a file or directory recursively if present."""
+    """Remove a file or directory recursively if present.
+
+    Args:
+        path: Relative or absolute path (under the home directory) to remove.
+
+    Returns:
+        RemovePathResult: Result object indicating success or failure. On
+        success, ``path`` is the relative path removed (or that did not exist).
+        On failure, ``error`` contains a message.
+    """
     try:
         abs_path, _home, rel = resolve_under_home(path)
         if not abs_path.exists():
@@ -86,7 +124,16 @@ def remove_path(path: str) -> RemovePathResult:
 
 
 def move_path(src: str, dst: str) -> MoveCopyResult:
-    """Move a file or directory, creating destination parents."""
+    """Move a file or directory, creating destination parents as needed.
+
+    Args:
+        src: Source path (relative or absolute under the home directory).
+        dst: Destination path (relative or absolute under the home directory).
+
+    Returns:
+        MoveCopyResult: Result object indicating success or failure. Paths in
+        the result are normalized to be relative to the home directory.
+    """
     try:
         src_abs, _home, src_rel = resolve_under_home(src)
         dst_abs, _home2, dst_rel = resolve_under_home(dst)
@@ -101,7 +148,19 @@ def move_path(src: str, dst: str) -> MoveCopyResult:
 
 
 def copy_path(src: str, dst: str) -> MoveCopyResult:
-    """Copy a file or directory (dirs merged)."""
+    """Copy a file or directory.
+
+    If copying a directory, existing destination contents are merged (similar
+    to ``cp -r`` with existing dirs allowed).
+
+    Args:
+        src: Source path (relative or absolute under the home directory).
+        dst: Destination path (relative or absolute under the home directory).
+
+    Returns:
+        MoveCopyResult: Result object indicating success or failure. Paths in
+        the result are normalized to be relative to the home directory.
+    """
     try:
         src_abs, _home, src_rel = resolve_under_home(src)
         dst_abs, _home2, dst_rel = resolve_under_home(dst)
@@ -119,7 +178,22 @@ def copy_path(src: str, dst: str) -> MoveCopyResult:
 
 
 def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
-    """Append content to a file, creating it and parents if missing."""
+    """Append content to a file, creating the file and parents if needed.
+
+    Args:
+        path: Relative or absolute path under the home directory.
+        content: The content to append. If a string is provided, it is written
+            using UTF-8 encoding. If bytes are provided, they are written as-is.
+
+    Returns:
+        WriteFileResult: Result object indicating success or failure. On
+        success, ``file_path`` contains the relative path written. On failure,
+        ``error`` contains a message.
+
+    Notes:
+        This function does not raise on I/O errors; failures are reported in
+        the returned ``WriteFileResult``.
+    """
     file_path: Path | None = None
     rel_return_path: str = ""
     try:
@@ -148,7 +222,18 @@ def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
 
 
 def write_files(files: list[tuple[str, str | bytes]]) -> list[WriteFileResult]:
-    """Batch write multiple files."""
+    """Write multiple files in a batch.
+
+    Each item is processed independently using ``write_file``.
+
+    Args:
+        files: A list of ``(path, content)`` tuples. ``content`` may be ``str``
+            (written as UTF-8) or ``bytes``.
+
+    Returns:
+        list[WriteFileResult]: A list of results in the same order as inputs.
+        Examine individual items for success or error details.
+    """
     results: list[WriteFileResult] = []
     for path, content in files:
         results.append(write_file(path, content))
@@ -156,7 +241,15 @@ def write_files(files: list[tuple[str, str | bytes]]) -> list[WriteFileResult]:
 
 
 def path_exists(path: str) -> PathExistsResult:
-    """Return existence and type info for a path."""
+    """Check whether a path exists and whether it is a file or directory.
+
+    Args:
+        path: Relative or absolute path (under the home directory) to check.
+
+    Returns:
+        PathExistsResult: Result object containing ``exists``, ``is_file``,
+        ``is_dir``, and the normalized relative ``path``.
+    """
     try:
         abs_path, _home, rel = resolve_under_home(path)
         exists = abs_path.exists()
@@ -170,7 +263,23 @@ def path_exists(path: str) -> PathExistsResult:
 
 
 async def read_file_directory(path: str) -> ReadResult:
-    """Read a file (text/base64) or list a directory."""
+    """Read a file (text or base64) or list a directory.
+
+    For files, binary files are returned base64-encoded with ``encoding`` set to
+    ``"base64"``. Text files are returned decoded as UTF-8 with ``encoding`` set
+    to ``"utf-8"``. For directories, returns an entry listing.
+
+    Args:
+        path: Relative or absolute path (under the home directory) to read.
+
+    Returns:
+        ReadResult: ``FileReadResult`` for files or ``DirectoryReadResult`` for
+        directories. The ``name`` is the path relative to the home directory.
+
+    Raises:
+        ReadFileError: If the path does not exist, is not readable, or is an
+            unsupported type.
+    """
     try:
         target_path, _home, rel_return_path = resolve_under_home(path)
         if not target_path.exists():

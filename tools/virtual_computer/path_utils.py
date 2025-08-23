@@ -11,16 +11,21 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_under_home(path: str) -> tuple[Path, Path, str]:
-    """Resolve a relative/absolute path inside the virtual computer home.
+    """Resolve a path within the virtual computer home directory.
+
+    Handles absolute, relative, and container-working-dir-prefixed inputs,
+    clamps traversal, and prefixes the active workspace when set.
 
     Args:
-        path: Input path provided by caller; may be absolute, relative, or
-            include the container working directory prefix.
+        path: Input path. May be absolute, relative, or include the container
+            working directory prefix.
 
     Returns:
-        Tuple of (absolute_path, home_dir, relative_path_string) where
-        relative_path_string is the path relative to the virtual computer
-        home (optionally including the active workspace prefix).
+        tuple[Path, Path, str]: ``(abs_path, home_dir, rel_return_path)`` where
+        ``abs_path`` is the absolute resolved path; ``home_dir`` is the
+        absolute home directory root; and ``rel_return_path`` is the path
+        relative to the home directory (including the active workspace prefix
+        if present).
     """
     # Local import so tests patching config.load_config see effect without needing
     # to reload this module; keeps backward-compatible monkeypatch behavior.
