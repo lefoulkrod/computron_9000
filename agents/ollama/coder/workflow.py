@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, TypedDict
 
+from agents.ollama.coder.code_review_agent import code_review_agent_tool
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
@@ -241,22 +242,60 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
         StepYield dictionaries containing per-step results.
 
     Notes:
-        This function intentionally excludes any tester or verifier agents. Each
-        step is executed directly via the coder agent.
+        Verification is intentionally stubbed for now; a future implementation will
+        invoke a verifier agent to gate completion. We loop and re-run the coder
+        step until verification passes.
     """
     steps_by_id: dict[str, PlanStep] = {s.id: s for s in steps}
     for step in steps:
         try:
             deps = _collect_step_dependencies(steps_by_id=steps_by_id, start=step)
-            step_result_msg = await _run_coder_agent(step, dependencies=deps)
-            yield {
-                "step_id": step.id,
-                "title": step.title,
-                "completed": True,
-                "result": step_result_msg,
-                "verification": None,
-            }
+            attempt = 0
+            while True:
+                attempt += 1
+                logger.info("Executing step %s (attempt %s)", step.id, attempt)
+                step_result_msg = await _run_coder_agent(step, dependencies=deps)
+                verified, verification_info = await _verify_step_result(
+                    step=step, result=step_result_msg
+                )
+                if verified:
+                    logger.info("Step %s passed verification on attempt %s", step.id, attempt)
+                    yield {
+                        "step_id": step.id,
+                        "title": step.title,
+                        "completed": True,
+                        "result": step_result_msg,
+                        "verification": verification_info,
+                    }
+                    break
+                logger.warning(
+                    "Verification failed for step %s on attempt %s; retrying",
+                    step.id,
+                    attempt,
+                )
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("Coder agent failed on step: %s", step.id)
             msg = f"Failed on step: {step.id}"
             raise CoderWorkflowAgentError(msg) from exc
+
+
+async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, dict[str, Any]]:
+    """Verify a coder step's result via the code review agent.
+
+    Calls the lightweight code_review agent with the plan step and the coder output.
+    The agent returns a JSON object with "pass" and optional "fixes".
+
+    Args:
+        step: The plan step that was executed.
+        result: The textual output/result from the coder agent for this step.
+
+    Returns:
+        Tuple of (passed, details_dict). Details include the fixes list.
+    """
+    payload = {"step": step.model_dump(), "coder_output": result}
+    raw = await code_review_agent_tool(json.dumps(payload))
+    data = json.loads(raw)
+    passed = bool(data.get("pass") if "pass" in data else data.get("passed", False))
+    fixes = data.get("fixes") or []
+    details: dict[str, Any] = {"passed": passed, "fixes": fixes}
+    return passed, details

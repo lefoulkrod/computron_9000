@@ -106,3 +106,75 @@ class ApplyPatchResult(BaseModel):
     file_path: str
     diff: str | None = None
     error: str | None = None
+
+
+# --- New results for read/search/edit ops -------------------------------------------------------
+
+
+class ReadTextResult(BaseModel):
+    """Result of reading text from a file, optionally by line range.
+
+    Args:
+        success: Whether the read was successful.
+        file_path: Path relative to the virtual computer home directory.
+        content: File content or selected range as a single UTF-8 string.
+        start: Optional inclusive start line (1-based).
+        end: Optional inclusive end line (1-based).
+        total_lines: Total number of lines in the file when known.
+        error: Optional error message on failure.
+
+    Returns:
+        ReadTextResult: JSON-serializable read result.
+
+    Raises:
+        None
+    """
+
+    success: bool
+    file_path: str
+    content: str | None
+    start: int | None = None
+    end: int | None = None
+    total_lines: int | None = None
+    error: str | None = None
+
+
+class GrepMatch(BaseModel):
+    """Single grep match within a file."""
+
+    file_path: str
+    line_number: int
+    line: str
+    start_col: int
+    end_col: int
+
+
+class GrepResult(BaseModel):
+    """Result of a grep search across files in the workspace."""
+
+    success: bool
+    matches: list[GrepMatch]
+    truncated: bool = False
+    searched_files: int = 0
+    error: str | None = None
+
+
+class ReplaceInFileResult(BaseModel):
+    """Result of a replace-in-file operation."""
+
+    success: bool
+    file_path: str
+    replacements: int
+    preview: bool
+    diff_sample: str | None = None
+    error: str | None = None
+
+
+class InsertTextResult(BaseModel):
+    """Result of inserting text relative to an anchor pattern."""
+
+    success: bool
+    file_path: str
+    occurrences: int
+    where: str
+    error: str | None = None
