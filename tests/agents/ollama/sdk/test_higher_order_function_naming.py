@@ -68,3 +68,33 @@ async def test_docstring_contains_argument_description() -> None:
     assert "Doc agent description" in doc
     assert "instructions (str)" in doc
     assert "Returns:" in doc
+
+
+@pytest.mark.unit
+async def test_docstring_exact_match() -> None:
+    """Docstring should exactly match the template with provided description."""
+    agent = Agent(
+        name="ExactDocAgent",
+        description="desc",
+        instruction="Do things",
+        model="dummy-model",
+        options={},
+        tools=[],
+        think=False,
+    )
+
+    description = "Doc agent description"
+    func = make_run_agent_as_tool_function(agent=agent, tool_description=description)
+
+    expected = (
+        "\n"
+        "Doc agent description\n"
+        "\n"
+        "Args:\n"
+        "    instructions (str): The detailed instructions for the agent to follow. Including step by step plans if necessary.\n"
+        "\n"
+        "Returns:\n"
+        "    str: The result returned by the agent after processing the instructions.\n"
+    )
+
+    assert func.__doc__ == expected
