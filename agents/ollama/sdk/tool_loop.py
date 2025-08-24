@@ -15,8 +15,6 @@ class ToolLoopError(Exception):
 
 logger = logging.getLogger(__name__)
 
-# --- Utility Functions ---
-
 
 def _to_serializable(obj: Any) -> Any:
     """Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
@@ -37,6 +35,85 @@ def _to_serializable(obj: Any) -> Any:
     if isinstance(obj, list | tuple | set):
         return [_to_serializable(i) for i in obj]
     return obj
+
+
+def _validate_tool_arguments(
+    tool_func: Callable[..., Any], arguments: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate and convert tool function arguments according to type hints.
+
+    Args:
+        tool_func (Callable[..., Any]): The tool function to validate arguments for.
+        arguments (dict[str, Any]): The raw arguments from the tool call.
+
+    Returns:
+        dict[str, Any]: The validated and converted arguments.
+
+    Raises:
+        ValueError: If argument validation fails.
+        TypeError: If argument type conversion fails.
+        json.JSONDecodeError: If JSON parsing fails for Pydantic objects.
+
+    """
+    validated_args = {}
+    sig = inspect.signature(tool_func)
+
+    for arg_name, param in sig.parameters.items():
+        expected_type = param.annotation
+        value = arguments.get(arg_name, param.default)
+
+        # Skip validation if parameter has no default and is missing from arguments
+        if value is inspect.Parameter.empty:
+            msg = f"Required parameter '{arg_name}' is missing"
+            raise ValueError(msg)
+
+        if expected_type is not inspect.Parameter.empty:
+            origin = getattr(expected_type, "__origin__", None)
+            if origin is not None and origin is type(None):
+                validated_args[arg_name] = value
+            elif origin is list:
+                # Handle list[SomeModel] types
+                args = getattr(expected_type, "__args__", ())
+                if args and len(args) == 1:
+                    item_type = args[0]
+                    if hasattr(item_type, "model_validate") or hasattr(item_type, "parse_obj"):
+                        # Convert list of dicts to list of Pydantic models
+                        validated_list = []
+                        for item_value in value:
+                            parsed_item = item_value
+                            if isinstance(item_value, str):
+                                parsed_item = json.loads(item_value)
+                            if hasattr(item_type, "model_validate"):
+                                validated_list.append(item_type.model_validate(parsed_item))
+                            else:  # Fallback for older Pydantic
+                                validated_list.append(item_type.parse_obj(parsed_item))
+                        validated_args[arg_name] = validated_list
+                    else:
+                        validated_args[arg_name] = value
+                else:
+                    validated_args[arg_name] = value
+            elif hasattr(expected_type, "model_validate"):
+                if isinstance(value, str):
+                    value = json.loads(value)
+                validated_args[arg_name] = expected_type.model_validate(value)
+            elif hasattr(expected_type, "parse_obj"):  # Fallback for older Pydantic
+                if isinstance(value, str):
+                    value = json.loads(value)
+                validated_args[arg_name] = expected_type.parse_obj(value)
+            elif expected_type is str:
+                validated_args[arg_name] = str(value)
+            elif expected_type is int:
+                validated_args[arg_name] = int(value)
+            elif expected_type is float:
+                validated_args[arg_name] = float(value)
+            elif expected_type is bool:
+                validated_args[arg_name] = bool(value)
+            else:
+                validated_args[arg_name] = value
+        else:
+            validated_args[arg_name] = value
+
+    return validated_args
 
 
 async def run_tool_call_loop(
@@ -92,6 +169,7 @@ async def run_tool_call_loop(
             content = response.message.content
             thinking = response.message.thinking
             tool_calls = response.message.tool_calls
+            logger.debug("tool_calls: %s", tool_calls)
             assistant_message = {
                 "role": "assistant",
                 "content": content,
@@ -117,54 +195,20 @@ async def run_tool_call_loop(
                     logger.error("Tool '%s' not found in tools.", tool_name)
                     tool_result = {"error": "Tool not found"}
                 else:
-                    # TODO(<larry>): refactor this ugly function argument validation logic
-                    validated_args = {}
-                    sig = inspect.signature(tool_func)
-                    validation_error = None
-                    for arg_name, param in sig.parameters.items():
-                        expected_type = param.annotation
-                        value = arguments.get(arg_name, param.default)
-                        try:
-                            if expected_type is not inspect.Parameter.empty:
-                                origin = getattr(expected_type, "__origin__", None)
-                                if origin is not None and origin is type(None):
-                                    validated_args[arg_name] = value
-                                elif hasattr(expected_type, "parse_obj"):
-                                    if isinstance(value, str):
-                                        value = json.loads(value)
-                                    validated_args[arg_name] = expected_type.parse_obj(value)
-                                elif expected_type is str:
-                                    validated_args[arg_name] = str(value)
-                                elif expected_type is int:
-                                    validated_args[arg_name] = int(value)
-                                elif expected_type is float:
-                                    validated_args[arg_name] = float(value)
-                                elif expected_type is bool:
-                                    validated_args[arg_name] = bool(value)
-                                else:
-                                    validated_args[arg_name] = value
-                            else:
-                                validated_args[arg_name] = value
-                        except (ValueError, TypeError, json.JSONDecodeError) as exc:
-                            logger.exception(
-                                "Argument '%s' failed validation for tool '%s'", arg_name, tool_name
-                            )
-                            tool_result = {
-                                "error": f"Argument '{arg_name}' failed validation: {exc}"
-                            }
-                            validation_error = True
-                            break
-                    if not validation_error:
-                        try:
-                            if inspect.iscoroutinefunction(tool_func):
-                                result = await tool_func(**validated_args)
-                            else:
-                                result = tool_func(**validated_args)
-                            serializable_result = _to_serializable(result)
-                            tool_result = {"result": serializable_result}
-                        except Exception as exc:
-                            logger.exception("Error running tool '%s'", tool_name)
-                            tool_result = {"error": str(exc)}
+                    try:
+                        validated_args = _validate_tool_arguments(tool_func, arguments)
+                        if inspect.iscoroutinefunction(tool_func):
+                            result = await tool_func(**validated_args)
+                        else:
+                            result = tool_func(**validated_args)
+                        serializable_result = _to_serializable(result)
+                        tool_result = {"result": serializable_result}
+                    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                        logger.exception("Argument validation failed for tool '%s'", tool_name)
+                        tool_result = {"error": f"Argument validation failed: {exc}"}
+                    except Exception as exc:
+                        logger.exception("Error running tool '%s'", tool_name)
+                        tool_result = {"error": str(exc)}
                 tool_message = {
                     "role": "tool",
                     "tool_name": tool_name,

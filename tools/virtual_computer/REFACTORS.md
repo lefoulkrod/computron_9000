@@ -84,8 +84,6 @@ Bash command policy
 ## Search improvements
 
 Defaults and options
-- Add default excludes behind a flag: e.g., `.git/**`, `node_modules/**`, `__pycache__/**`, `*.lock`.
-  - API: `use_default_excludes: bool = True` with `exclude_globs` merged.
 - Add `max_file_bytes: int | None` to skip excessively large files.
 - Add `grep_context(pattern, before=0, after=0, ...)` variant returning context lines.
 
