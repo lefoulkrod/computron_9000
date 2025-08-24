@@ -5,22 +5,24 @@ import logging
 
 from ._fs_internal import read_text_lines, write_text_lines
 from ._path_utils import resolve_under_home
-from .models import ApplyPatchResult, TextPatch
+from .models import ApplyPatchResult
 
 logger = logging.getLogger(__name__)
 
 
-def apply_text_patch(path: str, patches: list[TextPatch]) -> ApplyPatchResult:
-    """Apply structured text patches to a file.
+def apply_text_patch(
+    path: str, start_line: int, end_line: int, replacement: str
+) -> ApplyPatchResult:
+    """Apply a single line-based text patch to a file.
 
-    Supports two patch modes as defined by ``TextPatch``:
-    - "lines": Replace a range of lines with new content.
-    - "substring": Replace the first occurrence of a substring with another.
+    Replaces a range of lines with new content.
 
     Args:
         path: Path to the target text file (relative or absolute under the
             virtual computer home directory).
-        patches: Ordered list of ``TextPatch`` items to apply.
+        start_line: Starting line number (1-based, inclusive).
+        end_line: Ending line number (1-based, inclusive).
+        replacement: New text content to replace the specified line range.
 
     Returns:
         ApplyPatchResult: Result indicating success, relative ``file_path``,
@@ -29,47 +31,28 @@ def apply_text_patch(path: str, patches: list[TextPatch]) -> ApplyPatchResult:
 
     Notes:
         This function writes changes only when a difference is produced. Errors
-        such as invalid ranges or missing substrings are reported in the result
-        rather than raised.
+        such as invalid ranges are reported in the result rather than raised.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
         if not abs_path.exists() or not abs_path.is_file():
             return ApplyPatchResult(success=False, file_path=rel, error="File does not exist")
+
         before_lines = read_text_lines(abs_path)
         after_lines = before_lines.copy()
-        for p in patches:
-            if p.mode() == "lines":
-                if p.start_line is None or p.end_line is None:
-                    return ApplyPatchResult(
-                        success=False,
-                        file_path=rel,
-                        error="start_line/end_line required",
-                    )
-                if p.start_line < 1 or p.end_line < p.start_line or p.end_line > len(after_lines):
-                    return ApplyPatchResult(
-                        success=False,
-                        file_path=rel,
-                        error="Invalid line range",
-                    )
-                new_segment = p.replacement.splitlines(keepends=True)
-                after_lines[p.start_line - 1 : p.end_line] = new_segment
-            else:
-                if p.original is None:
-                    return ApplyPatchResult(
-                        success=False,
-                        file_path=rel,
-                        error="original required for substring mode",
-                    )
-                joined = "".join(after_lines)
-                if p.original not in joined:
-                    return ApplyPatchResult(
-                        success=False, file_path=rel, error="original substring not found"
-                    )
-                joined = joined.replace(p.original, p.replacement, 1)
-                after_lines = [joined]
+
+        if start_line < 1 or end_line < start_line or end_line > len(after_lines):
+            return ApplyPatchResult(
+                success=False,
+                file_path=rel,
+                error="Invalid line range",
+            )
+        new_segment = replacement.splitlines(keepends=True)
+        after_lines[start_line - 1 : end_line] = new_segment
+
         if after_lines == before_lines:
             return ApplyPatchResult(success=True, file_path=rel, diff="")
+
         diff_text = "".join(
             difflib.unified_diff(
                 before_lines,

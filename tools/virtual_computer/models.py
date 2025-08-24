@@ -156,29 +156,17 @@ ReadResult = FileReadResult | DirectoryReadResult
 
 
 class TextPatch(BaseModel):
-    """Represents a text patch operation for file editing.
+    """Represents a line-based text patch operation for file editing.
 
     Attributes:
-        start_line: Starting line number for line-based patches (1-based).
-        end_line: Ending line number for line-based patches (1-based).
-        original: Original text content for substring-based patches.
-        replacement: New text content to replace with.
+        start_line: Starting line number (1-based).
+        end_line: Ending line number (1-based).
+        replacement: New text content to replace the specified line range.
     """
 
-    start_line: int | None = None
-    end_line: int | None = None
-    original: str | None = None
+    start_line: int
+    end_line: int
     replacement: str
-
-    def mode(self) -> str:  # pragma: no cover - trivial
-        """Return patch mode.
-
-        Returns:
-            Either "lines" for line-based patches or "substring" for text-based patches.
-        """
-        if self.start_line is not None or self.end_line is not None:
-            return "lines"
-        return "substring"
 
 
 class ApplyPatchResult(BaseModel):

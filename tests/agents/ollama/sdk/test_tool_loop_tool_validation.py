@@ -5,7 +5,7 @@ import pytest
 from pydantic import BaseModel
 
 from agents.ollama.sdk.tool_loop import _validate_tool_arguments
-from tools.virtual_computer.models import TextPatch, ApplyPatchResult
+from tools.virtual_computer.models import ApplyPatchResult
 
 
 class PydanticTestModel(BaseModel):
@@ -252,50 +252,31 @@ def test_validate_tool_arguments_apply_text_patch_example():
     """
     Test argument validation with the apply_text_patch tool function.
     
-    This simulates a tool call for apply_text_patch with TextPatch objects,
-    testing Pydantic model validation for complex nested structures.
+    This simulates a tool call for apply_text_patch with individual arguments,
+    testing basic type validation.
     """
-    def apply_text_patch(path: str, patches: list[TextPatch]) -> ApplyPatchResult:
-        """Apply structured text patches to a file."""
+    def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
+        """Apply line-based text patches to a file."""
         return ApplyPatchResult(success=True, file_path=path, diff="")
     
-    # Simulate a tool call with nested Pydantic models
+    # Simulate a tool call with individual arguments
     arguments = {
         "path": "src/main.py",
-        "patches": [
-            {
-                "start_line": 5,
-                "end_line": 7,
-                "replacement": "def new_function():\n    return 'updated'\n"
-            },
-            {
-                "original": "old_text",
-                "replacement": "new_text"
-            }
-        ]
+        "start_line": 5,
+        "end_line": 7,
+        "replacement": "def new_function():\n    return 'updated'\n"
     }
     
     result = _validate_tool_arguments(apply_text_patch, arguments)
     
     assert result["path"] == "src/main.py"
     assert isinstance(result["path"], str)
-    assert isinstance(result["patches"], list)
-    assert len(result["patches"]) == 2
-    
-    # First patch should be a TextPatch with line-based mode
-    patch1 = result["patches"][0]
-    assert isinstance(patch1, TextPatch)
-    assert patch1.start_line == 5
-    assert patch1.end_line == 7
-    assert patch1.replacement == "def new_function():\n    return 'updated'\n"
-    assert patch1.mode() == "lines"
-    
-    # Second patch should be a TextPatch with substring mode
-    patch2 = result["patches"][1]
-    assert isinstance(patch2, TextPatch)
-    assert patch2.original == "old_text"
-    assert patch2.replacement == "new_text"
-    assert patch2.mode() == "substring"
+    assert result["start_line"] == 5
+    assert isinstance(result["start_line"], int)
+    assert result["end_line"] == 7
+    assert isinstance(result["end_line"], int)
+    assert result["replacement"] == "def new_function():\n    return 'updated'\n"
+    assert isinstance(result["replacement"], str)
 
 
 @pytest.mark.unit

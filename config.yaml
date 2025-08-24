@@ -29,6 +29,7 @@ models:
     think: true
     options:
       num_ctx: 128000
+      reasoning_effort: medium
   - name: vision
     model: qwen2.5vl:32b
     options:
