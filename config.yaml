@@ -18,8 +18,7 @@ models:
     model: gpt-oss:120b
     think: false
     options:
-      num_ctx: 73728
-      temperature: 0.1
+      num_ctx: 128000
   - name: coder_architect
     model: gpt-oss:120b
     think: true

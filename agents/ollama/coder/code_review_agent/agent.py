@@ -19,7 +19,16 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_model_by_name
-from tools.virtual_computer import exists, head, is_dir, is_file, read_file, run_bash_cmd, tail
+from tools.virtual_computer import (
+    exists,
+    grep,
+    head,
+    is_dir,
+    is_file,
+    read_file,
+    run_bash_cmd,
+    tail,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +96,7 @@ code_review_agent = Agent(
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[run_bash_cmd, exists, is_dir, is_file, read_file, head, tail],
+    tools=[run_bash_cmd, exists, is_dir, is_file, read_file, head, tail, grep],
     think=model.think,
 )
 
