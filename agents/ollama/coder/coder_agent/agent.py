@@ -14,6 +14,7 @@ from tools.virtual_computer import (
     apply_text_patch,
     copy_path,
     exists,
+    grep,
     head,
     make_dirs,
     move_path,
@@ -121,6 +122,7 @@ Output:
         read_file,
         head,
         tail,
+        grep,
     ],
     think=model.think,
 )
