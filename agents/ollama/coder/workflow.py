@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from agents.ollama.coder.code_review_agent import code_review_agent_tool
+from agents.ollama.coder.code_review_agent.models import CodeReviewResult
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
@@ -204,13 +205,17 @@ def _collect_step_dependencies(
     return ordered
 
 
-async def _run_coder_agent(step: PlanStep, *, dependencies: list[PlanStep]) -> str:
+async def _run_coder_agent(
+    step: PlanStep, *, dependencies: list[PlanStep], fixes: list[str] | None = None
+) -> str:
     """Run the coder agent for a single plan step.
 
     Args:
         step: The plan step to implement.
         dependencies: Other steps this step depends on (transitive closure),
             ordered approximately by dependency depth.
+        fixes: Optional reviewer-required changes from a failed verification,
+            to be applied on this retry attempt.
 
     Returns:
         The coder agent's textual result/output for the step.
@@ -219,10 +224,13 @@ async def _run_coder_agent(step: PlanStep, *, dependencies: list[PlanStep]) -> s
         CoderWorkflowAgentError: If the coder agent call fails.
     """
     # Provide a clear, structured prompt to the coder agent about the current step
-    step_payload = {
+    step_payload: dict[str, Any] = {
         "step": step.model_dump(),
         "dependencies": [d.model_dump() for d in dependencies],
     }
+    if fixes:
+        # Provide reviewer-required fixes to guide the retry implementation.
+        step_payload["fixes"] = fixes
     try:
         # Send as formatted JSON string to preserve structure
         return await coder_agent_tool(json.dumps(step_payload))
@@ -242,30 +250,30 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
         StepYield dictionaries containing per-step results.
 
     Notes:
-        Verification is intentionally stubbed for now; a future implementation will
-        invoke a verifier agent to gate completion. We loop and re-run the coder
-        step until verification passes.
+        We loop and re-run the coder step until verification passes. When verification
+        fails, its required changes ("fixes") are passed into the next retry.
     """
     steps_by_id: dict[str, PlanStep] = {s.id: s for s in steps}
     for step in steps:
         try:
             deps = _collect_step_dependencies(steps_by_id=steps_by_id, start=step)
             attempt = 0
+            fixes_for_retry: list[str] | None = None
             while True:
                 attempt += 1
                 logger.info("Executing step %s (attempt %s)", step.id, attempt)
-                step_result_msg = await _run_coder_agent(step, dependencies=deps)
-                verified, verification_info = await _verify_step_result(
-                    step=step, result=step_result_msg
+                step_result_msg = await _run_coder_agent(
+                    step, dependencies=deps, fixes=fixes_for_retry
                 )
-                if verified:
+                success, fixes = await _verify_step_result(step=step, result=step_result_msg)
+                if success:
                     logger.info("Step %s passed verification on attempt %s", step.id, attempt)
                     yield {
                         "step_id": step.id,
                         "title": step.title,
                         "completed": True,
                         "result": step_result_msg,
-                        "verification": verification_info,
+                        "verification": {"success": True, "required_changes": fixes},
                     }
                     break
                 logger.warning(
@@ -273,29 +281,51 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
                     step.id,
                     attempt,
                 )
+                # On failure, carry the fixes into the next retry attempt.
+                fixes_for_retry = fixes or None
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("Coder agent failed on step: %s", step.id)
             msg = f"Failed on step: {step.id}"
             raise CoderWorkflowAgentError(msg) from exc
 
 
-async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, dict[str, Any]]:
+async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, list[str]]:
     """Verify a coder step's result via the code review agent.
 
-    Calls the lightweight code_review agent with the plan step and the coder output.
-    The agent returns a JSON object with "pass" and optional "fixes".
+    Calls the code review agent with the plan step and coder output, then
+    deserializes the response into ``CodeReviewResult`` for type-safe handling.
 
     Args:
         step: The plan step that was executed.
         result: The textual output/result from the coder agent for this step.
 
     Returns:
-        Tuple of (passed, details_dict). Details include the fixes list.
+        Tuple of (success, required_changes).
+
+    Raises:
+        CoderWorkflowAgentError: If the code review agent returns invalid JSON
+            or a payload that fails validation against ``CodeReviewResult``.
     """
     payload = {"step": step.model_dump(), "coder_output": result}
-    raw = await code_review_agent_tool(json.dumps(payload))
-    data = json.loads(raw)
-    passed = bool(data.get("pass") if "pass" in data else data.get("passed", False))
-    fixes = data.get("fixes") or []
-    details: dict[str, Any] = {"passed": passed, "fixes": fixes}
-    return passed, details
+    try:
+        raw = await code_review_agent_tool(json.dumps(payload))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Code review agent call failed for step: %s", step.id)
+        msg = f"Code review agent call failed for step: {step.id}"
+        raise CoderWorkflowAgentError(msg) from exc
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.exception("Code review returned non-JSON output for step: %s", step.id)
+        msg = "Code review agent did not return valid JSON"
+        raise CoderWorkflowAgentError(msg) from exc
+
+    try:
+        # Validate into model, then project to (bool, list[str]) API
+        review = CodeReviewResult.model_validate(data)
+    except Exception as exc:  # pragma: no cover - validation path
+        logger.exception("Code review JSON failed validation for step: %s", step.id)
+        msg = "Invalid code review JSON structure"
+        raise CoderWorkflowAgentError(msg) from exc
+    return review.success, review.required_changes

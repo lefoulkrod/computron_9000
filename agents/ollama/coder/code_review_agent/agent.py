@@ -19,8 +19,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_model_by_name
-from tools.virtual_computer.file_ops import path_exists, read_file_directory
-from tools.virtual_computer.run_bash_cmd import run_bash_cmd
+from tools.virtual_computer import exists, head, is_dir, is_file, read_file, run_bash_cmd, tail
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 model = get_model_by_name("coder_architect")
 
 _PLAN_STEP_SCHEMA = generate_plan_step_schema_summary()
-_REVIEW_SCHEMA = '{\n    "pass": "boolean",\n    "fixes": ["string", "..."]\n}'
+_REVIEW_SCHEMA = '{\n    "success": "boolean",\n    "required_changes": ["string", "..."]\n}'
 
 SYSTEM_PROMPT = dedent(
     f"""
@@ -58,9 +57,9 @@ Interpretation rules
     verify that files/dirs exist, expected content is present, and specified
     commands/tests succeed.
 2) If the step's intended outcome is fully and correctly implemented (supported by actual evidence),
-     set "pass" to true. Minor deviations that do not affect the step's goal can still pass.
+    set "success" to true. Minor deviations that do not affect the step's goal can still succeed.
 3) If evidence is insufficient or the implementation appears incomplete/incorrect,
-    set "pass" to false and enumerate concise, actionable fixes in "fixes".
+    set "success" to false and enumerate concise, actionable fixes in "required_changes".
     Prioritize minimal changes to complete the step.
 4) Never include explanations outside the JSON. Always return the exact structure.
 
@@ -74,7 +73,7 @@ Verification workflow (guidance)
     `grep -R "symbol" path`, `python -m module --help`). Avoid mutating the workspace
     unless the step explicitly required it.
 - Base your pass/fail solely on observed evidence. If anything is ambiguous,
-    prefer fail with minimal fixes.
+    prefer fail with minimal required changes.
 
 Schemas for reference
 PlanStep:
@@ -84,15 +83,11 @@ PlanStep:
 
 code_review_agent = Agent(
     name="CODE_REVIEW_AGENT",
-    description="Reviews a single step implementation and returns pass/fixes.",
+    description="Reviews a single step implementation and returns pass/required_changes.",
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[
-        run_bash_cmd,
-        read_file_directory,
-        path_exists,
-    ],
+    tools=[run_bash_cmd, exists, is_dir, is_file, read_file, head, tail],
     think=model.think,
 )
 
@@ -101,7 +96,7 @@ after_model_call_callback = make_log_after_model_call(code_review_agent)
 code_review_agent_tool = make_run_agent_as_tool_function(
     agent=code_review_agent,
     tool_description=(
-        "Given a plan step and coder output, decide if it passes and provide fixes if not."
+        "Given a plan step and coder output, decide if it passes and provide required_changes if not."
     ),
     before_model_callbacks=[before_model_call_callback],
     after_model_callbacks=[after_model_call_callback],
