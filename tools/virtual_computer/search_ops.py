@@ -14,9 +14,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Iterable
     from pathlib import Path
 
+from ._fs_internal import is_binary_file
+from ._path_utils import resolve_under_home
 from .models import GrepMatch, GrepResult
-from .ops_internal import is_binary_file
-from .path_utils import resolve_under_home
 
 logger = logging.getLogger(__name__)
 

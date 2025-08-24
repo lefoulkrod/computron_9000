@@ -5,7 +5,7 @@ models, and patch application utilities so that callers can simply import from
 ``tools.virtual_computer``.  The legacy ``file_system`` facade module is being
 removed; update imports accordingly:
 
-    from tools.virtual_computer import write_file, read_file_directory
+    from tools.virtual_computer import write_file, list_dir
 
 Tests may still import internal modules directly if they need to patch
 internals, but production code should rely on these exports.
@@ -15,10 +15,10 @@ from .edit_ops import insert_text, replace_in_file
 from .file_ops import (
     append_to_file,
     copy_path,
+    list_dir,
     make_dirs,
     move_path,
     path_exists,
-    read_file_directory,
     remove_path,
     write_file,
     write_files,
@@ -77,11 +77,11 @@ __all__ = [
     "insert_text",
     "is_dir",
     "is_file",
+    "list_dir",
     "make_dirs",
     "move_path",
     "path_exists",
     "read_file",
-    "read_file_directory",
     "remove_path",
     "replace_in_file",
     "run_bash_cmd",

@@ -9,9 +9,9 @@ import io
 import logging
 from typing import TYPE_CHECKING
 
+from ._fs_internal import is_binary_file
+from ._path_utils import resolve_under_home
 from .models import ReadTextResult
-from .ops_internal import is_binary_file
-from .path_utils import resolve_under_home
 
 logger = logging.getLogger(__name__)
 

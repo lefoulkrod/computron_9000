@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 class CommandSpec(BaseModel):
-    """Command to run for a plan step.
+    """Specification for a shell command to execute in a plan step.
 
-    Args:
-        run: Shell command to run (single, short-lived).
-        timeout_sec: Max seconds to allow the command to run.
+    Attributes:
+        run: Shell command to execute (should be short-lived).
+        timeout_sec: Maximum seconds to allow the command to run.
     """
 
     run: str
@@ -25,9 +25,16 @@ class CommandSpec(BaseModel):
 
 
 class PlanStep(BaseModel):
-    """Strict planner step schema.
+    """Represents a single step in a development plan.
 
-    Fields mirror the proposal's strict planner schema.
+    Attributes:
+        id: Unique identifier for this step.
+        title: Human-readable title describing the step.
+        step_kind: Type of step (command or file operation).
+        file_path: Target file path for file operations.
+        command: Command specification for command steps.
+        implementation_details: List of implementation requirements.
+        depends_on: List of step IDs that must complete before this step.
     """
 
     id: str
@@ -45,7 +52,11 @@ class PlanStep(BaseModel):
 
 
 def generate_plan_step_schema_summary() -> str:
-    """Return simplified placeholder JSON schema for PlanStep."""
+    """Generate a simplified example JSON schema for PlanStep.
+
+    Returns:
+        JSON schema summary string with example values.
+    """
     overrides: dict[str, JSONValue] = {
         "id": "step-1",
         "title": "Initialize environment",

@@ -16,6 +16,7 @@ from tools.virtual_computer import (
     exists,
     grep,
     head,
+    list_dir,
     make_dirs,
     move_path,
     read_file,
@@ -123,6 +124,7 @@ Output:
         head,
         tail,
         grep,
+        list_dir,
     ],
     think=model.think,
 )

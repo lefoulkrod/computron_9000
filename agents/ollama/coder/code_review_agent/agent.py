@@ -25,6 +25,7 @@ from tools.virtual_computer import (
     head,
     is_dir,
     is_file,
+    list_dir,
     read_file,
     run_bash_cmd,
     tail,
@@ -52,7 +53,8 @@ Inputs
 
 Tools you can and should use
 - path_exists: Check whether a file or directory exists.
-- read_file_directory: Read files (optionally by glob) to inspect contents.
+- read_file: Read text files with optional line range support.
+- list_dir: List directory contents with optional hidden file filtering.
 - run_bash_cmd: Run read-only shell commands to validate outcomes (e.g., grep, pytest,
   mypy, ruff, build/test commands specified by the step). Prefer idempotent, non-mutating
   commands.
@@ -76,7 +78,7 @@ Verification workflow (guidance)
 - Parse the step to identify concrete acceptance checks: target files/dirs, key symbols
     or text expected in files, commands/tests that should run, and any API or schema changes.
 - Use path_exists to confirm presence of expected files/dirs.
-- Use read_file_directory to inspect relevant files; verify required symbols,
+- Use read_file and list_dir to inspect relevant files; verify required symbols,
     config keys, strings, or code fragments exist and appear in the correct locations.
 - Use run_bash_cmd for read-only verification (e.g., `pytest -q -k <pattern>`,
     `grep -R "symbol" path`, `python -m module --help`). Avoid mutating the workspace
@@ -96,7 +98,7 @@ code_review_agent = Agent(
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[run_bash_cmd, exists, is_dir, is_file, read_file, head, tail, grep],
+    tools=[run_bash_cmd, exists, is_dir, is_file, read_file, head, tail, grep, list_dir],
     think=model.think,
 )
 
