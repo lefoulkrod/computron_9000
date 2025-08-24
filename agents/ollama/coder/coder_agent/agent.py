@@ -23,7 +23,7 @@ from tools.virtual_computer import (
     remove_path,
     run_bash_cmd,
     tail,
-    write_files,
+    write_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ coder_agent = Agent(
     name="CODER_DEV_AGENT",
     description="An agent to implement a single plan step.",
     instruction="""
+    There is no `search` tool. Use `grep` instead.
 You are a coding agent operating in a headless virtual computer (no GUI).
 You receive a single JSON payload to implement one step of a multi-step implementation plan:
 {
@@ -117,7 +118,7 @@ Output:
         move_path,
         copy_path,
         append_to_file,
-        write_files,
+        write_file,
         exists,
         apply_text_patch,
         read_file,

@@ -9,7 +9,7 @@ from tools.virtual_computer.patching import (
     apply_text_patch,
     apply_unified_diff,
 )
-from tools.virtual_computer.models import TextPatch, WriteFileResult
+from tools.virtual_computer.models import WriteFileResult
 from tools.virtual_computer.file_ops import write_file
 
 
@@ -29,24 +29,13 @@ def test_apply_text_patch_line_replacement() -> None:
             write_file("file.txt", "line1\nline2\nline3\n")
             res = apply_text_patch(
                 "file.txt",
-                [TextPatch(start_line=2, end_line=2, replacement="LINE_TWO_REPLACED\n")],
+                start_line=2,
+                end_line=2,
+                replacement="LINE_TWO_REPLACED\n",
             )
             assert res.success, res.error
             new_content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
             assert new_content == "line1\nLINE_TWO_REPLACED\nline3\n"
-
-
-@pytest.mark.unit
-def test_apply_text_patch_substring() -> None:
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("file.txt", "hello world")
-            res = apply_text_patch(
-                "file.txt",
-                [TextPatch(original="world", replacement="there")],
-            )
-            assert res.success, res.error
-            assert Path(tmp_home, "file.txt").read_text(encoding="utf-8") == "hello there"
 
 
 @pytest.mark.unit
@@ -56,23 +45,12 @@ def test_apply_text_patch_invalid_range() -> None:
             write_file("file.txt", "only one line\n")
             res = apply_text_patch(
                 "file.txt",
-                [TextPatch(start_line=2, end_line=2, replacement="oops\n")],
+                start_line=2,
+                end_line=2,
+                replacement="oops\n",
             )
             assert not res.success
-            assert res.error in {"Invalid line range", "start_line/end_line required"}
-
-
-@pytest.mark.unit
-def test_apply_text_patch_missing_substring() -> None:
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("file.txt", "abc")
-            res = apply_text_patch(
-                "file.txt",
-                [TextPatch(original="zzz", replacement="q")],
-            )
-            assert not res.success
-            assert res.error == "original substring not found"
+            assert res.error == "Invalid line range"
 
 
 @pytest.mark.unit

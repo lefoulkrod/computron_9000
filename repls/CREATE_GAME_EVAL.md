@@ -1,7 +1,7 @@
 # MARIO GAME
 create a mario brothers inspired side scoller game using html, css, and js. 
 ## Game Assets
-create visual game assets using SVG
+YOU MUST create SVGs for all visual game assets
 - player character should have blue overalls, a red had, and black shoes
 - enemy character should be brown with white "googly" eyes and black shoes
 - blocks should be gold with a question mark on them
