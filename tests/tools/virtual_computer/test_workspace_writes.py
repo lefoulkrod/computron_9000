@@ -13,7 +13,7 @@ from tools.virtual_computer.file_ops import (
     write_file,
     append_to_file,
     make_dirs,
-    read_file_directory,
+    _read_file_directory,
 )
 from tools.virtual_computer.workspace import (
     set_workspace_folder,
@@ -30,8 +30,8 @@ class DummyConfig2:
         self.virtual_computer = self.VirtualComputer(home_dir)
 
 
-@pytest.mark.asyncio
-async def test_writes_stay_under_workspace() -> None:
+@pytest.mark.unit
+def test_writes_stay_under_workspace() -> None:
     with tempfile.TemporaryDirectory() as tmp_home:
         set_workspace_folder("ws_123")
         assert get_current_workspace_folder() == "ws_123"
@@ -52,6 +52,6 @@ async def test_writes_stay_under_workspace() -> None:
             assert res2.success
             assert Path(tmp_home, "ws_123", "pkg", "sub", "file.txt").exists()
 
-            rf = await read_file_directory("pkg/sub/file.txt")
+            rf = _read_file_directory("pkg/sub/file.txt")
             assert rf.type == "file"
             assert rf.name.startswith("ws_123/")

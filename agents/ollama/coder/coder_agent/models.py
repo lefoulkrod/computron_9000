@@ -4,9 +4,25 @@ from pydantic import BaseModel, Field
 
 from agents.ollama.coder.verifier_agent.models import VerificationReport
 
+__all__ = [
+    "StepResult",
+]
+
 
 class StepResult(BaseModel):
-    """Step execution result surface for UI and logging."""
+    """Represents the execution result of a development step.
+
+    Attributes:
+        step_id: Unique identifier for the step.
+        title: Human-readable title describing the step.
+        started_at: Unix timestamp when step execution began.
+        finished_at: Unix timestamp when step execution completed.
+        completed: Whether the step finished successfully.
+        artifacts: List of file paths or outputs created during step execution.
+        verification: Verification report if step was verified, None otherwise.
+        logs: List of log messages from step execution.
+        error: Error message if step failed, None otherwise.
+    """
 
     step_id: str
     title: str

@@ -9,9 +9,35 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+__all__ = [
+    "ApplyPatchResult",
+    "DirEntry",
+    "DirectoryReadResult",
+    "FileReadResult",
+    "GrepMatch",
+    "GrepResult",
+    "InsertTextResult",
+    "MakeDirsResult",
+    "MoveCopyResult",
+    "PathExistsResult",
+    "ReadFileError",
+    "ReadResult",
+    "ReadTextResult",
+    "RemovePathResult",
+    "ReplaceInFileResult",
+    "TextPatch",
+    "WriteFileResult",
+]
+
 
 class WriteFileResult(BaseModel):
-    """Model returned by write/append operations."""
+    """Result model for file write and append operations.
+
+    Attributes:
+        success: Whether the operation completed successfully.
+        file_path: Path to the file that was written.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     file_path: str
@@ -19,7 +45,13 @@ class WriteFileResult(BaseModel):
 
 
 class MakeDirsResult(BaseModel):
-    """Model returned by make_dirs."""
+    """Result model for directory creation operations.
+
+    Attributes:
+        success: Whether the directory creation was successful.
+        dir_path: Path to the directory that was created.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     dir_path: str
@@ -27,7 +59,13 @@ class MakeDirsResult(BaseModel):
 
 
 class RemovePathResult(BaseModel):
-    """Model returned by remove_path."""
+    """Result model for file and directory removal operations.
+
+    Attributes:
+        success: Whether the removal operation was successful.
+        path: Path that was removed.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     path: str
@@ -35,7 +73,14 @@ class RemovePathResult(BaseModel):
 
 
 class MoveCopyResult(BaseModel):
-    """Model returned by move_path and copy_path."""
+    """Result model for file and directory move/copy operations.
+
+    Attributes:
+        success: Whether the move/copy operation was successful.
+        src: Source path of the operation.
+        dst: Destination path of the operation.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     src: str
@@ -44,7 +89,14 @@ class MoveCopyResult(BaseModel):
 
 
 class PathExistsResult(BaseModel):
-    """Model returned by path_exists."""
+    """Result model for path existence checks.
+
+    Attributes:
+        exists: Whether the path exists.
+        is_file: Whether the path is a file.
+        is_dir: Whether the path is a directory.
+        path: The path that was checked.
+    """
 
     exists: bool
     is_file: bool
@@ -57,7 +109,13 @@ class ReadFileError(Exception):
 
 
 class DirEntry(BaseModel):
-    """Directory entry for a file or subdirectory."""
+    """Represents a single directory entry.
+
+    Attributes:
+        name: Name of the file or directory.
+        is_file: Whether this entry is a file.
+        is_dir: Whether this entry is a directory.
+    """
 
     name: str
     is_file: bool
@@ -65,7 +123,14 @@ class DirEntry(BaseModel):
 
 
 class FileReadResult(BaseModel):
-    """Return type for reading a file."""
+    """Result model for reading file contents.
+
+    Attributes:
+        type: Always "file" to distinguish from directory reads.
+        name: Name of the file that was read.
+        content: File content as a string.
+        encoding: Content encoding format.
+    """
 
     type: Literal["file"] = Field(default="file", frozen=True)
     name: str
@@ -74,7 +139,13 @@ class FileReadResult(BaseModel):
 
 
 class DirectoryReadResult(BaseModel):
-    """Return type for reading a directory."""
+    """Result model for reading directory contents.
+
+    Attributes:
+        type: Always "directory" to distinguish from file reads.
+        name: Name of the directory that was read.
+        entries: List of directory entries contained within.
+    """
 
     type: Literal["directory"] = Field(default="directory", frozen=True)
     name: str
@@ -85,7 +156,14 @@ ReadResult = FileReadResult | DirectoryReadResult
 
 
 class TextPatch(BaseModel):
-    """Single text patch operation (line range or substring)."""
+    """Represents a text patch operation for file editing.
+
+    Attributes:
+        start_line: Starting line number for line-based patches (1-based).
+        end_line: Ending line number for line-based patches (1-based).
+        original: Original text content for substring-based patches.
+        replacement: New text content to replace with.
+    """
 
     start_line: int | None = None
     end_line: int | None = None
@@ -93,14 +171,25 @@ class TextPatch(BaseModel):
     replacement: str
 
     def mode(self) -> str:  # pragma: no cover - trivial
-        """Return patch mode ("lines" or "substring")."""
+        """Return patch mode.
+
+        Returns:
+            Either "lines" for line-based patches or "substring" for text-based patches.
+        """
         if self.start_line is not None or self.end_line is not None:
             return "lines"
         return "substring"
 
 
 class ApplyPatchResult(BaseModel):
-    """Result of applying a patch to a file."""
+    """Result model for applying text patches to files.
+
+    Attributes:
+        success: Whether the patch was applied successfully.
+        file_path: Path to the file that was patched.
+        diff: Text diff showing changes made, None if operation failed.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     file_path: str
@@ -112,22 +201,16 @@ class ApplyPatchResult(BaseModel):
 
 
 class ReadTextResult(BaseModel):
-    """Result of reading text from a file, optionally by line range.
+    """Result model for reading text from files with optional line range selection.
 
-    Args:
-        success: Whether the read was successful.
-        file_path: Path relative to the virtual computer home directory.
-        content: File content or selected range as a single UTF-8 string.
-        start: Optional inclusive start line (1-based).
-        end: Optional inclusive end line (1-based).
-        total_lines: Total number of lines in the file when known.
-        error: Optional error message on failure.
-
-    Returns:
-        ReadTextResult: JSON-serializable read result.
-
-    Raises:
-        None
+    Attributes:
+        success: Whether the read operation was successful.
+        file_path: Path to the file relative to the virtual computer home directory.
+        content: File content or selected range as a UTF-8 string, None on failure.
+        start: Inclusive start line number (1-based) if range was specified.
+        end: Inclusive end line number (1-based) if range was specified.
+        total_lines: Total number of lines in the file when available.
+        error: Error message if the operation failed, None otherwise.
     """
 
     success: bool
@@ -140,7 +223,15 @@ class ReadTextResult(BaseModel):
 
 
 class GrepMatch(BaseModel):
-    """Single grep match within a file."""
+    """Represents a single match found during grep search.
+
+    Attributes:
+        file_path: Path to the file containing the match.
+        line_number: Line number where the match was found (1-based).
+        line: Full text content of the matching line.
+        start_col: Starting column position of the match (0-based).
+        end_col: Ending column position of the match (0-based).
+    """
 
     file_path: str
     line_number: int
@@ -150,7 +241,15 @@ class GrepMatch(BaseModel):
 
 
 class GrepResult(BaseModel):
-    """Result of a grep search across files in the workspace."""
+    """Result model for grep search operations across multiple files.
+
+    Attributes:
+        success: Whether the grep search completed successfully.
+        matches: List of matches found during the search.
+        truncated: Whether results were truncated due to limits.
+        searched_files: Number of files searched.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     matches: list[GrepMatch]
@@ -160,7 +259,16 @@ class GrepResult(BaseModel):
 
 
 class ReplaceInFileResult(BaseModel):
-    """Result of a replace-in-file operation."""
+    """Result model for text replacement operations in files.
+
+    Attributes:
+        success: Whether the replace operation was successful.
+        file_path: Path to the file where replacements were made.
+        replacements: Number of replacements that were performed.
+        preview: Whether this was a preview operation (no actual changes made).
+        diff_sample: Sample of changes made for preview purposes, None if not applicable.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     file_path: str
@@ -171,7 +279,15 @@ class ReplaceInFileResult(BaseModel):
 
 
 class InsertTextResult(BaseModel):
-    """Result of inserting text relative to an anchor pattern."""
+    """Result model for inserting text at specific locations in files.
+
+    Attributes:
+        success: Whether the text insertion was successful.
+        file_path: Path to the file where text was inserted.
+        occurrences: Number of insertion points where text was added.
+        where: Description of where the text was inserted.
+        error: Error message if the operation failed, None otherwise.
+    """
 
     success: bool
     file_path: str

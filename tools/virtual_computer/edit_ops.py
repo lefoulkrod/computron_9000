@@ -9,9 +9,9 @@ import logging
 import re
 from typing import Final
 
+from ._fs_internal import is_binary_file, write_text_lines
+from ._path_utils import resolve_under_home
 from .models import InsertTextResult, ReplaceInFileResult
-from .ops_internal import is_binary_file, write_text_lines
-from .path_utils import resolve_under_home
 
 logger = logging.getLogger(__name__)
 

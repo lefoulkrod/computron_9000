@@ -28,8 +28,6 @@ from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.system_designer_agent import system_designer_agent_tool
 from agents.ollama.coder.system_designer_agent.models import SystemDesign
-from agents.ollama.coder.test_executor_agent import test_executor_agent_tool
-from agents.ollama.coder.test_planner_agent import test_planner_agent_tool
 from agents.ollama.coder.verifier_agent import verifier_agent_tool
 from agents.ollama.coder.workflow import workflow
 from repls.repl_logging import get_repl_logger
@@ -206,24 +204,6 @@ async def _run_verifier(user_prompt: str) -> None:
     await _invoke_agent(user_prompt, verifier_agent_tool, "Verifier")
 
 
-async def _run_test_planner(user_prompt: str) -> None:
-    parsed = _maybe_parse_json(user_prompt)
-    if parsed is None:
-        payload = {"assignment": user_prompt, "coder_output": ""}
-        user_prompt = json.dumps(payload)
-        logger.info("Test planner constructed minimal payload from text prompt")
-    await _invoke_agent(user_prompt, test_planner_agent_tool, "TestPlanner")
-
-
-async def _run_test_executor(user_prompt: str) -> None:
-    parsed = _maybe_parse_json(user_prompt)
-    if parsed is None:
-        payload = {"commands": [{"run": user_prompt, "timeout_sec": 120}]}
-        user_prompt = json.dumps(payload)
-        logger.info("Test executor constructed single-command payload")
-    await _invoke_agent(user_prompt, test_executor_agent_tool, "TestExecutor")
-
-
 async def _run_agent(agent: str, prompt: str) -> None:
     if agent == "workflow":
         await _run_workflow(prompt)
@@ -235,10 +215,6 @@ async def _run_agent(agent: str, prompt: str) -> None:
         await _run_coder(prompt)
     elif agent == "verifier":
         await _run_verifier(prompt)
-    elif agent == "test_planner":
-        await _run_test_planner(prompt)
-    elif agent == "test_executor":
-        await _run_test_executor(prompt)
     else:
         logger.error("Unknown agent: %s", agent)
 

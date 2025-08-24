@@ -17,21 +17,6 @@ Non-goals
 
 ## Structure and module layout
 
-Public modules (unchanged filenames)
-- `__init__.py` (facade; authoritative exports via `__all__`)
-- `models.py` (Pydantic models and custom exceptions)
-- `file_ops.py` (write/append/mkdir/move/copy/remove/path_exists/read_file_directory)
-- `read_ops.py` (text reads: full/range/head/tail)
-- `edit_ops.py` (replace/insert)
-- `search_ops.py` (grep)
-- `stat_ops.py` (thin wrappers around `path_exists`)
-- `patching.py` (structured and unified-diff patching)
-- `run_bash_cmd.py` (guarded container command execution)
-
-Private internals (rename for clarity)
-- Rename `ops_internal.py` → `_fs_internal.py` (IO helpers: read/write lines, binary sniff).
-- Rename `path_utils.py` → `_path_utils.py` (resolution/sanitization helpers).
-
 Workspace state
 - Keep `workspace.py` public API (`set_workspace_folder`, `get_current_workspace_folder`). Internally, migrate storage to a `contextvars.ContextVar` for thread/async-safety, preserving the public function surface.
 
@@ -42,10 +27,6 @@ Documentation
 
 ## API consistency and behavior
 
-Sync/async
-- Make `file_ops.read_file_directory` synchronous. It performs only sync IO and is the lone async FS function.
-  - Migration: update tests to call it directly without `await`.
-  - Alternative (defer): keep async, but document that it is currently sync under the hood.
 
 Edit flags parity
 - `edit_ops.insert_text` should support `preview_only` to mirror `replace_in_file`.
@@ -91,8 +72,6 @@ Defaults and options
 
 ## New ergonomic tools
 
-- `list_dir(path: str, include_hidden: bool = False) -> DirectoryReadResult`
-  - Thin explicit wrapper around directory branch of `read_file_directory`.
 - `glob_paths(patterns: list[str], base: str = ".") -> list[str]`
   - Workspace-safe globbing with clamped traversal.
 - `batch_replace(files: list[str], pattern: str, replacement: str, ...) -> list[ReplaceInFileResult]`

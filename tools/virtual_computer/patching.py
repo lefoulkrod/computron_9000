@@ -3,9 +3,9 @@
 import difflib
 import logging
 
+from ._fs_internal import read_text_lines, write_text_lines
+from ._path_utils import resolve_under_home
 from .models import ApplyPatchResult, TextPatch
-from .ops_internal import read_text_lines, write_text_lines
-from .path_utils import resolve_under_home
 
 logger = logging.getLogger(__name__)
 

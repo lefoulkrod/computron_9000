@@ -1,4 +1,28 @@
-create a mario inspired game using html, css, and js. don't reference external assets, create all assets that you may need using svg. the player should get 3 lives. the game can be restarted after 3 lives. enemies should scroll in from right to left and should spawn randomly. the player should be able to kill enemies by jumping on them. each enemy earns 20 points. players should be able to break blocks by jumping into it from below. each block should be worth 10 points. some blocks should spawn coins. collected coins are worth 100 points. if a player lands on top of a block, the block should not break and they should remain on top.  
+# MARIO GAME
+create a mario brothers inspired side scoller game using html, css, and js. 
+## Game Assets
+create visual game assets using SVG
+- player character should have blue overalls, a red had, and black shoes
+- enemy character should be brown with white "googly" eyes and black shoes
+- blocks should be gold with a question mark on them
+- coin should be gold and round with a star or asterick style visual and should spin while falling
+- the ground should be green
+- the background should be blue (doesnt have to be SVG)
+- there should be white clouds in the sky in fixed positions
+do not use any audio game assets
+## Functional Requirements
+- the player should get 3 lives. 
+- the game can be restarted after 3 lives. 
+- enemies should scroll in from right to left and should spawn randomly. 
+- the player should be able to kill enemies by jumping on them. -
+- killing an enemy earns 20 points. 
+- players should be able to break blocks by jumping into it from below. 
+- each block should be worth 10 points. 
+- some blocks should spawn coins. collected coins are worth 100 points. 
+- if a player lands on top of a block, the block should not break and they should remain on top.  
+## Non Functional Requirements
+- user should be able to run the game using a simple HTTP server from the project root (you do not need to install this as a dep)
+- use easy to change constants for things like gravity, player speed, enemy speed, etc.
 
 {
   "artifacts": [

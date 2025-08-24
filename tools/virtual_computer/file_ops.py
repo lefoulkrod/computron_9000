@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from ._fs_internal import is_binary_file
+from ._path_utils import resolve_under_home
 from .models import (
     DirectoryReadResult,
     DirEntry,
@@ -22,8 +24,6 @@ from .models import (
     RemovePathResult,
     WriteFileResult,
 )
-from .ops_internal import is_binary_file
-from .path_utils import resolve_under_home
 
 logger = logging.getLogger(__name__)
 
@@ -265,9 +265,10 @@ def path_exists(path: str) -> PathExistsResult:
         return PathExistsResult(exists=exists, is_file=is_file, is_dir=is_dir, path=rel)
 
 
-async def read_file_directory(path: str) -> ReadResult:
+def _read_file_directory(path: str) -> ReadResult:
     """Read a file (text or base64) or list a directory.
 
+    Internal function that handles both file reading and directory listing.
     For files, binary files are returned base64-encoded with ``encoding`` set to
     ``"base64"``. Text files are returned decoded as UTF-8 with ``encoding`` set
     to ``"utf-8"``. For directories, returns an entry listing.
@@ -311,3 +312,36 @@ async def read_file_directory(path: str) -> ReadResult:
         logger.exception("Failed to read file or directory at path %s", path)
         msg = "Failed to read file or directory."
         raise ReadFileError(msg) from exc
+
+
+def list_dir(path: str, *, include_hidden: bool = False) -> DirectoryReadResult:
+    """List directory contents with optional hidden file filtering.
+
+    Returns a directory listing with entries for files and subdirectories.
+    By default, hidden files and directories (those starting with '.') are
+    excluded from the results.
+
+    Args:
+        path: Relative or absolute path (under the home directory) to list.
+        include_hidden: If False, exclude entries starting with '.'.
+
+    Returns:
+        DirectoryReadResult: Directory listing with filtered entries.
+
+    Raises:
+        ReadFileError: If the path does not exist, is not a directory, or is not readable.
+    """
+    result = _read_file_directory(path)
+
+    if not isinstance(result, DirectoryReadResult):
+        msg = f"Path is not a directory: {result.name}"
+        logger.error(msg)
+        raise ReadFileError(msg)
+
+    if include_hidden:
+        return result
+
+    # Filter out hidden files/directories (those starting with '.')
+    filtered_entries = [entry for entry in result.entries if not entry.name.startswith(".")]
+
+    return DirectoryReadResult(name=result.name, entries=filtered_entries)
