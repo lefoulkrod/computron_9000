@@ -13,13 +13,14 @@ from tools.virtual_computer import (
     append_to_file,
     apply_text_patch,
     copy_path,
+    exists,
+    head,
     make_dirs,
     move_path,
-    path_exists,
-    read_file_directory,
+    read_file,
     remove_path,
     run_bash_cmd,
-    write_file,
+    tail,
     write_files,
 )
 
@@ -37,7 +38,9 @@ You receive a single JSON payload to implement one step of a multi-step implemen
     "step": PlanStep,  // { id, title, step_kind: "file"|"command"|null,
                                              //   file_path?, command?, implementation_details[] }
         "dependencies": PlanStep[],  // transitive dependency steps for context
-    "instructions": string
+    "instructions": string,
+    "fixes": string[]  // optional: reviewer-required changes when retrying after
+                        // verification failed
 }
 
 Using the payload:
@@ -49,6 +52,8 @@ Using the payload:
 
 Goals:
 - Implement the requested plan step using the provided instructions.
+- If a "fixes" list is provided, treat it as authoritative guidance to adjust your
+    previous attempt. Apply those fixes first while keeping changes minimal.
 - If instructions are unclear, make reasonable assumptions and proceed;
     note assumptions in the output.
 - Keep the change minimal and scoped to this step.
@@ -69,6 +74,11 @@ Operational rules:
 - Never start servers, watchers, or daemons. Only short-lived, one-shot
     commands are allowed.
 
+Retries with fixes:
+- When a retry occurs and "fixes" is present, summarize how you addressed each
+    fix explicitly in your output. Do not expand scope beyond these fixes unless
+    necessary for correctness.
+
 Step handling:
 - If step_kind == "file" (or file_path is present): create or update the file
     according to the instructions and any inferred context from related
@@ -86,16 +96,17 @@ Output:
     options=model.options,
     tools=[
         run_bash_cmd,
-        write_file,
-        read_file_directory,
         make_dirs,
         remove_path,
         move_path,
         copy_path,
         append_to_file,
         write_files,
-        path_exists,
+        exists,
         apply_text_patch,
+        read_file,
+        head,
+        tail,
     ],
     think=model.think,
 )

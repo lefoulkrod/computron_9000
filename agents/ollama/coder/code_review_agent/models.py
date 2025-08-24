@@ -13,12 +13,12 @@ class CodeReviewResult(BaseModel):
     """Outcome of reviewing a single step implementation.
 
     Args:
-        passed: True if the step appears correctly implemented; otherwise False.
-        fixes: Actionable fixes to address gaps when ``passed`` is False.
+        success: True if the step appears correctly implemented; otherwise False.
+        required_changes: Actionable fixes to address gaps when ``success`` is False.
     """
 
-    passed: bool = Field(serialization_alias="pass")
-    fixes: list[str] = Field(default_factory=list)
+    success: bool
+    required_changes: list[str] = Field(default_factory=list)
 
 
 __all__ = [
