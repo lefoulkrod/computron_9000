@@ -12,6 +12,8 @@ models:
   - name: gpt
     model: gpt-oss:120b
     think: true
+    options:
+      num_ctx: 128000
   - name: handoff_agent
     model: gpt-oss:120b
     think: false

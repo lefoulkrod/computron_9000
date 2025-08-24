@@ -63,6 +63,7 @@ def grep(
         pattern: Regex or literal pattern to search for.
         include_globs: Optional list of glob patterns to include (relative to workspace root).
         exclude_globs: Optional list of glob patterns to exclude.
+            Default excludes are always applied.
         regex: Treat pattern as regex (default). If False, search literally.
         case_sensitive: If True, matches are case-sensitive; default False (case-insensitive).
         max_results: Maximum number of matches to return; None for unlimited.
@@ -71,6 +72,15 @@ def grep(
         GrepResult: Structured matches and counters; ``truncated`` is True when max_results hit.
     """
     try:
+        # Default excludes that are always applied
+        default_excludes = [".git/**", "node_modules/**", "__pycache__/**", "*.lock"]
+
+        # Merge default excludes with user-provided excludes
+        if exclude_globs is None:
+            exclude_globs = default_excludes
+        else:
+            exclude_globs = exclude_globs + default_excludes
+
         # Root is the home/workspace directory path of '.'
         root_abs, _home, root_rel = resolve_under_home(".")
         if not root_abs.exists() or not root_abs.is_dir():
