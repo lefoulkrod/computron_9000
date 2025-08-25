@@ -28,27 +28,24 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-def write_file(path: str, content: str | bytes) -> WriteFileResult:
-    """Write a file within the virtual computer home directory.
+def write_file(path: str, content: str) -> WriteFileResult:
+    """Write a UTF-8 text file within the virtual computer home directory.
 
-    Overwrites the file if it already exists. Creates parent directories as
-    needed.
+    Overwrites the file if it already exists and creates parent directories as
+    needed. Accepts text only and writes using UTF-8. For binary data, encode
+    to text (e.g., base64) before writing. This function does not raise on I/O
+    errors; failures are reported in the returned ``WriteFileResult``.
 
     Args:
         path: Relative or absolute path under the configured home directory.
             The returned path in the result is normalized to be relative to the
             home directory.
-        content: The content to write. If a string is provided, it is written
-            using UTF-8 encoding. If bytes are provided, they are written as-is.
+        content: UTF-8 text to write. Only ``str`` is accepted.
 
     Returns:
         WriteFileResult: Result object indicating success or failure. On
         success, ``file_path`` contains the relative path written. On failure,
         ``error`` contains a message.
-
-    Notes:
-        This function does not raise on I/O errors; failures are reported in
-        the returned ``WriteFileResult``.
     """
     file_path: Path | None = None
     rel_return_path: str = ""
@@ -56,14 +53,11 @@ def write_file(path: str, content: str | bytes) -> WriteFileResult:
         file_path, _home, rel_return_path = resolve_under_home(path)
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, bytes):
-            with file_path.open("wb") as f:
-                f.write(content)
-        elif isinstance(content, str):
+        if isinstance(content, str):
             with file_path.open("w", encoding="utf-8") as f:
                 f.write(content)
         else:
-            logger.error("Content must be of type str or bytes, got %s", type(content))
+            logger.error("Content must be of type str, got %s", type(content))
             return WriteFileResult(
                 success=False,
                 file_path=rel_return_path,
@@ -193,9 +187,8 @@ def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
         success, ``file_path`` contains the relative path written. On failure,
         ``error`` contains a message.
 
-    Notes:
-        This function does not raise on I/O errors; failures are reported in
-        the returned ``WriteFileResult``.
+    This function does not raise on I/O errors; failures are reported in the
+    returned ``WriteFileResult``.
     """
     file_path: Path | None = None
     rel_return_path: str = ""
@@ -224,14 +217,14 @@ def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
     return WriteFileResult(success=True, file_path=rel_return_path)
 
 
-def write_files(files: list[tuple[str, str | bytes]]) -> list[WriteFileResult]:
-    """Write multiple files in a batch.
+def write_files(files: list[tuple[str, str]]) -> list[WriteFileResult]:
+    """Write multiple text files in a batch.
 
     Each item is processed independently using ``write_file``.
 
     Args:
-        files: A list of ``(path, content)`` tuples. ``content`` may be ``str``
-            (written as UTF-8) or ``bytes``.
+        files: A list of ``(path, content)`` tuples where ``content`` is ``str``
+            (written as UTF-8).
 
     Returns:
         list[WriteFileResult]: A list of results in the same order as inputs.
@@ -239,6 +232,10 @@ def write_files(files: list[tuple[str, str | bytes]]) -> list[WriteFileResult]:
     """
     results: list[WriteFileResult] = []
     for path, content in files:
+        if not isinstance(content, str):
+            logger.error("Content in write_files must be str, got %s", type(content))
+            results.append(WriteFileResult(success=False, file_path=path, error=str(type(content))))
+            continue
         results.append(write_file(path, content))
     return results
 
