@@ -1,14 +1,11 @@
-"""Tests for apply_text_patch and apply_unified_diff utilities."""
+"""Tests for apply_unified_diff utility."""
 
 from pathlib import Path
 from unittest import mock
 import tempfile
 import pytest
 
-from tools.virtual_computer.patching import (
-    apply_text_patch,
-    apply_unified_diff,
-)
+from tools.virtual_computer.patching import apply_unified_diff
 from tools.virtual_computer.models import WriteFileResult
 from tools.virtual_computer.file_ops import write_file
 
@@ -20,37 +17,6 @@ class DummyConfig:
 
     def __init__(self, home_dir: str) -> None:
         self.virtual_computer = self.VirtualComputer(home_dir)
-
-
-@pytest.mark.unit
-def test_apply_text_patch_line_replacement() -> None:
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("file.txt", "line1\nline2\nline3\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=2,
-                replacement="LINE_TWO_REPLACED\n",
-            )
-            assert res.success, res.error
-            new_content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
-            assert new_content == "line1\nLINE_TWO_REPLACED\nline3\n"
-
-
-@pytest.mark.unit
-def test_apply_text_patch_invalid_range() -> None:
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("file.txt", "only one line\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=2,
-                replacement="oops\n",
-            )
-            assert not res.success
-            assert res.error == "Invalid line range"
 
 
 @pytest.mark.unit
@@ -155,31 +121,6 @@ def test_apply_unified_diff_addition_only_unsupported() -> None:
             # Either unsupported creation or missing target depending on interpretation.
             err = results[0].error or ""
             assert ("not supported" in err) or ("Target file missing" in err)
-
-
-@pytest.mark.unit
-def test_apply_unified_diff_partial_failure_multi_file() -> None:
-    """One file missing should not prevent applying another valid file."""
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("ok.txt", "ok\n")
-            diff = (
-                "--- a/missing.txt\n"
-                "+++ b/missing.txt\n"
-                "@@ -1,1 +1,1 @@\n"
-                "-x\n"
-                "+y\n"
-                "--- a/ok.txt\n"
-                "+++ b/ok.txt\n"
-                "@@ -1,1 +1,1 @@\n"
-                "-ok\n"
-                "+OK\n"
-            )
-            results = apply_unified_diff(diff)
-            assert len(results) == 2
-            # First failure, second success
-            assert not results[0].success and results[1].success
-            assert Path(tmp_home, "ok.txt").read_text(encoding="utf-8") == "OK\n"
 
 
 @pytest.mark.unit

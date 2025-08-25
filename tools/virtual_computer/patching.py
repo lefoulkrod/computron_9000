@@ -59,7 +59,7 @@ def apply_text_patch(
                 after_lines,
                 fromfile=f"{rel} (before)",
                 tofile=f"{rel} (after)",
-                lineterm="",
+                # Use default lineterm ("\n") for standard human-friendly diffs
             )
         )
         write_text_lines(abs_path, after_lines)
@@ -138,7 +138,7 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
                                 patched,
                                 fromfile=f"{rel} (before)",
                                 tofile=f"{rel} (after)",
-                                lineterm="",
+                                # Default lineterm ("\n")
                             )
                         )
                         if diff_text:
