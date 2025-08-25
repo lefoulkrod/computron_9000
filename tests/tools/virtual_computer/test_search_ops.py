@@ -68,7 +68,8 @@ def test_grep_exclude_globs() -> None:
             write_file("src/a.txt", "hello world\n")
             write_file("src/b.md", "hello md\n")
             # Include both files, but exclude markdown; expect only .txt match
-            r = grep("hello", include_globs=["src/*"], exclude_globs=["*.md"], regex=False)
+            # With globstar semantics, use **/*.md to exclude markdown at any depth
+            r = grep("hello", include_globs=["src/*"], exclude_globs=["**/*.md"], regex=False)
             assert r.success
             assert all(m.file_path.endswith("a.txt") for m in r.matches)
 
@@ -306,3 +307,122 @@ if __name__ == "__main__":
             # Verify that the full line context is preserved, not just the match
             assert "def " in match1.line and "(arg1, arg2):" in match1.line
             assert "# This is a comment" in match2.line and " inside" in match2.line
+
+
+@pytest.mark.unit
+def test_grep_double_star_glob_include_and_exclude() -> None:
+    """Verify that the pattern 'src/**/*.js' works for include and exclude globs.
+
+    With fnmatch-based matching, '*' matches across path separators. The pattern
+    'src/**/*.js' therefore requires at least one subdirectory between 'src/'
+    and the file name (because of the explicit '/'), so it should:
+    - include nested JS files but not top-level 'src/*.js' when used as include_globs
+    - exclude nested JS files but keep top-level 'src/*.js' when used as exclude_globs
+    """
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            make_dirs("src")
+            make_dirs("src/utils")
+            make_dirs("src/utils/deeper")
+            write_file("src/app.js", "console.log('top');\n")
+            write_file("src/utils/helper.js", "console.log('nested1');\n")
+            write_file("src/utils/deeper/more.js", "console.log('nested2');\n")
+            write_file("src/readme.md", "console in docs\n")
+
+            # Include: top-level and nested JS files should be searched and matched
+            r_inc = grep("console", regex=False, include_globs=["src/**/*.js"])
+            assert r_inc.success
+            inc_files = {m.file_path for m in r_inc.matches}
+            assert any(p.endswith("src/app.js") for p in inc_files)
+            assert any(p.endswith("src/utils/helper.js") for p in inc_files)
+            assert any(p.endswith("src/utils/deeper/more.js") for p in inc_files)
+            assert r_inc.searched_files == 3  # three JS files searched
+            assert len(r_inc.matches) == 3    # one match per JS file
+
+            # Exclude: all JS files (top-level and nested) should be excluded; md remains
+            r_exc = grep("console", regex=False, exclude_globs=["src/**/*.js"])
+            assert r_exc.success
+            exc_files = {m.file_path for m in r_exc.matches}
+            assert any(p.endswith("src/readme.md") for p in exc_files)
+            assert not any(p.endswith(".js") for p in exc_files)
+
+
+@pytest.mark.unit
+def test_glob_single_star_does_not_cross_dirs() -> None:
+    """Verify that a single '*' does not match across directory separators.
+
+    src/*.py should match only files directly under src/, not nested ones like src/nested/x.py.
+    """
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            make_dirs("src")
+            make_dirs("src/nested")
+            write_file("src/app.py", "hit\n")
+            write_file("src/nested/mod.py", "hit nested\n")
+
+            r = grep("hit", regex=False, include_globs=["src/*.py"])
+            assert r.success
+            files = {m.file_path for m in r.matches}
+            assert any(p.endswith("src/app.py") for p in files)
+            assert not any(p.endswith("src/nested/mod.py") for p in files)
+            assert r.searched_files == 1
+            assert len(r.matches) == 1
+
+
+@pytest.mark.unit
+def test_glob_py_patterns_root_vs_any_depth() -> None:
+    """Verify that *.py matches only workspace root, and **/*.py matches any depth (including root).
+
+    This ensures our globstar-on semantics: "*" does not cross directories,
+    while "**" matches zero or more directories.
+    """
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            make_dirs("src/inner")
+            write_file("root.py", "print('root hit')\n")
+            write_file("src/inner/file.py", "print('nested hit')\n")
+
+            # Root-only: should search only root.py
+            r_root = grep("hit", regex=False, include_globs=["*.py"])
+            assert r_root.success
+            assert r_root.searched_files == 1
+            assert len(r_root.matches) == 1
+            assert any(m.file_path.endswith("root.py") for m in r_root.matches)
+
+            # Any-depth: should search both root.py and nested file.py
+            r_any = grep("hit", regex=False, include_globs=["**/*.py"])
+            assert r_any.success
+            assert r_any.searched_files == 2
+            files_any = {m.file_path for m in r_any.matches}
+            assert any(p.endswith("root.py") for p in files_any)
+            assert any(p.endswith("src/inner/file.py") for p in files_any)
+
+
+@pytest.mark.unit
+def test_glob_py_patterns_exclude_root_vs_any_depth() -> None:
+    """Complementary test: exclude root-only vs any-depth .py files.
+
+    - Excluding "*.py" should remove only root-level .py (keep nested)
+    - Excluding "**/*.py" should remove all .py at any depth (including root)
+    """
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            make_dirs("src/inner")
+            write_file("root.py", "print('root hit')\n")
+            write_file("src/inner/file.py", "print('nested hit')\n")
+            write_file("readme.md", "root doc\n")
+
+            # Exclude only root-level .py; nested .py should remain searchable
+            r_ex_root = grep("hit", regex=False, exclude_globs=["*.py"])
+            assert r_ex_root.success
+            files_root = {m.file_path for m in r_ex_root.matches}
+            # root.py excluded, nested .py searched
+            assert any(p.endswith("src/inner/file.py") for p in files_root)
+            assert not any(p.endswith("root.py") for p in files_root)
+
+            # Exclude any .py at any depth; only non-.py files remain
+            r_ex_any = grep("doc|hit", regex=True, exclude_globs=["**/*.py"])
+            assert r_ex_any.success
+            files_any = {m.file_path for m in r_ex_any.matches}
+            assert any(p.endswith("readme.md") for p in files_any)
+            assert not any(p.endswith(".py") for p in files_any)
