@@ -29,6 +29,7 @@ do not use any audio game assets
 ## Non Functional Requirements
 - user should be able to run the game using a simple HTTP server from the project root (you do not need to install this as a dep)
 - use easy to change constants for things like gravity, player speed, enemy speed, etc.
+- use vite as the modern dev server and bundler. add an npm script dev that runs vite (dont run it yourself)
 
 {
   "artifacts": [
