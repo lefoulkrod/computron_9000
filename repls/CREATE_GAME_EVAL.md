@@ -1,5 +1,5 @@
 # MARIO GAME
-create a mario brothers inspired side scoller game using html, css, and js. 
+create a mario brothers inspired side scoller game using javascript. you may also use CSS. the entrypoint should be an index.html file.
 ## Game Assets
 YOU MUST create SVGs for all visual game assets
 - player character should have blue overalls, a red had, and black shoes
@@ -10,6 +10,12 @@ YOU MUST create SVGs for all visual game assets
 - the background should be blue (doesnt have to be SVG)
 - there should be white clouds in the sky in fixed positions
 do not use any audio game assets
+## Acceptance Criteria
+- the player should be able to move left, right, and jump
+- blocks should be rendered in the air, above the players head
+- enemies should move along the ground, similar to the player
+- the player should be able to jump high enough to land on the blocks
+- the players jumping movement should approximate actual physics
 ## Functional Requirements
 - the player should get 3 lives. 
 - the game can be restarted after 3 lives. 

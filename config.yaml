@@ -24,12 +24,13 @@ models:
     think: true
     options:
       num_ctx: 128000
+      reasoning_effort: high
   - name: coder_developer
     model: gpt-oss:120b
     think: true
     options:
       num_ctx: 128000
-      reasoning_effort: medium
+      reasoning_effort: high
   - name: vision
     model: qwen2.5vl:32b
     options:
