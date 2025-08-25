@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run unit tests",
+            "type": "shell",
+            "command": "just",
+            "args": [
+                "test-unit"
+            ],
+            "group": "test"
+        },
+    ]
+}
