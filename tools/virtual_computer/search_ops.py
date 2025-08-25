@@ -5,9 +5,9 @@ Skips binary files; returns structured matches suitable for LLM consumption.
 
 from __future__ import annotations
 
-import fnmatch
 import logging
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -27,23 +27,72 @@ def _iter_files(root: Path) -> Iterable[Path]:
             yield p
 
 
+def _expand_globstar_zero_depth(pattern: str) -> set[str]:
+    """Expand a pattern so that each "**/" can also be zero directories.
+
+    Example: "src/**/*.js" -> {"src/**/*.js", "src/*.js"}
+    Works for multiple occurrences by generating all combinations.
+    """
+    pat = pattern.replace("\\", "/")
+    token = "**/"
+    if token not in pat:
+        return {pat}
+    parts = pat.split(token)
+    # Reconstruct with either token kept or removed at each junction
+    variants: set[str] = set()
+    n = len(parts) - 1
+    # Each bit in mask: 1 means keep token, 0 means drop
+    for mask in range(1 << n):
+        s = parts[0]
+        for i in range(n):
+            s += (token if (mask & (1 << i)) else "") + parts[i + 1]
+        variants.add(s)
+    return variants
+
+
 def _apply_globs(
     paths: Iterable[Path],
     root: Path,
     include: list[str] | None,
     exclude: list[str] | None,
 ) -> Iterable[Path]:
-    def rel(p: Path) -> str:
-        try:
-            return str(p.relative_to(root))
-        except ValueError:
-            return str(p)
+    """Filter paths by include/exclude patterns using Path.glob (globstar-on).
+
+    We expand include and exclude patterns using ``root.glob`` which supports
+    ``**`` for recursive matches. Only files are considered.
+    """
+    # Build sets of included/excluded file Paths for fast membership checks
+    included: set[Path] | None = None
+    excluded: set[Path] = set()
+
+    if include:
+        inc_set: set[Path] = set()
+        for pat in include:
+            for expanded in _expand_globstar_zero_depth(pat):
+                for gp in root.glob(expanded):
+                    if gp.is_file():
+                        inc_set.add(gp)
+                    elif gp.is_dir():
+                        for fp in gp.rglob("*"):
+                            if fp.is_file():
+                                inc_set.add(fp)
+        included = inc_set
+
+    if exclude:
+        for pat in exclude:
+            for expanded in _expand_globstar_zero_depth(pat):
+                for gp in root.glob(expanded):
+                    if gp.is_file():
+                        excluded.add(gp)
+                    elif gp.is_dir():
+                        for fp in gp.rglob("*"):
+                            if fp.is_file():
+                                excluded.add(fp)
 
     for p in paths:
-        rp = rel(p)
-        if include and not any(fnmatch.fnmatch(rp, pat) for pat in include):
+        if included is not None and p not in included:
             continue
-        if exclude and any(fnmatch.fnmatch(rp, pat) for pat in exclude):
+        if p in excluded:
             continue
         yield p
 
@@ -61,9 +110,16 @@ def grep(
 
     Args:
         pattern: Regex or literal pattern to search for.
-        include_globs: Optional list of glob patterns to include (relative to workspace root).
-        exclude_globs: Optional list of glob patterns to exclude.
-            Default excludes are always applied.
+        include_globs: Glob patterns relative to the workspace root that select which files
+            to search. Glob semantics follow Bash "globstar on":
+            - ``*`` and ``?`` do NOT match ``/`` (directory separators).
+            - ``**`` matches zero or more directories recursively.
+            - Patterns are matched against the path relative to the workspace root using
+              POSIX-style slashes. Examples: ``src/*.py`` (top-level only), ``src/**/*.py``
+              (top-level and nested), ``*.py`` (workspace root), ``**/*.py`` (any depth).
+            If omitted, all non-excluded files are searched.
+        exclude_globs: Glob patterns to exclude from search. Same semantics as include_globs.
+            Default excludes are always applied in addition to any provided here.
         regex: Treat pattern as regex (default). If False, search literally.
         case_sensitive: If True, matches are case-sensitive; default False (case-insensitive).
         max_results: Maximum number of matches to return; None for unlimited.
@@ -72,8 +128,13 @@ def grep(
         GrepResult: Structured matches and counters; ``truncated`` is True when max_results hit.
     """
     try:
-        # Default excludes that are always applied
-        default_excludes = [".git/**", "node_modules/**", "__pycache__/**", "*.lock"]
+        # Default excludes that are always applied (globstar semantics)
+        default_excludes = [
+            ".git/**",
+            "node_modules/**",
+            "__pycache__/**",
+            "**/*.lock",
+        ]
 
         # Merge default excludes with user-provided excludes
         if exclude_globs is None:
