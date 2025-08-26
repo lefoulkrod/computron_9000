@@ -61,19 +61,33 @@ def _create_workspace_dir() -> str:
     return workspace_folder
 
 
-async def workflow(prompt: str) -> AsyncGenerator[StepYield, None]:
+async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[StepYield, None]:
     """Main workflow for the coder agent using an architect agent for planning.
 
     Args:
         prompt (str): The high-level task to accomplish.
+        workspace (str | None): Optional workspace folder name. If None, creates a new workspace.
 
     Yields:
-    StepYield: Step results and plan updates as the workflow progresses.
+        StepYield: Step results and plan updates as the workflow progresses.
 
     Raises:
         CoderWorkflowAgentError: On unrecoverable errors.
     """
-    _create_workspace_dir()
+    if workspace is None:
+        _create_workspace_dir()
+    else:
+        # Use the provided workspace folder and ensure it exists
+        config = load_config()
+        home_dir = config.virtual_computer.home_dir
+        workspace_path = Path(home_dir) / workspace
+        try:
+            workspace_path.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            logger.exception("Failed to create/access workspace directory: %s", workspace_path)
+            msg = f"Failed to create/access workspace directory: {workspace_path}"
+            raise CoderWorkflowAgentError(msg) from exc
+        set_workspace_folder(workspace)
 
     # Create & parse system design
     design = await _run_system_designer_agent(prompt)
