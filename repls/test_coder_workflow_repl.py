@@ -4,9 +4,11 @@ Supported agent keys (initial selection via -a or in REPL with /agent <key>):
     workflow, designer, planner, coder, test_planner, test_executor, verifier
 
 Commands inside the REPL:
-    /agent <key>   Switch current agent/workflow
-    /help          Show command help
-    /exit          Exit the REPL
+    /agent <key>      Switch current agent/workflow
+    /workspace <name> Set workspace folder name for workflow (only affects workflow agent)
+    /workspace        Show current workspace folder name
+    /help             Show command help
+    /exit             Exit the REPL
 
 Any other input line runs the current agent (or full workflow) using that line as the
 prompt. Prompts are adapted per agent for convenience (designer/planner/coder). The
@@ -42,13 +44,19 @@ logger.setLevel(logging.INFO)
 setup_logging()
 
 
+class ReplState:
+    """Encapsulates REPL state to avoid global variables."""
+
+    def __init__(self) -> None:
+        """Initialize REPL state with default values."""
+        self.current_workspace: str | None = None
+
+
 AGENT_KEYS = [
     "workflow",
     "designer",
     "planner",
     "coder",
-    "test_planner",
-    "test_executor",
     "verifier",
 ]
 
@@ -88,10 +96,16 @@ def _maybe_parse_json(text: str) -> object | None:
         return None
 
 
-async def _run_workflow(user_prompt: str) -> None:
+async def _run_workflow(user_prompt: str, state: ReplState) -> None:
     logger.info("--- Running workflow ---")
-    async for result in workflow(user_prompt):
-        logger.info("Step result: %s", result)
+    if state.current_workspace:
+        logger.info("Using workspace: %s", state.current_workspace)
+        async for result in workflow(user_prompt, workspace=state.current_workspace):
+            logger.info("Step result: %s", result)
+    else:
+        logger.info("Using auto-generated workspace")
+        async for result in workflow(user_prompt):
+            logger.info("Step result: %s", result)
 
 
 def _pretty_print(obj: object) -> str:
@@ -204,9 +218,9 @@ async def _run_verifier(user_prompt: str) -> None:
     await _invoke_agent(user_prompt, verifier_agent_tool, "Verifier")
 
 
-async def _run_agent(agent: str, prompt: str) -> None:
+async def _run_agent(agent: str, prompt: str, state: ReplState) -> None:
     if agent == "workflow":
-        await _run_workflow(prompt)
+        await _run_workflow(prompt, state)
     elif agent == "designer":
         await _run_designer(prompt)
     elif agent == "planner":
@@ -219,14 +233,15 @@ async def _run_agent(agent: str, prompt: str) -> None:
         logger.error("Unknown agent: %s", agent)
 
 
-async def _repl(current_agent: str) -> None:
+async def _repl(current_agent: str, state: ReplState) -> None:
     logger.info(
-        "Entering REPL. Current agent: %s (use /agent <name>, /help, /exit)",
+        "Entering REPL. Current agent: %s (use /agent <name>, /workspace <name>, /help, /exit)",
         current_agent,
     )
     while True:
+        workspace_info = f" workspace:{state.current_workspace}" if state.current_workspace else ""
         try:
-            line = input(f"[{current_agent}] > ").strip()
+            line = input(f"[{current_agent}{workspace_info}] > ").strip()
         except (EOFError, KeyboardInterrupt):
             logger.info("Exiting REPL (interrupt)")
             break
@@ -241,13 +256,31 @@ async def _repl(current_agent: str) -> None:
             else:
                 logger.warning("Unknown agent '%s' (choices: %s)", name, ", ".join(AGENT_KEYS))
             continue
+        if line.startswith("/workspace"):
+            parts = line.split(maxsplit=1)
+            if len(parts) == 1:
+                # Show current workspace
+                if state.current_workspace:
+                    logger.info("Current workspace: %s", state.current_workspace)
+                else:
+                    logger.info("No workspace set (auto-generated will be used)")
+            else:
+                # Set workspace
+                workspace_name = parts[1].strip()
+                if workspace_name:
+                    state.current_workspace = workspace_name
+                    logger.info("Set workspace to: %s", state.current_workspace)
+                else:
+                    state.current_workspace = None
+                    logger.info("Cleared workspace (auto-generated will be used)")
+            continue
         if line == "/exit":
             logger.info("Exiting REPL")
             break
         if line == "/help":
-            logger.info("Commands: /agent <name>, /exit, /help")
+            logger.info("Commands: /agent <name>, /workspace [<name>], /exit, /help")
             continue
-        await _run_agent(current_agent, line)
+        await _run_agent(current_agent, line, state)
 
 
 async def main() -> None:
@@ -255,11 +288,12 @@ async def main() -> None:
     parser = _build_arg_parser()
     args = parser.parse_args()
     agent = args.agent
+    state = ReplState()
     # Optional initial run if prompt provided; otherwise skip to REPL
     if args.prompt:
-        await _run_agent(agent, args.prompt)
+        await _run_agent(agent, args.prompt, state)
     # Enter REPL regardless
-    await _repl(agent)
+    await _repl(agent, state)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution path
