@@ -171,18 +171,33 @@ info:
 container-build:
     podman build --format docker -f computron_os_dockerfile -t computron_9000:latest .
 
-container-run:
+container-stop:
+    podman stop computron_virtual_computer
+
+container-start:
     #!/usr/bin/env bash
     set -euo pipefail
-    home_dir=$(grep '^  home_dir:' config.yaml | awk '{print $2}')
-    if [ ! -d "${home_dir}/container_home" ]; then
-        mkdir -p "${home_dir}/container_home"
+    # Extract only the virtual_computer.home_dir value
+    home_dir=$(awk '/^virtual_computer:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
+    if [ ! -d "${home_dir}" ]; then
+        mkdir -p "${home_dir}"
     fi
     podman run -d --rm \
-      --name computron_agent \
+      --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
-      -v "${home_dir}/container_home:/home/computron:rw,z" \
+      -v "${home_dir}:/home/computron:rw,z" \
       computron_9000:latest sleep infinity
-    echo "Container 'computron_agent' started in background and ready for exec commands."
+    echo "Container 'computron_virtual_computer' started in background and ready for exec commands."
+
+container-shell:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if podman container exists computron_virtual_computer; then
+        echo "Opening shell in running container computron_virtual_computer"
+        podman exec -it computron_virtual_computer bash
+    else
+        echo "Container 'computron_virtual_computer' is not running. Start it with: just container-start" >&2
+        exit 1
+    fi
 

@@ -1,3 +1,5 @@
+"""Tests for the tool loop functionality."""
+
 import pytest
 from pydantic import BaseModel
 

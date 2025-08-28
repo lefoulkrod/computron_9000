@@ -3,21 +3,34 @@ models:
     model: hf.co/unsloth/Qwen2.5-Coder-32B-Instruct-128K-GGUF:Q4_K_M
     options:
       num_ctx: 73728
-  - name: gemma3
-    model: gemma3:27b-it-qat-tools
-    options:
-      num_ctx: 131072
-      temperature: .6
+      temperature: 0.1
   - name: qwen3
-    model: qwen3-30B-A3B-128K-GGUF:Q5_K_XL_fix_think
+    model: qwen3:30b-a3b-thinking-2507-q8_0
     think: true
     options:
-      num_ctx: 119808
+      num_ctx: 73728
+  - name: gpt
+    model: gpt-oss:120b
+    think: true
+    options:
+      num_ctx: 128000
   - name: handoff_agent
-    model: qwen3-30B-A3B-128K-GGUF:Q5_K_XL_fix_think
+    model: gpt-oss:120b
     think: false
     options:
-      num_ctx: 119808
+      num_ctx: 128000
+  - name: coder_architect
+    model: gpt-oss:120b
+    think: true
+    options:
+      num_ctx: 128000
+      reasoning_effort: high
+  - name: coder_developer
+    model: gpt-oss:120b
+    think: true
+    options:
+      num_ctx: 128000
+      reasoning_effort: high
   - name: vision
     model: qwen2.5vl:32b
     options:
@@ -25,11 +38,12 @@ models:
     think: false
 settings:
   home_dir: /home/larry/.computron_9000
-  default_model: qwen3
+  default_model: gpt
 virtual_computer:
-  container_name: computron_agent
+  container_name: computron_virtual_computer
   container_user: computron
   home_dir: /home/larry/.computron_9000/container_home
+  container_working_dir: /home/computron
   
 tools:
   web:
