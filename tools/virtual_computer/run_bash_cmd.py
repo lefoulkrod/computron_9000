@@ -1,7 +1,12 @@
-"""Tool for running bash commands in a container."""
+"""Tool for running bash commands in a container with guardrails.
+
+Adds deny patterns, per-command timeouts, and strict bash flags to ensure only
+short-lived, test-oriented commands execute in the headless execution environment.
+"""
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from podman import PodmanClient
@@ -9,6 +14,7 @@ from podman.domain.containers import Container
 from pydantic import BaseModel
 
 from config import load_config
+from tools.virtual_computer.workspace import get_current_workspace_folder
 
 if TYPE_CHECKING:
     from podman.domain.containers import Container
@@ -17,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 class RunBashCmdError(Exception):
-    """Custom exception for errors during bash command execution in container.
+    """Error raised when a bash command execution fails in the container.
 
     Args:
-        message (str): Error message describing the failure.
+        message: Error message describing the failure.
     """
 
     def __init__(self, message: str) -> None:
@@ -36,9 +42,9 @@ class BashCmdResult(BaseModel):
     """Validated result for a bash command executed in a container.
 
     Attributes:
-        stdout (str | None): Standard output from the command.
-        stderr (str | None): Standard error from the command.
-        exit_code (int | None): Exit code from the command execution.
+    stdout: Standard output from the command.
+    stderr: Standard error from the command.
+    exit_code: Exit code from the command execution.
     """
 
     stdout: str | None
@@ -48,20 +54,89 @@ class BashCmdResult(BaseModel):
 
 BASH_CMD_TIMEOUT: float = 60.0
 
+# Allowed top-level commands or command prefixes (conservative default)
+_ALLOWED_PREFIXES: tuple[str, ...] = (
+    "python",
+    "python3",
+    "pip",
+    "pytest",
+    "ruff",
+    "mypy",
+    "node",
+    "npm",
+    "git",
+    "echo",
+    "ls",
+    "cat",
+    "pwd",
+)
 
-async def run_bash_cmd(cmd: str) -> BashCmdResult:
-    """Execute a bash command in your virtual computer which is Ubuntu LTS.
+# Deny substrings indicating long-running servers/watchers
+_DENY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bserve\b", re.IGNORECASE),
+    # Block explicit 'dev' scripts like `npm run dev` but allow flags like '--save-dev'.
+    # Negative lookbehind ensures 'dev' isn't preceded by 'save-' (e.g. --save-dev)
+    # or part of 'saved'.
+    re.compile(r"(?<!save-)\bdev\b", re.IGNORECASE),
+    re.compile(r"\bstart\b", re.IGNORECASE),
+    re.compile(r"\bwatch\b", re.IGNORECASE),
+    re.compile(r"tail\s+-f"),
+    re.compile(r"sleep\s+inf(inity)?", re.IGNORECASE),
+    re.compile(r"python\s+-m\s+http\.server"),
+    re.compile(r"playwright\b.*\bheaded\b", re.IGNORECASE),
+)
 
-    Execute any bash command with full access to a virtual computer. Times out after 60 seconds.
+
+def _is_allowed_command(cmd: str) -> bool:
+    """Check if a command is permitted by execution policy.
+
+    Conservative rule: block only when a deny pattern matches; otherwise allow.
+    This avoids breaking legitimate multi-line or compound shell commands used
+    in tests.
 
     Args:
-        cmd (str): The bash command to execute.
+        cmd: The command string to evaluate.
 
     Returns:
-        BashCmdResult: Validated result object containing stdout, stderr, and exit_code.
+        bool: True if allowed; False if a deny pattern matches or empty input.
+    """
+    lowered = cmd.strip()
+    if not lowered:
+        return False
+    return all(not pat.search(lowered) for pat in _DENY_PATTERNS)
+
+
+def _timeout_for(cmd: str) -> float:
+    """Compute a timeout based on the command content.
+
+    Args:
+        cmd: The command string to evaluate.
+
+    Returns:
+        float: Timeout in seconds. Uses command-specific overrides for common
+        long-running operations; otherwise defaults to ``BASH_CMD_TIMEOUT``.
+    """
+    text = cmd.strip()
+    if "pip install" in text or "-m venv" in text:
+        return 180.0
+    if text.startswith("pytest"):
+        return 120.0
+    return BASH_CMD_TIMEOUT
+
+
+async def run_bash_cmd(cmd: str) -> BashCmdResult:
+    """Execute a bash command in the virtual computer.
+
+    Enforces deny patterns, strict bash flags, and per-command timeouts.
+
+    Args:
+        cmd: The bash command to execute.
+
+    Returns:
+        BashCmdResult: Object containing ``stdout``, ``stderr``, and ``exit_code``.
 
     Raises:
-        RunBashCmdError: If execution fails, container is not found, or timeout occurs.
+        RunBashCmdError: If execution fails or a timeout occurs.
     """
 
     def _raise_container_not_found(container_name: str) -> None:
@@ -82,29 +157,45 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
             _raise_container_not_found(container_name)
             return BashCmdResult(stdout=None, stderr=None, exit_code=None)
 
-        exec_args = ["bash", "-c", cmd]
+        # Enforce execution policy (deny patterns)
+        if not _is_allowed_command(cmd):
+            msg = "Command is not allowed by execution policy"
+            logger.error("%s: %s", msg, cmd)
+            return BashCmdResult(stdout=None, stderr=msg, exit_code=126)
+
+        # Add strict flags to ensure one-shot behavior
+        strict_cmd = f"set -euo pipefail; {cmd}"
+        exec_args = ["bash", "-c", strict_cmd]
+
+        workspace_folder = get_current_workspace_folder()
+        container_working_dir = config.virtual_computer.container_working_dir.rstrip("/")
+        workdir = (
+            f"{container_working_dir}/{workspace_folder}"
+            if workspace_folder
+            else container_working_dir
+        )
 
         loop = asyncio.get_running_loop()
 
         def _exec_run_sync() -> tuple[int | None, object]:
-            return container.exec_run(
-                exec_args,
-                stdout=True,
-                stderr=True,
-                demux=True,
-                tty=False,
-                user=container_user,
-            )
+            exec_run_kwargs = {
+                "stdout": True,
+                "stderr": True,
+                "demux": True,
+                "tty": False,
+                "user": container_user,
+                "workdir": workdir,
+            }
+            return container.exec_run(exec_args, **exec_run_kwargs)
 
         try:
             exec_result = await asyncio.wait_for(
-                loop.run_in_executor(None, _exec_run_sync), timeout=BASH_CMD_TIMEOUT
+                loop.run_in_executor(None, _exec_run_sync), timeout=_timeout_for(cmd)
             )
         except TimeoutError:
-            logger.exception(
-                "Timeout after %s seconds running bash command: %s", BASH_CMD_TIMEOUT, cmd
-            )
-            msg = f"Timeout after {BASH_CMD_TIMEOUT} seconds running bash command: {cmd}"
+            timeout_used = _timeout_for(cmd)
+            logger.exception("Timeout after %s seconds running bash command: %s", timeout_used, cmd)
+            msg = f"Timeout after {timeout_used} seconds running bash command: {cmd}"
             raise RunBashCmdError(msg) from None
 
         logger.debug("exec_result: %r", exec_result)

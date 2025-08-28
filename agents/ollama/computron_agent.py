@@ -9,11 +9,7 @@ from agents.prompt import COMPUTRON_AGENT_PROMPT
 from agents.types import Agent
 from config import load_config
 from models import get_default_model
-from tools.virtual_computer import (
-    read_file_or_dir_in_home_dir,
-    run_bash_cmd,
-    write_file_in_home_dir,
-)
+from tools.code.execute_code import execute_python_program
 
 from .web_agent import web_agent_tool
 
@@ -28,7 +24,7 @@ computron: Agent = Agent(
     instruction=COMPUTRON_AGENT_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[web_agent_tool, run_bash_cmd, write_file_in_home_dir, read_file_or_dir_in_home_dir],
+    tools=[web_agent_tool, execute_python_program],
     think=model.think,
 )
 

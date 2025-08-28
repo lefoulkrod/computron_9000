@@ -28,8 +28,27 @@ class ModelConfig(BaseModel):
 
     name: str
     model: str
-    options: dict[str, Any]
+    # Make options optional in YAML (missing or null) and normalize to an empty dict
+    options: dict[str, Any] = Field(default_factory=dict)
     think: bool = False
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _normalize_options(cls, v: object) -> dict[str, Any]:
+        """Normalize ``options`` allowing missing or null values.
+
+        Args:
+            v: Incoming value from YAML (may be None, dict, or missing).
+
+        Returns:
+            A dictionary of options (empty if unspecified).
+        """
+        if v is None:
+            return {}
+        if isinstance(v, dict):
+            return v
+        msg = "options must be a mapping if provided"
+        raise TypeError(msg)
 
 
 class SearchGoogleConfig(BaseModel):
@@ -81,6 +100,7 @@ class VirtualComputerConfig(BaseModel):
     container_name: str
     container_user: str
     home_dir: str
+    container_working_dir: str
 
 
 class AppConfig(BaseModel):
@@ -98,7 +118,8 @@ class AppConfig(BaseModel):
     def validate_models_not_empty(cls, v: list[ModelConfig]) -> list[ModelConfig]:
         """Ensure at least one model is configured."""
         if not v:
-            raise ValueError("At least one model must be configured")
+            msg = "At least one model must be configured"
+            raise ValueError(msg)
         return v
 
     def get_model_by_name(self, name: str) -> ModelConfig | None:
@@ -125,9 +146,8 @@ class AppConfig(BaseModel):
         """
         model = self.get_model_by_name(self.settings.default_model)
         if model is None:
-            raise ValueError(
-                f"Default model '{self.settings.default_model}' not found in configured models",
-            )
+            msg = f"Default model '{self.settings.default_model}' not found in configured models"
+            raise ValueError(msg)
         return model
 
 
@@ -146,7 +166,7 @@ def load_config() -> AppConfig:
 
     """
     path = Path(__file__).parent.parent / "config.yaml"
-    logger.info(f"Loading configuration from {path}")
+    logger.info("Loading configuration from %s", path)
 
     try:
         with path.open(encoding="utf-8") as f:
@@ -158,19 +178,21 @@ def load_config() -> AppConfig:
 
         config = AppConfig(**data)
         logger.info(
-            f"Successfully loaded configuration with {len(config.models)} models",
+            "Successfully loaded configuration with %d models",
+            len(config.models),
         )
-        return config
 
     except FileNotFoundError as exc:
-        error_msg = f"Config file not found: {path}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from exc
+        msg = f"Config file not found: {path}"
+        logger.exception(msg)
+        raise RuntimeError(msg) from exc
     except yaml.YAMLError as exc:
-        error_msg = f"Invalid YAML in config file {path}: {exc}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from exc
+        msg = f"Invalid YAML in config file {path}: {exc}"
+        logger.exception(msg)
+        raise RuntimeError(msg) from exc
     except Exception as exc:
-        error_msg = f"Failed to load config from {path}: {exc}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from exc
+        msg = f"Failed to load config from {path}: {exc}"
+        logger.exception(msg)
+        raise RuntimeError(msg) from exc
+    else:
+        return config

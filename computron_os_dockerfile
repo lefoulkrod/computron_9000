@@ -1,32 +1,58 @@
-
 FROM ubuntu:22.04
 
-# Set non-interactive frontend and default timezone
+# Non-interactive + UTC timezone
 ENV DEBIAN_FRONTEND=noninteractive
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone
 
-# Install system dependencies
+# System deps for Python, Node, compiling packages, etc.
 RUN apt-get update && \
-    apt-get install -y software-properties-common curl gnupg2 && \
+    apt-get install -y --no-install-recommends \
+      software-properties-common curl gnupg2 xz-utils ca-certificates jq \
+      build-essential git sudo unzip && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
-    apt-get install -y python3.12 python3.12-venv python3-pip && \
-    curl -fsSL https://deb.nodesource.com/setup_current.x | bash - && \
-    apt-get install -y nodejs && \
+    apt-get install -y --no-install-recommends \
+      python3.12 python3.12-venv python3-pip && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Create non-sudo user
-RUN useradd --create-home --shell /bin/bash computron && \
-    passwd -d computron
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    cp /root/.local/bin/uv /usr/local/bin/uv && \
+    cp /root/.local/bin/uvx /usr/local/bin/uvx
 
-# Set permissions: only allow writing to home directory
-RUN chown -R computron:computron /home/computron && \
+# Replace pip with uv
+RUN ln -sf /usr/local/bin/uv /usr/local/bin/pip
+
+# Install latest Node.js LTS
+RUN set -eux; \
+    LTS_VERSION=$(curl -fsSL https://nodejs.org/dist/index.json | jq -r '[.[] | select(.lts != false)][0].version' | sed 's/^v//'); \
+    curl -fsSLO "https://nodejs.org/dist/v${LTS_VERSION}/node-v${LTS_VERSION}-linux-x64.tar.xz"; \
+    tar -xJf "node-v${LTS_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner; \
+    rm "node-v${LTS_VERSION}-linux-x64.tar.xz"; \
+    ln -sf /usr/local/bin/node /usr/local/bin/nodejs; \
+    node -v && npm -v
+
+# Create non-root user 'computron' with sudo (no password)
+RUN useradd --create-home --shell /bin/bash computron && \
+    passwd -d computron && \
+    usermod -aG sudo computron && \
+    echo 'computron ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    chown -R computron:computron /home/computron && \
     chmod 700 /home/computron
 
-# Switch to non-sudo user
+# Aliases for Python (python → python3.12)
+RUN ln -s /usr/bin/python3.12 /usr/local/bin/python
+
+# Switch to non-root user (safer sandbox)
 USER computron
 WORKDIR /home/computron
 
-# Set default shell to bash
+# Default shell
 SHELL ["/bin/bash", "-c"]
+
+# Startup: show versions (helps debug sandbox env quickly)
+CMD echo "Python: $(python --version)" && \
+    echo "Pip: $(pip --version)" && \
+    echo "Node: $(node -v)" && \
+    echo "NPM: $(npm -v)" && \
+    bash
