@@ -1,10 +1,10 @@
 import logging
 
-from agents.ollama.sdk.higher_order import make_run_agent_as_tool_function
 from agents.ollama.sdk.logging_callbacks import (
     make_log_after_model_call,
     make_log_before_model_call,
 )
+from agents.ollama.sdk.run_agent_tools import make_run_agent_as_tool_function
 from agents.prompt import COMPUTRON_AGENT_PROMPT
 from agents.types import Agent
 from config import load_config

@@ -99,3 +99,83 @@ def test_apply_text_patch_exact_unified_diff_output() -> None:
                 " line3\n"
             )
             assert res.diff == expected
+
+
+@pytest.mark.unit
+def test_apply_text_patch_multiline_replacement_expands_content_exact_diff() -> None:
+    """Replace two lines with three lines; assert the full unified diff string."""
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            write_file("file.txt", "a\nb\nc\nd\n")
+            res = apply_text_patch(
+                "file.txt",
+                start_line=2,
+                end_line=3,
+                replacement="B1\nB2\nB3\n",
+            )
+            assert res.success, res.error
+            expected = (
+                "--- file.txt (before)\n"
+                "+++ file.txt (after)\n"
+                "@@ -1,4 +1,5 @@\n"
+                " a\n"
+                "-b\n"
+                "-c\n"
+                "+B1\n"
+                "+B2\n"
+                "+B3\n"
+                " d\n"
+            )
+            assert res.diff == expected
+
+
+@pytest.mark.unit
+def test_apply_text_patch_delete_middle_range_exact_diff() -> None:
+    """Delete a middle range by replacing it with an empty string; assert exact diff."""
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            write_file("file.txt", "1\n2\n3\n4\n5\n")
+            res = apply_text_patch(
+                "file.txt",
+                start_line=2,
+                end_line=4,
+                replacement="",
+            )
+            assert res.success, res.error
+            expected = (
+                "--- file.txt (before)\n"
+                "+++ file.txt (after)\n"
+                "@@ -1,5 +1,2 @@\n"
+                " 1\n"
+                "-2\n"
+                "-3\n"
+                "-4\n"
+                " 5\n"
+            )
+            assert res.diff == expected
+
+
+@pytest.mark.unit
+def test_apply_text_patch_replace_last_line_with_multiple_lines_exact_diff() -> None:
+    """Replace the final line with multiple lines; assert the full unified diff output."""
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            write_file("file.txt", "x\ny\nz\n")
+            res = apply_text_patch(
+                "file.txt",
+                start_line=3,
+                end_line=3,
+                replacement="Z1\nZ2\n",
+            )
+            assert res.success, res.error
+            expected = (
+                "--- file.txt (before)\n"
+                "+++ file.txt (after)\n"
+                "@@ -1,3 +1,4 @@\n"
+                " x\n"
+                " y\n"
+                "-z\n"
+                "+Z1\n"
+                "+Z2\n"
+            )
+            assert res.diff == expected

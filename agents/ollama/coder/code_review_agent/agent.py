@@ -31,6 +31,8 @@ from tools.virtual_computer import (
     tail,
 )
 
+from .models import CodeReviewResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,6 +111,7 @@ code_review_agent_tool = make_run_agent_as_tool_function(
     tool_description=(
         "Given a plan step and coder output, decide if it passes and provide required_changes if not."
     ),
+    result_type=CodeReviewResult,
     before_model_callbacks=[before_model_call_callback],
     after_model_callbacks=[after_model_call_callback],
 )

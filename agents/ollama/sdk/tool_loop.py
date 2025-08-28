@@ -37,6 +37,61 @@ def _to_serializable(obj: Any) -> Any:
     return obj
 
 
+async def _chat_with_retries(
+    client: AsyncClient,
+    *,
+    model: str,
+    messages: list[dict[str, Any]],
+    options: Mapping[str, Any] | None,
+    tools: Sequence[Callable[..., Any]] | None,
+    think: bool,
+    retries: int = 20,
+) -> ChatResponse:
+    """Call client.chat with simple retries and no backoff.
+
+    Args:
+        client (AsyncClient): The Ollama async client instance.
+        model (str): The model to use.
+        messages (list[dict[str, Any]]): The chat messages payload.
+        options (Mapping[str, Any] | None): Model options.
+        tools (Sequence[Callable[..., Any]] | None): Tool functions to expose.
+        think (bool): Whether to use "think" option.
+        retries (int): Number of retry attempts after the initial try. Defaults to 20.
+
+    Returns:
+        ChatResponse: The successful chat response.
+
+    Raises:
+        Exception: The last exception raised by client.chat after exhausting retries.
+    """
+    attempt = 0
+    total_attempts = 1 + max(0, retries)
+    while attempt < total_attempts:
+        try:
+            return await client.chat(
+                model=model,
+                messages=messages,
+                options=options,
+                tools=tools or [],
+                stream=False,
+                think=think,
+            )
+        except Exception as exc:
+            attempt += 1
+            if attempt >= total_attempts:
+                # Exhausted retries, re-raise the last exception
+                raise
+            logger.warning(
+                "client.chat failed (attempt %s/%s): %s",
+                attempt,
+                total_attempts,
+                exc,
+            )
+    # Should never reach here, but for type safety, raise an error
+    msg = "Failed to get chat response after retries."
+    raise ToolLoopError(msg)
+
+
 def _validate_tool_arguments(
     tool_func: Callable[..., Any], arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -121,6 +176,7 @@ async def run_tool_call_loop(
     tools: Sequence[Callable[..., Any]] | None = None,
     model: str = "",
     model_options: Mapping[str, Any] | None = None,
+    *,
     think: bool = False,
     before_model_callbacks: list[Callable[[list[dict[str, Any]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
@@ -144,7 +200,7 @@ async def run_tool_call_loop(
         tuple[str | None, str | None]: The message content and thinking as they are generated.
 
     Raises:
-        ToolLoopError: If an unexpected error occurs in the tool loop.
+    ToolLoopError: If an unexpected error occurs in the tool loop.
 
     """  # noqa: E501
     client = AsyncClient()
@@ -154,12 +210,13 @@ async def run_tool_call_loop(
             for before_cb in before_model_callbacks:
                 before_cb(list(messages))
         try:
-            response = await client.chat(
+            # Call model with internal retry handling
+            response = await _chat_with_retries(
+                client,
                 model=model,
                 messages=messages,
                 options=model_options,
                 tools=tools,
-                stream=False,
                 think=think,
             )
             if after_model_callbacks:
@@ -217,5 +274,6 @@ async def run_tool_call_loop(
                 messages.append(tool_message)
             # Do not yield tool results, just continue looping
         except Exception as exc:
-            logger.exception("Unhandled exception in tool loop: %s", exc)
-            raise ToolLoopError("An error occurred while processing your message.") from exc
+            logger.exception("Unhandled exception in tool loop")
+            msg = "An error occurred while processing your message."
+            raise ToolLoopError(msg) from exc

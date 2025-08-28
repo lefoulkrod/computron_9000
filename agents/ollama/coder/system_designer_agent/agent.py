@@ -2,7 +2,7 @@
 
 import logging
 
-from agents.ollama.coder.system_designer_agent.models import generate_schema_summary
+from agents.ollama.coder.system_designer_agent.models import SystemDesign, generate_schema_summary
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -74,6 +74,7 @@ system_designer_agent_tool = make_run_agent_as_tool_function(
     tool_description="""
 	Produce a clear, actionable software architecture for the given assignment.
 	""",
+    result_type=SystemDesign,
     before_model_callbacks=[before_model_call_callback],
     after_model_callbacks=[after_model_call_callback],
 )

@@ -1,3 +1,10 @@
+"""Extracts and models LLM runtime statistics for Ollama agent responses.
+
+This module provides:
+- LLMRuntimeStats: Pydantic model for runtime statistics
+- llm_runtime_stats: function to parse and convert response stats
+"""
+
 import logging
 
 from ollama import ChatResponse, GenerateResponse
