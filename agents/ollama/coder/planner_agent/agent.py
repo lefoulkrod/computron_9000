@@ -3,7 +3,7 @@
 import logging
 from textwrap import dedent
 
-from agents.ollama.coder.planner_agent.models import generate_plan_step_schema_summary
+from agents.ollama.coder.planner_agent.models import PlanStep, generate_plan_step_schema_summary
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -91,6 +91,8 @@ planner_agent_tool = make_run_agent_as_tool_function(
     tool_description="""
     Turn a high-level design into a structured, JSON implementation plan.
     """,
+    # Return raw JSON string; downstream code parses into List[PlanStep]
+    result_type=list[PlanStep],
     before_model_callbacks=[before_model_call_callback],
     after_model_callbacks=[after_model_call_callback],
 )

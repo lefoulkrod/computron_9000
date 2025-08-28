@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from agents.ollama.coder.code_review_agent import code_review_agent_tool
-from agents.ollama.coder.code_review_agent.models import CodeReviewResult
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
@@ -121,23 +120,10 @@ async def _run_system_designer_agent(task_prompt: str) -> SystemDesign:
         CoderWorkflowAgentError: If the agent output is not valid JSON or fails validation.
     """
     try:
-        raw = await system_designer_agent_tool(task_prompt)
+        return await system_designer_agent_tool(task_prompt)
     except Exception as exc:  # pragma: no cover - defensive, underlying lib may raise generic
         logger.exception("System designer agent call failed")
         msg = "System designer agent call failed"
-        raise CoderWorkflowAgentError(msg) from exc
-    logger.debug("system design response: %s", raw)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.exception("System designer returned non-JSON output")
-        msg = "System designer did not return valid JSON"
-        raise CoderWorkflowAgentError(msg) from exc
-    try:
-        return SystemDesign.model_validate(data)
-    except Exception as exc:  # pragma: no cover - validation path
-        logger.exception("System design JSON failed validation")
-        msg = "Invalid system design JSON structure"
         raise CoderWorkflowAgentError(msg) from exc
 
 
@@ -157,29 +143,13 @@ async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[Pla
     """
     plan_prompt = f"software assignment:\n{prompt}\narchitectural design:\n{design_json}\n"
     try:
-        raw_plan = await planner_agent_tool(plan_prompt)
+        plan_steps = await planner_agent_tool(plan_prompt)
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Planner agent call failed")
         msg = "Planner agent call failed"
         raise CoderWorkflowAgentError(msg) from exc
-    logger.debug("planner agent response: %s", raw_plan)
-    try:
-        plan_data = json.loads(raw_plan)
-    except json.JSONDecodeError as exc:
-        msg = "Failed to parse plan response as JSON"
-        logger.exception(msg)
-        raise CoderWorkflowAgentError(msg) from exc
-    if not isinstance(plan_data, list):
-        msg = "Plan response is not a list"
-        logger.error("%s: %s", msg, plan_data)
-        raise CoderWorkflowAgentError(msg)
-    try:
-        plan_steps = [PlanStep.model_validate(step) for step in plan_data]
-    except (TypeError, ValueError) as exc:
-        msg = "Failed to validate plan response"
-        logger.exception(msg)
-        raise CoderWorkflowAgentError(msg) from exc
-    return plan_steps, raw_plan
+    else:
+        return plan_steps, json.dumps([s.model_dump() for s in plan_steps], indent=2)
 
 
 def _collect_step_dependencies(
@@ -317,29 +287,14 @@ async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, lis
         Tuple of (success, required_changes).
 
     Raises:
-        CoderWorkflowAgentError: If the code review agent returns invalid JSON
-            or a payload that fails validation against ``CodeReviewResult``.
+        CoderWorkflowAgentError: If the code review agent call fails.
     """
     payload = {"step": step.model_dump(), "coder_output": result}
     try:
-        raw = await code_review_agent_tool(json.dumps(payload))
+        review = await code_review_agent_tool(json.dumps(payload))
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Code review agent call failed for step: %s", step.id)
         msg = f"Code review agent call failed for step: {step.id}"
         raise CoderWorkflowAgentError(msg) from exc
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.exception("Code review returned non-JSON output for step: %s", step.id)
-        msg = "Code review agent did not return valid JSON"
-        raise CoderWorkflowAgentError(msg) from exc
-
-    try:
-        # Validate into model, then project to (bool, list[str]) API
-        review = CodeReviewResult.model_validate(data)
-    except Exception as exc:  # pragma: no cover - validation path
-        logger.exception("Code review JSON failed validation for step: %s", step.id)
-        msg = "Invalid code review JSON structure"
-        raise CoderWorkflowAgentError(msg) from exc
-    return review.success, review.required_changes
+    else:
+        return review.success, review.required_changes

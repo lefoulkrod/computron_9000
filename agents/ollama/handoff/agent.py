@@ -3,7 +3,7 @@
 import logging
 
 from agents.ollama.sdk import Agent
-from agents.ollama.sdk.higher_order import make_run_agent_as_tool_function
+from agents.ollama.sdk.run_agent_tools import make_run_agent_as_tool_function
 from config import load_config
 from models import get_model_by_name
 

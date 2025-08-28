@@ -7,9 +7,10 @@ name to the returned function so the tool loop can distinguish multiple agents.
 from collections.abc import Callable
 
 import pytest
+from pydantic import BaseModel
 
 from agents.types import Agent
-from agents.ollama.sdk.higher_order import make_run_agent_as_tool_function
+from agents.ollama.sdk.run_agent_tools import make_run_agent_as_tool_function
 
 
 @pytest.mark.unit
@@ -98,3 +99,29 @@ async def test_docstring_exact_match() -> None:
     )
 
     assert func.__doc__ == expected
+
+
+@pytest.mark.unit
+async def test_docstring_dynamic_return_type() -> None:
+    """Docstring 'Returns' section should reflect the provided result_type name."""
+
+    class InlineModel(BaseModel):
+        foo: int
+
+    agent = Agent(
+        name="DocTypeAgent",
+        description="desc",
+        instruction="Do things",
+        model="dummy-model",
+        options={},
+        tools=[],
+        think=False,
+    )
+
+    func = make_run_agent_as_tool_function(
+        agent=agent, tool_description="Doc type desc", result_type=InlineModel
+    )
+    doc = func.__doc__ or ""
+    # Check the specific Returns line contains the dynamic type name
+    assert "Returns:" in doc
+    assert "\n    InlineModel: The result returned by the agent after processing the instructions.\n" in doc
