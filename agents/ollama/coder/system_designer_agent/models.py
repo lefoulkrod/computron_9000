@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from utils.pydantic_schema import schema_summary
+from agents.ollama.sdk.schema_tools import model_to_schema
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def generate_json_schema() -> dict[str, Any]:  # pragma: no cover
 
 def generate_schema_summary() -> str:
     """Return simplified placeholder JSON for prompts and docs."""
-    return schema_summary(SystemDesign)
+    return model_to_schema(SystemDesign)
 
 
 __all__ = [

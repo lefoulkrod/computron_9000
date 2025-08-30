@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from utils.pydantic_schema import JSONValue, schema_summary
+from agents.ollama.sdk.schema_tools import JSONValue, model_to_schema
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def generate_plan_step_schema_summary() -> str:
             "error handling",
         ],
     }
-    return schema_summary(PlanStep, overrides=overrides)
+    return model_to_schema(PlanStep, overrides=overrides)
 
 
 __all__ = [

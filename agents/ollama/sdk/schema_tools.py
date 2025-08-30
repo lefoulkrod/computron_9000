@@ -1,6 +1,6 @@
 r"""Utilities for generating simplified, LLM friendly JSON placeholders for Pydantic models.
 
-Centralizes logic for producing *example oriented* JSON structures that are:
+Centralizes logic for producing example-oriented JSON structures that are:
 
 * Stable across runs (deterministic field ordering)
 * Without "$ref", "anyOf", explicit null markers
@@ -21,12 +21,12 @@ Example:
     ...     tags: list[str]
     ...     notes: list[dict[str, str]] | None
     ...
-    >>> from utils.pydantic_schema import model_placeholder_shape, schema_summary
-    >>> schema_summary(User)
+    >>> from agents.ollama.sdk.schema_tools import model_placeholder_shape, model_to_schema
+    >>> model_to_schema(User)
     '{\n    "id": "number", ... }'  # shortened example
 
 Override:
-    schema_summary(User, overrides={"id": 123, "name": "Alice"})
+    model_to_schema(User, overrides={"id": 123, "name": "Alice"})
 
 Targeted overrides inject concrete example literals without losing automatic
 synchronization when fields are added or removed.
@@ -256,15 +256,15 @@ def _render_commented_json(
     Comments are inserted above keys for object at the corresponding path.
     """
 
-    def render_value(value: JSONValue, path: tuple[str, ...], level: int) -> list[str]:
+    def _render_value(value: JSONValue, path: tuple[str, ...], level: int) -> list[str]:
         if isinstance(value, dict):
-            return render_dict(value, path, level)
+            return _render_dict(value, path, level)
         if isinstance(value, list):
-            return render_list(value, path, level)
+            return _render_list(value, path, level)
         # Scalars always rendered with json.dumps for correctness
         return ["".join((" " * (indent * level), json.dumps(value)))]
 
-    def render_dict(d: dict[str, JSONValue], path: tuple[str, ...], level: int) -> list[str]:
+    def _render_dict(d: dict[str, JSONValue], path: tuple[str, ...], level: int) -> list[str]:
         lines: list[str] = []
         pad = " " * (indent * level)
         lines.append(pad + "{")
@@ -279,7 +279,7 @@ def _render_commented_json(
             if doc:
                 lines.append(key_pad + "// " + doc)
             if isinstance(v, dict):
-                child_lines = render_dict(v, (*path, k), level + 1)
+                child_lines = _render_dict(v, (*path, k), level + 1)
                 # Attach first child line to key prefix
                 first = child_lines[0]
                 rest = child_lines[1:]
@@ -288,7 +288,7 @@ def _render_commented_json(
                 if not last:
                     lines[-1] = lines[-1] + ","
             elif isinstance(v, list):
-                child_lines = render_list(v, (*path, k), level + 1)
+                child_lines = _render_list(v, (*path, k), level + 1)
                 lines.append(key_pad + json.dumps(k) + ": " + child_lines[0].strip())
                 lines.extend(child_lines[1:])
                 if not last:
@@ -301,20 +301,20 @@ def _render_commented_json(
         lines.append(pad + "}")
         return lines
 
-    def render_list(lst: list[JSONValue], path: tuple[str, ...], level: int) -> list[str]:
+    def _render_list(lst: list[JSONValue], path: tuple[str, ...], level: int) -> list[str]:
         lines: list[str] = []
         pad = " " * (indent * level)
         lines.append(pad + "[")
         for idx, el in enumerate(lst):
             last = idx == len(lst) - 1
-            child_lines = render_value(el, path, level + 1)
+            child_lines = _render_value(el, path, level + 1)
             lines.extend(child_lines)
             if not last:
                 lines[-1] = lines[-1] + ","
         lines.append(pad + "]")
         return lines
 
-    return "\n".join(render_value(obj, (), 0))
+    return "\n".join(_render_value(obj, (), 0))
 
 
 def model_placeholder_shape(model_cls: type[BaseModel]) -> dict[str, JSONValue]:
@@ -346,7 +346,7 @@ def model_placeholder_shape(model_cls: type[BaseModel]) -> dict[str, JSONValue]:
     return shape
 
 
-def schema_summary(
+def model_to_schema(
     model_cls: type[BaseModel],
     overrides: Mapping[str, JSONValue] | None = None,
     *,
@@ -383,5 +383,5 @@ def schema_summary(
 __all__ = [
     "JSONValue",
     "model_placeholder_shape",
-    "schema_summary",
+    "model_to_schema",
 ]

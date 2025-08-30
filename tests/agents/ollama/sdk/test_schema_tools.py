@@ -1,4 +1,4 @@
-"""Unit tests for utils.pydantic_schema simplified placeholder generation.
+"""Unit tests for schema_tools simplified placeholder generation.
 
 Covers:
 * Primitive field placeholder mapping
@@ -14,7 +14,7 @@ import json
 import pytest
 from pydantic import BaseModel
 
-from utils.pydantic_schema import model_placeholder_shape, schema_summary
+from agents.ollama.sdk.schema_tools import model_placeholder_shape, model_to_schema
 
 
 class Inner(BaseModel):
@@ -99,9 +99,9 @@ def test_optional_list_collapses_type() -> None:
 
 
 @pytest.mark.unit
-def test_schema_summary_overrides() -> None:
+def test_model_to_schema_overrides() -> None:
     """Overrides replace placeholder values when field present."""
-    s = schema_summary(
+    s = model_to_schema(
         Outer, overrides={"id": 123, "title": "Example"}, sort_keys=True, include_docs=True
     )
     # Comments are not valid JSON; strip them before parsing
@@ -116,7 +116,7 @@ def test_schema_summary_overrides() -> None:
 
 
 @pytest.mark.unit
-def test_schema_summary_hardcoded_json_match() -> None:
+def test_model_to_schema_hardcoded_json_match() -> None:
     """Schema summary matches an expected hardcoded JSON string (sorted keys).
 
     Ensures deterministic formatting for downstream prompt embedding stability.
@@ -148,27 +148,27 @@ def test_schema_summary_hardcoded_json_match() -> None:
         '"title": "string"\n'
         '}'
     )
-    produced = schema_summary(Outer, sort_keys=True, overrides=None, indent=0, include_docs=True)
+    produced = model_to_schema(Outer, sort_keys=True, overrides=None, indent=0, include_docs=True)
     # With include_docs=True, comments should be present inline and match expected exactly
     assert produced == expected
 
 
 @pytest.mark.unit
-def test_schema_summary_no_docstring_model_has_no_comments() -> None:
+def test_model_to_schema_no_docstring_model_has_no_comments() -> None:
     """Models without docstrings should not render comments even with include_docs=True."""
 
     class NoDocModel(BaseModel):
         a: int
         b: str
 
-    s = schema_summary(NoDocModel, include_docs=True, sort_keys=True)
+    s = model_to_schema(NoDocModel, include_docs=True, sort_keys=True)
     assert "//" not in s
     # And content parses fine as JSON
     json.loads(_strip_json_comments(s))
 
 
 @pytest.mark.unit
-def test_schema_summary_other_docstyles_are_ignored() -> None:
+def test_model_to_schema_other_docstyles_are_ignored() -> None:
     """NumPy and Sphinx/ReST docstring styles should be ignored by the Args parser."""
 
     class NumpyDocModel(BaseModel):
@@ -197,16 +197,16 @@ def test_schema_summary_other_docstyles_are_ignored() -> None:
         p: int
         q: str
 
-    s1 = schema_summary(NumpyDocModel, include_docs=True, sort_keys=True)
-    s2 = schema_summary(SphinxDocModel, include_docs=True, sort_keys=True)
+    s1 = model_to_schema(NumpyDocModel, include_docs=True, sort_keys=True)
+    s2 = model_to_schema(SphinxDocModel, include_docs=True, sort_keys=True)
     assert "//" not in s1
     assert "//" not in s2
 
 
 @pytest.mark.unit
-def test_schema_summary_includes_docs_as_comments_when_enabled() -> None:
+def test_model_to_schema_includes_docs_as_comments_when_enabled() -> None:
     """Docs are rendered as // comments above top-level keys when include_docs=True."""
-    s = schema_summary(DocumentedModel, include_docs=True, sort_keys=True, indent=2)
+    s = model_to_schema(DocumentedModel, include_docs=True, sort_keys=True, indent=2)
     # Presence of comment lines for documented fields
     assert "// Unique identifier for the entity." in s
     assert "// Human-readable name (no PII)." in s
@@ -220,7 +220,7 @@ def test_schema_summary_includes_docs_as_comments_when_enabled() -> None:
 
 
 @pytest.mark.unit
-def test_schema_summary_no_docs_by_default() -> None:
+def test_model_to_schema_no_docs_by_default() -> None:
     """Docs are not included unless explicitly requested (no // comments)."""
-    s = schema_summary(DocumentedModel, sort_keys=True)
+    s = model_to_schema(DocumentedModel, sort_keys=True)
     assert "// Unique identifier for the entity." not in s
