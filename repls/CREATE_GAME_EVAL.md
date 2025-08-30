@@ -31,6 +31,45 @@ do not use any audio game assets
 - use easy to change constants for things like gravity, player speed, enemy speed, etc.
 - use vite as the modern dev server and bundler. add an npm script dev that runs vite (dont run it yourself)
 
+--------------------------
+# Software Assignment: Mario-Inspired Python Game
+
+## Functional Requirements
+
+1. **Player Character**
+
+   * Controlled with keyboard (left, right, jump).
+   * 3 lives total; losing all lives restarts the game.
+
+2. **Environment**
+
+   * Blue background.
+   * Blocks that the player can jump into and break.
+   * Some blocks contain coins that are collected when broken.
+
+3. **Enemies**
+
+   * Enemies move horizontally on platforms.
+   * Player can kill an enemy by jumping on top of it.
+
+4. **Gameplay**
+
+   * Coins increase the score.
+   * Losing a life occurs when colliding with an enemy from the side or below.
+   * Game restarts after all lives are lost.
+
+## Technical Requirements
+
+1. Must be implemented in **Python with Pygame**.
+2. Must use **sprites** for player and enemy characters.
+
+   * Sprites can be either:
+
+     * Downloaded from the internet using `curl`
+     * OR generated programmatically (e.g., simple shapes or generated images).
+3. Assets (blocks, enemies, player, background) must be in formats appropriate for Pygame (e.g., PNG for images).
+4. The game must run as a **single Python script** with no manual asset preparation required beyond what the script itself downloads or generates.
+
 {
   "artifacts": [
     {

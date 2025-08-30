@@ -14,6 +14,7 @@ from agents.ollama.coder.architect_agent import architect_agent_tool
 from agents.ollama.coder.architect_agent.models import LowLevelDesign
 from agents.ollama.coder.code_review_agent import code_review_agent_tool
 from agents.ollama.coder.coder_agent import coder_agent_tool
+from agents.ollama.coder.coder_planner_agent import coder_planner_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
 from config import load_config
@@ -205,9 +206,28 @@ async def _run_coder_agent(step: PlanStep, *, fixes: list[str] | None = None) ->
     Raises:
         CoderWorkflowAgentError: If the coder agent call fails.
     """
+    # First, expand the plan step into ordered coder sub-steps via coder_planner agent
+    try:
+        planner_instructions = await coder_planner_agent_tool(
+            json.dumps(
+                {
+                    "step": step.model_dump(),
+                    "instructions": (
+                        "Expand this PlanStep into an ordered list of concrete coder sub-steps."
+                    ),
+                }
+            )
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Coder-planner agent call failed for step: %s", step.id)
+        msg = f"Coder-planner agent call failed for step: {step.id}"
+        raise CoderWorkflowAgentError(msg) from exc
+
     # Provide a clear, structured prompt to the coder agent about the current step
     step_payload: dict[str, Any] = {
         "step": step.model_dump(),
+        # Join list[str] into a single plain-text instruction block
+        "instructions": "\n".join(planner_instructions or []),
     }
     if fixes:
         # Provide reviewer-required fixes to guide the retry implementation.
