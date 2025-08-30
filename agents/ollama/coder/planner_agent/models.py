@@ -37,7 +37,7 @@ class PlanStep(BaseModel):
         title: Human-readable title describing the step.
         step_kind: Type of step (command or file operation).
         file_path: An optional target file path for file operations.
-        command: An optional shell command to execute (structured spec).
+        command: Optional command specification to execute.
         implementation_details: Detailed list of implementation requirements.
         depends_on: An optional list of components this step depends on.
     """
