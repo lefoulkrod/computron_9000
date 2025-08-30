@@ -8,6 +8,24 @@ from pydantic import BaseModel, Field
 
 from agents.ollama.sdk.schema_tools import model_to_schema
 
+
+class CommandSpec(BaseModel):
+    """Specification for a short-lived shell command.
+
+    Attributes:
+        run: The shell command to execute.
+        timeout_sec: Maximum allowed runtime in seconds.
+    """
+
+    run: str
+    timeout_sec: int
+
+    class Config:
+        """Pydantic configuration for CommandSpec."""
+
+        extra = "forbid"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +37,7 @@ class PlanStep(BaseModel):
         title: Human-readable title describing the step.
         step_kind: Type of step (command or file operation).
         file_path: An optional target file path for file operations.
-        command: An optional shell command to execute.
+        command: An optional shell command to execute (structured spec).
         implementation_details: Detailed list of implementation requirements.
         depends_on: An optional list of components this step depends on.
     """
@@ -28,7 +46,7 @@ class PlanStep(BaseModel):
     title: str
     step_kind: str
     file_path: str | None = None
-    command: str | None = None
+    command: CommandSpec | None = None
     implementation_details: list[str] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
 
@@ -48,6 +66,7 @@ def generate_plan_step_schema_summary() -> str:
 
 
 __all__ = [
+    "CommandSpec",
     "PlanStep",
     "generate_plan_step_schema_summary",
 ]

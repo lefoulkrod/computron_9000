@@ -10,12 +10,12 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, TypedDict
 
+from agents.ollama.coder.architect_agent import architect_agent_tool
+from agents.ollama.coder.architect_agent.models import LowLevelDesign
 from agents.ollama.coder.code_review_agent import code_review_agent_tool
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
-from agents.ollama.coder.system_designer_agent import system_designer_agent_tool
-from agents.ollama.coder.system_designer_agent.models import SystemDesign
 from config import load_config
 from tools.virtual_computer import write_file
 from tools.virtual_computer.workspace import set_workspace_folder
@@ -88,8 +88,8 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
             raise CoderWorkflowAgentError(msg) from exc
         set_workspace_folder(workspace)
 
-    # Create & parse system design
-    design = await _run_system_designer_agent(prompt)
+    # Create & parse low-level design via the architect agent
+    design = await _run_architect_agent(prompt)
     design_json = design.model_dump_json(indent=2)
     _ = write_file("DESIGN.json", design_json)
 
@@ -107,23 +107,23 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
         yield item
 
 
-async def _run_system_designer_agent(task_prompt: str) -> SystemDesign:
-    """Run the system designer agent and deserialize JSON into ``SystemDesign``.
+async def _run_architect_agent(task_prompt: str) -> LowLevelDesign:
+    """Run the architect agent and deserialize JSON into ``LowLevelDesign``.
 
     Args:
         task_prompt: High-level user assignment / problem statement.
 
     Returns:
-        Parsed ``SystemDesign`` instance.
+    Parsed ``LowLevelDesign`` instance.
 
     Raises:
-        CoderWorkflowAgentError: If the agent output is not valid JSON or fails validation.
+    CoderWorkflowAgentError: If the agent output is not valid JSON or fails validation.
     """
     try:
-        return await system_designer_agent_tool(task_prompt)
+        return await architect_agent_tool(task_prompt)
     except Exception as exc:  # pragma: no cover - defensive, underlying lib may raise generic
-        logger.exception("System designer agent call failed")
-        msg = "System designer agent call failed"
+        logger.exception("Architect agent call failed")
+        msg = "Architect agent call failed"
         raise CoderWorkflowAgentError(msg) from exc
 
 
@@ -189,9 +189,7 @@ def _collect_step_dependencies(
     return ordered
 
 
-async def _run_coder_agent(
-    step: PlanStep, *, dependencies: list[PlanStep], fixes: list[str] | None = None
-) -> str:
+async def _run_coder_agent(step: PlanStep, *, fixes: list[str] | None = None) -> str:
     """Run the coder agent for a single plan step.
 
     Args:
@@ -210,7 +208,6 @@ async def _run_coder_agent(
     # Provide a clear, structured prompt to the coder agent about the current step
     step_payload: dict[str, Any] = {
         "step": step.model_dump(),
-        "dependencies": [d.model_dump() for d in dependencies],
     }
     if fixes:
         # Provide reviewer-required fixes to guide the retry implementation.
@@ -237,18 +234,16 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
         We loop and re-run the coder step until verification passes. When verification
         fails, its required changes ("fixes") are passed into the next retry.
     """
-    steps_by_id: dict[str, PlanStep] = {s.id: s for s in steps}
     for step in steps:
         try:
-            deps = _collect_step_dependencies(steps_by_id=steps_by_id, start=step)
+            # Execute steps strictly in the provided order; do not collect or pass
+            # transitive dependencies. Each step is handled independently.
             attempt = 0
             fixes_for_retry: list[str] | None = None
             while True:
                 attempt += 1
                 logger.info("Executing step %s (attempt %s)", step.id, attempt)
-                step_result_msg = await _run_coder_agent(
-                    step, dependencies=deps, fixes=fixes_for_retry
-                )
+                step_result_msg = await _run_coder_agent(step, fixes=fixes_for_retry)
                 success, fixes = await _verify_step_result(step=step, result=step_result_msg)
                 if success:
                     logger.info("Step %s passed verification on attempt %s", step.id, attempt)
