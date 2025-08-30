@@ -1,7 +1,7 @@
 """Coder agents REPL with simple /agent switching.
 
 Supported agent keys (initial selection via -a or in REPL with /agent <key>):
-    workflow, designer, planner, coder, test_planner, test_executor, verifier
+    workflow, architect, planner, coder, test_planner, test_executor, verifier
 
 Commands inside the REPL:
     /agent <key>      Switch current agent/workflow
@@ -11,7 +11,7 @@ Commands inside the REPL:
     /exit             Exit the REPL
 
 Any other input line runs the current agent (or full workflow) using that line as the
-prompt. Prompts are adapted per agent for convenience (designer/planner/coder). The
+prompt. Prompts are adapted per agent for convenience (architect/planner/coder). The
 verifier (gating) consumes execution and plan JSON directly for workflow; test_planner
 and test_executor provide isolated planning and execution.
 """
@@ -26,10 +26,10 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ValidationError
 
+from agents.ollama.coder.architect_agent import architect_agent_tool
+from agents.ollama.coder.architect_agent.models import LowLevelDesign
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
-from agents.ollama.coder.system_designer_agent import system_designer_agent_tool
-from agents.ollama.coder.system_designer_agent.models import SystemDesign
 from agents.ollama.coder.verifier_agent import verifier_agent_tool
 from agents.ollama.coder.workflow import workflow
 from repls.repl_logging import get_repl_logger
@@ -54,7 +54,7 @@ class ReplState:
 
 AGENT_KEYS = [
     "workflow",
-    "designer",
+    "architect",
     "planner",
     "coder",
     "verifier",
@@ -183,8 +183,8 @@ async def _invoke_agent(
     _process_agent_response(resp, model_cls, agent_name)
 
 
-async def _run_designer(user_prompt: str) -> None:
-    await _invoke_agent(user_prompt, system_designer_agent_tool, "SystemDesign", SystemDesign)
+async def _run_architect(user_prompt: str) -> None:
+    await _invoke_agent(user_prompt, architect_agent_tool, "LowLevelDesign", LowLevelDesign)
 
 
 async def _run_planner(user_prompt: str) -> None:
@@ -221,8 +221,8 @@ async def _run_verifier(user_prompt: str) -> None:
 async def _run_agent(agent: str, prompt: str, state: ReplState) -> None:
     if agent == "workflow":
         await _run_workflow(prompt, state)
-    elif agent == "designer":
-        await _run_designer(prompt)
+    elif agent == "architect":
+        await _run_architect(prompt)
     elif agent == "planner":
         await _run_planner(prompt)
     elif agent == "coder":
