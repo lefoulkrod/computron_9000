@@ -20,11 +20,6 @@ class CommandSpec(BaseModel):
     run: str
     timeout_sec: int
 
-    class Config:
-        """Pydantic configuration for CommandSpec."""
-
-        extra = "forbid"
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +44,6 @@ class PlanStep(BaseModel):
     command: CommandSpec | None = None
     implementation_details: list[str] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
-
-    class Config:
-        """Pydantic configuration for PlanStep."""
-
-        extra = "forbid"
 
 
 def generate_plan_step_schema_summary() -> str:

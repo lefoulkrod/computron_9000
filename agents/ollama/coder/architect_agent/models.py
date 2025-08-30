@@ -29,11 +29,6 @@ class Module(BaseModel):
     name: str
     summary: str
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class InterfaceParam(BaseModel):
     """Parameter specification for an interface.
@@ -45,11 +40,6 @@ class InterfaceParam(BaseModel):
 
     name: str
     type: str
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 class InterfaceSpec(BaseModel):
@@ -73,11 +63,6 @@ class InterfaceSpec(BaseModel):
     preconditions: list[str] = Field(default_factory=list)
     postconditions: list[str] = Field(default_factory=list)
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class Attribute(BaseModel):
     """Attribute on a type.
@@ -94,11 +79,6 @@ class Attribute(BaseModel):
     mutable: bool
     visibility: str
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class FieldSpec(BaseModel):
     """Field for value objects or enums.
@@ -110,11 +90,6 @@ class FieldSpec(BaseModel):
 
     name: str
     type: str
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 class Member(BaseModel):
@@ -130,11 +105,6 @@ class Member(BaseModel):
     type: str
     visibility: str
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class UsedInterface(BaseModel):
     """Interface usage of another component.
@@ -148,11 +118,6 @@ class UsedInterface(BaseModel):
     component: str
     interface: str
     notes: str | None = None
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 class TypeSpec(BaseModel):
@@ -179,11 +144,6 @@ class TypeSpec(BaseModel):
     members: list[Member] = Field(default_factory=list)
     uses_interfaces: list[UsedInterface] = Field(default_factory=list)
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class ExceptionSpec(BaseModel):
     """Exception definition.
@@ -198,11 +158,6 @@ class ExceptionSpec(BaseModel):
     module: str
     summary: str
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class EnumSpec(BaseModel):
     """Enumeration definition.
@@ -216,11 +171,6 @@ class EnumSpec(BaseModel):
     name: str
     module: str
     literals: list[str] = Field(default_factory=list)
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 class InteractionStep(BaseModel):
@@ -237,9 +187,8 @@ class InteractionStep(BaseModel):
     note: str
 
     class Config:
-        """Pydantic configuration (forbid extras)."""
+        """Pydantic configuration."""
 
-        extra = "forbid"
         allow_population_by_field_name = True
 
 
@@ -253,11 +202,6 @@ class InteractionSpec(BaseModel):
 
     name: str
     steps: list[InteractionStep] = Field(default_factory=list)
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 class LowLevelDesign(BaseModel):
@@ -280,11 +224,6 @@ class LowLevelDesign(BaseModel):
     exceptions: list[ExceptionSpec] = Field(default_factory=list)
     enums: list[EnumSpec] = Field(default_factory=list)
     interactions: list[InteractionSpec] = Field(default_factory=list)
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 def generate_json_schema() -> dict[str, Any]:  # pragma: no cover
