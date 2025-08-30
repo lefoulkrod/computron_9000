@@ -31,11 +31,6 @@ class Artifact(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
 
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
-
 
 class SystemDesign(BaseModel):
     """Top-level system design produced by the designer agent.
@@ -59,11 +54,6 @@ class SystemDesign(BaseModel):
     packages: list[str] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
     test_framework: str | None = None
-
-    class Config:
-        """Pydantic configuration (forbid extras)."""
-
-        extra = "forbid"
 
 
 def generate_json_schema() -> dict[str, Any]:  # pragma: no cover
