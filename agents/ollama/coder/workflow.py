@@ -3,12 +3,13 @@
 Coordinates design, planning, and step-wise coding execution.
 """
 
+import datetime
 import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from agents.ollama.coder.architect_agent import architect_agent_tool
 from agents.ollama.coder.architect_agent.models import LowLevelDesign
@@ -18,7 +19,7 @@ from agents.ollama.coder.coder_planner_agent import coder_planner_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
 from config import load_config
-from tools.virtual_computer import write_file
+from tools.virtual_computer import append_to_file, make_dirs, path_exists, write_file
 from tools.virtual_computer.workspace import set_workspace_folder
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class StepYield(TypedDict):
     title: str
     completed: bool
     result: str
-    verification: dict[str, Any] | None
+    verification: dict[str, object] | None
 
 
 def _create_workspace_dir() -> str:
@@ -59,6 +60,72 @@ def _create_workspace_dir() -> str:
         raise CoderWorkflowAgentError(msg) from exc
     set_workspace_folder(workspace_folder)
     return workspace_folder
+
+
+# Implementation log constants
+_IMPL_DIR = ".IMPLEMENTATION"
+_IMPL_FILE = f"{_IMPL_DIR}/IMPLEMENTATION_LOG.js"
+_IMPL_README = f"{_IMPL_DIR}/README.md"
+
+
+def _init_implementation_log() -> None:
+    """Ensure the implementation log directory and file exist.
+
+    Creates the hidden ``.IMPLEMENTATION`` directory under the current workspace
+    (as configured via ``set_workspace_folder``) and initializes
+    ``IMPLEMENTATION_LOG.js`` with an exportable array if the file does not exist.
+
+    This function is best-effort and logs failures via the module logger.
+    """
+    try:
+        _ = make_dirs(_IMPL_DIR)
+        exists_info = path_exists(_IMPL_FILE)
+        if not exists_info.exists:
+            # Initialize as an empty text log file
+            _ = write_file(_IMPL_FILE, "")
+        # Ensure README exists with notice not to modify
+        readme_exists = path_exists(_IMPL_README)
+        if not readme_exists.exists:
+            _ = write_file(
+                _IMPL_README,
+                (
+                    "# Implementation Log\n\n"
+                    "This folder contains implementation logs and snapshots "
+                    "(DESIGN.json, PLAN.json).\n\n"
+                    "Do not modify, remove, or alter this folder or the files "
+                    "in it in any way.\n"
+                ),
+            )
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to initialize implementation log")
+
+
+def _append_log_entry(*, step: PlanStep, part: str, data: object) -> None:
+    """Append a single structured entry to IMPLEMENTATION_LOG.js.
+
+    Args:
+        step: The current plan step providing context (id/title included).
+        part: One of "planstep", "coder_planner", "coder_summary", "code_review".
+        data: The payload to record (JSON-serializable where possible).
+    """
+    try:
+        ts = datetime.datetime.now(tz=datetime.UTC).isoformat()
+        header = f"[{ts}] step {step.id} - {step.title} - {part}\n"
+        body: str
+        if isinstance(data, str):
+            body = data
+        elif isinstance(data, list):
+            if all(isinstance(x, str) for x in data):
+                # Present as bullet list
+                body = "\n".join(f"- {x}" for x in data)
+            else:
+                body = json.dumps(data, indent=2, ensure_ascii=False)
+        else:
+            body = json.dumps(data, indent=2, ensure_ascii=False)
+        text_block = header + body + "\n\n"
+        _ = append_to_file(_IMPL_FILE, text_block)
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to append implementation log for step %s", step.id)
 
 
 async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[StepYield, None]:
@@ -90,9 +157,12 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
         set_workspace_folder(workspace)
 
     # Create & parse low-level design via the architect agent
+    _init_implementation_log()
     design = await _run_architect_agent(prompt)
     design_json = design.model_dump_json(indent=2)
     _ = write_file("DESIGN.json", design_json)
+    # Also write a copy into .IMPLEMENTATION
+    _ = write_file(f"{_IMPL_DIR}/DESIGN.json", design_json)
 
     # Use the planner agent via wrapper to convert design into an executable plan (JSON)
     plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
@@ -102,6 +172,8 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
     except json.JSONDecodeError:  # pragma: no cover - defensive
         plan_pretty = raw_plan
     _ = write_file("PLAN.json", plan_pretty)
+    # Also write a copy into .IMPLEMENTATION
+    _ = write_file(f"{_IMPL_DIR}/PLAN.json", plan_pretty)
 
     # 2. Execute the plan steps using the coder agent only
     async for item in _execute_steps_with_coder(plan_steps):
@@ -224,9 +296,13 @@ async def _run_coder_agent(
         logger.exception("Coder-planner agent call failed for step: %s", step.id)
         msg = f"Coder-planner agent call failed for step: {step.id}"
         raise CoderWorkflowAgentError(msg) from exc
+    else:
+        # Log the plan step and the coder-planner output
+        _append_log_entry(step=step, part="planstep", data=step.model_dump())
+        _append_log_entry(step=step, part="coder_planner", data=planner_instructions or [])
 
     # Provide a clear, structured prompt to the coder agent about the current step
-    step_payload: dict[str, Any] = {
+    step_payload: dict[str, object] = {
         "step": step.model_dump(),
         # Join list[str] into a single plain-text instruction block
         "instructions": "\n".join(planner_instructions or []),
@@ -242,6 +318,8 @@ async def _run_coder_agent(
         msg = f"Coder agent call failed for step: {step.id}"
         raise CoderWorkflowAgentError(msg) from exc
     else:
+        # Log the coder result summary/output
+        _append_log_entry(step=step, part="coder_summary", data=coder_result)
         return coder_result, planner_instructions or []
 
 
@@ -328,4 +406,10 @@ async def _verify_step_result(
         msg = f"Code review agent call failed for step: {step.id}"
         raise CoderWorkflowAgentError(msg) from exc
     else:
+        # Log the code review result
+        _append_log_entry(
+            step=step,
+            part="code_review",
+            data={"success": review.success, "required_changes": review.required_changes},
+        )
         return review.success, review.required_changes
