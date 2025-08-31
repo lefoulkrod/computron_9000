@@ -176,14 +176,14 @@ class EnumSpec(BaseModel):
 class InteractionStep(BaseModel):
     """Single step in an interaction sequence.
 
-    Args:
-        from_: Source "component.operation" of the step. Use field name "from" in JSON.
-        to: Target "component.operation" of the step.
+    Attributes:
+        origin: Source "component.operation" of the step.
+        target: Target "component.operation" of the step.
         note: Short description of the transition or purpose.
     """
 
-    from_: str = Field(alias="from")
-    to: str
+    origin: str = Field(alias="from")
+    target: str = Field(alias="to")
     note: str
 
     class Config:
