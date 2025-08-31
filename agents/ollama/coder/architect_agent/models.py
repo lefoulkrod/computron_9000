@@ -182,14 +182,9 @@ class InteractionStep(BaseModel):
         note: Short description of the transition or purpose.
     """
 
-    origin: str = Field(alias="from")
-    target: str = Field(alias="to")
+    origin: str
+    target: str
     note: str
-
-    class Config:
-        """Pydantic configuration."""
-
-        allow_population_by_field_name = True
 
 
 class InteractionSpec(BaseModel):
