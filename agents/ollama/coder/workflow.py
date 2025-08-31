@@ -190,7 +190,9 @@ def _collect_step_dependencies(
     return ordered
 
 
-async def _run_coder_agent(step: PlanStep, *, fixes: list[str] | None = None) -> str:
+async def _run_coder_agent(
+    step: PlanStep, *, fixes: list[str] | None = None
+) -> tuple[str, list[str]]:
     """Run the coder agent for a single plan step.
 
     Args:
@@ -201,7 +203,7 @@ async def _run_coder_agent(step: PlanStep, *, fixes: list[str] | None = None) ->
             to be applied on this retry attempt.
 
     Returns:
-        The coder agent's textual result/output for the step.
+        Tuple of (coder_result, planner_instructions).
 
     Raises:
         CoderWorkflowAgentError: If the coder agent call fails.
@@ -234,11 +236,13 @@ async def _run_coder_agent(step: PlanStep, *, fixes: list[str] | None = None) ->
         step_payload["fixes"] = fixes
     try:
         # Send as formatted JSON string to preserve structure
-        return await coder_agent_tool(json.dumps(step_payload))
+        coder_result: str = await coder_agent_tool(json.dumps(step_payload))
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Coder agent call failed for step: %s", step.id)
         msg = f"Coder agent call failed for step: {step.id}"
         raise CoderWorkflowAgentError(msg) from exc
+    else:
+        return coder_result, planner_instructions or []
 
 
 async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[StepYield, None]:
@@ -263,8 +267,12 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
             while True:
                 attempt += 1
                 logger.info("Executing step %s (attempt %s)", step.id, attempt)
-                step_result_msg = await _run_coder_agent(step, fixes=fixes_for_retry)
-                success, fixes = await _verify_step_result(step=step, result=step_result_msg)
+                step_result_msg, plan_instrs = await _run_coder_agent(step, fixes=fixes_for_retry)
+                success, fixes = await _verify_step_result(
+                    step=step,
+                    result=step_result_msg,
+                    planner_instructions=plan_instrs,
+                )
                 if success:
                     logger.info("Step %s passed verification on attempt %s", step.id, attempt)
                     yield {
@@ -288,7 +296,9 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
             raise CoderWorkflowAgentError(msg) from exc
 
 
-async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, list[str]]:
+async def _verify_step_result(
+    *, step: PlanStep, result: str, planner_instructions: list[str]
+) -> tuple[bool, list[str]]:
     """Verify a coder step's result via the code review agent.
 
     Calls the code review agent with the plan step and coder output, then
@@ -297,6 +307,8 @@ async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, lis
     Args:
         step: The plan step that was executed.
         result: The textual output/result from the coder agent for this step.
+        planner_instructions: The ordered list of sub-steps produced by coder_planner
+            for this PlanStep; used by reviewer for acceptance criteria.
 
     Returns:
         Tuple of (success, required_changes).
@@ -304,7 +316,11 @@ async def _verify_step_result(*, step: PlanStep, result: str) -> tuple[bool, lis
     Raises:
         CoderWorkflowAgentError: If the code review agent call fails.
     """
-    payload = {"step": step.model_dump(), "coder_output": result}
+    payload = {
+        "step": step.model_dump(),
+        "planner_instructions": planner_instructions,
+        "coder_output": result,
+    }
     try:
         review = await code_review_agent_tool(json.dumps(payload))
     except Exception as exc:  # pragma: no cover - defensive
