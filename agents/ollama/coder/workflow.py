@@ -56,7 +56,8 @@ def _create_workspace_dir() -> str:
     Raises:
         CoderWorkflowAgentError: If the workspace directory cannot be created.
     """
-    workspace_folder = f"folder_{uuid.uuid4().hex}"
+    # Use a short, readable, and sufficiently unique name (8 hex chars)
+    workspace_folder = f"ws_{uuid.uuid4().hex[:8]}"
     config = load_config()
     home_dir = config.virtual_computer.home_dir
     workspace_path = Path(home_dir) / workspace_folder
