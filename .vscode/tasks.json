@@ -10,5 +10,14 @@
             ],
             "group": "test"
         },
+        {
+            "label": "start computron container (virtual computer)",
+            "type": "shell",
+            "command": "just",
+            "args": [
+                "container-start"
+            ],
+            "group": "none"
+        },
     ]
 }

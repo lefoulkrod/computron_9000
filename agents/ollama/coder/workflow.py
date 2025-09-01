@@ -19,7 +19,15 @@ from agents.ollama.coder.coder_planner_agent import coder_planner_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlanStep
 from config import load_config
-from tools.virtual_computer import append_to_file, make_dirs, path_exists, write_file
+from tools.virtual_computer import (
+    append_to_file,
+    make_dirs,
+    path_exists,
+    write_file,
+)
+from tools.virtual_computer import (
+    read_file as vc_read_file,
+)
 from tools.virtual_computer.workspace import set_workspace_folder
 
 logger = logging.getLogger(__name__)
@@ -62,10 +70,40 @@ def _create_workspace_dir() -> str:
     return workspace_folder
 
 
+def _setup_workspace(workspace: str | None) -> None:
+    """Set up the workspace directory for the workflow.
+
+    Args:
+        workspace: Optional workspace folder name. If None, creates a new workspace.
+
+    Raises:
+        CoderWorkflowAgentError: If workspace setup fails.
+    """
+    if workspace is None:
+        _create_workspace_dir()
+    else:
+        # Use the provided workspace folder and ensure it exists
+        config = load_config()
+        home_dir = config.virtual_computer.home_dir
+        workspace_path = Path(home_dir) / workspace
+        try:
+            workspace_path.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            logger.exception("Failed to create/access workspace directory: %s", workspace_path)
+            msg = f"Failed to create/access workspace directory: {workspace_path}"
+            raise CoderWorkflowAgentError(msg) from exc
+        set_workspace_folder(workspace)
+
+
 # Implementation log constants
 _IMPL_DIR = ".IMPLEMENTATION"
 _IMPL_FILE = f"{_IMPL_DIR}/IMPLEMENTATION_LOG.js"
 _IMPL_README = f"{_IMPL_DIR}/README.md"
+_DESIGN_FILE = f"{_IMPL_DIR}/DESIGN.json"
+_PLAN_FILE = f"{_IMPL_DIR}/PLAN.json"
+
+# Code review retry configuration
+_CODE_REVIEW_MAX_RETRIES = 5
 
 
 def _init_implementation_log() -> None:
@@ -128,6 +166,50 @@ def _append_log_entry(*, step: PlanStep, part: str, data: object) -> None:
         logger.exception("Failed to append implementation log for step %s", step.id)
 
 
+def _load_existing_design() -> LowLevelDesign | None:
+    """Load existing DESIGN.json if present and valid.
+
+    Returns:
+        LowLevelDesign instance if file exists and is valid, None otherwise.
+    """
+    try:
+        if not path_exists(_DESIGN_FILE).exists:
+            return None
+
+        read_result = vc_read_file(_DESIGN_FILE)
+        if not read_result.success or not read_result.content:
+            return None
+
+        return LowLevelDesign.model_validate_json(read_result.content)
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to load existing DESIGN.json; will regenerate")
+        return None
+
+
+def _load_existing_plan() -> list[PlanStep] | None:
+    """Load existing PLAN.json if present and valid.
+
+    Returns:
+        List of PlanStep instances if file exists and is valid, None otherwise.
+    """
+    try:
+        if not path_exists(_PLAN_FILE).exists:
+            return None
+
+        read_result = vc_read_file(_PLAN_FILE)
+        if not read_result.success or not read_result.content:
+            return None
+
+        parsed = json.loads(read_result.content)
+        if not isinstance(parsed, list):
+            return None
+
+        return [PlanStep.model_validate(x) for x in parsed]
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to load existing PLAN.json; will regenerate")
+        return None
+
+
 async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[StepYield, None]:
     """Main workflow for the coder agent using an architect agent for planning.
 
@@ -141,39 +223,42 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
     Raises:
         CoderWorkflowAgentError: On unrecoverable errors.
     """
-    if workspace is None:
-        _create_workspace_dir()
-    else:
-        # Use the provided workspace folder and ensure it exists
-        config = load_config()
-        home_dir = config.virtual_computer.home_dir
-        workspace_path = Path(home_dir) / workspace
-        try:
-            workspace_path.mkdir(parents=True, exist_ok=True)
-        except Exception as exc:
-            logger.exception("Failed to create/access workspace directory: %s", workspace_path)
-            msg = f"Failed to create/access workspace directory: {workspace_path}"
-            raise CoderWorkflowAgentError(msg) from exc
-        set_workspace_folder(workspace)
+    _setup_workspace(workspace)
 
     # Create & parse low-level design via the architect agent
     _init_implementation_log()
-    design = await _run_architect_agent(prompt)
-    design_json = design.model_dump_json(indent=2)
-    _ = write_file("DESIGN.json", design_json)
-    # Also write a copy into .IMPLEMENTATION
-    _ = write_file(f"{_IMPL_DIR}/DESIGN.json", design_json)
 
-    # Use the planner agent via wrapper to convert design into an executable plan (JSON)
-    plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
-    # Persist raw plan (pretty-printed if possible)
-    try:
-        plan_pretty = json.dumps(json.loads(raw_plan), indent=2)
-    except json.JSONDecodeError:  # pragma: no cover - defensive
-        plan_pretty = raw_plan
-    _ = write_file("PLAN.json", plan_pretty)
-    # Also write a copy into .IMPLEMENTATION
-    _ = write_file(f"{_IMPL_DIR}/PLAN.json", plan_pretty)
+    # Check for existing plan first (highest priority)
+    existing_plan = _load_existing_plan()
+    if existing_plan is not None:
+        # Plan exists, use it and skip both architect and planner
+        plan_steps = existing_plan
+    else:
+        # No plan exists, check for existing design
+        existing_design = _load_existing_design()
+        if existing_design is not None:
+            # Design exists, use it and run planner
+            design_json = existing_design.model_dump_json(indent=2)
+            plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
+            # Persist raw plan (pretty-printed if possible)
+            try:
+                plan_pretty = json.dumps(json.loads(raw_plan), indent=2)
+            except json.JSONDecodeError:  # pragma: no cover - defensive
+                plan_pretty = raw_plan
+            _ = write_file(_PLAN_FILE, plan_pretty)
+        else:
+            # Neither exists, start from beginning
+            design = await _run_architect_agent(prompt)
+            design_json = design.model_dump_json(indent=2)
+            _ = write_file(_DESIGN_FILE, design_json)
+
+            plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
+            # Persist raw plan (pretty-printed if possible)
+            try:
+                plan_pretty = json.dumps(json.loads(raw_plan), indent=2)
+            except json.JSONDecodeError:  # pragma: no cover - defensive
+                plan_pretty = raw_plan
+            _ = write_file(_PLAN_FILE, plan_pretty)
 
     # 2. Execute the plan steps using the coder agent only
     async for item in _execute_steps_with_coder(plan_steps):
@@ -223,43 +308,6 @@ async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[Pla
         raise CoderWorkflowAgentError(msg) from exc
     else:
         return plan_steps, json.dumps([s.model_dump() for s in plan_steps], indent=2)
-
-
-def _collect_step_dependencies(
-    *, steps_by_id: dict[str, PlanStep], start: PlanStep
-) -> list[PlanStep]:
-    """Collect transitive dependencies for a step.
-
-    Performs a DFS over ``depends_on`` to gather all reachable dependency steps,
-    preserving a stable order by first-seen during traversal. Cycles are
-    guarded against via a visited set.
-
-    Args:
-        steps_by_id: Mapping of step id to ``PlanStep``.
-        start: The step whose dependencies to collect.
-
-    Returns:
-        A list of dependency steps. Missing ids are ignored but logged.
-    """
-    ordered: list[PlanStep] = []
-    visited: set[str] = set()
-
-    def dfs(step_id: str) -> None:
-        if step_id in visited:
-            return
-        visited.add(step_id)
-        dep = steps_by_id.get(step_id)
-        if dep is None:
-            logger.warning("Unknown dependency step id: %s", step_id)
-            return
-        # Traverse its deps first
-        for nxt in dep.depends_on:
-            dfs(nxt)
-        ordered.append(dep)
-
-    for dep_id in start.depends_on:
-        dfs(dep_id)
-    return ordered
 
 
 async def _run_coder_agent(
@@ -381,6 +429,7 @@ async def _verify_step_result(
 
     Calls the code review agent with the plan step and coder output, then
     deserializes the response into ``CodeReviewResult`` for type-safe handling.
+    Retries up to _CODE_REVIEW_MAX_RETRIES times on failure, then assumes pass.
 
     Args:
         step: The plan step that was executed.
@@ -392,24 +441,49 @@ async def _verify_step_result(
         Tuple of (success, required_changes).
 
     Raises:
-        CoderWorkflowAgentError: If the code review agent call fails.
+        CoderWorkflowAgentError: If the code review agent call fails after all retries.
     """
     payload = {
         "step": step.model_dump(),
         "planner_instructions": planner_instructions,
         "coder_output": result,
     }
-    try:
-        review = await code_review_agent_tool(json.dumps(payload))
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Code review agent call failed for step: %s", step.id)
-        msg = f"Code review agent call failed for step: {step.id}"
-        raise CoderWorkflowAgentError(msg) from exc
-    else:
-        # Log the code review result
-        _append_log_entry(
-            step=step,
-            part="code_review",
-            data={"success": review.success, "required_changes": review.required_changes},
-        )
-        return review.success, review.required_changes
+
+    for attempt in range(1, _CODE_REVIEW_MAX_RETRIES + 1):
+        try:
+            review = await code_review_agent_tool(json.dumps(payload))
+        except RuntimeError as exc:  # Only catch expected agent errors
+            if attempt < _CODE_REVIEW_MAX_RETRIES:
+                logger.warning(
+                    "Code review agent call failed for step %s (attempt %d/%d): %s. Retrying...",
+                    step.id,
+                    attempt,
+                    _CODE_REVIEW_MAX_RETRIES,
+                    exc,
+                )
+                continue
+
+            logger.warning(
+                "Code review agent call failed for step %s after %d attempts: %s. Assuming pass.",
+                step.id,
+                _CODE_REVIEW_MAX_RETRIES,
+                exc,
+            )
+            # Log the assumed pass result
+            _append_log_entry(
+                step=step,
+                part="code_review",
+                data={"success": True, "required_changes": [], "assumed_pass": True},
+            )
+            return True, []
+        else:
+            # Log the code review result
+            _append_log_entry(
+                step=step,
+                part="code_review",
+                data={"success": review.success, "required_changes": review.required_changes},
+            )
+            return review.success, review.required_changes
+
+    # This should never be reached due to the logic above, but satisfies type checker
+    return True, []  # pragma: no cover

@@ -41,7 +41,7 @@ model = get_model_by_name("coder_architect")
 
 _PLAN_STEP_SCHEMA = generate_plan_step_schema_summary()
 # Generate strict JSON example from the actual Pydantic model
-_REVIEW_SCHEMA = model_to_schema(CodeReviewResult)
+_REVIEW_SCHEMA = model_to_schema(CodeReviewResult, indent=2, include_docs=True)
 
 SYSTEM_PROMPT = dedent(
     f"""
