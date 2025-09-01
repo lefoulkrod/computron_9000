@@ -15,7 +15,7 @@ from agents.types import Agent
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_run_agent_as_tool_returns_string_by_default(monkeypatch):
-    """Factory returns an async tool that yields concatenated string when no type specified."""
+    """Factory returns only the last emission's content when no type specified."""
 
     async def fake_loop(**_: Any):
         yield "hello", None
@@ -36,7 +36,7 @@ async def test_run_agent_as_tool_returns_string_by_default(monkeypatch):
     )
     tool_fn = make_run_agent_as_tool_function(agent, "Echo")
     result = await tool_fn("say something")
-    assert result == "hello\nworld"
+    assert result == "world"
 
 
 @pytest.mark.unit
