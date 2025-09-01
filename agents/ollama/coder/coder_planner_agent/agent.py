@@ -66,6 +66,7 @@ Examples of step phrasing
 - "Run uv run pytest -q and inspect failures"
 - "Address failing test assertions in ./src/pkg/module.py"
 - "Run uvx ruff check . and uvx black . --check"
+- Never read the full contents of lock files or package directories
 """
 
 coder_planner_agent = Agent(

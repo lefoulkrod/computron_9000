@@ -94,6 +94,7 @@ Workflow:
     such as node_modules or .venv
 - Do not modify DESIGN.json or PLAN.json.
 - Never start servers, watchers, or daemons. Only short-lived, one-shot commands are allowed.
+- Never read the full contents of lock files or package directories.
 
 Step handling:
 - If step_kind == "file" (or file_path is present): create or update the file
