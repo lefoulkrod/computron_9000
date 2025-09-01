@@ -1,6 +1,6 @@
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Protocol, cast, get_args, get_origin
 
 from ollama import ChatResponse
@@ -200,7 +200,7 @@ Returns:
         ]
         result_text = ""
         try:
-            gen = run_tool_call_loop(
+            gen: AsyncGenerator[tuple[str | None, str | None], None] = run_tool_call_loop(
                 messages=messages,
                 tools=agent.tools,
                 model=agent.model,
@@ -209,15 +209,10 @@ Returns:
                 before_model_callbacks=before_model_callbacks,
                 after_model_callbacks=after_model_callbacks,
             )
-            # Support both async generators and awaitables so exceptions propagate
-            # even if a test monkeypatch returns a coroutine instead of a generator.
-            if hasattr(gen, "__aiter__"):
-                async for content, _ in gen:  # type: ignore[attr-defined]
-                    if content:
-                        result_text += content + "\n"
-            else:
-                # Await the coroutine to surface any exceptions; ignore any return value.
-                await gen  # type: ignore[misc]
+            # Only keep the last emission's content rather than accumulating all chunks
+            async for content, _ in gen:
+                if content:
+                    result_text = content
         except Exception:
             # Log full traceback and re-raise to avoid swallowing unexpected errors
             logger.exception("Unexpected error running agent tool loop for agent '%s'", agent.name)
