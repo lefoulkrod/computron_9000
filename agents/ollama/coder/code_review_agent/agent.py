@@ -66,7 +66,7 @@ STRICT OUTPUT
 {_REVIEW_SCHEMA}
 
 Verification workflow (guidance)
-- Identify acceptance checks from step + planner_instructions: expected files/dirs, symbols,
+- Identify acceptance checks from step + instructions: expected files/dirs, symbols,
     strings, config keys, and short commands/tests to run.
 - Use path checks and directory listings to confirm presence.
 - Read relevant files to confirm required content and placements.

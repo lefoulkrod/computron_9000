@@ -324,14 +324,14 @@ async def _run_coder_agent(
             applied on this retry attempt.
 
     Returns:
-        Tuple of (coder_result, planner_instructions).
+        Tuple of (coder_result, instructions_used).
 
     Raises:
         CoderWorkflowAgentError: If the coder agent call fails.
     """
     # First, expand the plan step into ordered coder sub-steps via coder_planner agent
     try:
-        planner_instructions = await coder_planner_agent_tool(
+        base_instructions = await coder_planner_agent_tool(
             CoderPlannerInput(step=step, tooling=tooling).model_dump_json()
         )
     except Exception as exc:  # pragma: no cover - defensive
@@ -341,14 +341,16 @@ async def _run_coder_agent(
     else:
         # Log the plan step and the coder-planner output
         _append_log_entry(step=step, part="planstep", data=step.model_dump())
-        _append_log_entry(step=step, part="coder_planner", data=planner_instructions or [])
+        _append_log_entry(step=step, part="coder_planner", data=base_instructions or [])
+
+    # Choose which instructions to use: reviewer fixes if provided, otherwise base plan
+    instructions = fixes if (fixes and len(fixes) > 0) else (base_instructions or [])
 
     # Provide a clear, structured prompt to the coder agent about the current step
     coder_input = CoderInput(
         step=step,
         tooling=tooling,
-        planner_instructions=planner_instructions or [],
-        fixes=fixes or None,
+        instructions=instructions,
     )
     try:
         coder_result: str = await coder_agent_tool(coder_input.model_dump_json())
@@ -359,7 +361,7 @@ async def _run_coder_agent(
     else:
         # Log the coder result summary/output
         _append_log_entry(step=step, part="coder_summary", data=coder_result)
-        return coder_result, planner_instructions or []
+        return coder_result, instructions
 
 
 async def _execute_steps_with_coder(
@@ -393,7 +395,7 @@ async def _execute_steps_with_coder(
                 success, fixes = await _verify_step_result(
                     step=step,
                     result=step_result_msg,
-                    planner_instructions=plan_instrs,
+                    instructions=plan_instrs,
                     tooling=tooling,
                 )
                 if success:
@@ -420,7 +422,7 @@ async def _execute_steps_with_coder(
 
 
 async def _verify_step_result(
-    *, step: PlanStep, result: str, planner_instructions: list[str], tooling: ToolingSelection
+    *, step: PlanStep, result: str, instructions: list[str], tooling: ToolingSelection
 ) -> tuple[bool, list[str]]:
     """Verify a coder step's result via the code review agent.
 
@@ -431,8 +433,8 @@ async def _verify_step_result(
     Args:
         step: The plan step that was executed.
         result: The textual output/result from the coder agent for this step.
-        planner_instructions: The ordered list of sub-steps produced by coder_planner
-            for this PlanStep; used by reviewer for acceptance criteria.
+        instructions: The ordered list of actions used for this attempt; used by reviewer
+            for acceptance criteria.
         tooling: Top-level tooling selection from the plan.
 
     Returns:
@@ -444,7 +446,7 @@ async def _verify_step_result(
     review_input = CodeReviewInput(
         step=step,
         tooling=tooling,
-        planner_instructions=planner_instructions,
+        instructions=instructions,
         coder_output=result,
     )
 

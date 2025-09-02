@@ -44,13 +44,12 @@ def test_coder_input_round_trip() -> None:
     payload = CoderInput(
         step=step,
         tooling=tooling,
-        planner_instructions=["Create README.md with project info"],
-        fixes=None,
+        instructions=["Create README.md with project info"],
     )
     raw = payload.model_dump_json()
     restored = CoderInput.model_validate_json(raw)
     assert restored.step.title == "Create file"
-    assert restored.planner_instructions == ["Create README.md with project info"]
+    assert restored.instructions == ["Create README.md with project info"]
 
 
 @pytest.mark.unit
@@ -61,7 +60,7 @@ def test_code_review_input_round_trip() -> None:
     payload = CodeReviewInput(
         step=step,
         tooling=tooling,
-        planner_instructions=["Run uv run pytest -q"],
+    instructions=["Run uv run pytest -q"],
         coder_output="Ran tests; all passed",
     )
     raw = payload.model_dump_json()

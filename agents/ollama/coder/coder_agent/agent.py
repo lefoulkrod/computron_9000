@@ -1,7 +1,9 @@
 """Coder development agent implementation."""
 
 import logging
+from textwrap import dedent
 
+from agents.ollama.coder.context_models import generate_coder_input_schema_summary
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -32,48 +34,23 @@ logger = logging.getLogger(__name__)
 
 model = get_model_by_name("coder_developer")
 
-coder_agent = Agent(
-    name="CODER_DEV_AGENT",
-    description="An agent to implement a single plan step.",
-    instruction="""
+_CODER_INPUT_SCHEMA = generate_coder_input_schema_summary()
+
+SYSTEM_PROMPT = dedent(
+    f"""
         There is no `search` tool. Use `grep` instead.
 You are a coding agent operating in a headless virtual computer (no GUI).
 You receive a standardized JSON payload to implement one step of a multi-step plan.
 
-Input payload (CoderInput):
-{
-    "step": PlanStep,                 // the current plan step to implement
-    "tooling": ToolingSelection,      // language, package_manager, test_framework
-    "planner_instructions": ["..."], // ordered coder sub-steps for this step
-    "fixes": ["..."] | null          // optional: reviewer-required changes on retry
-}
+Input JSON payload (CoderInput)
+{_CODER_INPUT_SCHEMA}
 
-EXECUTION MODE:
-Check if "fixes" field is present and non-empty:
-- IF present and non-empty: Follow FIXES FLOW
-- ELSE: Follow INITIAL IMPLEMENTATION FLOW
-
-=== INITIAL IMPLEMENTATION FLOW ===
-Goals:
-- Implement the plan step guided by planner_instructions and tooling.
+Execution guidance:
+- Use the provided "instructions" list in order. If they are reviewer fixes, address them precisely.
+- Keep changes scoped strictly to this step and the instructions.
 - If details are unclear, make minimal, reasonable assumptions and note them.
-- Keep changes scoped strictly to this step.
 
-Workflow:
-- Use "step" as the unit of work.
-- Before editing, READ any referenced files to understand current state.
-- Follow planner_instructions in order; add small pragmatic adjustments when needed.
-
-=== FIXES FLOW ===
-Goals:
-- Address each fix precisely; minimize unrelated changes.
-- Verify the fixes through short validations when applicable.
-
-Workflow:
-- Examine current files/commands from the previous attempt.
-- Apply fixes in order; re-check where relevant.
-
-=== COMMON RULES ===
+Common rules:
 - Review the workspace tree as needed; avoid package folders (node_modules, .venv).
 - Do not modify DESIGN.json or PLAN.json.
 - Never start servers/watchers; use only short-lived commands.
@@ -86,10 +63,15 @@ Step handling:
 - Tests are allowed when short-lived; no background processes.
 
 Output:
-- INITIAL IMPLEMENTATION: concise plain-text summary of changes, assumptions, results.
-- FIXES: concise plain-text summary addressing each fix and changes made.
+- Concise plain-text summary of changes, assumptions, and results.
 - Avoid code blocks in output.
-""",
+"""
+)
+
+coder_agent = Agent(
+    name="CODER_DEV_AGENT",
+    description="An agent to implement a single plan step.",
+    instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
     tools=[
