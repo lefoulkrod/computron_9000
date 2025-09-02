@@ -42,14 +42,28 @@ STRICT OUTPUT
 Input payload shape (CoderPlannerInput):
 {_CODER_PLANNER_INPUT_SCHEMA}
 
+Workspace context
+- An implementation log folder exists at .IMPLEMENTATION within the workspace.
+- The saved plan file is .IMPLEMENTATION/PLAN.json. It contains the full PlannerPlan
+    including all steps (id, title, step_kind, file_path, command, implementation_details,
+    depends_on). You MAY read this file to understand prior steps when needed.
+- Never modify files under .IMPLEMENTATION; they are read-only context.
+
 What to produce
 - A precise sequence of actionable steps the Coder should follow.
 - Each item must be a short imperative instruction.
 - Keep each step atomic (one action per step) and scoped to the provided PlanStep.
 
 Required coverage
-- Dependencies: If the PlanStep depends on other artifacts, plan to READ relevant
-    files first to understand interfaces and relationships before editing.
+- Dependencies & plan awareness:
+        - If the PlanStep.depends_on is non-empty, FIRST consult .IMPLEMENTATION/PLAN.json
+            to locate those prerequisite steps by id and learn what artifacts (files/folders
+            or commands) they created or modified.
+        - Include early sub-steps to READ/INSPECT only the applicable existing files or
+            directories from those prerequisite steps (e.g., open specific files, list a
+            directory) to understand interfaces and verify expected artifacts exist before
+            proceeding.
+        - Do not dump or read the entire PLAN.json; only extract the minimal info needed.
 - Tests: Include steps to WRITE focused unit tests for the behavior introduced/changed.
 - Validation: Include steps to RUN fast validations after implementing (unit tests,
     style/lint checks, type checks if present).
@@ -60,6 +74,7 @@ Constraints
 - Do not start servers, watchers, or long-running processes.
 - Keep commands short-lived.
 - Use only relative paths.
+- Do not modify DESIGN.json or PLAN.json or any file under .IMPLEMENTATION.
 - Do not include code snippets; use descriptions like "implement function X in file Y".
 
 Examples of step phrasing (informal, do not copy verbatim - just get the gist -

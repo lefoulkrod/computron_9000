@@ -31,7 +31,6 @@ from agents.ollama.coder.architect_agent.models import LowLevelDesign
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
 from agents.ollama.coder.planner_agent.models import PlannerPlan
-from agents.ollama.coder.verifier_agent import verifier_agent_tool
 from agents.ollama.coder.workflow import workflow
 from repls.repl_logging import get_repl_logger
 
@@ -202,23 +201,6 @@ async def _run_coder(user_prompt: str) -> None:
     await _invoke_agent(step_input, coder_agent_tool, "Coder")
 
 
-async def _run_verifier(user_prompt: str) -> None:
-    parsed = _maybe_parse_json(user_prompt)
-    if parsed is None:
-        payload = {
-            "commands": [
-                {"run": user_prompt, "timeout_sec": 120},
-            ],
-            "instruction": (
-                "Execute the single short-lived verification command and return the strict "
-                "JSON summary specified by your system prompt."
-            ),
-        }
-        user_prompt = json.dumps(payload)
-        logger.info("Verifier constructed single-command payload")
-    await _invoke_agent(user_prompt, verifier_agent_tool, "Verifier")
-
-
 async def _run_agent(agent: str, prompt: str, state: ReplState) -> None:
     if agent == "workflow":
         await _run_workflow(prompt, state)
@@ -228,8 +210,6 @@ async def _run_agent(agent: str, prompt: str, state: ReplState) -> None:
         await _run_planner(prompt)
     elif agent == "coder":
         await _run_coder(prompt)
-    elif agent == "verifier":
-        await _run_verifier(prompt)
     else:
         logger.error("Unknown agent: %s", agent)
 
