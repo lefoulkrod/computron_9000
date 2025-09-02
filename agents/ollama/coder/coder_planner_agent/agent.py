@@ -19,6 +19,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_model_by_name
+from tools.virtual_computer import grep, read_file
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ coder_planner_agent = Agent(
     instruction=CODER_PLANNER_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[],
+    tools=[read_file, grep],
     think=model.think,
 )
 
