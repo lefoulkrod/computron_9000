@@ -30,6 +30,7 @@ from agents.ollama.coder.architect_agent import architect_agent_tool
 from agents.ollama.coder.architect_agent.models import LowLevelDesign
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
+from agents.ollama.coder.planner_agent.models import PlannerPlan
 from agents.ollama.coder.verifier_agent import verifier_agent_tool
 from agents.ollama.coder.workflow import workflow
 from repls.repl_logging import get_repl_logger
@@ -189,7 +190,7 @@ async def _run_architect(user_prompt: str) -> None:
 
 async def _run_planner(user_prompt: str) -> None:
     plan_prompt = f"You are given a software assignment and an architectural design:{user_prompt}"
-    await _invoke_agent(plan_prompt, planner_agent_tool, "Planner")
+    await _invoke_agent(plan_prompt, planner_agent_tool, "Planner", PlannerPlan)
 
 
 async def _run_coder(user_prompt: str) -> None:
