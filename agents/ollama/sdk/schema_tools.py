@@ -103,10 +103,12 @@ def _placeholder_for_type(tp: object) -> JSONValue:
 def _extract_field_docs_from_docstring(
     model_cls: type[BaseModel], *, allowed_fields: set[str]
 ) -> dict[str, str]:
-    """Parse Google-style "Args:" section from a model class docstring.
+    """Parse Google-style field docs from a model class docstring.
 
-    Extracts a mapping of field name -> description for names present in
-    allowed_fields. Ignores unknown names. Handles multiline descriptions.
+    Supports "Attributes:" (preferred per Google style for class fields) and
+    "Args:" as a fallback for compatibility. Extracts a mapping of field name
+    -> description for names present in ``allowed_fields``. Ignores unknown
+    names and handles multiline descriptions.
 
     Args:
         model_cls: The Pydantic model class whose docstring to parse.
@@ -120,17 +122,17 @@ def _extract_field_docs_from_docstring(
         return {}
     doc = textwrap.dedent(doc)
     lines = doc.splitlines()
-    # Find the Args or Arguments section header (allow indentation)
-    args_header_indices: list[int] = []
-    args_header_pattern = re.compile(r"^\s*(Args|Arguments):\s*$")
+    # Find the Attributes/Args section header (allow indentation)
+    header_indices: list[int] = []
+    header_pattern = re.compile(r"^\s*(Attributes|Args|Arguments):\s*$")
     for i, line in enumerate(lines):
-        if args_header_pattern.match(line):
-            args_header_indices.append(i)
-    if not args_header_indices:
+        if header_pattern.match(line):
+            header_indices.append(i)
+    if not header_indices:
         return {}
 
-    # We'll parse only the first Args section found
-    start = args_header_indices[0] + 1
+    # Parse only the first matching section found
+    start = header_indices[0] + 1
     # Section ends when a new top-level section header appears or EOF
     section_end = len(lines)
     section_headers = (

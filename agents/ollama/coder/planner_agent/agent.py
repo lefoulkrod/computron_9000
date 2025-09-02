@@ -2,7 +2,10 @@
 
 import logging
 
-from agents.ollama.coder.planner_agent.models import PlanStep, generate_plan_step_schema_summary
+from agents.ollama.coder.planner_agent.models import (
+    PlannerPlan,
+    generate_planner_plan_schema_summary,
+)
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -16,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 model = get_model_by_name("coder_architect")
 
-_PLAN_STEP_SCHEMA = generate_plan_step_schema_summary()
+_PLAN_SCHEMA = generate_planner_plan_schema_summary()
 
 PLANNER_SYSTEM_PROMPT = f"""
 Role: Expert Implementation Planner
@@ -25,14 +28,15 @@ Goal: Transform the software assignment and the architect's JSON design into a c
 step-by-step plan that an autonomous developer can follow.
 
 STRICT OUTPUT
-- Return ONLY valid JSON: a single array of PlanStep objects.
+- Return ONLY valid JSON: a single object with top-level keys "tooling" and "steps".
 - No markdown, comments, code fences, or extra text.
 
 Schema summary:
-{_PLAN_STEP_SCHEMA}
+{_PLAN_SCHEMA}
 
 Guidelines
-- Select the programming language, package manager, and test framework.
+- Populate the tooling section by selecting the programming language,
+  package manager, and test framework.
 - Step 1 MUST initialize the project environment with the chosen tooling.
 - Order artifacts so that items without dependencies come before dependent ones.
 - Each step performs exactly one short command or one file creation/modification.
@@ -61,7 +65,7 @@ Language-specific tooling guidelines
     - Modules and deps: go mod init <module>; go get <pkg>; go mod tidy.
     - Testing: go test ./... -v.
     - Build/run: go run ./cmd/<app> or go build -o bin/<app> ./cmd/<app>.
-"""  # noqa: S608
+"""
 
 planner_agent = Agent(
     name="PLANNER_AGENT",
@@ -78,10 +82,11 @@ after_model_call_callback = make_log_after_model_call(planner_agent)
 planner_agent_tool = make_run_agent_as_tool_function(
     agent=planner_agent,
     tool_description="""
-    Turn a high-level design into a structured, JSON implementation plan.
+    Turn a high-level design into a structured, JSON implementation plan containing
+    top-level tooling and an ordered list of steps.
     """,
-    # Return raw JSON string; downstream code parses into List[PlanStep]
-    result_type=list[PlanStep],
+    # Return structured PlannerPlan; downstream code extracts steps
+    result_type=PlannerPlan,
     before_model_callbacks=[before_model_call_callback],
     after_model_callbacks=[after_model_call_callback],
 )

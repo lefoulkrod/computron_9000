@@ -17,7 +17,7 @@ from agents.ollama.coder.code_review_agent import code_review_agent_tool
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.coder_planner_agent import coder_planner_agent_tool
 from agents.ollama.coder.planner_agent import planner_agent_tool
-from agents.ollama.coder.planner_agent.models import PlanStep
+from agents.ollama.coder.planner_agent.models import PlannerPlan, PlanStep
 from config import load_config
 from tools.virtual_computer import (
     append_to_file,
@@ -187,11 +187,11 @@ def _load_existing_design() -> LowLevelDesign | None:
         return None
 
 
-def _load_existing_plan() -> list[PlanStep] | None:
+def _load_existing_plan() -> PlannerPlan | None:
     """Load existing PLAN.json if present and valid.
 
     Returns:
-        List of PlanStep instances if file exists and is valid, None otherwise.
+        PlannerPlan instance if file exists and is valid, None otherwise.
     """
     try:
         if not path_exists(_PLAN_FILE).exists:
@@ -201,11 +201,7 @@ def _load_existing_plan() -> list[PlanStep] | None:
         if not read_result.success or not read_result.content:
             return None
 
-        parsed = json.loads(read_result.content)
-        if not isinstance(parsed, list):
-            return None
-
-        return [PlanStep.model_validate(x) for x in parsed]
+        return PlannerPlan.model_validate_json(read_result.content)
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to load existing PLAN.json; will regenerate")
         return None
@@ -233,14 +229,14 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
     existing_plan = _load_existing_plan()
     if existing_plan is not None:
         # Plan exists, use it and skip both architect and planner
-        plan_steps = existing_plan
+        plan = existing_plan
     else:
         # No plan exists, check for existing design
         existing_design = _load_existing_design()
         if existing_design is not None:
             # Design exists, use it and run planner
             design_json = existing_design.model_dump_json(indent=2)
-            plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
+            plan, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
             # Persist raw plan (pretty-printed if possible)
             try:
                 plan_pretty = json.dumps(json.loads(raw_plan), indent=2)
@@ -252,8 +248,7 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
             design = await _run_architect_agent(prompt)
             design_json = design.model_dump_json(indent=2)
             _ = write_file(_DESIGN_FILE, design_json)
-
-            plan_steps, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
+            plan, raw_plan = await _run_planner_agent(prompt=prompt, design_json=design_json)
             # Persist raw plan (pretty-printed if possible)
             try:
                 plan_pretty = json.dumps(json.loads(raw_plan), indent=2)
@@ -262,7 +257,7 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
             _ = write_file(_PLAN_FILE, plan_pretty)
 
     # 2. Execute the plan steps using the coder agent only
-    async for item in _execute_steps_with_coder(plan_steps):
+    async for item in _execute_steps_with_coder(plan.steps):
         yield item
 
 
@@ -286,7 +281,7 @@ async def _run_architect_agent(task_prompt: str) -> LowLevelDesign:
         raise CoderWorkflowAgentError(msg) from exc
 
 
-async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[PlanStep], str]:
+async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[PlannerPlan, str]:
     """Run the planner agent and return validated plan steps plus raw response.
 
     Args:
@@ -294,7 +289,7 @@ async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[Pla
         design_json: The serialized system design JSON produced by system designer.
 
     Returns:
-        A tuple of (list[PlanStep], raw JSON string returned by planner).
+        A tuple of (PlannerPlan, raw JSON string returned by planner).
 
     Raises:
         CoderWorkflowAgentError: If the planner agent call fails or returns invalid JSON
@@ -302,13 +297,13 @@ async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[list[Pla
     """
     plan_prompt = f"software assignment:\n{prompt}\narchitectural design:\n{design_json}\n"
     try:
-        plan_steps = await planner_agent_tool(plan_prompt)
+        plan = await planner_agent_tool(plan_prompt)
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Planner agent call failed")
         msg = "Planner agent call failed"
         raise CoderWorkflowAgentError(msg) from exc
     else:
-        return plan_steps, json.dumps([s.model_dump() for s in plan_steps], indent=2)
+        return plan, json.dumps(plan.model_dump(), indent=2)
 
 
 async def _run_coder_agent(

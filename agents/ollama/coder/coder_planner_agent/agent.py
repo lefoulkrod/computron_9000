@@ -59,7 +59,8 @@ Constraints
 - Use only relative paths.
 - Do not include code snippets; use descriptions like "implement function X in file Y".
 
-Examples of step phrasing
+Examples of step phrasing (informal, do not copy verbatim - just get the gist - use tools appropriate
+ for the language)
 - "Read ./src/pkg/module.py to understand Foo API"
 - "Create tests/test_module.py with unit tests covering Bar() edge cases"
 - "Implement Bar() in ./src/pkg/module.py to meet spec"
