@@ -4,11 +4,12 @@
         {
             "label": "Run unit tests",
             "type": "shell",
-            "command": "just",
+            "command": "bash",
             "args": [
-                "test-unit"
+                "-lc", // run as login shell
+                "just test-unit"
             ],
             "group": "test"
-        },
+        }
     ]
 }
