@@ -8,6 +8,8 @@ from typing import Any
 
 from ollama import AsyncClient, ChatResponse
 
+from config import load_config
+
 
 class ToolLoopError(Exception):
     """Custom exception for errors in the tool loop."""
@@ -203,7 +205,11 @@ async def run_tool_call_loop(
     ToolLoopError: If an unexpected error occurs in the tool loop.
 
     """  # noqa: E501
-    client = AsyncClient()
+    cfg = load_config()
+    if getattr(cfg, "llm", None) and cfg.llm.host:
+        client = AsyncClient(host=cfg.llm.host)
+    else:
+        client = AsyncClient()
     tools = tools or []
     while True:
         if before_model_callbacks:

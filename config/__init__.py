@@ -103,6 +103,13 @@ class VirtualComputerConfig(BaseModel):
     container_working_dir: str
 
 
+class LLMConfig(BaseModel):
+    """Configuration for Large Language Model connection."""
+
+    # Read from env var LLM_HOST; default to None if not set
+    host: str | None = Field(default_factory=lambda: os.getenv("LLM_HOST"))
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -112,6 +119,7 @@ class AppConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
     @field_validator("models")
     @classmethod

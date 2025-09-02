@@ -145,6 +145,12 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
         raise RunBashCmdError(msg)
 
     try:
+        # Enforce execution policy (deny patterns) BEFORE any container access
+        if not _is_allowed_command(cmd):
+            msg = "Command is not allowed by execution policy"
+            logger.error("%s: %s", msg, cmd)
+            return BashCmdResult(stdout=None, stderr=msg, exit_code=126)
+
         config = load_config()
         container_name = config.virtual_computer.container_name
         container_user = config.virtual_computer.container_user
@@ -156,12 +162,6 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
         if container is None:
             _raise_container_not_found(container_name)
             return BashCmdResult(stdout=None, stderr=None, exit_code=None)
-
-        # Enforce execution policy (deny patterns)
-        if not _is_allowed_command(cmd):
-            msg = "Command is not allowed by execution policy"
-            logger.error("%s: %s", msg, cmd)
-            return BashCmdResult(stdout=None, stderr=msg, exit_code=126)
 
         # Add strict flags to ensure one-shot behavior
         strict_cmd = f"set -euo pipefail; {cmd}"
