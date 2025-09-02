@@ -47,6 +47,10 @@ Guidelines
   and execute tests.
 - Use relative paths and depends_on where necessary.\
 
+Downstream context expectations
+- Each coder-related agent will receive the current plan step and the top-level tooling.
+- Ensure each PlanStep has enough implementation_details for a coder to act.
+
 Language-specific tooling guidelines
 - Python
         - Environment and deps: uv venv; uv sync; uv add <pkg>; uv add --dev <pkg>;

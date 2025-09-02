@@ -16,8 +16,13 @@ from agents.ollama.coder.architect_agent.models import LowLevelDesign
 from agents.ollama.coder.code_review_agent import code_review_agent_tool
 from agents.ollama.coder.coder_agent import coder_agent_tool
 from agents.ollama.coder.coder_planner_agent import coder_planner_agent_tool
+from agents.ollama.coder.context_models import (
+    CodeReviewInput,
+    CoderInput,
+    CoderPlannerInput,
+)
 from agents.ollama.coder.planner_agent import planner_agent_tool
-from agents.ollama.coder.planner_agent.models import PlannerPlan, PlanStep
+from agents.ollama.coder.planner_agent.models import PlannerPlan, PlanStep, ToolingSelection
 from config import load_config
 from tools.virtual_computer import (
     append_to_file,
@@ -257,7 +262,7 @@ async def workflow(prompt: str, workspace: str | None = None) -> AsyncGenerator[
             _ = write_file(_PLAN_FILE, plan_pretty)
 
     # 2. Execute the plan steps using the coder agent only
-    async for item in _execute_steps_with_coder(plan.steps):
+    async for item in _execute_steps_with_coder(plan.steps, plan.tooling):
         yield item
 
 
@@ -307,16 +312,16 @@ async def _run_planner_agent(*, prompt: str, design_json: str) -> tuple[PlannerP
 
 
 async def _run_coder_agent(
-    step: PlanStep, *, fixes: list[str] | None = None
+    step: PlanStep, tooling: ToolingSelection, *, fixes: list[str] | None = None
 ) -> tuple[str, list[str]]:
     """Run the coder agent for a single plan step.
 
     Args:
         step: The plan step to implement.
-        dependencies: Other steps this step depends on (transitive closure),
-            ordered approximately by dependency depth.
-        fixes: Optional reviewer-required changes from a failed verification,
-            to be applied on this retry attempt.
+        tooling: Top-level tooling selection from the plan (language, package manager,
+            test framework).
+        fixes: Optional reviewer-required changes from a failed verification to be
+            applied on this retry attempt.
 
     Returns:
         Tuple of (coder_result, planner_instructions).
@@ -327,14 +332,7 @@ async def _run_coder_agent(
     # First, expand the plan step into ordered coder sub-steps via coder_planner agent
     try:
         planner_instructions = await coder_planner_agent_tool(
-            json.dumps(
-                {
-                    "step": step.model_dump(),
-                    "instructions": (
-                        "Expand this PlanStep into an ordered list of concrete coder sub-steps."
-                    ),
-                }
-            )
+            CoderPlannerInput(step=step, tooling=tooling).model_dump_json()
         )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Coder-planner agent call failed for step: %s", step.id)
@@ -346,17 +344,14 @@ async def _run_coder_agent(
         _append_log_entry(step=step, part="coder_planner", data=planner_instructions or [])
 
     # Provide a clear, structured prompt to the coder agent about the current step
-    step_payload: dict[str, object] = {
-        "step": step.model_dump(),
-        # Join list[str] into a single plain-text instruction block
-        "instructions": "\n".join(planner_instructions or []),
-    }
-    if fixes:
-        # Provide reviewer-required fixes to guide the retry implementation.
-        step_payload["fixes"] = fixes
+    coder_input = CoderInput(
+        step=step,
+        tooling=tooling,
+        planner_instructions=planner_instructions or [],
+        fixes=fixes or None,
+    )
     try:
-        # Send as formatted JSON string to preserve structure
-        coder_result: str = await coder_agent_tool(json.dumps(step_payload))
+        coder_result: str = await coder_agent_tool(coder_input.model_dump_json())
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Coder agent call failed for step: %s", step.id)
         msg = f"Coder agent call failed for step: {step.id}"
@@ -367,11 +362,14 @@ async def _run_coder_agent(
         return coder_result, planner_instructions or []
 
 
-async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[StepYield, None]:
+async def _execute_steps_with_coder(
+    steps: list[PlanStep], tooling: ToolingSelection
+) -> AsyncGenerator[StepYield, None]:
     """Iterate through plan steps and execute each with the coder agent.
 
     Args:
         steps: Ordered list of plan steps to implement.
+    tooling: Top-level tooling selection from the plan used by downstream agents.
 
     Yields:
         StepYield dictionaries containing per-step results.
@@ -389,11 +387,14 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
             while True:
                 attempt += 1
                 logger.info("Executing step %s (attempt %s)", step.id, attempt)
-                step_result_msg, plan_instrs = await _run_coder_agent(step, fixes=fixes_for_retry)
+                step_result_msg, plan_instrs = await _run_coder_agent(
+                    step, tooling, fixes=fixes_for_retry
+                )
                 success, fixes = await _verify_step_result(
                     step=step,
                     result=step_result_msg,
                     planner_instructions=plan_instrs,
+                    tooling=tooling,
                 )
                 if success:
                     logger.info("Step %s passed verification on attempt %s", step.id, attempt)
@@ -419,7 +420,7 @@ async def _execute_steps_with_coder(steps: list[PlanStep]) -> AsyncGenerator[Ste
 
 
 async def _verify_step_result(
-    *, step: PlanStep, result: str, planner_instructions: list[str]
+    *, step: PlanStep, result: str, planner_instructions: list[str], tooling: ToolingSelection
 ) -> tuple[bool, list[str]]:
     """Verify a coder step's result via the code review agent.
 
@@ -432,6 +433,7 @@ async def _verify_step_result(
         result: The textual output/result from the coder agent for this step.
         planner_instructions: The ordered list of sub-steps produced by coder_planner
             for this PlanStep; used by reviewer for acceptance criteria.
+        tooling: Top-level tooling selection from the plan.
 
     Returns:
         Tuple of (success, required_changes).
@@ -439,15 +441,16 @@ async def _verify_step_result(
     Raises:
         CoderWorkflowAgentError: If the code review agent call fails after all retries.
     """
-    payload = {
-        "step": step.model_dump(),
-        "planner_instructions": planner_instructions,
-        "coder_output": result,
-    }
+    review_input = CodeReviewInput(
+        step=step,
+        tooling=tooling,
+        planner_instructions=planner_instructions,
+        coder_output=result,
+    )
 
     for attempt in range(1, _CODE_REVIEW_MAX_RETRIES + 1):
         try:
-            review = await code_review_agent_tool(json.dumps(payload))
+            review = await code_review_agent_tool(review_input.model_dump_json())
         except RuntimeError as exc:  # Only catch expected agent errors
             if attempt < _CODE_REVIEW_MAX_RETRIES:
                 logger.warning(
