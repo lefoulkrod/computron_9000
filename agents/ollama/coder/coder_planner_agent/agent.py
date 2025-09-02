@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import logging
 
-from agents.ollama.coder.planner_agent.models import generate_plan_step_schema_summary
+from agents.ollama.coder.context_models import (
+    generate_coder_planner_input_schema_summary,
+)
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -23,20 +25,21 @@ logger = logging.getLogger(__name__)
 # Reuse the same strong reasoning/coding-capable model as architect/planner
 model = get_model_by_name("coder_architect")
 
-_PLAN_STEP_SCHEMA = generate_plan_step_schema_summary()
+_CODER_PLANNER_INPUT_SCHEMA = generate_coder_planner_input_schema_summary()
 
 CODER_PLANNER_PROMPT = f"""
 Role: Expert Implementation Sequencer
 
-Goal: Given a single PlanStep from the Planner, return a comprehensive, ordered
-list of exact sub-steps the Coder agent should take to implement that step.
+Goal: Given a standardized input payload containing the current PlanStep and the
+selected project tooling, return a comprehensive, ordered list of exact sub-steps
+the Coder agent should take to implement that step.
 
 STRICT OUTPUT
 - Return ONLY valid JSON: a single array of strings (list[str]).
 - No markdown, comments, code fences, or extra text.
 
-Input schema reference (PlanStep):
-{_PLAN_STEP_SCHEMA}
+Input payload shape (CoderPlannerInput):
+{_CODER_PLANNER_INPUT_SCHEMA}
 
 What to produce
 - A precise sequence of actionable steps the Coder should follow.
@@ -45,13 +48,12 @@ What to produce
 
 Required coverage
 - Dependencies: If the PlanStep depends on other artifacts, plan to READ relevant
-  files first to understand interfaces and relationships before editing.
+    files first to understand interfaces and relationships before editing.
 - Tests: Include steps to WRITE focused unit tests for the behavior introduced/changed.
 - Validation: Include steps to RUN fast validations after implementing (unit tests,
-  style/lint checks, type checks if present).
+    style/lint checks, type checks if present).
 - Files: When creating or editing files, name the exact relative path.
-- Commands: When running commands, prefer the project’s chosen tooling (e.g., uv run pytest -q).
- - Commands: When running commands, prefer the project's chosen tooling (e.g., uv run pytest -q).
+- Commands: When running commands, prefer the project's chosen tooling (e.g., uv run pytest -q).
 
 Constraints
 - Do not start servers, watchers, or long-running processes.
@@ -59,8 +61,8 @@ Constraints
 - Use only relative paths.
 - Do not include code snippets; use descriptions like "implement function X in file Y".
 
-Examples of step phrasing (informal, do not copy verbatim - just get the gist - use tools appropriate
- for the language)
+Examples of step phrasing (informal, do not copy verbatim - just get the gist -
+use tools appropriate for the language)
 - "Read ./src/pkg/module.py to understand Foo API"
 - "Create tests/test_module.py with unit tests covering Bar() edge cases"
 - "Implement Bar() in ./src/pkg/module.py to meet spec"
@@ -86,9 +88,8 @@ coder_planner_after_model_call_callback = make_log_after_model_call(coder_planne
 coder_planner_agent_tool = make_run_agent_as_tool_function(
     agent=coder_planner_agent,
     tool_description="""
-        Expand a single PlanStep into a comprehensive, ordered list of actionable coder sub-steps.
-        The result is a JSON list[str]. The input should contain the PlanStep JSON and any
-        additional context string.
+        Expand the current PlanStep (with tooling context) into a comprehensive, ordered list
+        of actionable coder sub-steps. Input is CoderPlannerInput JSON; result is JSON list[str].
         """,
     result_type=list[str],
     before_model_callbacks=[before_model_call_callback],

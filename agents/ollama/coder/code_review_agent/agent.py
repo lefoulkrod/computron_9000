@@ -11,7 +11,9 @@ from __future__ import annotations
 import logging
 from textwrap import dedent
 
-from agents.ollama.coder.planner_agent.models import generate_plan_step_schema_summary
+from agents.ollama.coder.context_models import (
+    generate_code_review_input_schema_summary,
+)
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -39,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 model = get_model_by_name("coder_architect")
 
-_PLAN_STEP_SCHEMA = generate_plan_step_schema_summary()
+_CODE_REVIEW_INPUT_SCHEMA = generate_code_review_input_schema_summary()
 # Generate strict JSON example from the actual Pydantic model
 _REVIEW_SCHEMA = model_to_schema(CodeReviewResult, indent=2, include_docs=True)
 
@@ -51,12 +53,8 @@ Role: Code Review Agent
 You operate in a headless virtual computer. Your job is to verify whether a single plan step
 was implemented correctly based on concrete evidence gathered with tools.
 
-Input JSON payload
-{{
-    "step": PlanStep,                // the step being reviewed
-    "planner_instructions": ["..."], // list[str] from coder_planner for this step
-    "coder_output": "..."            // plain-text summary from coder agent
-}}
+Input JSON payload (CodeReviewInput)
+{_CODE_REVIEW_INPUT_SCHEMA}
 
 Tools (read-only)
 - exists, is_file, is_dir
@@ -75,11 +73,8 @@ Verification workflow (guidance)
 - Run short, idempotent commands for validation (tests/lint/type checks) when applicable.
 - Decide:
     - success=true when evidence supports the step's goal is met.
-        - success=false when evidence is missing or incorrect; list minimal actionable
-            fixes in required_changes.
-
-Reference schema: PlanStep
-{_PLAN_STEP_SCHEMA}
+    - success=false when evidence is missing or incorrect; list minimal actionable
+      fixes in required_changes.
 """
 )
 
@@ -98,7 +93,7 @@ after_model_call_callback = make_log_after_model_call(code_review_agent)
 code_review_agent_tool = make_run_agent_as_tool_function(
     agent=code_review_agent,
     tool_description=(
-        "Given a plan step and coder output, decide if it passes and provide"
+        "Given standardized context (CodeReviewInput), decide if the step passes and provide"
         " required_changes if not."
     ),
     result_type=CodeReviewResult,
