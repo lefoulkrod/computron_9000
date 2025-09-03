@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -103,6 +104,13 @@ class VirtualComputerConfig(BaseModel):
     container_working_dir: str
 
 
+class LLMConfig(BaseModel):
+    """Configuration for Large Language Model connection."""
+
+    # Read from env var LLM_HOST; default to None if not set
+    host: str | None = Field(default_factory=lambda: os.getenv("LLM_HOST"))
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -112,6 +120,7 @@ class AppConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
     @field_validator("models")
     @classmethod
@@ -152,6 +161,11 @@ class AppConfig(BaseModel):
 
 
 logger = logging.getLogger(__name__)
+
+# Ensure environment variables from a local .env file are available as early as possible
+# so that env-driven defaults (e.g., LLM_HOST) are read correctly even when configuration
+# is loaded during import time in other modules.
+load_dotenv()
 
 
 @lru_cache(maxsize=1)

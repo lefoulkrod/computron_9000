@@ -4,9 +4,10 @@
         {
             "label": "Run unit tests",
             "type": "shell",
-            "command": "just",
+            "command": "bash",
             "args": [
-                "test-unit"
+                "-lc",
+                "just test-unit"
             ],
             "group": "test"
         },
@@ -19,5 +20,25 @@
             ],
             "group": "none"
         },
+        {
+            "label": "Run integration tests",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "just test-integration"
+            ],
+            "group": "test"
+        },
+        {
+            "label": "Run all checks (lint, type, format)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "just check"
+            ],
+            "group": "build"
+        }
     ]
 }

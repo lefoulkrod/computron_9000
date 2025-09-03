@@ -8,6 +8,8 @@ from typing import Any
 
 from ollama import AsyncClient
 
+from config import load_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +37,12 @@ async def generate_completion(
         RuntimeError: If the LLM call fails.
     """
     try:
-        response = await AsyncClient().generate(
+        cfg = load_config()
+        if getattr(cfg, "llm", None) and cfg.llm.host:
+            client = AsyncClient(host=cfg.llm.host)
+        else:
+            client = AsyncClient()
+        response = await client.generate(
             model=model,
             prompt=prompt,  # prompt_to_send,
             system=system or "Generate a response based on the provided prompt.",

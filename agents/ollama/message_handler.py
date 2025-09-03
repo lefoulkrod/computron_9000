@@ -5,7 +5,6 @@ from collections.abc import AsyncGenerator, Sequence
 
 from ollama import AsyncClient, Image
 
-from agents.ollama import handoff_agent_tool
 from agents.types import Agent, Data, UserMessageEvent
 from config import load_config
 from models.model_configs import get_model_by_name
@@ -65,7 +64,9 @@ async def _handle_image_message(
     log_before_model_call = make_log_before_model_call()
     log_before_model_call(_message_history)
     model = get_model_by_name("vision")
-    response = await AsyncClient().generate(
+    host = config.llm.host if getattr(config, "llm", None) else None
+    client = AsyncClient(host=host) if host else AsyncClient()
+    response = await client.generate(
         model=model.model,
         prompt=message,
         options=model.options,
@@ -106,7 +107,7 @@ async def handle_user_message(
 
         _message_history.append({"role": "user", "content": message})
         # Use the handoff agent to process the message and run the appropriate agent
-        agent_to_run = await handoff_agent_tool(message)
+        agent_to_run = "computron"  # await handoff_agent_tool(message)
         logger.debug("Using agent: %s", agent_to_run)
         if agent_to_run == "computron":
             agent = computron
