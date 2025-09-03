@@ -13,7 +13,6 @@ from agents.types import Agent
 from models import get_model_by_name
 from tools.virtual_computer import (
     append_to_file,
-    apply_text_patch,
     copy_path,
     exists,
     grep,
@@ -83,7 +82,6 @@ coder_agent = Agent(
         append_to_file,
         write_file,
         exists,
-        apply_text_patch,
         read_file,
         head,
         tail,

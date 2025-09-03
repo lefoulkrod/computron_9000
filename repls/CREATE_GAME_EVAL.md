@@ -70,6 +70,17 @@ do not use any audio game assets
 3. Assets (blocks, enemies, player, background) must be in formats appropriate for Pygame (e.g., PNG for images).
 4. The game must run as a **single Python script** with no manual asset preparation required beyond what the script itself downloads or generates.
 
+# Coding Assignment - Web browser based OS simulator
+create a browser based OS simulator
+- a desktop with a background color or gradient; settings to configure different backgrounds
+- a taskbar with start menu and clock
+- working sample applications; file explorer, web browser, terminal
+- windows should be resizable by dragging the edges; should be able to maximize and minimize them; should be able to drag them around
+- use only javascript, html, css, and svg
+- generate SVGs for all icons
+- should be able to run this from the workspace root by using npx vite or having installed vite and running it from a package.json script
+- should simulate a shutdown procedure
+
 {
   "artifacts": [
     {
