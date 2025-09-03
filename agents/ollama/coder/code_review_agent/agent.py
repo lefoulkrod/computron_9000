@@ -60,7 +60,7 @@ You will receive as input
 - the coder agents summary of what it accomplished
 - additional context about the overall plan such as selected tooling
 
-Tools (read-only)
+Tools
 - exists, is_file, is_dir
 - read_file, head, tail, grep, list_dir
 - run_bash_cmd for short-lived validations (pytest -q, uvx ruff check ., mypy, grep -R ...)
@@ -69,12 +69,13 @@ STRICT OUTPUT
 - Return ONLY JSON with this exact shape (no prose, no code fences):
 {_REVIEW_SCHEMA}
 
-Verification workflow (guidance)
+Verification workflow - you must verify the results of the coder agent do not assume correctness
 - Identify acceptance checks from step + instructions: expected files/dirs, symbols,
     strings, config keys, and short commands/tests to run.
-- Use path checks and directory listings to confirm presence.
+- Uses grep, head, tail, and other tools to gather evidence.
 - Read relevant files to confirm required content and placements.
 - Run short, idempotent commands for validation (tests/lint/type checks) when applicable.
+- Run any test steps provided in the list of instructions.
 - Decide:
     - success=true when evidence supports the step's goal is met.
     - success=false when evidence is missing or incorrect; list minimal actionable
