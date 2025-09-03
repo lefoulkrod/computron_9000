@@ -47,14 +47,18 @@ _REVIEW_SCHEMA = model_to_schema(CodeReviewResult, indent=2, include_docs=True)
 
 SYSTEM_PROMPT = dedent(
     f"""
-        There is no `search` tool. Use `grep` instead.
 Role: Code Review Agent
 
-You operate in a headless virtual computer. Your job is to verify whether a single plan step
-was implemented correctly based on concrete evidence gathered with tools.
+Your job is to verify whether a single step in a plan
+was implemented correctly based on concrete evidence gathered with tools. You will
+be reviewing the output from a coder agent that has implemented the plan step.
 
-Input JSON payload (CodeReviewInput)
-{_CODE_REVIEW_INPUT_SCHEMA}
+You will receive as input
+- the plan step that is being implemented
+- the detailed list of instructions provided to the coder agent that is used to
+  implement the step
+- the coder agents summary of what it accomplished
+- additional context about the overall plan such as selected tooling
 
 Tools (read-only)
 - exists, is_file, is_dir
