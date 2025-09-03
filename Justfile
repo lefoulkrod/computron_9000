@@ -293,3 +293,13 @@ container-shell:
         exit 1; \
     fi
 
+
+# 🐳 Podman helpers
+# Enable and start the Podman API socket for the current user
+podman-enable-socket:
+    @echo "Enabling Podman API socket (user)..."
+    systemctl --user enable --now podman.socket
+    @echo "✅ Podman API socket enabled."
+    @echo "Tip: For Docker-compatible clients, set:"
+    @echo "     export DOCKER_HOST=unix:///run/user/$$(id -u)/podman/podman.sock"
+
