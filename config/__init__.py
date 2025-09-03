@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -160,6 +161,11 @@ class AppConfig(BaseModel):
 
 
 logger = logging.getLogger(__name__)
+
+# Ensure environment variables from a local .env file are available as early as possible
+# so that env-driven defaults (e.g., LLM_HOST) are read correctly even when configuration
+# is loaded during import time in other modules.
+load_dotenv()
 
 
 @lru_cache(maxsize=1)
