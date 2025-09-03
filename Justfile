@@ -83,6 +83,105 @@ sync:
 tree:
     uv tree
 
+# 🕹 Playwright helpers
+
+# Install only specific browser engines (chromium, firefox, webkit)
+playwright-install-browser browser:
+    uv run python -m playwright install {{browser}}
+
+# Install Playwright system dependencies (Linux)
+playwright-install-deps:
+    @set -euo pipefail; \
+    if command -v apt-get >/dev/null 2>&1; then \
+        echo "Installing Playwright system deps via apt-get..."; \
+        sudo apt-get update; \
+        sudo apt-get install -y \
+            libnss3 \
+            libnspr4 \
+            libdbus-1-3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libxcb1 \
+            libatspi2.0-0 \
+            libx11-6 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxext6 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libasound2; \
+    elif command -v dnf >/dev/null 2>&1; then \
+        echo "Installing Playwright system deps via dnf..."; \
+        sudo dnf install -y \
+            nss \
+            nspr \
+            dbus-libs \
+            atk \
+            at-spi2-atk \
+            cups-libs \
+            libxcb \
+            at-spi2-core \
+            libX11 \
+            libXcomposite \
+            libXdamage \
+            libXext \
+            libXfixes \
+            libXrandr \
+            mesa-libgbm \
+            pango \
+            cairo \
+            alsa-lib; \
+    elif command -v yum >/dev/null 2>&1; then \
+        echo "Installing Playwright system deps via yum..."; \
+        sudo yum install -y \
+            nss \
+            nspr \
+            dbus-libs \
+            atk \
+            at-spi2-atk \
+            cups-libs \
+            libxcb \
+            at-spi2-core \
+            libX11 \
+            libXcomposite \
+            libXdamage \
+            libXext \
+            libXfixes \
+            libXrandr \
+            mesa-libgbm \
+            pango \
+            cairo \
+            alsa-lib; \
+    elif command -v zypper >/dev/null 2>&1; then \
+        echo "Installing Playwright system deps via zypper..."; \
+        sudo zypper install -y \
+            mozilla-nss \
+            mozilla-nspr \
+            libdbus-1-3 \
+            atk \
+            at-spi2-atk \
+            libcups2 \
+            libxcb1 \
+            at-spi2-core \
+            libX11-6 \
+            libXcomposite1 \
+            libXdamage1 \
+            libXext6 \
+            libXfixes3 \
+            libXrandr2 \
+            libgbm1 \
+            pango \
+            cairo \
+            alsa; \
+    else \
+        echo "Unsupported package manager. Please install system packages manually." >&2; \
+        exit 1; \
+    fi
+
 # 🧪 Testing commands
 # Run all tests with coverage
 test:
@@ -175,29 +274,32 @@ container-stop:
     podman stop computron_virtual_computer
 
 container-start:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Extract only the virtual_computer.home_dir value
-    home_dir=$(awk '/^virtual_computer:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
-    if [ ! -d "${home_dir}" ]; then
-        mkdir -p "${home_dir}"
-    fi
+    @home_dir=$(awk '/^virtual_computer:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml); \
+    if [ ! -d "$home_dir" ]; then mkdir -p "$home_dir"; fi; \
     podman run -d --rm \
       --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
-      -v "${home_dir}:/home/computron:rw,z" \
+      -v "$home_dir:/home/computron:rw,z" \
       computron_9000:latest sleep infinity
-    echo "Container 'computron_virtual_computer' started in background and ready for exec commands."
+    @echo "Container 'computron_virtual_computer' started in background and ready for exec commands."
 
 container-shell:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if podman container exists computron_virtual_computer; then
-        echo "Opening shell in running container computron_virtual_computer"
-        podman exec -it computron_virtual_computer bash
-    else
-        echo "Container 'computron_virtual_computer' is not running. Start it with: just container-start" >&2
-        exit 1
+    @if podman container exists computron_virtual_computer; then \
+        echo "Opening shell in running container computron_virtual_computer"; \
+        podman exec -it computron_virtual_computer bash; \
+    else \
+        echo "Container 'computron_virtual_computer' is not running. Start it with: just container-start" >&2; \
+        exit 1; \
     fi
+
+
+# 🐳 Podman helpers
+# Enable and start the Podman API socket for the current user
+podman-enable-socket:
+    @echo "Enabling Podman API socket (user)..."
+    systemctl --user enable --now podman.socket
+    @echo "✅ Podman API socket enabled."
+    @echo "Tip: For Docker-compatible clients, set:"
+    @echo "     export DOCKER_HOST=unix:///run/user/$$(id -u)/podman/podman.sock"
 
