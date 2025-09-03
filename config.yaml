@@ -12,7 +12,7 @@ models:
       top_p: 0.8
       top_k: 20
       repetition_penalty: 1.05
-  - name: coder_architect
+  - name: coder_architect_qwen
     model: qwen3:30b-a3b-thinking-2507-q8_0
     think: true
     options:
@@ -21,7 +21,7 @@ models:
       top_p: 0.8
       top_k: 20
       repetition_penalty: 1.05
-  - name: coder_developer
+  - name: coder_developer_qwen
     model: qwen3:30b-a3b-thinking-2507-q8_0
     think: true
     options:
@@ -40,13 +40,13 @@ models:
     think: false
     options:
       num_ctx: 128000
-  - name: coder_architect_gpt
+  - name: coder_architect
     model: gpt-oss:120b
     think: true
     options:
       num_ctx: 128000
       reasoning_effort: high
-  - name: coder_developer_gpt
+  - name: coder_developer
     model: gpt-oss:120b
     think: true
     options:
