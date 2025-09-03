@@ -1,0 +1,15 @@
+{
+    "recommendations": [
+        "ms-python.python", // Python extension (needed for Pylance + testing)
+        "ms-python.vscode-pylance", // Pylance language server (fast IntelliSense, type checking)
+        "charliermarsh.ruff", // Ruff formatter + linter
+        "ms-toolsai.jupyter", // Optional: notebooks support
+        "tamasfe.even-better-toml", // TOML syntax (pyproject.toml, uv config)
+        "ms-azuretools.vscode-docker" // Helpful for Podman/Docker workflows
+    ],
+    "unwantedRecommendations": [
+        "ms-python.black-formatter", // Redundant since you’re standardizing on Ruff
+        "ms-python.flake8", // Redundant
+        "ms-python.isort" // Ruff handles import sorting
+    ]
+}
