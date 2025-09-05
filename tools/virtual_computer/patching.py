@@ -15,11 +15,13 @@ def apply_text_patch(
 ) -> ApplyPatchResult:
     """Apply a single line-based text patch to a file.
 
-    Replaces a range of lines with new content.
+    Replaces a range of lines with new content. Newlines are not added
+    automatically—include a trailing newline for each inserted line (including
+    the last) to keep lines separate. Writes only when a change occurs; invalid
+    ranges return an error in the result.
 
     Args:
-        path: Path to the target text file (relative or absolute under the
-            virtual computer home directory).
+        path: Path to the target text file.
         start_line: Starting line number (1-based, inclusive).
         end_line: Ending line number (1-based, inclusive).
         replacement: New text content to replace the specified line range.
@@ -29,9 +31,6 @@ def apply_text_patch(
         and a unified ``diff`` string of the changes when applicable. On
         failure, ``error`` contains a brief message.
 
-    Notes:
-        This function writes changes only when a difference is produced. Errors
-        such as invalid ranges are reported in the result rather than raised.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
