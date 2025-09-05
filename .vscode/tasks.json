@@ -18,7 +18,8 @@
             "args": [
                 "container-start"
             ],
-            "group": "none"
+            "group": "none",
+            "problemMatcher": []
         },
         {
             "label": "Run integration tests",
