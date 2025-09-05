@@ -174,21 +174,22 @@ def copy_path(src: str, dst: str) -> MoveCopyResult:
         return MoveCopyResult(success=True, src=src_rel, dst=dst_rel)
 
 
-def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
-    """Append content to a file, creating the file and parents if needed.
+def append_to_file(path: str, content: str) -> WriteFileResult:
+    """Append UTF-8 text to a file, creating the file and parents if needed.
+
+    Appends text using UTF-8 encoding and returns a ``WriteFileResult``. This function
+    does not raise on I/O errors; failures are reported in the returned result object
+    with an ``error`` message. Only ``str`` content is accepted; for binary data,
+    encode to text (e.g., base64) before calling.
 
     Args:
         path: Relative or absolute path under the home directory.
-        content: The content to append. If a string is provided, it is written
-            using UTF-8 encoding. If bytes are provided, they are written as-is.
+        content: Text to append (UTF-8). Only ``str`` is accepted.
 
     Returns:
-        WriteFileResult: Result object indicating success or failure. On
-        success, ``file_path`` contains the relative path written. On failure,
-        ``error`` contains a message.
-
-    This function does not raise on I/O errors; failures are reported in the
-    returned ``WriteFileResult``.
+        WriteFileResult: Result object indicating success or failure. On success,
+        ``file_path`` contains the relative path written. On failure, ``error``
+        contains a message.
     """
     file_path: Path | None = None
     rel_return_path: str = ""
@@ -196,14 +197,11 @@ def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
         file_path, _home, rel_return_path = resolve_under_home(path)
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, bytes):
-            with file_path.open("ab") as f:
-                f.write(content)
-        elif isinstance(content, str):
+        if isinstance(content, str):
             with file_path.open("a", encoding="utf-8") as f:
                 f.write(content)
         else:
-            logger.error("Content must be of type str or bytes, got %s", type(content))
+            logger.error("Content must be of type str, got %s", type(content))
             return WriteFileResult(
                 success=False,
                 file_path=rel_return_path,
@@ -214,6 +212,56 @@ def append_to_file(path: str, content: str | bytes) -> WriteFileResult:
         err_path = rel_return_path if rel_return_path else path
         return WriteFileResult(success=False, file_path=err_path, error="append failed")
     logger.debug("Appended to file at path %s", rel_return_path)
+    return WriteFileResult(success=True, file_path=rel_return_path)
+
+
+def prepend_to_file(path: str, content: str) -> WriteFileResult:
+    """Prepend UTF-8 text to a file, creating the file if needed.
+
+    Args:
+        path: Relative or absolute path under the home directory.
+        content: Text to prepend (UTF-8). Only ``str`` is accepted.
+
+    Returns:
+        WriteFileResult: Indicates success or failure with the relative ``file_path``.
+    """
+    file_path: Path | None = None
+    rel_return_path: str = ""
+    try:
+        file_path, _home, rel_return_path = resolve_under_home(path)
+        if file_path.parent and not file_path.parent.exists():
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not isinstance(content, str):
+            logger.error("Content must be of type str, got %s", type(content))
+            return WriteFileResult(
+                success=False,
+                file_path=rel_return_path,
+                error=str(type(content)),
+            )
+
+        existing_text = ""
+        if file_path.exists():
+            try:
+                with file_path.open("r", encoding="utf-8", errors="replace") as f:
+                    existing_text = f.read()
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Failed to read existing file for prepend at path %s", path)
+                return WriteFileResult(
+                    success=False,
+                    file_path=rel_return_path,
+                    error="read failed",
+                )
+
+        with file_path.open("w", encoding="utf-8") as f:
+            f.write(content)
+            if existing_text:
+                f.write(existing_text)
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to prepend file at path %s", path)
+        err_path = rel_return_path if rel_return_path else path
+        return WriteFileResult(success=False, file_path=err_path, error="prepend failed")
+    logger.debug("Prepended to file at path %s", rel_return_path)
     return WriteFileResult(success=True, file_path=rel_return_path)
 
 

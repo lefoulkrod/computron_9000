@@ -13,6 +13,7 @@ from agents.types import Agent
 from models import get_model_by_name
 from tools.virtual_computer import (
     append_to_file,
+    apply_text_patch,
     copy_path,
     exists,
     grep,
@@ -20,6 +21,7 @@ from tools.virtual_computer import (
     list_dir,
     make_dirs,
     move_path,
+    prepend_to_file,
     read_file,
     remove_path,
     replace_in_file,
@@ -85,6 +87,8 @@ coder_agent = Agent(
         list_dir,
         replace_in_file,
         insert_text,
+        apply_text_patch,
+        prepend_to_file,
     ],
     think=model.think,
 )
