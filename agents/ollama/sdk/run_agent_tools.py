@@ -109,12 +109,29 @@ def _convert_result_to_type[T](raw_text: str, result_type: type[T]) -> T:
     # String fast path is handled by the caller to keep this function focused
     # on JSON-based conversions.
 
-    # Attempt to parse JSON
-    try:
-        parsed: Any = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        logger.exception("Failed to parse agent result as JSON for type %s", result_type)
-        raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON) from exc
+    # Attempt to parse JSON with simple retry for transient formatting issues
+    max_attempts = 5
+    parsed: Any | None = None
+    for attempt in range(max_attempts):
+        try:
+            parsed = json.loads(raw_text)
+            break
+        except json.JSONDecodeError as exc:
+            if attempt < max_attempts - 1:
+                logger.warning(
+                    "JSON parse failed attempt %s/%s for type %s",
+                    attempt + 1,
+                    max_attempts,
+                    result_type,
+                )
+                continue
+            logger.exception("Failed to parse agent result as JSON for type %s", result_type)
+            raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON) from exc
+
+    # Safety check; parsed must be set when loop breaks
+    if parsed is None:  # pragma: no cover - defensive
+        logger.error("JSON parse failed without exception for type %s", result_type)
+        raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON)
 
     # Handle list[Model] (PEP 585 GenericAlias) or typing.List[Model]
     origin = get_origin(result_type)
