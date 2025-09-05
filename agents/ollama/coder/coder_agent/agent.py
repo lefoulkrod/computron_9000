@@ -16,7 +16,6 @@ from tools.virtual_computer import (
     copy_path,
     exists,
     grep,
-    head,
     insert_text,
     list_dir,
     make_dirs,
@@ -25,7 +24,6 @@ from tools.virtual_computer import (
     remove_path,
     replace_in_file,
     run_bash_cmd,
-    tail,
     write_file,
 )
 
@@ -83,8 +81,6 @@ coder_agent = Agent(
         write_file,
         exists,
         read_file,
-        head,
-        tail,
         grep,
         list_dir,
         replace_in_file,
