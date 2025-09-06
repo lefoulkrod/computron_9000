@@ -1,6 +1,6 @@
 # Copilot Custom Instructions
 
-- Use Google‑style docstrings with Args/Returns/Raises
+- Use Google‑style docstrings
 - Do not use f-strings for logging; use `logger.info("message %s", var)` instead
 - Handle exceptions with context‑aware logging; use module-level logger (`logger = logging.getLogger(__name__)`)
 - Use custom exceptions where appropriate

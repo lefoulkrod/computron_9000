@@ -109,29 +109,12 @@ def _convert_result_to_type[T](raw_text: str, result_type: type[T]) -> T:
     # String fast path is handled by the caller to keep this function focused
     # on JSON-based conversions.
 
-    # Attempt to parse JSON with simple retry for transient formatting issues
-    max_attempts = 5
-    parsed: Any | None = None
-    for attempt in range(max_attempts):
-        try:
-            parsed = json.loads(raw_text)
-            break
-        except json.JSONDecodeError as exc:
-            if attempt < max_attempts - 1:
-                logger.warning(
-                    "JSON parse failed attempt %s/%s for type %s",
-                    attempt + 1,
-                    max_attempts,
-                    result_type,
-                )
-                continue
-            logger.exception("Failed to parse agent result as JSON for type %s", result_type)
-            raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON) from exc
-
-    # Safety check; parsed must be set when loop breaks
-    if parsed is None:  # pragma: no cover - defensive
-        logger.error("JSON parse failed without exception for type %s", result_type)
-        raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON)
+    # Parse JSON once; caller is responsible for retrying the tool loop on failure
+    try:
+        parsed: Any = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        logger.exception("Failed to parse agent result as JSON for type %s", result_type)
+        raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON) from exc
 
     # Handle list[Model] (PEP 585 GenericAlias) or typing.List[Model]
     origin = get_origin(result_type)
@@ -170,6 +153,108 @@ def _convert_result_to_type[T](raw_text: str, result_type: type[T]) -> T:
     # Builtins and general types: return parsed JSON as-is (best-effort)
     # Note: we only guarantee JSON-convertible types; deep type checks are not enforced.
     return cast("T", parsed)
+
+
+async def _run_tool_loop_once(
+    *,
+    messages: list[dict[str, str]],
+    agent: Agent,
+    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None,
+    after_model_callbacks: list[Callable[[ChatResponse], None]] | None,
+) -> str:
+    """Run the tool-call loop once and return the final assistant text.
+
+    Args:
+        messages: Conversation messages to seed the model/tool loop.
+        agent: Agent providing tools, model, options, and think flag.
+        before_model_callbacks: Optional pre-call callbacks.
+        after_model_callbacks: Optional post-call callbacks.
+
+    Returns:
+        The last emitted assistant content, stripped.
+
+    Raises:
+        Propagates any unexpected exceptions from the tool loop after logging.
+    """
+    result_text = ""
+    try:
+        gen: AsyncGenerator[tuple[str | None, str | None], None] = run_tool_call_loop(
+            messages=messages,
+            tools=agent.tools,
+            model=agent.model,
+            model_options=agent.options,
+            think=agent.think,
+            before_model_callbacks=before_model_callbacks,
+            after_model_callbacks=after_model_callbacks,
+        )
+        async for content, _ in gen:
+            if content:
+                result_text = content
+    except Exception:
+        logger.exception(
+            "Unexpected error running agent tool loop for agent '%s'",
+            agent.name,
+        )
+        raise
+
+    return result_text.strip()
+
+
+async def _run_with_json_retry[T](
+    *,
+    messages: list[dict[str, str]],
+    agent: Agent,
+    result_type: type[T],
+    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None,
+    after_model_callbacks: list[Callable[[ChatResponse], None]] | None,
+    max_attempts: int = 5,
+) -> T:
+    """Run the tool loop with JSON-parse retries for non-string result types.
+
+    Retries the entire tool-call loop up to ``max_attempts`` times when the
+    conversion fails specifically due to non-JSON output (ERR_NOT_JSON).
+
+    Args:
+        messages: Conversation messages.
+        agent: Agent to execute.
+        result_type: The target non-string type to convert the output into.
+        before_model_callbacks: Optional pre-call callbacks.
+        after_model_callbacks: Optional post-call callbacks.
+        max_attempts: Number of attempts to try when JSON parsing fails.
+
+    Returns:
+        Parsed/validated result of type ``T``.
+
+    Raises:
+        AgentToolConversionError: On final JSON failure or other conversion errors.
+        Exception: Any unexpected error raised by the tool loop.
+    """
+    for attempt in range(max_attempts):
+        final_text = await _run_tool_loop_once(
+            messages=messages,
+            agent=agent,
+            before_model_callbacks=before_model_callbacks,
+            after_model_callbacks=after_model_callbacks,
+        )
+        try:
+            return _convert_result_to_type(final_text, result_type)
+        except AgentToolConversionError as exc:
+            if (
+                isinstance(exc, AgentToolConversionError)
+                and exc.kind == AgentToolConversionError.ERR_NOT_JSON
+                and attempt < max_attempts - 1
+            ):
+                logger.warning(
+                    "Non-JSON tool result, retrying tool loop attempt %s/%s for agent %s",
+                    attempt + 1,
+                    max_attempts,
+                    agent.name,
+                )
+                continue
+            raise
+    # Exhausted retries specifically for non-JSON results
+    logger.error("Exhausted retries parsing non-string result for agent '%s'", agent.name)
+    raise AgentToolConversionError(AgentToolConversionError.ERR_NOT_JSON)
 
 
 def make_run_agent_as_tool_function[T](
@@ -215,30 +300,25 @@ Returns:
             {"role": "system", "content": agent.instruction},
             {"role": "user", "content": instructions},
         ]
-        result_text = ""
-        try:
-            gen: AsyncGenerator[tuple[str | None, str | None], None] = run_tool_call_loop(
+
+        # For string results, single pass without retry
+        if result_type is str:  # type: ignore[comparison-overlap]
+            return await _run_tool_loop_once(
                 messages=messages,
-                tools=agent.tools,
-                model=agent.model,
-                model_options=agent.options,
-                think=agent.think,
+                agent=agent,
                 before_model_callbacks=before_model_callbacks,
                 after_model_callbacks=after_model_callbacks,
-            )
-            # Only keep the last emission's content rather than accumulating all chunks
-            async for content, _ in gen:
-                if content:
-                    result_text = content
-        except Exception:
-            # Log full traceback and re-raise to avoid swallowing unexpected errors
-            logger.exception("Unexpected error running agent tool loop for agent '%s'", agent.name)
-            raise
-        final_text = result_text.strip()
-        # Convert to requested type if needed
-        if result_type is str:  # type: ignore[comparison-overlap]
-            return final_text  # type: ignore[return-value]
-        return _convert_result_to_type(final_text, result_type)
+            )  # type: ignore[return-value]
+
+        # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
+        return await _run_with_json_retry(
+            messages=messages,
+            agent=agent,
+            result_type=result_type,
+            before_model_callbacks=before_model_callbacks,
+            after_model_callbacks=after_model_callbacks,
+            max_attempts=5,
+        )
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
     # distinguish multiple agent tools. We assume agent.name values are unique.
