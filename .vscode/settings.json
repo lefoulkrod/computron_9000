@@ -3,7 +3,9 @@
         "**/.pytest_cache": true,
         "**/.mypy_cache": true,
         "**/*.egg-info": true,
-        "**/.ruff_cache": true
+        "**/.ruff_cache": true,
+        "**/__pycache__": true,
+        "**/.venv": true
     },
     "python.terminal.activateEnvironment": true,
     "terminal.integrated.env.linux": {
