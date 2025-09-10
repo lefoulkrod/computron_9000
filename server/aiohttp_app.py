@@ -18,6 +18,7 @@ from agents.types import Data
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+UI_DIST_DIR = Path(__file__).parent / "ui" / "dist"
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -172,7 +173,7 @@ async def handle_get(request: Request) -> Response:
 
     """
     if request.path in ["", "/"]:
-        html_path = STATIC_DIR / "agent_ui.html"
+        html_path = UI_DIST_DIR / "index.html"
         if html_path.is_file():
             with html_path.open("rb") as f:
                 html = f.read()
@@ -187,6 +188,20 @@ async def handle_get(request: Request) -> Response:
             content_type="text/html",
             headers=CORS_HEADERS,
         )
+    if request.path.startswith("/assets/"):
+        rel_path = request.path.lstrip("/")
+        file_path = UI_DIST_DIR / rel_path
+        if file_path.is_file():
+            content_type = _guess_content_type(str(file_path))
+            with file_path.open("rb") as f:
+                data = f.read()
+            return web.Response(
+                body=data,
+                content_type=content_type,
+                headers=CORS_HEADERS,
+            )
+        logger.warning(f"Asset not found: {file_path}")
+        return web.Response(status=404)
     if request.path.startswith("/static/"):
         rel_path = request.path[len("/static/") :]
         file_path = STATIC_DIR / rel_path
@@ -223,5 +238,6 @@ app = web.Application(client_max_size=10 * 1024**2)
 app.router.add_route("OPTIONS", "/api/chat", handle_options)
 app.router.add_route("POST", "/api/chat", handle_post)
 app.router.add_route("GET", "/", handle_get)
+app.router.add_route("GET", "/assets/{tail:.*}", handle_get)
 app.router.add_route("GET", "/static/{tail:.*}", handle_get)
 app.router.add_route("DELETE", "/api/chat/history", handle_delete_history)

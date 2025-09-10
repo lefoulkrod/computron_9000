@@ -1,0 +1,20 @@
+import React, { useEffect, useRef } from 'react';
+import Message from './Message.jsx';
+
+export default function ChatMessages({ messages }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  return (
+    <div className="chat-messages" id="chatMessages" ref={containerRef}>
+      {messages.map((msg, idx) => (
+        <Message key={idx} {...msg} />
+      ))}
+    </div>
+  );
+}
