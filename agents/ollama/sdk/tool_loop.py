@@ -232,11 +232,11 @@ async def run_tool_call_loop(
             content = response.message.content
             thinking = response.message.thinking
             tool_calls = response.message.tool_calls
-            logger.debug("tool_calls: %s", tool_calls)
             assistant_message = {
                 "role": "assistant",
                 "content": content,
                 "tool_calls": tool_calls,
+                "thinking": thinking,
             }
             messages.append(assistant_message)
             if content is not None or thinking is not None:
