@@ -73,13 +73,19 @@ _ALLOWED_PREFIXES: tuple[str, ...] = (
 
 # Deny substrings indicating long-running servers/watchers
 _DENY_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bserve\b", re.IGNORECASE),
-    # Block explicit 'dev' scripts like `npm run dev` but allow flags like '--save-dev'.
-    # Negative lookbehind ensures 'dev' isn't preceded by 'save-' (e.g. --save-dev)
-    # or part of 'saved'.
-    re.compile(r"(?<!save-)\bdev\b", re.IGNORECASE),
-    re.compile(r"\bstart\b", re.IGNORECASE),
-    re.compile(r"\bwatch\b", re.IGNORECASE),
+    # Contextual blocks for starting dev/serve processes (avoid false positives)
+    # Popular package managers invoking dev/start
+    re.compile(r"(?<!\S)(npm|pnpm|yarn|bun)\s+(run\s+)?dev\b", re.IGNORECASE),
+    re.compile(r"(?<!\S)(npm|pnpm|yarn|bun)\s+(run\s+)?start\b", re.IGNORECASE),
+    # Framework CLIs invoking dev/start/serve
+    re.compile(r"(?<!\S)(vite|astro|nuxt|next|svelte(?:-kit)?|turbo)\s+dev\b", re.IGNORECASE),
+    re.compile(r"(?<!\S)(next|nuxt|astro)\s+start\b", re.IGNORECASE),
+    re.compile(r"(?<!\S)(vue-cli-service|ng)\s+serve\b", re.IGNORECASE),
+    # 'watch' the Linux command (long-running)
+    re.compile(r"(?<!\S)watch\b", re.IGNORECASE),
+    # Watch flags: block plain flag or explicit enabling; allow explicit false/0
+    re.compile(r"--watch(All)?(?:\s|$)", re.IGNORECASE),
+    re.compile(r"--watch(All)?\s*=\s*(?!false\b|0\b)\S+", re.IGNORECASE),
     re.compile(r"tail\s+-f"),
     re.compile(r"sleep\s+inf(inity)?", re.IGNORECASE),
     re.compile(r"python\s+-m\s+http\.server"),

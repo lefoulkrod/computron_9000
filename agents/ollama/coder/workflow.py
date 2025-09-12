@@ -103,10 +103,10 @@ def _setup_workspace(workspace: str | None) -> None:
 
 # Implementation log constants
 _IMPL_DIR = ".IMPLEMENTATION"
-_IMPL_FILE = f"{_IMPL_DIR}/IMPLEMENTATION_LOG.js"
+_IMPL_FILE = f"{_IMPL_DIR}/IMPLEMENTATION_LOG.log"
 _IMPL_README = f"{_IMPL_DIR}/README.md"
-_DESIGN_FILE = f"{_IMPL_DIR}/DESIGN.json"
-_PLAN_FILE = f"{_IMPL_DIR}/PLAN.json"
+_DESIGN_FILE = f"{_IMPL_DIR}/DESIGN.log"
+_PLAN_FILE = f"{_IMPL_DIR}/PLAN.log"
 
 # Code review retry configuration
 _CODE_REVIEW_MAX_RETRIES = 5
