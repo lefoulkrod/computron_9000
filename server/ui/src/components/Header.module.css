@@ -1,0 +1,35 @@
+.header {
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 2.5rem;
+  border-bottom: 1px solid var(--secondary);
+  box-sizing: border-box;
+}
+
+.logo {
+  height: 60px;
+}
+
+.logoLight {}
+
+.logoDark {
+  display: none;
+}
+
+:global(.dark-theme) .logoLight {
+  display: none;
+}
+
+:global(.dark-theme) .logoDark {
+  display: inline;
+}
+
+.appTitle {
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 0.03em;
+  font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
+  color: var(--text);
+}

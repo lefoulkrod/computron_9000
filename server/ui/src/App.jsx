@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
+import styles from './App.module.css';
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -128,11 +129,11 @@ function App() {
   return (
     <>
       <Header dark={dark} onToggleTheme={toggleTheme} onNewSession={newSession} />
-      <div className="main-layout">
-        <div className="column">
+      <div className={styles.mainLayout}>
+        <div className={styles.column}>
           <ChatInput onSend={sendMessage} disabled={isStreaming} />
         </div>
-        <div className="column">
+        <div className={styles.column}>
           <ChatMessages messages={messages} />
         </div>
       </div>

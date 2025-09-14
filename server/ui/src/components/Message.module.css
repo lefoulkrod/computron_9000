@@ -1,0 +1,174 @@
+.message {
+  margin-bottom: 1.125rem;
+  display: flex;
+}
+
+.assistant {
+  justify-content: flex-start;
+}
+
+.user {
+  justify-content: flex-end;
+}
+
+.assistant .bubble {
+  background: none;
+  color: var(--text);
+  margin-right: auto;
+  min-width: 80%;
+}
+
+.user .bubble {
+  background: var(--secondary);
+  color: var(--text);
+  margin-left: auto;
+  padding: 0.6rem 1rem;
+}
+
+.bubble {
+  display: inline-block;
+  border-radius: var(--radius);
+  max-width: 80%;
+  color: var(--text);
+}
+
+.bubble pre,
+.bubble code {
+  background: var(--secondary) !important;
+  color: var(--text);
+  border-radius: var(--radius);
+  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 0.98em;
+  position: relative;
+}
+
+.bubble pre {
+  padding: 2.2em 1em 1em 1em;
+  overflow-x: auto;
+  margin: 1em 0;
+  border-radius: var(--radius);
+  background: var(--secondary) !important;
+  color: var(--text);
+  position: relative;
+}
+
+.codeHeader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5em 0.8em;
+  font-size: 0.9em;
+  color: #888;
+  font-family: inherit;
+  background: transparent;
+  border-radius: var(--radius) var(--radius) 0 0;
+  user-select: none;
+  margin: 0;
+}
+
+.copyBtn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.95em;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.codeLangLabel {
+  font-family: inherit;
+}
+
+.loadingIndicator {
+  color: #888;
+  font-style: italic;
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+}
+
+.dot {}
+
+.loadingIndicator .dot {
+  animation: blink 1.2s infinite both;
+}
+
+.loadingIndicator .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loadingIndicator .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0%, 20% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.collapsibleThink {
+  margin: 1em 0;
+  border-left: 4px solid var(--button);
+  border-radius: var(--radius);
+  background: var(--secondary);
+  font-style: italic;
+}
+
+.collapsibleThinkHeader {
+  cursor: pointer;
+  padding: 0.5em 1em;
+  background: var(--button);
+  color: var(--text);
+  font-weight: bold;
+  border-radius: 0 var(--radius) 0 0;
+  user-select: none;
+}
+
+.collapsibleThinkContent {
+  padding: 0.75em 1em;
+  display: none;
+}
+
+.expanded .collapsibleThinkContent {
+  display: block;
+}
+
+.expanded .collapsibleThinkHeader::after {
+  content: '▲';
+  float: right;
+  font-size: 0.9em;
+}
+
+.collapsibleThinkHeader::after {
+  content: '▼';
+  float: right;
+  font-size: 0.9em;
+}
+
+.messageImages {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.messageImages img {
+  max-width: 300px;
+  max-height: 220px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  box-shadow: 0 1px 2px #ddd;
+}
