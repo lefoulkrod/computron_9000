@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import styles from './ChatInput.module.css';
 
 export default function ChatInput({ onSend, disabled }) {
   const [message, setMessage] = useState('');
@@ -40,10 +41,10 @@ export default function ChatInput({ onSend, disabled }) {
   };
 
   return (
-    <div className="input-area-wrapper">
-      <form className="input-area" onSubmit={handleSubmit}>
+    <div className={styles.inputAreaWrapper}>
+      <form className={styles.inputArea} onSubmit={handleSubmit}>
         <textarea
-          className="custom-input"
+          className={styles.customInput}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => {
@@ -57,7 +58,7 @@ export default function ChatInput({ onSend, disabled }) {
         />
         {filePreview && (
           <div
-            className="input-image-wrapper"
+            className={styles.inputImageWrapper}
             onClick={() => {
               setFileData(null);
               setFilePreview(null);
@@ -67,7 +68,7 @@ export default function ChatInput({ onSend, disabled }) {
             <img src={filePreview} alt="selected" />
           </div>
         )}
-        <div className="input-area-buttons">
+        <div className={styles.inputAreaButtons}>
           <button
             type="button"
             id="fileButton"

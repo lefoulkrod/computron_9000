@@ -1,0 +1,77 @@
+.inputAreaWrapper {
+  background-color: var(--secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--button);
+  padding: 0.75rem;
+}
+
+.customInputWrapper {
+  position: relative;
+  width: 100%;
+}
+
+.customInput {
+  min-height: 2.25rem;
+  max-height: 10rem;
+  overflow-y: auto;
+  font-size: 1rem;
+  padding: 0.65rem 0.8rem;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--button);
+  border-radius: var(--radius);
+  background: var(--secondary);
+  color: var(--text);
+  resize: none;
+}
+
+.customInput::placeholder {
+  color: #8a8a8a;
+}
+
+.inputArea {
+  display: flex;
+  flex-direction: column;
+}
+
+.inputArea button {
+  margin-left: 0;
+  margin-top: 0.25rem;
+  align-self: flex-end;
+}
+
+.inputArea button:disabled {
+  background: #aaa;
+}
+
+.customInput:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.inputAreaButtons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0.25rem 0 0.25rem 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--button);
+}
+
+.inputImageWrapper {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  cursor: pointer;
+}
+
+.inputImageWrapper img {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  box-shadow: 0 1px 2px #ddd;
+}

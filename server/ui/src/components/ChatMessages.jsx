@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import Message from './Message.jsx';
+import styles from './ChatMessages.module.css';
 
 export default function ChatMessages({ messages }) {
   const containerRef = useRef(null);
@@ -11,7 +12,7 @@ export default function ChatMessages({ messages }) {
   }, [messages]);
 
   return (
-    <div className="chat-messages" id="chatMessages" ref={containerRef}>
+    <div className={styles.chatMessages} id="chatMessages" ref={containerRef}>
       {messages.map((msg, idx) => (
         <Message key={idx} {...msg} />
       ))}

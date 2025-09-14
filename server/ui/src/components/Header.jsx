@@ -1,11 +1,20 @@
 import React from 'react';
+import styles from './Header.module.css';
 
 export default function Header({ dark, onToggleTheme, onNewSession }) {
   return (
-    <div className="header">
-      <img src="/static/computron_logo.png" alt="Computron Logo" className="logo logo-light" />
-      <img src="/static/computron_logo_dark.png" alt="Computron Logo Dark" className="logo logo-dark" />
-      <div className="app-title">COMPUTRON_9000</div>
+    <div className={styles.header}>
+      <img
+        src="/static/computron_logo.png"
+        alt="Computron Logo"
+        className={`${styles.logo} ${styles.logoLight}`}
+      />
+      <img
+        src="/static/computron_logo_dark.png"
+        alt="Computron Logo Dark"
+        className={`${styles.logo} ${styles.logoDark}`}
+      />
+      <div className={styles.appTitle}>COMPUTRON_9000</div>
       <button onClick={onToggleTheme} id="themeToggle">
         <i className="bi bi-lamp"></i> {dark ? 'Light' : 'Dark'}
       </button>
