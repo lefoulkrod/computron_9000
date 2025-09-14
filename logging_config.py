@@ -8,7 +8,7 @@ def setup_logging() -> None:
     """Configure basic loggers for the application.
 
     Sets the root logger to output to ``stdout`` and adjusts log levels for
-    specific third‑party libraries and application modules.
+    specific third-party libraries and application modules.
     """
     logging.basicConfig(level=logging.WARNING, stream=sys.stdout)
     logging.getLogger("tools").setLevel(logging.WARNING)
@@ -16,3 +16,6 @@ def setup_logging() -> None:
     logging.getLogger("ollama").setLevel(logging.WARNING)
     logging.getLogger("agents.ollama").setLevel(logging.DEBUG)
     logging.getLogger("agents.ollama.deep_researchV2").setLevel(logging.DEBUG)
+    # REPLs default to INFO so users see helpful output without increasing
+    # global verbosity. Individual REPL modules can still override as needed.
+    logging.getLogger("repls").setLevel(logging.INFO)

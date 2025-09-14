@@ -20,26 +20,6 @@
             ],
             "group": "none",
             "problemMatcher": []
-        },
-        {
-            "label": "Run integration tests",
-            "type": "shell",
-            "command": "bash",
-            "args": [
-                "-lc",
-                "just test-integration"
-            ],
-            "group": "test"
-        },
-        {
-            "label": "Run all checks (lint, type, format)",
-            "type": "shell",
-            "command": "bash",
-            "args": [
-                "-lc",
-                "just check"
-            ],
-            "group": "build"
         }
     ]
 }
