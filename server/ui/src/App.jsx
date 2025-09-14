@@ -122,7 +122,9 @@ function App() {
             <Header dark={dark} onToggleTheme={toggleTheme} onNewSession={newSession} />
             <div className={styles.mainLayout}>
                 <div className={styles.column}>
-                    <ChatInput onSend={sendMessage} disabled={isStreaming} />
+                    <div className={styles.stickyInput}>
+                        <ChatInput onSend={sendMessage} disabled={isStreaming} />
+                    </div>
                 </div>
                 <div className={styles.column}>
                     <ChatMessages messages={messages} />

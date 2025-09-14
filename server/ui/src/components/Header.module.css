@@ -1,15 +1,27 @@
 .header {
-  width: 100vw;
+  width: 100%;
+  border-bottom: 1px solid var(--secondary);
+  box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--primary);
+  backdrop-filter: saturate(1.2) blur(4px);
+}
+
+.headerInner {
+  width: 100%;
+  max-width: 1400px; /* match main layout */
+  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.5rem 2.5rem;
-  border-bottom: 1px solid var(--secondary);
+  padding: 0.5rem 1.5rem; /* match App.module.css mainLayout padding */
   box-sizing: border-box;
 }
 
 .logo {
-  height: 60px;
+  height: 48px;
 }
 
 .logoLight {}
@@ -32,4 +44,27 @@
   letter-spacing: 0.03em;
   font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
   color: var(--text);
+  margin-right: auto; /* push controls to right */
 }
+
+.iconButton {
+  width: 36px;
+  height: 36px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--button);
+  color: var(--text);
+  border: 1px solid rgba(0,0,0,0.25);
+  box-shadow: none;
+  line-height: 1;
+  transition: transform 120ms ease, filter 160ms ease;
+}
+
+.iconButton:hover { filter: brightness(1.08); }
+.iconButton:active { transform: translateY(1px); }
+.iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+
+.iconButton + .iconButton { margin-left: 0.35rem; }

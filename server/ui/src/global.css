@@ -1,20 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
 :root {
-  --primary: #fafafa;
-  --secondary: #f3f3f3;
-  --button: #ababab;
-  --text: #222;
-  --radius: 0.25rem;
+  --primary: #fafafa;         /* app background */
+  --secondary: #f3f3f3;       /* surfaces/cards */
+  --button: #ababab;          /* muted accents */
+  --text: #222;               /* foreground text */
+  --radius: 0.5rem;
+  --header-height: 4.75rem;
+  --shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
 }
 
 /* Dark theme variables */
 .dark-theme {
   --primary: #0b0b0c;
-  --secondary: #4a4a4a;
-  --button: #727272;
+  --secondary: #1b1b1d;       /* darker card for contrast */
+  --button: #3a3a3c;
   --text: #f3f3f3;
-  --radius: 0.25rem;
+  --radius: 0.5rem;
+  --header-height: 4.75rem;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.2);
 }
 
 html,
@@ -27,13 +31,15 @@ body {
 
 body {
   min-height: 100vh;
-  width: 100vw;
+  width: 100%;
   background: var(--primary);
-  font-family: Arial, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color: var(--text);
   margin: 0;
   padding: 0;
 }
+
+*, *::before, *::after { box-sizing: inherit; }
 
 i {
   color: var(--text);
@@ -43,11 +49,31 @@ button {
   background: var(--button);
   border-radius: var(--radius);
   color: var(--text);
-  border: none;
-  padding: 0.5rem 1.2rem;
+  border: 1px solid transparent;
+  padding: 0.5rem 1rem;
   cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease, transform 60ms ease;
+  box-shadow: var(--shadow);
 }
 
 button:disabled {
   cursor: not-allowed;
 }
+
+button:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:focus-visible {
+  outline: 2px solid #7aa2ff;
+  outline-offset: 2px;
+}
+
+/* Subtle custom scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--button); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }

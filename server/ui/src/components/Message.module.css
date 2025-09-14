@@ -12,17 +12,21 @@
 }
 
 .assistant .bubble {
-  background: none;
+  background: var(--primary);
   color: var(--text);
   margin-right: auto;
-  min-width: 80%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--button);
+  max-width: 92%;
+  min-width: clamp(420px, 60%, 92%);
 }
 
 .user .bubble {
   background: var(--secondary);
   color: var(--text);
   margin-left: auto;
-  padding: 0.6rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--button);
 }
 
 .bubble {
@@ -30,6 +34,7 @@
   border-radius: var(--radius);
   max-width: 80%;
   color: var(--text);
+  line-height: 1.5;
 }
 
 .bubble pre,
@@ -40,16 +45,21 @@
   font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
   font-size: 0.98em;
   position: relative;
+  border: none;
 }
 
 .bubble pre {
-  padding: 2.2em 1em 1em 1em;
+  padding: 3em 1em 1em 1em;
+  /* extra space below header */
   overflow-x: auto;
   margin: 1em 0;
-  border-radius: var(--radius);
+  border-radius: 0.85rem;
+  /* rounder corners for card-like look */
   background: var(--secondary) !important;
   color: var(--text);
   position: relative;
+  overflow: hidden;
+  /* clip header rounding */
 }
 
 .codeHeader {
@@ -59,31 +69,50 @@
   right: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.5em 0.8em;
+  justify-content: flex-start;
+  padding: 0.55em 0.9em;
   font-size: 0.9em;
-  color: #888;
+  color: rgba(255, 255, 255, 0.85);
   font-family: inherit;
-  background: transparent;
-  border-radius: var(--radius) var(--radius) 0 0;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 0.85rem 0.85rem 0 0;
   user-select: none;
   margin: 0;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  /* subtle divider */
 }
 
 .copyBtn {
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 0.95em;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9em;
   cursor: pointer;
   z-index: 2;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.3em;
+  gap: 0.4em;
+  padding: 0.25em 0.65em;
+  border-radius: 999px;
+  margin-left: auto;
+}
+
+.copyBtn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.copyBtn:hover {
+  color: var(--text);
 }
 
 .codeLangLabel {
   font-family: inherit;
+  opacity: 0.9;
 }
 
 .loadingIndicator {
@@ -108,37 +137,52 @@
 }
 
 @keyframes blink {
-  0%, 20% {
+
+  0%,
+  20% {
     opacity: 0;
   }
+
   50% {
     opacity: 1;
   }
+
   100% {
     opacity: 0;
   }
 }
 
+/* Avoid enforcing a minimum on small screens */
+@media (max-width: 700px) {
+  .assistant .bubble {
+    min-width: auto;
+  }
+}
+
 .collapsibleThink {
   margin: 1em 0;
-  border-left: 4px solid var(--button);
-  border-radius: var(--radius);
+  border: 1px solid var(--button);
+  border-radius: 0.85rem;
   background: var(--secondary);
-  font-style: italic;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .collapsibleThinkHeader {
   cursor: pointer;
-  padding: 0.5em 1em;
-  background: var(--button);
-  color: var(--text);
-  font-weight: bold;
-  border-radius: 0 var(--radius) 0 0;
+  padding: 0.55em 0.9em;
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  border-radius: 0.85rem 0.85rem 0 0;
   user-select: none;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .collapsibleThinkContent {
-  padding: 0.75em 1em;
+  padding: 0.9em 1em;
   display: none;
 }
 
@@ -148,14 +192,30 @@
 
 .expanded .collapsibleThinkHeader::after {
   content: '▲';
-  float: right;
+  margin-left: auto;
   font-size: 0.9em;
 }
 
 .collapsibleThinkHeader::after {
   content: '▼';
-  float: right;
+  margin-left: auto;
   font-size: 0.9em;
+}
+
+.thinkIcon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  margin-right: 0.5em;
+}
+
+.thinkIcon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
 }
 
 .messageImages {
@@ -169,6 +229,19 @@
   max-width: 300px;
   max-height: 220px;
   border-radius: 8px;
-  border: 1px solid #eee;
-  box-shadow: 0 1px 2px #ddd;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
+}
+
+/* Tidy markdown spacing */
+.bubble :where(p, ul, ol, pre, blockquote, table) {
+  margin: 0.5em 0;
+}
+
+.bubble :first-child {
+  margin-top: 0;
+}
+
+.bubble :last-child {
+  margin-bottom: 0;
 }
