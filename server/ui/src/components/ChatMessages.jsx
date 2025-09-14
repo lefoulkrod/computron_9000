@@ -14,7 +14,7 @@ export default function ChatMessages({ messages }) {
   return (
     <div className={styles.chatMessages} id="chatMessages" ref={containerRef}>
       {messages.map((msg, idx) => (
-        <Message key={idx} {...msg} />
+        <Message key={msg.id || idx} {...msg} />
       ))}
     </div>
   );
