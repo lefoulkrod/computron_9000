@@ -54,6 +54,10 @@ setup:
     # Install Python dependencies
     echo "📚 Installing Python dependencies..."
     uv sync --all-extras
+
+    # Install the project in editable mode so imports work without PYTHONPATH
+    echo "🧩 Installing project in editable mode..."
+    uv pip install -e .
     
     # Install Playwright browser(s)
     echo "🎭 Ensuring Playwright Chromium is installed..."

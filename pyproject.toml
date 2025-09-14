@@ -8,7 +8,6 @@ dependencies = [
     "aiohttp",
     "pydantic",
     "playwright==1.52.0",
-    "setuptools>=65.0.0",
     "beautifulsoup4",
     "podman==5.4.0.1",
     "ollama>=0.5.1",
@@ -108,3 +107,23 @@ markers = [
     "slow: marks tests as slow running",
 ]
 asyncio_mode = "auto"
+
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Explicitly include our flat-layout top-level packages
+include = [
+    "agents*",
+    "config*",
+    "models*",
+    "repls*",
+    "server*",
+    "tools*",
+    "utils*",
+]
+exclude = [
+    "tests*",
+]
