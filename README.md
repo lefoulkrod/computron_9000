@@ -10,45 +10,48 @@ COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive c
 
 ## Virtual Computer
 
-COMPUTRON_9000 uses Podman to provide secure, isolated environments for code execution. This allows agents to have access to a "virtual computer". The agent can:
-- Read/write files
-- Execute bash commands
+COMPUTRON_9000 can spin up a Podman container to give agents a sandboxed "virtual computer." This environment shares a volume with the host so files written by agents are accessible outside the container.
 
-The container has a volume mount that is shared with the host computer. This way written files are accessible from the host.
+Common container commands:
 
-To build the container for the virtual computer run
 ```
-just container-build
-```
-
-To run the container 
-```
-just container-run
+just container-build    # build the container image
+just container-start    # start the sandbox
+just container-shell    # open a shell in the container
+just container-stop     # stop the container
+just container-status   # view container status
 ```
 
 ## Requirements
 - Python 3.12+ (see `.python-version`)
 - [uv](https://github.com/astral-sh/uv) (for dependency and venv management)
 - [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`)
-- [Podman](https://podman.io/) (optional, for containerized features)
+- [Podman](https://podman.io/) (optional, for the virtual computer)
+- [Node.js](https://nodejs.org/) & npm (optional, for UI development)
+- [Just](https://just.systems/) (for task automation)
 
-## Quick Setup
-
-**New developers can get started with a single command:**
+## Quick Start
 
 ```sh
 git clone computron_9000
 cd computron_9000
-just setup
+just setup        # create venv, install deps, run health checks
+just run          # start backend on http://localhost:8080
 ```
 
-This will automatically:
-- Create a virtual environment
-- Install all dependencies
-- Check Ollama status
-- Run a health check
+Helpful development commands:
 
-**Note**: Podman setup requires manual configuration (see Manual Setup section below).
+```
+just dev          # backend with auto-reload
+just dev-full     # backend + React UI
+just ui-dev       # UI dev server only
+just test         # run test suite
+just format       # format code
+just lint         # lint with ruff
+just typecheck    # type check with mypy
+```
+
+Run `just` to see all available tasks. Podman setup requires manual configuration (see Manual Setup below).
 
 ## Manual Setup
 
@@ -60,6 +63,8 @@ If you prefer to set up manually or don't have Just installed:
 - **[uv](https://github.com/astral-sh/uv)** (for dependency and venv management)
 - **[Ollama](https://ollama.com/)** running locally (default: `http://localhost:11434`)
 - **[Podman](https://podman.io/)** (optional, for containerized features)
+- **[Node.js](https://nodejs.org/)** & npm (optional, for UI development)
+- **[Just](https://just.systems/)** (for task automation)
 
 ### Installation Steps
 
@@ -110,13 +115,19 @@ If you prefer to set up manually or don't have Just installed:
 
 ## Development Commands
 
-This project uses [Just](https://just.systems/) for task running. Install it and then use `just --list` to see all available commands.
+This project uses [Just](https://just.systems/) for task running. Helpful recipes include:
 
-### Installing Just
+```
+just format       # format code with ruff
+just lint         # lint the code
+just typecheck    # mypy type checks
+just test         # run tests
+just check        # run format-check, lint and typecheck
+just ci           # run all checks including tests
+just ui-build     # build the React UI for production
+```
 
-https://github.com/casey/just
-
-Once installed, run `just` to see all available commands, or check the `Justfile` for the complete list of development tasks.
+Run `just --list` to see the full set of available commands.
 
 ## Contributing
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
