@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import styles from './Message.module.css';
 
-function useCodeCopyEnhancer(containerRef) {
+function useCodeCopyEnhancer(containerRef, deps = []) {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -12,7 +12,7 @@ function useCodeCopyEnhancer(containerRef) {
       const pre = codeEl.parentElement;
       if (!pre) return;
       // Avoid duplicate headers when re-rendering
-      if (pre.querySelector(':scope > .code-header')) return;
+      if (pre.querySelector(`:scope > .${styles.codeHeader}`)) return;
 
       const header = document.createElement('div');
       header.className = styles.codeHeader;
@@ -44,21 +44,14 @@ function useCodeCopyEnhancer(containerRef) {
       pre.insertBefore(header, pre.firstChild);
     });
 
-    return () => {
-      // Cleanup listeners if any (optional)
-      const headers = Array.from(container.querySelectorAll('.code-header .copy-btn'));
-      headers.forEach((btn) => {
-        const clone = btn.cloneNode(true);
-        btn.parentNode?.replaceChild(clone, btn);
-      });
-    };
-  }, [containerRef]);
+    // No special cleanup required; elements are recreated with content updates
+  }, [containerRef, ...deps]);
 }
 
 function AssistantMessage({ content, thinking, images, placeholder }) {
   const [expanded, setExpanded] = useState(false);
   const bubbleRef = useRef(null);
-  useCodeCopyEnhancer(bubbleRef);
+  useCodeCopyEnhancer(bubbleRef, [content]);
   return (
     <div className={`${styles.message} ${styles.assistant}`}>
       <div className={styles.bubble} ref={bubbleRef}>
@@ -104,7 +97,7 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
 
 function UserMessage({ content, images }) {
   const bubbleRef = useRef(null);
-  useCodeCopyEnhancer(bubbleRef);
+  useCodeCopyEnhancer(bubbleRef, [content]);
   return (
     <div className={`${styles.message} ${styles.user}`}>
       <div className={styles.bubble} ref={bubbleRef}>

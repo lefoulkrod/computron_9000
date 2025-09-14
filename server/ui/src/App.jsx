@@ -34,7 +34,7 @@ function App() {
     if (!message && !fileData) return;
 
     // Build user message with optional image preview
-    const userMsg = { role: 'user', content: message || '' };
+  const userMsg = { id: `u_${Date.now()}_${Math.random().toString(36).slice(2)}`, role: 'user', content: message || '' };
     if (fileData && fileData.content_type && fileData.content_type.startsWith('image/')) {
       userMsg.images = [`data:${fileData.content_type};base64,${fileData.base64}`];
     }
@@ -42,7 +42,7 @@ function App() {
     setMessages((prev) => [
       ...prev,
       userMsg,
-      { role: 'assistant', placeholder: true, tempId: placeholderId },
+      { id: placeholderId, role: 'assistant', placeholder: true, tempId: placeholderId },
     ]);
 
     const body = { message: message || '(uploaded file)' };
@@ -59,8 +59,7 @@ function App() {
       if (!resp.body) return;
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
-      let hasAssistant = false;
+  let buffer = '';
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -74,35 +73,26 @@ function App() {
             const data = JSON.parse(line);
             setMessages((prev) => {
               const updated = [...prev];
-              // First chunk: replace placeholder with the assistant message
-              if (!hasAssistant) {
-                hasAssistant = true;
-                const pIndex = updated.findIndex((m) => m.placeholder && m.tempId === placeholderId);
-                const assistantMsg = {
-                  role: 'assistant',
-                  content: data.response || '',
-                  thinking: data.thinking,
-                  streaming: !data.final,
-                };
-                if (pIndex !== -1) {
-                  updated[pIndex] = assistantMsg;
-                } else {
-                  updated.push(assistantMsg);
-                }
-                return updated;
+              // Find any existing assistant message for this request
+              let idx = updated.findIndex(
+                (m) => m.role === 'assistant' && (m.id === placeholderId || m.tempId === placeholderId)
+              );
+              if (idx === -1) {
+                // No placeholder found yet (race), create a new assistant message entry
+                updated.push({ id: placeholderId, role: 'assistant', content: '', thinking: undefined, streaming: true });
+                idx = updated.length - 1;
               }
-              // Subsequent chunks: append to the last assistant message
-              for (let i = updated.length - 1; i >= 0; i--) {
-                if (updated[i].role === 'assistant') {
-                  updated[i] = {
-                    ...updated[i],
-                    content: (updated[i].content || '') + (data.response || ''),
-                    thinking: data.thinking,
-                    streaming: !data.final,
-                  };
-                  break;
-                }
-              }
+              const current = updated[idx];
+              const next = {
+                ...current,
+                id: placeholderId,
+                placeholder: false,
+                tempId: undefined,
+                content: (current.content || '') + (data.response || ''),
+                thinking: data.thinking,
+                streaming: !data.final,
+              };
+              updated[idx] = next;
               return updated;
             });
           } catch (e) {
@@ -114,12 +104,13 @@ function App() {
       // Replace placeholder with error, if present
       setMessages((prev) => {
         const updated = [...prev];
-        const pIndex = updated.findIndex((m) => m.placeholder);
+        const pIndex = updated.findIndex((m) => m.role === 'assistant' && (m.id === placeholderId || m.tempId === placeholderId || m.placeholder));
+        const errorMsg = { id: placeholderId, role: 'assistant', content: `[Error: ${err.message}]`, placeholder: false, streaming: false };
         if (pIndex !== -1) {
-          updated[pIndex] = { role: 'assistant', content: `[Error: ${err.message}]` };
+          updated[pIndex] = errorMsg;
           return updated;
         }
-        return [...prev, { role: 'assistant', content: `[Error: ${err.message}]` }];
+        return [...prev, errorMsg];
       });
     } finally {
       setIsStreaming(false);
