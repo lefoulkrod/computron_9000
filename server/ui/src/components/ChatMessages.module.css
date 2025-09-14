@@ -1,8 +1,11 @@
 .chatMessages {
   flex: 1;
-  padding: 0 1rem;
+  padding: 0.75rem 1rem 1.5rem;
   overflow-y: auto;
   background: none;
   display: flex;
   flex-direction: column;
+  gap: 0.25rem;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }

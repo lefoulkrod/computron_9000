@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
 import styles from './ChatInput.module.css';
+import PaperclipIcon from './icons/PaperclipIcon.jsx';
+import SendIcon from './icons/SendIcon.jsx';
 
 export default function ChatInput({ onSend, disabled }) {
   const [message, setMessage] = useState('');
@@ -43,8 +45,27 @@ export default function ChatInput({ onSend, disabled }) {
   return (
     <div className={styles.inputAreaWrapper}>
       <form className={styles.inputArea} onSubmit={handleSubmit}>
-        <textarea
-          className={styles.customInput}
+        <div className={styles.customInputWrapper}>
+          {filePreview && (
+            <div className={styles.inlinePreview}>
+              <img src={filePreview} alt="selected" />
+              <button
+                type="button"
+                className={styles.removeAttachment}
+                aria-label="Remove image"
+                title="Remove image"
+                onClick={() => {
+                  setFileData(null);
+                  setFilePreview(null);
+                  if (fileInputRef.current) fileInputRef.current.value = null;
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          <textarea
+          className={`${styles.customInput} ${filePreview ? styles.withPreview : ''}`}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => {
@@ -56,26 +77,18 @@ export default function ChatInput({ onSend, disabled }) {
           placeholder="Type your message..."
           disabled={disabled}
         />
-        {filePreview && (
-          <div
-            className={styles.inputImageWrapper}
-            onClick={() => {
-              setFileData(null);
-              setFilePreview(null);
-              if (fileInputRef.current) fileInputRef.current.value = null;
-            }}
-          >
-            <img src={filePreview} alt="selected" />
-          </div>
-        )}
+        </div>
         <div className={styles.inputAreaButtons}>
           <button
             type="button"
             id="fileButton"
+            className={styles.iconButton}
             onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            title="Attach file"
+            aria-label="Attach file"
             disabled={disabled}
           >
-            File
+            <PaperclipIcon />
           </button>
           <input
             ref={fileInputRef}
@@ -89,7 +102,15 @@ export default function ChatInput({ onSend, disabled }) {
             }}
             onChange={handleFile}
           />
-          <button type="submit" disabled={disabled}>Send</button>
+          <button
+            type="submit"
+            className={styles.iconButton}
+            title="Send message"
+            aria-label="Send message"
+            disabled={disabled}
+          >
+            <SendIcon />
+          </button>
         </div>
       </form>
     </div>

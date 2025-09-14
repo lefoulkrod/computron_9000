@@ -2,7 +2,8 @@
   background-color: var(--secondary);
   border-radius: var(--radius);
   border: 1px solid var(--button);
-  padding: 0.75rem;
+  padding: 1rem;
+  box-shadow: var(--shadow);
 }
 
 .customInputWrapper {
@@ -15,7 +16,7 @@
   max-height: 10rem;
   overflow-y: auto;
   font-size: 1rem;
-  padding: 0.65rem 0.8rem;
+  padding: 0.75rem 0.9rem;
   outline: none;
   width: 100%;
   box-sizing: border-box;
@@ -27,8 +28,21 @@
   resize: none;
 }
 
+/* Adds headroom when an inline preview is shown */
+.withPreview {
+  /* Reserve space to the left for the thumbnail and a small gap */
+  padding-left: 208px; /* 180px preview + ~28px gap/border */
+  padding-top: 12px;   /* small headroom so first line doesn't touch top */
+  min-height: 148px;   /* ensure the preview fits inside the textarea box */
+}
+
 .customInput::placeholder {
   color: #8a8a8a;
+}
+
+.customInput:focus {
+  border-color: #7aa2ff;
+  box-shadow: 0 0 0 3px rgba(122,162,255,0.25);
 }
 
 .inputArea {
@@ -47,8 +61,14 @@
 }
 
 .customInput:disabled {
-  background: #ccc;
+  background: var(--secondary);
+  border-color: var(--button);
+  opacity: 0.65;
   cursor: not-allowed;
+}
+
+.customInput:disabled::placeholder {
+  color: #9a9a9a;
 }
 
 .inputAreaButtons {
@@ -58,20 +78,85 @@
   justify-content: flex-end;
   margin: 0.25rem 0 0.25rem 0;
   padding-top: 0.5rem;
-  border-top: 1px solid var(--button);
 }
 
-.inputImageWrapper {
+.iconButton {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--button);
+  color: var(--text);
+  border: 1px solid rgba(0,0,0,0.25);
+  box-shadow: none;
+  line-height: 1;
+  transition: transform 120ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.iconButton svg { width: 18px; height: 18px; display: block; }
+
+.iconButton:hover:not(:disabled) { filter: brightness(1.08); }
+.iconButton:active:not(:disabled) { transform: translateY(1px); }
+.iconButton:disabled { opacity: 0.6; }
+.iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+
+/* Inline preview that sits inside the textarea area (top-left) */
+.inlinePreview {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  cursor: pointer;
+  top: 8px;
+  left: 8px;
+  width: 180px;
+  height: 120px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.15);
+  box-shadow: var(--shadow);
+  pointer-events: none; /* allow typing/selecting text without interference */
 }
 
-.inputImageWrapper img {
-  max-width: 120px;
-  max-height: 80px;
-  border-radius: 8px;
-  border: 1px solid #eee;
-  box-shadow: 0 1px 2px #ddd;
+.inlinePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.removeAttachment {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #111;
+  border: 1px solid rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.9;
+  transition: transform 120ms ease, opacity 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  pointer-events: auto; /* re-enable interaction on the button */
+}
+
+.removeAttachment:hover {
+  opacity: 1;
+  transform: scale(1.05);
+  background: #ffffff;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+}
+
+.removeAttachment:focus-visible {
+  outline: 2px solid #7aa2ff;
+  outline-offset: 2px;
 }

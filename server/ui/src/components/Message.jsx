@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import styles from './Message.module.css';
+import LightbulbIcon from './icons/LightbulbIcon.jsx';
 
 function useCodeCopyEnhancer(containerRef, deps = []) {
     useEffect(() => {
@@ -11,8 +12,13 @@ function useCodeCopyEnhancer(containerRef, deps = []) {
         pres.forEach((codeEl) => {
             const pre = codeEl.parentElement;
             if (!pre) return;
-            // Avoid duplicate headers when re-rendering
-            if (pre.querySelector(`:scope > .${styles.codeHeader}`)) return;
+            // If we've already enhanced this <pre>, skip
+            if (pre.dataset.enhanced === 'true') return;
+            // Defensive: remove any extra duplicate headers
+            const existing = pre.querySelectorAll(`:scope > .${styles.codeHeader}`);
+            if (existing.length > 1) {
+                existing.forEach((h, i) => i > 0 && h.remove());
+            }
 
             const header = document.createElement('div');
             header.className = styles.codeHeader;
@@ -26,13 +32,32 @@ function useCodeCopyEnhancer(containerRef, deps = []) {
             const copyBtn = document.createElement('button');
             copyBtn.className = styles.copyBtn;
             copyBtn.type = 'button';
-            copyBtn.textContent = 'Copy';
+            // Build a dedicated SVG icon (same geometry as CopyIcon component)
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('width', '16');
+            svg.setAttribute('height', '16');
+            svg.style.display = 'block';
+            const r1 = document.createElementNS(svgNS, 'rect');
+            r1.setAttribute('x', '9'); r1.setAttribute('y', '9'); r1.setAttribute('width', '11'); r1.setAttribute('height', '11');
+            r1.setAttribute('rx', '2'); r1.setAttribute('ry', '2');
+            r1.setAttribute('stroke', 'currentColor'); r1.setAttribute('stroke-width', '1.8'); r1.setAttribute('fill', 'none');
+            const r2 = document.createElementNS(svgNS, 'rect');
+            r2.setAttribute('x', '4'); r2.setAttribute('y', '4'); r2.setAttribute('width', '11'); r2.setAttribute('height', '11');
+            r2.setAttribute('rx', '2'); r2.setAttribute('ry', '2');
+            r2.setAttribute('stroke', 'currentColor'); r2.setAttribute('stroke-width', '1.8'); r2.setAttribute('fill', 'none');
+            svg.appendChild(r1); svg.appendChild(r2);
+            const label = document.createElement('span');
+            label.textContent = 'Copy code';
+            copyBtn.appendChild(svg);
+            copyBtn.appendChild(label);
             copyBtn.addEventListener('click', async () => {
                 try {
                     await navigator.clipboard.writeText(codeEl.textContent || '');
-                    const prev = copyBtn.textContent;
-                    copyBtn.textContent = 'Copied!';
-                    setTimeout(() => (copyBtn.textContent = prev), 1200);
+                    const prevText = label.textContent;
+                    label.textContent = 'Copied!';
+                    setTimeout(() => (label.textContent = prevText), 2200);
                 } catch (_e) {
                     // no-op
                 }
@@ -42,6 +67,7 @@ function useCodeCopyEnhancer(containerRef, deps = []) {
             header.appendChild(copyBtn);
             // Insert header inside the <pre> so it appears within the code area
             pre.insertBefore(header, pre.firstChild);
+            pre.dataset.enhanced = 'true';
         });
 
         // No special cleanup required; elements are recreated with content updates
@@ -70,7 +96,10 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
                             className={styles.collapsibleThinkHeader}
                             onClick={() => setExpanded((e) => !e)}
                         >
-                            {expanded ? 'Hide thoughts' : 'Show thoughts'}
+                            <span className={styles.thinkIcon} aria-hidden="true">
+                                <LightbulbIcon size={18} />
+                            </span>
+                            <span>{expanded ? 'Hide thoughts' : 'Show thoughts'}</span>
                         </div>
                         {expanded && (
                             <div

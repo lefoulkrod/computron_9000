@@ -1,12 +1,14 @@
 .mainLayout {
   display: flex;
   flex-direction: row;
-  width: 100vw;
-  height: calc(100vh - 7.5rem);
-  margin: 0;
-  gap: 0;
+  width: 100%;
+  min-height: calc(100vh - var(--header-height));
+  margin: 0 auto;
+  gap: 2rem;
   background: none;
   box-sizing: border-box;
+  max-width: 1400px;
+  padding: 1rem 1.5rem 2rem;
 }
 
 .column {
@@ -15,41 +17,63 @@
   min-width: 0;
   height: 100%;
   border: none;
-  padding: 2.5rem;
+  padding: 0;
   box-sizing: border-box;
   width: 100%;
 }
 
 .column:first-child {
-  flex: 0 0 30%;
-  max-width: 30%;
+  flex: 0 0 38%;
+  max-width: 38%;
   min-width: 20rem;
-  border-right: 1px solid var(--secondary);
+  padding-right: 1.5rem;
+  position: sticky;
+  top: calc(var(--header-height) + 0.75rem);
+  align-self: flex-start;
+  height: max-content; /* shrink-wrap so sticky behaves predictably */
 }
 
 .column:last-child {
   flex: 1 1 0;
-  max-width: 60%;
+  max-width: 62%;
   border-left: none;
+  padding-left: 0.5rem;
+}
+
+/* Keep the input near the top as the page scrolls */
+.stickyInput {
+  position: sticky;
+  top: calc(var(--header-height) + 0.75rem);
+  z-index: 10;
 }
 
 @media (max-width: 700px) {
   .mainLayout {
     flex-direction: column;
-    width: 100vw;
-    height: auto;
+    width: 100%;
+    min-height: auto;
     min-height: 100vh;
+    gap: 1rem;
+    padding: 0.75rem;
   }
 
   .column {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    padding: 1rem 0.5rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0;
     border-right: none !important;
     border-bottom: 1px solid #e5e7eb;
   }
 
   .column:last-child {
     border-bottom: none;
+    padding-left: 0;
+  }
+
+  /* disable sticky on small screens */
+  .column:first-child {
+    position: static;
+    top: auto;
+    height: auto;
   }
 }
