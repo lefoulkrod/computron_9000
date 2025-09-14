@@ -59,7 +59,7 @@ def _guess_content_type(file_path: str) -> str:
         return "text/html"
     if file_path.endswith(".png"):
         return "image/png"
-    if file_path.endswith(".jpg") or file_path.endswith(".jpeg"):
+    if file_path.endswith((".jpg", ".jpeg")):
         return "image/jpeg"
     if file_path.endswith(".svg"):
         return "image/svg+xml"
@@ -95,13 +95,13 @@ async def handle_post(request: Request) -> StreamResponse:
             try:
                 data = ChatRequest.model_validate_json(body)
             except ValidationError as ve:
-                logger.warning(f"Invalid request data: {ve}")
+                logger.warning("Invalid request data: %s", ve)
                 return web.json_response(
                     {"error": "Invalid JSON or missing required fields."},
                     status=400,
                     headers=CORS_HEADERS,
                 )
-        except Exception:
+        except json.JSONDecodeError:
             logger.exception("Failed to parse request JSON")
             return web.json_response(
                 {"error": "Invalid JSON."},
@@ -115,7 +115,8 @@ async def handle_post(request: Request) -> StreamResponse:
                 status=400,
                 headers=CORS_HEADERS,
             )
-        # Handle optional data field (array with 0 or more entries, always with base64 and content_type)
+        # Handle optional data field (array with 0 or more entries).
+        # Each entry must include base64 and content_type.
         data_objs = None
         if data.data and len(data.data) > 0:
             try:
@@ -123,8 +124,8 @@ async def handle_post(request: Request) -> StreamResponse:
                     Data(base64_encoded=obj["base64"], content_type=obj["content_type"])
                     for obj in data.data
                 ]
-            except Exception as exc:
-                logger.warning(f"Invalid data field: {exc}")
+            except (KeyError, TypeError) as exc:
+                logger.warning("Invalid data field: %s", exc)
                 return web.json_response(
                     {"error": "Invalid data field."},
                     status=400,
@@ -152,9 +153,9 @@ async def handle_post(request: Request) -> StreamResponse:
                 await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
                 if event.final:
                     break
-        except Exception as exc:
+        except Exception:
             logger.exception("Error in handle_user_message")
-            error_data = {"error": f"Server error: {exc!s}", "final": True}
+            error_data = {"error": "Server error", "final": True}
             await resp.write((json.dumps(error_data) + "\n").encode("utf-8"))
         finally:
             await resp.write_eof()
@@ -182,7 +183,7 @@ async def handle_get(request: Request) -> Response:
                 content_type="text/html",
                 headers=CORS_HEADERS,
             )
-        logger.warning(f"File not found: {html_path}")
+        logger.warning("File not found: %s", html_path)
         return web.Response(
             text="<h1>File not found</h1>",
             content_type="text/html",
@@ -200,7 +201,7 @@ async def handle_get(request: Request) -> Response:
                 content_type=content_type,
                 headers=CORS_HEADERS,
             )
-        logger.warning(f"Asset not found: {file_path}")
+        logger.warning("Asset not found: %s", file_path)
         return web.Response(status=404)
     if request.path.startswith("/static/"):
         rel_path = request.path[len("/static/") :]
@@ -214,7 +215,7 @@ async def handle_get(request: Request) -> Response:
                 content_type=content_type,
                 headers=CORS_HEADERS,
             )
-        logger.warning(f"Static file not found: {file_path}")
+        logger.warning("Static file not found: %s", file_path)
         return web.Response(status=404)
     return web.Response(status=404)
 

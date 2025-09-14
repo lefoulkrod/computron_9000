@@ -1,8 +1,9 @@
 """Utilities and tool implementations."""
 
-from . import fs, misc
+from . import browser, fs, misc
 
 __all__ = [
+    "browser",
     "fs",
     "misc",
 ]
