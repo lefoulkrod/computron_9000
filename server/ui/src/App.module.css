@@ -21,8 +21,9 @@
 }
 
 .column:first-child {
-  flex: 0 0 40%;
-  max-width: 40%;
+  flex: 0 0 30%;
+  max-width: 30%;
+  min-width: 20rem;
   border-right: 1px solid var(--secondary);
 }
 
