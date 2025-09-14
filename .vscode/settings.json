@@ -11,11 +11,6 @@
         "**/.ruff_cache": true,
         "**/.venv": true
     },
-    "notebook.formatOnSave.enabled": true,
-    "notebook.codeActionsOnSave": {
-        "notebook.source.fixAll": "explicit",
-        "notebook.source.organizeImports": "explicit"
-    },
     "editor.formatOnSave": true,
     "editor.detectIndentation": false,
     "[python]": {
@@ -40,5 +35,31 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.envFile": "${workspaceFolder}/.env"
+    "python.envFile": "${workspaceFolder}/.env",
+    // UI formatting: uses built-in formatters by default.
+    // If you install Prettier (esbenp.prettier-vscode), you can set editor.defaultFormatter to that extension.
+    "[javascript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features",
+        "editor.formatOnSave": true
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features",
+        "editor.formatOnSave": true
+    },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.formatOnSave": true
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.formatOnSave": true
+    },
+    "[yaml]": {
+        // No built-in YAML formatter ID; enable format on save if an extension is present.
+        "editor.formatOnSave": true
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": "vscode.markdown-language-features",
+        "editor.formatOnSave": true
+    }
 }
