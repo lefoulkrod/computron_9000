@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import logging
+import os
 import signal
 import threading
 from collections.abc import Awaitable, Callable, Iterable
@@ -51,6 +52,7 @@ _names: set[str] = set()
 _lock = threading.Lock()
 _ran = False
 _installed_hooks = False
+_prev_handlers: dict[int, Any] = {}
 
 
 def _ensure_hooks_installed() -> None:
@@ -65,15 +67,42 @@ def _ensure_hooks_installed() -> None:
         _installed_hooks = True
 
     # Register SIGINT and SIGTERM handlers
-    def _on_signal(signum: int, _frame: FrameType | None) -> None:  # pragma: no cover - signal path
+    def _on_signal(signum: int, frame: FrameType | None) -> None:  # pragma: no cover - signal path
         logger.info("Received signal %s, triggering shutdown", signum)
         try:
-            _trigger_shutdown(block=True)
+            # For SIGINT (Ctrl-C), do not block to allow immediate KeyboardInterrupt.
+            # For SIGTERM, block briefly for a graceful shutdown.
+            block = signum == signal.SIGTERM
+            _trigger_shutdown(block=block)
         except Exception:  # pragma: no cover - defensive
             logger.exception("Error during shutdown on signal %s", signum)
+        # After cleanup, forward the signal to the previous handler to
+        # preserve default semantics (e.g., KeyboardInterrupt on SIGINT).
+        prev = _prev_handlers.get(signum, signal.SIG_DFL)
+        try:
+            # Restore previous handler before invoking/propagating to avoid loops
+            signal.signal(signum, prev)
+        except (ValueError, RuntimeError):  # pragma: no cover - platform differences
+            logger.debug("Could not restore previous handler for %s", signum)
+
+        if prev is signal.SIG_IGN:
+            # Previously ignored; nothing more to do
+            return
+        if prev is signal.SIG_DFL:
+            # Re-send the signal to ourselves so the default action occurs
+            try:
+                os.kill(os.getpid(), signum)
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Failed to re-send signal %s to process", signum)
+            return
+        # If callable (e.g., default_int_handler for SIGINT), invoke it.
+        # Let any exceptions (e.g., KeyboardInterrupt) propagate naturally.
+        prev(signum, frame)  # type: ignore[misc]
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
+            # Capture existing handler so we can preserve semantics later
+            _prev_handlers[sig] = signal.getsignal(sig)
             signal.signal(sig, _on_signal)
         except (ValueError, RuntimeError):  # pragma: no cover - platform differences
             logger.debug("Skipping signal hook for %s", sig)

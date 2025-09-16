@@ -61,7 +61,7 @@ after_model_call_callback = make_log_after_model_call(browser_agent)
 
 browser_agent_tool = make_run_agent_as_tool_function(
     agent=browser_agent,
-    tool_description=("Open a URL and return title/snippet/links using a shared headless browser."),
+    tool_description=("An agent that can perform actions by browsing the web."),
     before_model_callbacks=[before_model_call_callback],
     after_model_callbacks=[after_model_call_callback],
 )
