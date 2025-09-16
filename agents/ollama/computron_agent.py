@@ -5,12 +5,12 @@ from agents.ollama.sdk.logging_callbacks import (
     make_log_before_model_call,
 )
 from agents.ollama.sdk.run_agent_tools import make_run_agent_as_tool_function
+from agents.ollama.web_agent import web_agent_tool
 from agents.types import Agent
 from config import load_config
 from models import get_default_model
 from tools.code.execute_code import execute_python_program
 from tools.virtual_computer import run_bash_cmd
-from tools.web.search_google import search_google
 
 from .browser import browser_agent_tool
 
@@ -58,7 +58,7 @@ computron: Agent = Agent(
     instruction=COMPUTRON_AGENT_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[execute_python_program, run_bash_cmd, browser_agent_tool, search_google],
+    tools=[execute_python_program, run_bash_cmd, browser_agent_tool, web_agent_tool],
     think=model.think,
 )
 
