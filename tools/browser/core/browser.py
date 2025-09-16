@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from playwright.async_api import BrowserContext, Page, Playwright, async_playwright
 
 from config import load_config
-from utils import register_shutdown
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
     from playwright.async_api import Geolocation, ProxySettings, ViewportSize
@@ -255,8 +254,6 @@ async def get_browser() -> Browser:
         config = load_config()
         profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
         _browser = await Browser.start(str(profile_path))
-        # Register a global shutdown handler to ensure clean exit
-        register_shutdown(close_browser, name="close_playwright_browser", priority=100)
     return _browser
 
 

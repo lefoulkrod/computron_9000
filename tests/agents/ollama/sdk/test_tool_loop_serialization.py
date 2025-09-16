@@ -76,7 +76,8 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
     # Patch the AsyncClient used in the module
     import agents.ollama.sdk.tool_loop as mod
 
-    monkeypatch.setattr(mod, "AsyncClient", lambda: _ClientScript([resp1, resp2]))
+    # Accept *args, **kwargs so keyword-only params like host won't break
+    monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp1, resp2]))
 
     # Provide tools: a sync function named apply_text_patch that returns a Pydantic model
     def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
@@ -126,7 +127,7 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
 
     import agents.ollama.sdk.tool_loop as mod
 
-    monkeypatch.setattr(mod, "AsyncClient", lambda: _ClientScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp1, resp2]))
 
     def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
         return ApplyPatchResult(success=False, file_path=path, diff=None, error="Invalid line range")
@@ -155,7 +156,7 @@ async def test_tool_serialization_tool_exception_as_error(monkeypatch):
 
     import agents.ollama.sdk.tool_loop as mod
 
-    monkeypatch.setattr(mod, "AsyncClient", lambda: _ClientScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp1, resp2]))
 
     def explode(x: int) -> str:
         raise RuntimeError("boom")
@@ -181,7 +182,7 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
 
     import agents.ollama.sdk.tool_loop as mod
 
-    monkeypatch.setattr(mod, "AsyncClient", lambda: _ClientScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp1, resp2]))
 
     async def run_bash_cmd(cmd: str) -> dict[str, Any]:
         return {"stdout": "hi\n", "stderr": None, "exit_code": 0}

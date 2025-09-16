@@ -107,8 +107,7 @@ class VirtualComputerConfig(BaseModel):
 class LLMConfig(BaseModel):
     """Configuration for Large Language Model connection."""
 
-    # Read from env var LLM_HOST; default to None if not set
-    host: str | None = Field(default_factory=lambda: os.getenv("LLM_HOST"))
+    host: str | None = None
 
 
 class AppConfig(BaseModel):
@@ -191,6 +190,11 @@ def load_config() -> AppConfig:
             data["models"] = [ModelConfig(**m) for m in data["models"]]
 
         config = AppConfig(**data)
+        # Apply environment variable precedence: if LLM_HOST is set and non-blank,
+        # override any YAML-provided llm.host value.
+        env_host = os.getenv("LLM_HOST")
+        if env_host is not None and env_host.strip() != "":
+            config.llm.host = env_host
         logger.info(
             "Successfully loaded configuration with %d models",
             len(config.models),

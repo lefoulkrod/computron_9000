@@ -78,3 +78,8 @@ agents:
   file_system:
     think: false
 
+# LLM settings. If LLM_HOST env var is set and non-blank, it overrides this value.
+# Otherwise, this YAML value is used as the default.
+llm:
+  host: http://127.0.0.1:11434
+
