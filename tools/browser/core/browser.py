@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from playwright.async_api import BrowserContext, Page, Playwright, async_playwright
 
+from config import load_config
 from utils import register_shutdown
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
@@ -70,7 +71,7 @@ WebGLRenderingContext.prototype.getParameter = function(parameter) {
 """
 
 
-class _Browser:
+class Browser:
     """Minimal persistent Playwright browser core for powering LLM tools.
 
     Example:
@@ -115,7 +116,7 @@ class _Browser:
         | None = None,  # e.g. ["geolocation", "clipboard-read", "clipboard-write"]
         extra_headers: dict[str, str] | None = None,  # sent with every request
         args: list[str] | None = None,  # extra Chromium args
-    ) -> _Browser:
+    ) -> Browser:
         """Start a persistent Chromium context and return a ``CoreBrowser``.
 
         Args:
@@ -239,10 +240,10 @@ class _Browser:
                 await self._pw.stop()
 
 
-_browser: _Browser | None = None
+_browser: Browser | None = None
 
 
-async def get_browser() -> _Browser:
+async def get_browser() -> Browser:
     """Get the singleton browser instance, initializing it if necessary.
 
     Returns:
@@ -251,7 +252,9 @@ async def get_browser() -> _Browser:
     global _browser  # noqa: PLW0603
     if _browser is None:
         # initialize once and keep it for the lifetime of the process
-        _browser = await _Browser.start("~/.playwright/profiles/agent1")
+        config = load_config()
+        profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
+        _browser = await Browser.start(str(profile_path))
         # Register a global shutdown handler to ensure clean exit
         register_shutdown(close_browser, name="close_playwright_browser", priority=100)
     return _browser

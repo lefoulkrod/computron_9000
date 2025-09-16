@@ -2,7 +2,7 @@ import pytest
 
 from typing import Any
 
-from tools.browser.core.browser import _Browser
+from tools.browser.core.browser import Browser
 
 
 class FakePage:
@@ -32,7 +32,7 @@ async def test_current_page_returns_last_open_page() -> None:
     """current_page returns most recently opened non-closed page."""
     pages = [FakePage(closed=True), FakePage(closed=False)]
     ctx = FakeContext(pages)
-    browser = _Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
+    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
 
     page = await browser.current_page()
     assert page is pages[-1]
@@ -43,7 +43,7 @@ async def test_current_page_returns_last_open_page() -> None:
 async def test_current_page_creates_when_none() -> None:
     """current_page creates a new page if none exist or all closed."""
     ctx = FakeContext([])
-    browser = _Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
+    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
 
     page = await browser.current_page()
     assert page in ctx.pages
@@ -55,7 +55,7 @@ async def test_current_page_creates_when_none() -> None:
 async def test_current_page_skips_closed_pages() -> None:
     """current_page skips closed pages when selecting current."""
     ctx = FakeContext([FakePage(closed=True), FakePage(closed=True)])
-    browser = _Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
+    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
 
     page = await browser.current_page()
     assert page in ctx.pages

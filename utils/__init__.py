@@ -11,4 +11,3 @@ __all__ = [
     "async_lru_cache",
     "register_shutdown",
 ]
-# "generate_completion",  # Removed from exports

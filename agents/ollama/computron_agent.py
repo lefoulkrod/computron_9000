@@ -11,7 +11,7 @@ from models import get_default_model
 from tools.code.execute_code import execute_python_program
 from tools.virtual_computer import run_bash_cmd
 
-from .web_agent import web_agent_tool
+from .browser import browser_agent_tool
 
 config = load_config()
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ computron: Agent = Agent(
     instruction=COMPUTRON_AGENT_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[web_agent_tool, execute_python_program, run_bash_cmd],
+    tools=[execute_python_program, run_bash_cmd, browser_agent_tool],
     think=model.think,
 )
 
