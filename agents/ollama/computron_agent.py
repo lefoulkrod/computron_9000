@@ -10,6 +10,7 @@ from config import load_config
 from models import get_default_model
 from tools.code.execute_code import execute_python_program
 from tools.virtual_computer import run_bash_cmd
+from tools.web.search_google import search_google
 
 from .browser import browser_agent_tool
 
@@ -57,7 +58,7 @@ computron: Agent = Agent(
     instruction=COMPUTRON_AGENT_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[execute_python_program, run_bash_cmd, browser_agent_tool],
+    tools=[execute_python_program, run_bash_cmd, browser_agent_tool, search_google],
     think=model.think,
 )
 
