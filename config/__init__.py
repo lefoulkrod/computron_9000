@@ -58,6 +58,10 @@ class SearchGoogleConfig(BaseModel):
     state_file: str = "./browser-state.json"
     no_save_state: bool = False
     timeout: int = 6000
+    api_endpoint: str = "https://www.googleapis.com/customsearch/v1"
+    search_engine_id: str | None = Field(
+        default_factory=lambda: os.getenv("GOOGLE_SEARCH_ENGINE_ID"),
+    )
 
 
 class WebToolsConfig(BaseModel):
