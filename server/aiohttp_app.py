@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from agents import handle_user_message, reset_message_history
 from agents.types import Data
 
+
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -242,3 +243,7 @@ app.router.add_route("GET", "/", handle_get)
 app.router.add_route("GET", "/assets/{tail:.*}", handle_get)
 app.router.add_route("GET", "/static/{tail:.*}", handle_get)
 app.router.add_route("DELETE", "/api/chat/history", handle_delete_history)
+
+
+# No side-effects or shutdown registration here; wired in main.
+__all__ = ["app"]
