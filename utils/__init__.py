@@ -5,7 +5,10 @@ This package provides utility functions such as async LRU caching and completion
 """
 
 from .cache import async_lru_cache
+from .shutdown import register_shutdown_callback, run_shutdown_callbacks
 
 __all__ = [
     "async_lru_cache",
+    "register_shutdown_callback",
+    "run_shutdown_callbacks",
 ]
