@@ -60,6 +60,29 @@ function App() {
             const reader = resp.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
+            // Track segmentation of assistant output for this single user turn.
+            // We gather all thinking until we receive a response; if more thinking comes AFTER a response,
+            // we start a NEW assistant message (section) and repeat.
+            let segmentIndex = 0;
+            let currentAssistantId = placeholderId; // id for current segment message
+            let currentHasResponse = false; // whether current segment has emitted any response text yet
+            // Helper to ensure a segment message exists and optionally initialize
+            const ensureAssistantMessage = (init = {}) => {
+                setMessages((prev) => {
+                    const updated = [...prev];
+                    let idx = updated.findIndex(
+                        (m) => m.role === 'assistant' && (m.id === currentAssistantId || m.tempId === currentAssistantId)
+                    );
+                    if (idx === -1) {
+                        // Create a fresh assistant segment entry
+                        updated.push({ id: currentAssistantId, role: 'assistant', content: '', thinking: undefined, placeholder: false, streaming: true, ...init });
+                    } else {
+                        // Make sure placeholder is cleared on first real data
+                        updated[idx] = { ...updated[idx], placeholder: false, tempId: undefined, streaming: true, ...init };
+                    }
+                    return updated;
+                });
+            };
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -71,28 +94,64 @@ function App() {
                     if (!line) continue;
                     try {
                         const data = JSON.parse(line);
+                        const hasResponse = typeof data.response === 'string' && data.response.length > 0;
+                        const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
+
+                        // If thinking arrives AFTER we've already shown a response in this segment,
+                        // start a new segment message to collect subsequent thinking.
+                        if (hasThinking && currentHasResponse) {
+                            segmentIndex += 1;
+                            currentAssistantId = `${placeholderId}_s${segmentIndex}`;
+                            currentHasResponse = false;
+                            ensureAssistantMessage();
+                        } else {
+                            // Ensure the current segment message exists (clears placeholder)
+                            ensureAssistantMessage();
+                        }
+
+                        // Now update the current segment with incoming data
                         setMessages((prev) => {
                             const updated = [...prev];
-                            // Find any existing assistant message for this request
-                            let idx = updated.findIndex(
-                                (m) => m.role === 'assistant' && (m.id === placeholderId || m.tempId === placeholderId)
-                            );
-                            if (idx === -1) {
-                                // No placeholder found yet (race), create a new assistant message entry
-                                updated.push({ id: placeholderId, role: 'assistant', content: '', thinking: undefined, streaming: true });
-                                idx = updated.length - 1;
+                            const i = updated.findIndex((m) => m.role === 'assistant' && m.id === currentAssistantId);
+                            const cur = i === -1 ? { id: currentAssistantId, role: 'assistant', content: '', thinking: undefined } : updated[i];
+                            const next = { ...cur };
+                            if (hasThinking) {
+                                const existing = typeof next.thinking === 'string' ? next.thinking : '';
+                                // Use a visible separation (double newline) between distinct thinking chunks.
+                                // Avoid adding extra newlines if existing already ends with blank line.
+                                if (existing) {
+                                    const endsWithBlank = /\n\s*$/.test(existing);
+                                    next.thinking = endsWithBlank
+                                        ? `${existing}${data.thinking}`
+                                        : `${existing}\n\n${data.thinking}`;
+                                } else {
+                                    next.thinking = data.thinking;
+                                }
                             }
-                            const current = updated[idx];
-                            const next = {
-                                ...current,
-                                id: placeholderId,
-                                placeholder: false,
-                                tempId: undefined,
-                                content: (current.content || '') + (data.response || ''),
-                                thinking: data.thinking,
-                                streaming: !data.final,
-                            };
-                            updated[idx] = next;
+                            if (hasResponse) {
+                                const existingContent = next.content || '';
+                                // If there is existing content and the new chunk does not start with a whitespace/newline
+                                // and existing content does not already end with a newline, insert a newline separator.
+                                // This addresses cases where the backend sends multiple discrete "response" chunks
+                                // that should appear on separate lines (e.g., when two JSON objects / paragraphs arrive).
+                                let toAppend = data.response;
+                                if (existingContent) {
+                                    const endsWithNewline = /\n\s*$/.test(existingContent);
+                                    const startsWithBlock = /^\s*(?:```|\n)/.test(toAppend);
+                                    if (!endsWithNewline && !startsWithBlock) {
+                                        toAppend = '\n' + toAppend; // ensure visual separation
+                                    }
+                                }
+                                next.content = existingContent + toAppend;
+                                currentHasResponse = true;
+                            }
+                            // Only switch off streaming on final chunk; otherwise keep it on
+                            if (data.final === true) {
+                                next.streaming = false;
+                            } else {
+                                next.streaming = true;
+                            }
+                            updated[i === -1 ? updated.length : i] = next;
                             return updated;
                         });
                     } catch (e) {
