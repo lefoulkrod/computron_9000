@@ -53,6 +53,15 @@ just typecheck    # type check with mypy
 
 Run `just` to see all available tasks. Podman setup requires manual configuration (see Manual Setup below).
 
+## Environment Configuration
+
+Some integrations require additional credentials. Copy `.env.example` to `.env` and populate the following variables when you want to enable the related tools:
+
+- **Reddit tools**: set `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `REDDIT_USER_AGENT` to the values from your Reddit app. These credentials allow the Reddit integration to authenticate with the API.
+- **Google search tools**: set `GOOGLE_SEARCH_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` (from your Programmable Search Engine) so the Google search utility can make authenticated requests.
+
+Restart the backend after updating environment variables so the changes take effect.
+
 ## Manual Setup
 
 If you prefer to set up manually or don't have Just installed:
