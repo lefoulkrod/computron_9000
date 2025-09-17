@@ -24,9 +24,10 @@
         {
             "label": "build ui",
             "type": "shell",
-            "command": "just",
+            "command": "bash",
             "args": [
-                "ui-build"
+                "-lc",
+                "just ui-build"
             ],
             "group": "none",
             "problemMatcher": []
