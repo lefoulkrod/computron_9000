@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -10,78 +9,8 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import styles from './Message.module.css';
 import LightbulbIcon from './icons/LightbulbIcon.jsx';
-import CopyIcon from './icons/CopyIcon.jsx';
-
-function CodeHeader({ lang, onCopy }) {
-    return (
-        <>
-            <span className={styles.codeLangLabel}>{lang || 'code'}</span>
-            <button className={styles.copyBtn} type="button" onClick={onCopy}>
-                <CopyIcon size={16} />
-                <span>Copy code</span>
-            </button>
-        </>
-    );
-}
-
-function useCodeCopyEnhancer(containerRef, deps = []) {
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-
-        const pres = Array.from(container.querySelectorAll('pre > code'));
-        pres.forEach((codeEl) => {
-            const pre = codeEl.parentElement;
-            if (!pre) return;
-            // If we've already enhanced this <pre>, skip
-            if (pre.dataset.enhanced === 'true') return;
-            // Defensive: remove any extra duplicate headers
-            const existing = pre.querySelectorAll(`:scope > .${styles.codeHeader}`);
-            if (existing.length > 1) {
-                existing.forEach((h, i) => i > 0 && h.remove());
-            }
-
-            const cls = codeEl.className || '';
-            const match = cls.match(/language-([a-zA-Z0-9+#._-]+)/);
-            const lang = match ? match[1] : 'code';
-
-            const header = document.createElement('div');
-            header.className = styles.codeHeader;
-            // Insert header inside the <pre> so it appears within the code area
-            pre.insertBefore(header, pre.firstChild);
-
-            const root = createRoot(header);
-            const handleCopy = async () => {
-                try {
-                    await navigator.clipboard.writeText(codeEl.textContent || '');
-                    // Swap the button text temporarily by re-rendering
-                    root.render(
-                        <CodeHeader
-                            lang={lang}
-                            onCopy={handleCopy}
-                        />
-                    );
-                    // Provide quick feedback via aria-live region or simple timeout text change
-                    const prev = header.querySelector('span:last-child');
-                    if (prev) {
-                        const old = prev.textContent;
-                        prev.textContent = 'Copied!';
-                        setTimeout(() => {
-                            prev.textContent = old;
-                        }, 2200);
-                    }
-                } catch (_e) {
-                    // no-op
-                }
-            };
-            root.render(<CodeHeader lang={lang} onCopy={handleCopy} />);
-
-            pre.dataset.enhanced = 'true';
-        });
-
-        // No explicit cleanup: headers are attached to code blocks that persist between renders.
-    }, [containerRef, ...deps]);
-}
+import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
+ 
 
 // Extend sanitize schema to allow KaTeX/MathML output and preserve code language classes
 const sanitizeSchema = (() => {
@@ -144,7 +73,6 @@ function preprocessContent(md) {
 function AssistantMessage({ content, thinking, images, placeholder }) {
     const [expanded, setExpanded] = useState(false);
     const bubbleRef = useRef(null);
-    useCodeCopyEnhancer(bubbleRef, [content]);
     return (
         <div className={`${styles.message} ${styles.assistant}`}>
             <div className={styles.bubble} ref={bubbleRef}>
@@ -173,6 +101,10 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
                                 <ReactMarkdown
                                     remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
                                     rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
+                                    components={{
+                                        pre: (props) => <PreCodeBlock {...props} />,
+                                        code: (props) => <InlineCode {...props} />,
+                                    }}
                                 >
                                     {preprocessContent(thinking || '')}
                                 </ReactMarkdown>
@@ -184,6 +116,10 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
                     <ReactMarkdown
                         remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
                         rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
+                        components={{
+                            pre: (props) => <PreCodeBlock {...props} />,
+                            code: (props) => <InlineCode {...props} />,
+                        }}
                     >
                         {preprocessContent(content || '')}
                     </ReactMarkdown>
@@ -202,13 +138,16 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
 
 function UserMessage({ content, images }) {
     const bubbleRef = useRef(null);
-    useCodeCopyEnhancer(bubbleRef, [content]);
     return (
         <div className={`${styles.message} ${styles.user}`}>
             <div className={styles.bubble} ref={bubbleRef}>
                 <ReactMarkdown
                     remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
                     rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
+                    components={{
+                        pre: (props) => <PreCodeBlock {...props} />,
+                        code: (props) => <InlineCode {...props} />,
+                    }}
                 >
                     {preprocessContent(content || '')}
                 </ReactMarkdown>
