@@ -8,4 +8,14 @@
   gap: 0.25rem;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
+
+  /* Provide a stable interior width so assistant responses always render to same max line length */
+  box-sizing: border-box;
+}
+
+/* Inner wrapper to constrain message bubble width consistently regardless of content length */
+.chatMessages>.assistant,
+.chatMessages>.user {
+  /* Allow full width usage of column while keeping a readable max width for content */
+  width: 100%;
 }

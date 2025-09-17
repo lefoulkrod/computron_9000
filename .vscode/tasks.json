@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run unit tests",
+            "label": "run unit tests",
             "type": "shell",
             "command": "bash",
             "args": [
@@ -17,6 +17,16 @@
             "command": "just",
             "args": [
                 "container-start"
+            ],
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "build ui",
+            "type": "shell",
+            "command": "just",
+            "args": [
+                "ui-build"
             ],
             "group": "none",
             "problemMatcher": []
