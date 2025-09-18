@@ -73,24 +73,28 @@ async def main() -> None:
                 f"Fetching comments for: {submission.title} (r/{submission.subreddit})",
             )
             try:
-                comments = await get_reddit_comments(submission.url)
+                # Pass the raw id (backend can also accept URL; id avoids extra parsing)
+                comments = await get_reddit_comments(submission.id)
                 print(f"Top {len(comments)} top-level comments:")
                 for j, comment in enumerate(comments, 1):
                     print(f"{j}. Author: {comment.author} | Score: {comment.score}")
-                    print(
-                        f"   {comment.body[:1000]}{'...' if len(comment.body) > 1000 else ''}",
-                    )
+                    max_body = 1000
+                    body_preview = comment.body[:max_body]
+                    if len(comment.body) > max_body:
+                        body_preview += "..."
+                    print(f"   {body_preview}")
                     if comment.replies:
                         print(
                             f"   Replies: {len(comment.replies)} (showing first reply)",
                         )
                         reply = comment.replies[0]
-                        print(
-                            f"      ↳ {reply.author}: {reply.body[:1000]}{'...' if len(reply.body) > 1000 else ''}",
-                        )
+                        reply_preview = reply.body[:max_body]
+                        if len(reply.body) > max_body:
+                            reply_preview += "..."
+                        print(f"      ↳ {reply.author}: {reply_preview}")
                     print()
             except Exception as e:
-                logger.exception(f"Error fetching comments: {e}")
+                logger.exception("Error fetching comments")
                 print(f"Error: {e}")
         else:
             print("Invalid option. Please enter a number, 'search', or 'exit'.")
