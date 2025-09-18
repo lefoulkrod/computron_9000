@@ -22,12 +22,9 @@ from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field
 
 from tools.browser.core import get_browser
+from tools.browser.exceptions import BrowserToolError
 
 logger = logging.getLogger(__name__)
-
-
-class BrowserToolError(Exception):
-    """Raised when the browser tool fails to open or process a page."""
 
 
 class OpenUrlLink(BaseModel):
@@ -84,7 +81,7 @@ async def open_url(url: str) -> OpenUrlResult:
         OpenUrlResult: Pydantic model with title, url, snippet, links, forms, status_code.
 
     Raises:
-        BrowserToolError: If navigation or extraction fails.
+    BrowserToolError: If navigation or extraction fails.
     """
     page: Any | None = None
     try:
@@ -171,6 +168,6 @@ async def open_url(url: str) -> OpenUrlResult:
             status_code=status_code,
         )
 
-    except Exception as exc:
+    except Exception as exc:  # gather any failure into unified error for upstream simplicity
         logger.exception("Failed to open URL %s", url)
-        raise BrowserToolError(str(exc)) from exc
+        raise BrowserToolError(str(exc), tool="open_url") from exc
