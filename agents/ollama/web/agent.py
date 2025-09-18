@@ -11,7 +11,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
-from tools.reddit import get_reddit_comments_tree_shallow, search_reddit
+from tools.reddit import get_reddit_comments, search_reddit
 from tools.web import get_webpage_substring, get_webpage_summary_sections, search_google
 
 model = get_default_model()
@@ -32,7 +32,7 @@ SYSTEM_PROMPT = dedent(
     2. Select the most relevant leads based on the user's question and open them.
     3. Use `get_webpage_summary_sections` for high-level summaries of long pages.
     4. When specific details are required, call `get_webpage_substring` to extract the exact passage.
-    5. Pull top-level Reddit reactions through `get_reddit_comments_tree_shallow` when helpful.
+    5. Pull top-level Reddit reactions through `get_reddit_comments` when helpful.
     6. Synthesize the findings into a cohesive answer with citations and source links.
 
     Guidance:
@@ -54,7 +54,7 @@ web_agent: Agent = Agent(
         get_webpage_substring,
         search_google,
         search_reddit,
-        get_reddit_comments_tree_shallow,
+        get_reddit_comments,
     ],
     think=model.think,
 )
