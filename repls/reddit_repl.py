@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 from tools.reddit import (
     RedditSubmission,
-    get_reddit_comments_tree_shallow,
+    get_reddit_comments,
     search_reddit,
 )
 
@@ -73,7 +73,7 @@ async def main() -> None:
                 f"Fetching comments for: {submission.title} (r/{submission.subreddit})",
             )
             try:
-                comments = await get_reddit_comments_tree_shallow(submission.url)
+                comments = await get_reddit_comments(submission.url)
                 print(f"Top {len(comments)} top-level comments:")
                 for j, comment in enumerate(comments, 1):
                     print(f"{j}. Author: {comment.author} | Score: {comment.score}")
