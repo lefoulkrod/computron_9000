@@ -332,16 +332,8 @@ ui-install:
     
     echo "📦 Installing UI dependencies..."
     cd {{UI_DIR}}
-    if [ -d node_modules ]; then
-        echo "✅ UI dependencies already installed — skipping"
-    else
-        if [ -f "package-lock.json" ]; then
-            npm ci
-        else
-            npm install
-        fi
-        echo "✅ UI dependencies installed!"
-    fi
+    npm install
+    echo "✅ UI dependencies are up to date!"
 
 # Start UI development server
 ui-dev:
@@ -401,6 +393,39 @@ ui-build:
     fi
     npm run build
     echo "✅ UI build complete!"
+
+# Run UI tests (Vitest)
+ui-test *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v node &> /dev/null; then
+        echo "❌ Node.js is not installed. Please install Node.js first:"
+        echo "   https://nodejs.org/ or use nvm/fnm"
+        exit 1
+    fi
+
+    if ! command -v npm &> /dev/null; then
+        echo "❌ npm is not installed. Please install npm first"
+        exit 1
+    fi
+
+    echo "🧪 Running UI tests..."
+    cd {{UI_DIR}}
+    if [ ! -d "node_modules" ]; then
+        echo "📦 Installing Node.js dependencies first..."
+        if [ -f "package-lock.json" ]; then
+            npm ci
+        else
+            npm install
+        fi
+    fi
+
+    if [ "$#" -eq 0 ]; then
+        npm run test
+    else
+        npm run test -- "$@"
+    fi
 
 # Clean UI artifacts
 # Remove only built assets (preserve node_modules by default)
@@ -629,5 +654,3 @@ playwright-install browser='chromium':
 # Install all Playwright browsers + Linux system deps
 playwright-install-all:
     uv run playwright install --with-deps
-
-
