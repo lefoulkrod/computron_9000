@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import styles from './Message.module.css';
 import CopyIcon from './icons/CopyIcon.jsx';
+import copyToClipboard from '../utils/copyToClipboard.js';
 
 function CodeHeader({ lang, onCopy, copied }) {
   return (
@@ -45,13 +46,11 @@ export function PreCodeBlock({ children }) {
   }, [children]);
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (_e) {
-      // no-op
-    }
+    const success = await copyToClipboard(text);
+    if (!success) return;
+
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
