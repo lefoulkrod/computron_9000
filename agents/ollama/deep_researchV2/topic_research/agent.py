@@ -10,7 +10,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
-from tools.reddit import get_reddit_comments_tree_shallow, get_reddit_submission
+from tools.reddit import get_reddit_comments, get_reddit_submission
 
 from .prompt import PROMPT
 
@@ -26,7 +26,7 @@ topic_research_agent = Agent(
     options=model.options,
     tools=[
         website_reader_agent_tool,
-        get_reddit_comments_tree_shallow,
+        get_reddit_comments,
         get_reddit_submission,
     ],
     think=model.think,
