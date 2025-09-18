@@ -1,8 +1,8 @@
-"""Simple browser agent implementation using the open_url tool only.
+"""Simple browser agent implementation with URL summary and screenshot Q&A tools.
 
-This agent is intentionally minimal: it can open a single URL and return a
-compact summary (title, snippet, and links). It mirrors the structure of the
-Coder agent for consistency across agents.
+This agent is intentionally minimal: it can open a URL, summarize textual content, and
+ask the vision model questions about a captured screenshot. It mirrors the structure
+of the Coder agent for consistency across agents.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
+from tools.browser.ask_about_screenshot import ask_about_screenshot
 from tools.browser.open_url import open_url
 
 logger = logging.getLogger(__name__)
@@ -29,30 +30,35 @@ SYSTEM_PROMPT = dedent(
     """
     You are a lightweight browser agent.
 
-    You have a single tool: open_url(url) which opens a webpage and returns:
-    - title
-    - snippet (first ~800 chars of visible body text)
-    - links (up to 20 with text + href)
+    You have two tools:
+    - open_url(url): opens a webpage and returns title, snippet (first ~800 visible characters),
+      links (up to 20 with text + href), forms, and status code.
+    - ask_about_screenshot(prompt, *, mode="full_page", selector=None): captures a screenshot of
+      the current page (full page, viewport, or a specific selector) and sends it to a vision model
+      to answer the prompt.
 
     Guidelines:
-        - Call open_url exactly with the provided URL when the user requests to open
-            or summarize a page.
-    - Return a concise summary based on the tool output.
+    - Call open_url exactly with the provided URL when the user requests to open or summarize a
+      page.
+    - Use ask_about_screenshot when you need visual details (e.g., "What does the banner say?"),
+      optionally adjusting ``mode`` or ``selector`` to focus on the right region, but only after you
+      have opened the relevant page.
+    - Return a concise summary based on tool outputs.
     - If the URL is missing or invalid, ask for a proper http/https URL.
-    - Do not attempt unrelated tasks; you only have open_url.
+    - Do not attempt unrelated tasks; only use the provided tools.
     """
 )
 
 browser_agent = Agent(
     name="BROWSER_AGENT",
     description=(
-        "An agent that opens a URL and returns a compact summary "
-        "(title, snippet, links) using a headless browser."
+        "An agent that opens a URL, summarizes the page, and can ask visual questions "
+        "about a captured screenshot."
     ),
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[open_url],
+    tools=[open_url, ask_about_screenshot],
     think=model.think,
 )
 
