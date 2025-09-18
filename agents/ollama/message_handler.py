@@ -9,14 +9,14 @@ from agents.types import Agent, Data, UserMessageEvent
 from config import load_config
 from models.model_configs import get_model_by_name
 
-from .computron_agent import computron
+from .computron import computron
 from .deep_researchV2 import coordinator
 from .sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
     run_tool_call_loop,
 )
-from .web_agent import web_agent
+from .web import web_agent
 
 logger = logging.getLogger(__name__)
 
