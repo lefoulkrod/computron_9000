@@ -2,7 +2,7 @@ import pytest
 
 from agents.ollama.browser import browser_agent, browser_agent_tool
 from tools.browser.ask_about_screenshot import ask_about_screenshot
-from tools.browser.open_url import open_url
+from tools.browser import open_url
 
 
 @pytest.mark.unit

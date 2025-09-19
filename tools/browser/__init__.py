@@ -9,16 +9,18 @@ Public API:
 
 from .ask_about_screenshot import ask_about_screenshot
 from .core import Browser, close_browser, get_browser
+from .core.snapshot import Form, Link, PageSnapshot
 from .exceptions import BrowserToolError
-from .open_url import OpenUrlForm, OpenUrlLink, OpenUrlResult
+from .open import open_url
 
 __all__ = [
     "Browser",
     "BrowserToolError",
-    "OpenUrlForm",
-    "OpenUrlLink",
-    "OpenUrlResult",
+    "Form",
+    "Link",
+    "PageSnapshot",
     "ask_about_screenshot",
     "close_browser",
     "get_browser",
+    "open_url",
 ]

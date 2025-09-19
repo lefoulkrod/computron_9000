@@ -17,8 +17,8 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
+from tools.browser import open_url
 from tools.browser.ask_about_screenshot import ask_about_screenshot
-from tools.browser.open_url import open_url
 
 logger = logging.getLogger(__name__)
 

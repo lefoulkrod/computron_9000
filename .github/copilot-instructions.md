@@ -12,3 +12,4 @@
 - Private and internal fields, methods, functions, constants, types and modules should all be named with a single leading underscore
 - Always include `__init__.py` for public re-exports, avoid exporting private members, do not export internal functions/classes
 - You may ignore Ruff(I001)
+- No backward compatible refactors unless prompted
