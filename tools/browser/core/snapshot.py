@@ -19,8 +19,14 @@ from __future__ import annotations
 
 import logging
 
-from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Page, Response
+from playwright.async_api import (
+    ElementHandle,
+    Page,
+    Response,
+)
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -32,10 +38,12 @@ class Link(BaseModel):
     Attributes:
         text: Visible link text (trimmed to <=80 chars).
         href: Href attribute of the anchor.
+        selector: CSS selector path to the anchor element.
     """
 
     text: str = Field(..., max_length=80)
     href: str
+    selector: str = ""
 
 
 class Form(BaseModel):
@@ -59,6 +67,57 @@ class PageSnapshot(BaseModel):
     links: list[Link]
     forms: list[Form]
     status_code: int | None = None
+
+
+async def _element_css_selector(element: ElementHandle) -> str:
+    """Return a best-effort CSS selector path for an element.
+
+    Uses an in-page evaluation of a small JS helper adapted from the provided
+    ``cssPath`` snippet. Falls back to an empty string if evaluation fails.
+
+    Args:
+        element: Playwright ``ElementHandle`` to derive a selector for.
+
+    Returns:
+        A CSS selector string (e.g. ``"html > body > div:nth-of-type(2) > a"``) or
+        an empty string on failure.
+    """
+    script = (
+        "(el) => {"  # Arrow function receives the element
+        "function cssPath(node) {"
+        "  if (!(node instanceof Element)) return '';"
+        "  const path = [];"
+        "  while (node && node.nodeType === Node.ELEMENT_NODE) {"
+        "    let selector = node.nodeName.toLowerCase();"
+        "    if (node.id) {"
+        "      selector += '#' + node.id;"
+        "      path.unshift(selector);"
+        "      break;"
+        "    } else {"
+        "      let sib = node, nth = 1;"
+        "      while ((sib = sib.previousElementSibling)) {"
+        "        if (sib.nodeName.toLowerCase() === selector) nth++;"
+        "      }"
+        "      if (nth !== 1) selector += ':nth-of-type(' + nth + ')';"
+        "    }"
+        "    path.unshift(selector);"
+        "    node = node.parentNode;"
+        "  }"
+        "  return path.join(' > ');"
+        "}"
+        "try { return cssPath(el) || ''; } catch (e) { return ''; }"
+        "}"
+    )
+    # Some test doubles may not implement evaluate; treat as empty selector.
+    if not hasattr(element, "evaluate"):
+        return ""
+    try:
+        selector: str = await element.evaluate(script)
+    except (PlaywrightError, AttributeError) as exc:  # pragma: no cover - defensive
+        logger.debug("Failed to compute element CSS selector: %s", exc)
+        return ""
+    else:
+        return selector
 
 
 async def _extract_links(page: Page, limit: int = 20) -> list[Link]:
@@ -90,7 +149,11 @@ async def _extract_links(page: Page, limit: int = 20) -> list[Link]:
         text = (text_val or "").strip()
         href = href_val or ""
         if text and href:
-            links.append(Link(text=text[:80], href=href))
+            try:
+                selector = await _element_css_selector(a)
+            except PlaywrightError:  # pragma: no cover - defensive
+                selector = ""
+            links.append(Link(text=text[:80], href=href, selector=selector))
     return links
 
 

@@ -11,6 +11,7 @@ from .ask_about_screenshot import ask_about_screenshot
 from .core import Browser, close_browser, get_browser
 from .core.snapshot import Form, Link, PageSnapshot
 from .exceptions import BrowserToolError
+from .interactions import click
 from .open import open_url
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "Link",
     "PageSnapshot",
     "ask_about_screenshot",
+    "click",
     "close_browser",
     "get_browser",
     "open_url",
