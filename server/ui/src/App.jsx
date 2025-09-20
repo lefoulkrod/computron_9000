@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from './components/ToastProvider.jsx';
 import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
@@ -8,6 +9,8 @@ function App() {
     const [messages, setMessages] = useState([]);
     const [dark, setDark] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
+    const [conversationId, setConversationId] = useState(null);
+    const { addToast } = useToast();
 
     useEffect(() => {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -20,12 +23,25 @@ function App() {
 
     const toggleTheme = () => setDark((d) => !d);
 
-    const newSession = async () => {
+    const newConversation = async () => {
         setMessages([]);
+        setConversationId(null);
         try {
-            await fetch('/api/chat/history', { method: 'DELETE' });
+            const resp = await fetch('/api/conversations', { method: 'POST' });
+            if (resp.ok) {
+                const data = await resp.json();
+                const cid = data.conversation_id || null;
+                setConversationId(cid);
+                if (!cid) {
+                    addToast('Failed to create conversation: missing conversation id.', { type: 'error' });
+                }
+            } else {
+                addToast(`Failed to create conversation (status ${resp.status}).`, { type: 'error' });
+                setConversationId(null);
+            }
         } catch (err) {
-            // ignore
+            addToast(`Failed to create conversation: ${err.message}`, { type: 'error' });
+            setConversationId(null);
         }
     };
 
@@ -46,6 +62,9 @@ function App() {
         ]);
 
         const body = { message: message || '(uploaded file)' };
+        if (conversationId) {
+            body.conversation_id = conversationId;
+        }
         if (fileData) {
             body.data = [fileData];
         }
@@ -178,7 +197,7 @@ function App() {
 
     return (
         <>
-            <Header dark={dark} onToggleTheme={toggleTheme} onNewSession={newSession} />
+            <Header dark={dark} onToggleTheme={toggleTheme} onNewConversation={newConversation} />
             <div className={styles.mainLayout}>
                 <div className={styles.column}>
                     <div className={styles.stickyInput}>

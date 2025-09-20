@@ -3,7 +3,7 @@ import styles from './Header.module.css';
 import ThemeIcon from './icons/ThemeIcon.jsx';
 import PlusIcon from './icons/PlusIcon.jsx';
 
-export default function Header({ dark, onToggleTheme, onNewSession }) {
+export default function Header({ dark, onToggleTheme, onNewConversation }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -28,11 +28,11 @@ export default function Header({ dark, onToggleTheme, onNewSession }) {
           <ThemeIcon dark={dark} />
         </button>
         <button
-          onClick={onNewSession}
-          id="newSessionBtn"
+          onClick={onNewConversation}
+          id="newConversationBtn"
           className={styles.iconButton}
-          aria-label="New session"
-          title="New session"
+          aria-label="New conversation"
+          title="New conversation"
         >
           <PlusIcon />
         </button>
