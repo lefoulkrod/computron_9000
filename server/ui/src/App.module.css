@@ -26,11 +26,11 @@
   flex: 0 0 38%;
   max-width: 38%;
   min-width: 20rem;
-  padding-right: 1.5rem;
   position: sticky;
   top: calc(var(--header-height) + 0.75rem);
   align-self: flex-start;
-  height: max-content; /* shrink-wrap so sticky behaves predictably */
+  height: max-content;
+  /* shrink-wrap so sticky behaves predictably */
 }
 
 .column:last-child {
@@ -62,7 +62,6 @@
     max-width: 100% !important;
     padding: 0;
     border-right: none !important;
-    border-bottom: 1px solid #e5e7eb;
   }
 
   .column:last-child {

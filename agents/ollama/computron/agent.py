@@ -6,6 +6,7 @@ import logging
 from textwrap import dedent
 
 from agents.ollama.browser import browser_agent_tool
+from agents.ollama.deep_researchV2.coordinator.agent import execute_research_tool
 from agents.ollama.sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
@@ -36,6 +37,10 @@ SYSTEM_PROMPT = dedent(
     - After a tool call, summarize the result plainly.
     - Keep emoticons out of code blocks and never let them replace substance.
 
+    Tool guidelines:
+    - Use `run_web_agent_as_tool` for up-to-date information from the web.
+    - Use `browser_agent_tool` to control a browser to achieve actions on web pages.
+    - Use `execute_research_tool` to perform a deep research on a topic.
     Tool usage policy:
     - Use internal knowledge for stable facts (>1 year old) when confident.
     - Avoid tools for purely opinion-based questions.
@@ -57,6 +62,7 @@ computron_agent: Agent = Agent(
         browser_agent_tool,
         web_agent_tool,
         generate_emoticon,
+        execute_research_tool,
     ],
     think=model.think,
 )
