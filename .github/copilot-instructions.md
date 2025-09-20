@@ -6,7 +6,7 @@
 - Use custom exceptions where appropriate
 - Write tests for new features/bugs; descriptive names, Google-style docstrings; place in `tests/` mirroring source structure
 - Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
-- run unit tests with `just test-unit`
+- Run unit tests  (UI or Python) after every related change
 - Include new deps in pyproject.toml
 - Use Pydantic for data validation; ensure JSON-serializable API responses
 - Private fields/methods get a single leading underscore
