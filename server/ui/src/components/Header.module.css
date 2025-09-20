@@ -11,12 +11,14 @@
 
 .headerInner {
   width: 100%;
-  max-width: 1400px; /* match main layout */
+  max-width: 1400px;
+  /* match main layout */
   margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.5rem 1.5rem; /* match App.module.css mainLayout padding */
+  padding: 0.5rem 1.5rem;
+  /* match App.module.css mainLayout padding */
   box-sizing: border-box;
 }
 
@@ -24,8 +26,7 @@
   height: 48px;
 }
 
-.logoLight {}
-
+/* Light theme shows .logoLight, dark theme swaps to .logoDark */
 .logoDark {
   display: none;
 }
@@ -44,7 +45,8 @@
   letter-spacing: 0.03em;
   font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
   color: var(--text);
-  margin-right: auto; /* push controls to right */
+  margin-right: auto;
+  /* push controls to right */
 }
 
 .iconButton {
@@ -57,14 +59,54 @@
   border-radius: 999px;
   background: var(--button);
   color: var(--text);
-  border: 1px solid rgba(0,0,0,0.25);
+  border: 1px solid rgba(0, 0, 0, 0.25);
   box-shadow: none;
   line-height: 1;
   transition: transform 120ms ease, filter 160ms ease;
 }
 
-.iconButton:hover { filter: brightness(1.08); }
-.iconButton:active { transform: translateY(1px); }
-.iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.iconButton:hover {
+  filter: brightness(1.08);
+}
 
-.iconButton + .iconButton { margin-left: 0.35rem; }
+.iconButton:active {
+  transform: translateY(1px);
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid #7aa2ff;
+  outline-offset: 2px;
+}
+
+.iconButton+.iconButton {
+  margin-left: 0.35rem;
+}
+
+/* Mobile adjustments */
+@media (max-width: 700px) {
+
+  /* Hide logos entirely on narrow screens */
+  .logo {
+    display: none;
+  }
+
+  :global(.dark-theme) .logoDark,
+  :global(.dark-theme) .logoLight {
+    display: none;
+  }
+
+  .headerInner {
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+  }
+
+  .appTitle {
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+  }
+
+  .iconButton {
+    width: 32px;
+    height: 32px;
+  }
+}
