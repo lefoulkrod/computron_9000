@@ -75,6 +75,7 @@ warn_no_return = true                     # Warn when a non-None function might 
 warn_unreachable = true                   # Catch code that can never be reached
 strict_equality = true                    # Enforce strict comparison (e.g., no comparing incompatible types)
 show_error_codes = true                   # Display mypy error codes (e.g., `[no-any-return]`)
+exclude = "^tests/"
 
 # 🎯 Extra strict flags common in large open-source/enterprise projects:
 disallow_any_unimported = true            # Prevent silent Any from missing imports; encourages stubs
@@ -82,10 +83,6 @@ disallow_any_generics = true              # Require explicit type parameters for
 disallow_untyped_calls = true             # Disallow calling untyped functions from typed code
 no_implicit_reexport = true               # Disallow implicit star re-exports (e.g., via `from module import *`)
 
-[[tool.mypy.overrides]]
-module = "tests/*"
-disallow_untyped_defs = false             # Allow untyped defs in tests for flexibility
-no_implicit_reexport = false              # Allow tests to import from internal modules
 
 [[tool.mypy.overrides]]
 module = ["asyncpraw.*"]

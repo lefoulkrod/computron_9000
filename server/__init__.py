@@ -1,5 +1,9 @@
-"""Server package for COMPUTRON_9000."""
+"""Server package for COMPUTRON_9000.
 
-from .aiohttp_app import app
+Exports the application factory `create_app` so callers can build their own
+configured aiohttp application instance.
+"""
 
-__all__ = ["app"]
+from .aiohttp_app import create_app
+
+__all__ = ["create_app"]
