@@ -53,6 +53,8 @@ def _viewport() -> ViewportSize:
 
 
 ANTI_BOT_INIT_SCRIPT = r"""
+// --- Stealth patches to reduce automation detection ---
+
 // 1) webdriver flag
 Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => undefined });
 
@@ -73,11 +75,17 @@ Object.defineProperty(navigator, 'plugins', {
 // 6) WebGL vendor/renderer
 const getParameter = WebGLRenderingContext.prototype.getParameter;
 WebGLRenderingContext.prototype.getParameter = function(parameter) {
-  // UNMASKED_VENDOR_WEBGL / UNMASKED_RENDERER_WEBGL
-  if (parameter === 37445) return 'Intel Inc.';
-  if (parameter === 37446) return 'Intel(R) UHD Graphics';
+  if (parameter === 37445) return 'Intel Inc.';                  // UNMASKED_VENDOR_WEBGL
+  if (parameter === 37446) return 'Intel(R) UHD Graphics';       // UNMASKED_RENDERER_WEBGL
   return getParameter.call(this, parameter);
 };
+
+// 7) Permissions API (avoid detection via notifications query)
+const originalQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = (parameters) =>
+  parameters.name === 'notifications'
+    ? Promise.resolve({ state: Notification.permission })
+    : originalQuery(parameters);
 """
 
 
@@ -118,16 +126,15 @@ class Browser:
         headless: bool = False,
         user_agent: str = DEFAULT_UA,
         locale: str = "en-US",
-        timezone_id: str = "America/Chicago",  # matches your TZ
+        timezone_id: str = "America/Chicago",
         proxy: ProxySettings | None = None,
         accept_downloads: bool = True,
-        geolocation: Geolocation | None = None,  # {"latitude": 37.7749, "longitude": -122.4194}
-        permissions: list[str]
-        | None = None,  # e.g. ["geolocation", "clipboard-read", "clipboard-write"]
-        extra_headers: dict[str, str] | None = None,  # sent with every request
-        args: list[str] | None = None,  # extra Chromium args
+        geolocation: Geolocation | None = None,
+        permissions: list[str] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        args: list[str] | None = None,
     ) -> Browser:
-        """Start a persistent Chromium context and return a ``CoreBrowser``.
+        """Start a persistent Chromium context and return a ``Browser``.
 
         Args:
             profile_dir: Directory for Chromium user data (persisted across runs).
@@ -143,13 +150,12 @@ class Browser:
             args: Additional Chromium command-line flags.
 
         Returns:
-            A ready-to-use ``CoreBrowser`` wrapping the persistent context.
+            A ready-to-use ``Browser`` wrapping the persistent context.
         """
-        # Expand and ensure profile directory exists
         profile_path = Path(profile_dir).expanduser().resolve()
         profile_path.mkdir(parents=True, exist_ok=True)
 
-        # Reasonable Chromium args to look “normal” and suppress obvious automation
+        # Chromium args tuned for stealth / stability
         chromium_args = [
             "--disable-blink-features=AutomationControlled",
             "--no-default-browser-check",
@@ -157,11 +163,13 @@ class Browser:
             "--disable-features=IsolateOrigins,site-per-process",
             "--disable-features=AutomationControlled",
             "--start-maximized",
+            "--disable-infobars",
+            "--enable-features=NetworkService,NetworkServiceInProcess",
+            "--ignore-certificate-errors",
         ]
         if args:
             chromium_args.extend(args)
 
-        # Start Playwright + PERSISTENT context (returns a BrowserContext directly)
         pw: Playwright = await async_playwright().start()
         context = await pw.chromium.launch_persistent_context(
             user_data_dir=str(profile_path),
@@ -175,11 +183,13 @@ class Browser:
             accept_downloads=accept_downloads,
             geolocation=geolocation,
             permissions=permissions or [],
+            java_script_enabled=True,  # ensure JS is enabled
         )
 
-        # Extra HTTP headers (helps look like a real browser session)
+        # HTTP headers to look like a normal browser
         headers = {
             "Accept-Language": f"{locale},en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",  # 👈 important for GitHub
             "Upgrade-Insecure-Requests": "1",
             "Sec-Fetch-Dest": "document",
             "Sec-Fetch-Mode": "navigate",
@@ -189,10 +199,9 @@ class Browser:
         }
         await context.set_extra_http_headers(headers)
 
-        # Anti-bot JS shims before any page runs its scripts
+        # Anti-bot JS shims
         await context.add_init_script(ANTI_BOT_INIT_SCRIPT)
 
-        # Persisted context already acts like a single “browser”.
         return cls(context=context, extra_headers=headers, pw=pw)
 
     async def new_page(self) -> Page:
