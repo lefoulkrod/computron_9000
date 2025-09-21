@@ -6,7 +6,7 @@
 - Use custom exceptions where appropriate
 - Write tests for new features/bugs; descriptive names, Google-style docstrings; place in `tests/` mirroring source structure
 - Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
-- Always run unit tests with `run unit tests` task after every change
+- Run unit tests  (UI or Python) after every related change
 - Include new deps in pyproject.toml
 - Use Pydantic for data validation; ensure JSON-serializable API responses
 - Private and internal fields, methods, functions, constants, types and modules should all be named with a single leading underscore

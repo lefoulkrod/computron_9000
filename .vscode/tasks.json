@@ -31,6 +31,17 @@
             ],
             "group": "none",
             "problemMatcher": []
+        },
+        {
+            "label": "run ui unit tests",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "cd server/ui && npm test"
+            ],
+            "group": "test",
+            "problemMatcher": []
         }
     ]
 }
