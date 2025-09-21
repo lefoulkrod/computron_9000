@@ -156,14 +156,15 @@ async def test_open_url_basic(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.url == "https://example.com/final"
     assert result.status_code == 200
     # Only first 20 links
-    assert len(result.links) == 20
-    # Text trimming to 80 chars is not triggered here but check structure
-    assert result.links[0].text.startswith("Link 0")
-    assert result.links[0].href == "https://example.com/0"
-    # Forms
-    assert len(result.forms) == 1
-    assert result.forms[0].selector == "form[action='/login']"
-    assert result.forms[0].inputs == ["username", "password"]
+    # Elements: first 20 anchors plus the form (order: anchors then forms)
+    anchor_elements = [e for e in result.elements if e.tag == "a"]
+    form_elements = [e for e in result.elements if e.tag == "form"]
+    assert len(anchor_elements) == 20
+    assert anchor_elements[0].text.startswith("Link 0")
+    assert anchor_elements[0].href == "https://example.com/0"
+    assert len(form_elements) == 1
+    assert form_elements[0].action == "/login"
+    assert form_elements[0].inputs == ["username", "password"]
 
 
 @pytest.mark.unit
@@ -187,7 +188,8 @@ async def test_open_url_skips_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     result = await open_url("https://example.com")
     assert result.title == "T"
     assert result.snippet == "Hello World"
-    assert [l.href for l in result.links] == ["https://ok"]
+    anchor_elements = [e for e in result.elements if e.tag == "a"]
+    assert [e.href for e in anchor_elements] == ["https://ok"]
 
 
 @pytest.mark.unit

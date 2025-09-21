@@ -58,8 +58,7 @@ async def test_current_page_success(monkeypatch):
     assert snap.url == "https://active"
     assert snap.snippet.startswith("Second body")
     assert snap.status_code is None  # no navigation response
-    assert snap.links == []
-    assert snap.forms == []
+    assert snap.elements == []
 
 
 @pytest.mark.unit

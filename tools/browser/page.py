@@ -28,7 +28,7 @@ async def open_url(url: str) -> PageSnapshot:  # backward-compatible function na
         url: The URL to open (http/https).
 
     Returns:
-        PageSnapshot: Pydantic model with title, url, snippet, links, forms, status_code.
+        PageSnapshot: Pydantic model with title, url, snippet, elements, status_code.
 
     Raises:
         BrowserToolError: If navigation or extraction fails.
@@ -55,7 +55,8 @@ async def current_page() -> PageSnapshot:
     first).
 
     Returns:
-        PageSnapshot: Structured snapshot of the active page.
+        PageSnapshot: Structured snapshot of the active page (title, url,
+        snippet, elements, status_code).
 
     Raises:
         BrowserToolError: If there is no open page or if snapshot extraction

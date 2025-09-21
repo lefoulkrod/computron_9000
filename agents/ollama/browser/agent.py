@@ -33,7 +33,7 @@ SYSTEM_PROMPT = dedent(
 
     You have five tools:
     - open_url(url): opens a webpage and returns title, snippet (first ~800 visible characters),
-      links (up to 20 with text + href), forms, and status code.
+      elements (anchors and forms; up to 20 anchors + all forms), and status code.
     - click(target): clicks an element on the current page. `target` can be the visible text of an
       element or a CSS selector (e.g., `.btn.primary`, `button#submit`, `input[name='q']`). Returns
       an updated page snapshot after the click (including any navigation changes).
@@ -44,7 +44,7 @@ SYSTEM_PROMPT = dedent(
       the current page (full page, viewport, or a specific selector) and sends it to a vision model
       to answer the prompt.
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
-      Use this to recall state or re-extract links/forms. If no page is open you must first call
+      Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
 
     Guidelines:
