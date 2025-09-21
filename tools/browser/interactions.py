@@ -23,19 +23,14 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tools.browser.core import get_browser
+from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
-from tools.browser.exceptions import BrowserToolError
 
 logger = logging.getLogger(__name__)
 
 
 async def click(target: str) -> PageSnapshot:
     """Click an element by visible text or CSS selector and snapshot the page.
-
-    The function attempts an exact visible text match first (``page.get_by_text``)
-    because LLM callers most often refer to what they *see*. If no element with
-    exactly that text exists, the ``target`` is treated as a CSS selector and
-    queried via ``page.locator``. The first matching element is clicked.
 
     Args:
         target: Either a visible text string (e.g. "Book Now") or a CSS selector

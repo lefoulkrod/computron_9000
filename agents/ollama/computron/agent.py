@@ -39,7 +39,7 @@ SYSTEM_PROMPT = dedent(
 
     Tool guidelines:
     - Use `run_web_agent_as_tool` for up-to-date information from the web.
-    - Use `browser_agent_tool` to control a browser to achieve actions on web pages.
+    - Use `run_browser_agent_tool` to control a browser to achieve actions on web pages.
     - Use `execute_research_tool` to perform a deep research on a topic.
     Tool usage policy:
     - Use internal knowledge for stable facts (>1 year old) when confident.

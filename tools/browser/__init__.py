@@ -9,10 +9,11 @@ Public API:
 
 from .ask_about_screenshot import ask_about_screenshot
 from .core import Browser, close_browser, get_browser
+from .core.exceptions import BrowserToolError
 from .core.snapshot import Form, Link, PageSnapshot
-from .exceptions import BrowserToolError
 from .interactions import click
-from .open import open_url
+from .page import current_page, open_url
+from .search import TextExtractionResult, extract_text
 
 __all__ = [
     "Browser",
@@ -20,9 +21,12 @@ __all__ = [
     "Form",
     "Link",
     "PageSnapshot",
+    "TextExtractionResult",
     "ask_about_screenshot",
     "click",
     "close_browser",
+    "current_page",
+    "extract_text",
     "get_browser",
     "open_url",
 ]

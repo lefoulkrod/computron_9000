@@ -33,5 +33,15 @@ async def run_shutdown_callbacks() -> None:
             result = callback()
             if inspect.isawaitable(result):
                 await result
-        except Exception:  # pragma: no cover - defensive logging
-            logger.exception("Shutdown callback %r failed", callback)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            msg = str(exc)
+            # Playwright sometimes raises connection-closed errors during Ctrl+C; treat as benign.
+            if "Connection closed" in msg or "connection closed" in msg:
+                logger.debug(
+                    "Suppressed benign shutdown exception from %r: %s: %s",
+                    callback,
+                    type(exc).__name__,
+                    msg,
+                )
+            else:
+                logger.exception("Shutdown callback %r failed", callback)

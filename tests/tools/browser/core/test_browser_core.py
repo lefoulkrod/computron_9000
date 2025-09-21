@@ -40,23 +40,21 @@ async def test_current_page_returns_last_open_page() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_current_page_creates_when_none() -> None:
-    """current_page creates a new page if none exist or all closed."""
+async def test_current_page_raises_when_none() -> None:
+    """current_page raises when no pages exist."""
     ctx = FakeContext([])
     browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
 
-    page = await browser.current_page()
-    assert page in ctx.pages
-    assert len(ctx.pages) == 1
+    with pytest.raises(RuntimeError):
+        await browser.current_page()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_current_page_skips_closed_pages() -> None:
-    """current_page skips closed pages when selecting current."""
+async def test_current_page_raises_when_all_closed() -> None:
+    """current_page raises when all pages are closed."""
     ctx = FakeContext([FakePage(closed=True), FakePage(closed=True)])
     browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
 
-    page = await browser.current_page()
-    assert page in ctx.pages
-    assert not page.is_closed()
+    with pytest.raises(RuntimeError):
+        await browser.current_page()

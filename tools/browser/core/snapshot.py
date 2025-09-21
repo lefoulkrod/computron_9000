@@ -82,35 +82,43 @@ async def _element_css_selector(element: ElementHandle) -> str:
         A CSS selector string (e.g. ``"html > body > div:nth-of-type(2) > a"``) or
         an empty string on failure.
     """
+    # Updated cssPath implementation prioritizing id, then unique class among siblings,
+    # then building a path that leverages class names (joined) with an nth-of-type fallback.
+    # Intentionally contains no test affordances or instrumentation.
     script = (
-        "(el) => {"  # Arrow function receives the element
-        "function cssPath(node) {"
-        "  if (!(node instanceof Element)) return '';"
+        "(el) => {"
+        "function cssPath(el) {"
+        "  if (!(el instanceof Element)) return '';"
+        "  if (el.id) return '#' + el.id;"  # Fast path for id
+        "  if (el.classList && el.classList.length > 0) {"
+        "    const className = [...el.classList][0];"
+        "    const siblings = el.parentNode ? el.parentNode.querySelectorAll('.' + className) : [];"
+        "    if (siblings.length === 1) { return '.' + className; }"
+        "  }"
         "  const path = [];"
-        "  while (node && node.nodeType === Node.ELEMENT_NODE) {"
-        "    let selector = node.nodeName.toLowerCase();"
-        "    if (node.id) {"
-        "      selector += '#' + node.id;"
+        "  while (el && el.nodeType === Node.ELEMENT_NODE) {"
+        "    let selector = el.nodeName.toLowerCase();"
+        "    if (el.id) {"
+        "      selector = '#' + el.id;"
         "      path.unshift(selector);"
         "      break;"
+        "    } else if (el.classList && el.classList.length > 0) {"
+        "      selector += '.' + [...el.classList].join('.');"
         "    } else {"
-        "      let sib = node, nth = 1;"
+        "      let sib = el, nth = 1;"
         "      while ((sib = sib.previousElementSibling)) {"
-        "        if (sib.nodeName.toLowerCase() === selector) nth++;"
+        "        if (sib.nodeName.toLowerCase() === el.nodeName.toLowerCase()) nth++;"
         "      }"
-        "      if (nth !== 1) selector += ':nth-of-type(' + nth + ')';"
+        "      if (nth > 1) selector += ':nth-of-type(' + nth + ')';"
         "    }"
         "    path.unshift(selector);"
-        "    node = node.parentNode;"
+        "    el = el.parentNode;"
         "  }"
         "  return path.join(' > ');"
         "}"
         "try { return cssPath(el) || ''; } catch (e) { return ''; }"
         "}"
     )
-    # Some test doubles may not implement evaluate; treat as empty selector.
-    if not hasattr(element, "evaluate"):
-        return ""
     try:
         selector: str = await element.evaluate(script)
     except (PlaywrightError, AttributeError) as exc:  # pragma: no cover - defensive
