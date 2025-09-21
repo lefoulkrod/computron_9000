@@ -13,15 +13,21 @@ from server.aiohttp_app import create_app
 from tools.browser.core.browser import close_browser
 from utils.shutdown import register_shutdown_callback, run_shutdown_callbacks
 
-load_dotenv()
-setup_logging()
 logger = logging.getLogger(__name__)
 
 PORT = int(os.getenv("PORT", "8080"))
 
 
 def main() -> None:
-    """Create and run the aiohttp application instance."""
+    """Create and run the aiohttp application instance.
+
+    Logging and environment variables are initialized here (runtime boundary)
+    rather than at import time so that importing this module in tests or other
+    tooling does not produce side effects.
+    """
+    # Initialize environment and logging only when actually running the server.
+    load_dotenv()
+    setup_logging()
     app = create_app()
     register_shutdown_callback(close_browser)
 

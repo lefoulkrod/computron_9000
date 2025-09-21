@@ -13,7 +13,7 @@ from playwright.async_api import Page
 from config import load_config
 from models.model_configs import get_model_by_name
 from tools.browser.core import get_browser
-from tools.browser.exceptions import BrowserToolError
+from tools.browser.core.exceptions import BrowserToolError
 
 logger = logging.getLogger(__name__)
 

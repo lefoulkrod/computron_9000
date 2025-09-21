@@ -20,6 +20,7 @@ dependencies = [
 test = [
     "pytest>=7.0.0,<8.0.0",
     "pytest-asyncio",
+    "pytest-aiohttp",
     "pytest-watch"
 ]
 dev = [
@@ -104,6 +105,9 @@ markers = [
     "slow: marks tests as slow running",
 ]
 asyncio_mode = "auto"
+log_cli = true
+log_cli_level = "INFO"
+log_level = "INFO"
 
 
 [build-system]

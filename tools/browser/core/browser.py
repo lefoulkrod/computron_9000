@@ -7,16 +7,27 @@ shutdown while keeping a light surface area.
 
 from __future__ import annotations
 
+import logging
 import secrets
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from playwright.async_api import BrowserContext, Page, Playwright, async_playwright
+from playwright.async_api import (
+    BrowserContext,
+    Page,
+    Playwright,
+    async_playwright,
+)
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
 
 from config import load_config
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
     from playwright.async_api import Geolocation, ProxySettings, ViewportSize
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_UA = (
     # A realistic, stable Chromium UA (tweak as needed)
@@ -219,24 +230,80 @@ class Browser:
             if not page.is_closed():
                 return page
 
-        # No existing usable page: create a new one.
-        return await self.new_page()
+        msg = "No open pages available in browser context"
+        raise RuntimeError(msg)
+
+    async def pages(self) -> list[Page]:
+        """Return a snapshot list of all pages in the context.
+
+        This provides a public, read-only style accessor so external tool
+        helpers don't need to reach into the private ``_context`` attribute.
+
+        Returns:
+            list[Page]: Current pages (order: creation order as provided by Playwright).
+        """
+        return list(self._context.pages)
 
     async def context(self) -> BrowserContext:
         """Return the underlying persistent ``BrowserContext``."""
         return self._context
 
     async def close(self) -> None:
-        """Close the browser context and stop the Playwright driver."""
+        """Close the browser context and stop the Playwright driver.
+
+        This method is defensive: any exception raised while closing the
+        underlying ``BrowserContext`` is logged and suppressed so that
+        application shutdown can proceed cleanly. The method is idempotent
+        and safe to call multiple times.
+        """
         if self._closed:
+            logger.debug("Browser.close called but already closed")
             return
         self._closed = True
+        context_exc: Exception | None = None
         try:
+            logger.debug("Closing Playwright BrowserContext ...")
             await self._context.close()
+            logger.debug("BrowserContext closed")
+        except PlaywrightError as exc:  # pragma: no cover - relies on Playwright internals
+            # We store and log at warning level but do not re-raise; shutdown
+            # should continue. The original error often appears when the
+            # driver process exits first: e.g. "Connection closed while reading".
+            context_exc = exc
+            logger.warning(
+                "Suppressed exception while closing BrowserContext: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+        except Exception as exc:  # noqa: BLE001  pragma: no cover - highly defensive
+            # Non-Playwright exceptions (e.g. RuntimeError if driver already gone)
+            context_exc = exc
+            logger.warning(
+                "Suppressed unexpected exception while closing BrowserContext: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
         finally:
-            # Stop Playwright driver
-            if self._pw is not None:
-                await self._pw.stop()
+            try:
+                if self._pw is not None:
+                    logger.debug("Stopping Playwright driver ...")
+                    await self._pw.stop()
+                    logger.debug("Playwright driver stopped")
+            except PlaywrightError as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "Suppressed exception while stopping Playwright driver: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+            except Exception as exc:  # noqa: BLE001  pragma: no cover - highly defensive
+                logger.warning(
+                    "Suppressed unexpected exception while stopping Playwright driver: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+        # If there was an exception closing the context we intentionally swallow it.
+        if context_exc:
+            logger.debug("Browser.close completed with suppressed context exception")
 
 
 _browser: Browser | None = None
@@ -266,6 +333,23 @@ async def close_browser() -> None:
         None
     """
     global _browser  # noqa: PLW0603
-    if _browser is not None:
+    if _browser is None:
+        logger.debug("close_browser called but no browser instance exists")
+        return
+    try:
         await _browser.close()
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        # Should generally be handled inside Browser.close already, but we add
+        # an outer guard in case of future changes.
+        logger.warning(
+            "Suppressed exception in close_browser wrapper: %s: %s", type(exc).__name__, exc
+        )
+    except Exception as exc:  # noqa: BLE001  pragma: no cover - highly defensive
+        logger.warning(
+            "Suppressed unexpected exception in close_browser wrapper: %s: %s",
+            type(exc).__name__,
+            exc,
+        )
+    finally:
         _browser = None
+        logger.debug("Browser singleton cleared")

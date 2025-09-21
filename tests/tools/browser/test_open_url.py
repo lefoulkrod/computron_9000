@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from tools.browser import BrowserToolError, PageSnapshot
-from tools.browser.open import open_url
+from tools.browser.page import open_url
 
 
 class FakeAnchor:
@@ -147,7 +147,8 @@ async def test_open_url_basic(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_get_browser() -> FakeBrowser:
         return fake_browser
 
-    monkeypatch.setattr("tools.browser.open.get_browser", fake_get_browser)
+    # Patch core.get_browser so open_url uses our fake browser
+    monkeypatch.setattr("tools.browser.core.get_browser", fake_get_browser)
 
     result: PageSnapshot = await open_url("https://example.com")
     assert result.title == "Example Title"
@@ -181,7 +182,7 @@ async def test_open_url_skips_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_get_browser() -> FakeBrowser:
         return fake_browser
 
-    monkeypatch.setattr("tools.browser.open.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.core.get_browser", fake_get_browser)
 
     result = await open_url("https://example.com")
     assert result.title == "T"
@@ -203,7 +204,7 @@ async def test_open_url_error(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_get_browser() -> FakeBrowser:
         return fake_browser
 
-    monkeypatch.setattr("tools.browser.open.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.core.get_browser", fake_get_browser)
 
     with pytest.raises(BrowserToolError):
         await open_url("https://example.com")
