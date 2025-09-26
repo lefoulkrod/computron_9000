@@ -11,13 +11,7 @@ from pydantic import BaseModel
 
 from config import load_config
 
-from .events import (
-    AssistantResponse,
-    ToolCallPayload,
-    enable_content_suppression,
-    publish_event,
-    reset_content_suppression,
-)
+from .events import AssistantResponse, ToolCallPayload, publish_event
 
 
 class ToolLoopError(Exception):
@@ -279,35 +273,28 @@ async def run_tool_call_loop(
                     )
                 except Exception:  # pragma: no cover - defensive
                     logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
-                suppression_token = None
                 tool_func = next(
                     (tool for tool in tools if getattr(tool, "__name__", None) == tool_name),
                     None,
                 )
-                if tool_func and getattr(tool_func, "__agent_as_tool_marker__", False):
-                    suppression_token = enable_content_suppression()
-                try:
-                    if not tool_func:
-                        logger.error("Tool '%s' not found in tools.", tool_name)
-                        tool_result = {"error": "Tool not found"}
-                    else:
-                        try:
-                            validated_args = _validate_tool_arguments(tool_func, arguments)
-                            if inspect.iscoroutinefunction(tool_func):
-                                result = await tool_func(**validated_args)
-                            else:
-                                result = tool_func(**validated_args)
-                            serializable_result = _to_serializable(result)
-                            tool_result = {"result": serializable_result}
-                        except (ValueError, TypeError, json.JSONDecodeError) as exc:
-                            logger.exception("Argument validation failed for tool '%s'", tool_name)
-                            tool_result = {"error": f"Argument validation failed: {exc}"}
-                        except Exception as exc:
-                            logger.exception("Error running tool '%s'", tool_name)
-                            tool_result = {"error": str(exc)}
-                finally:
-                    if suppression_token is not None:
-                        reset_content_suppression(suppression_token)
+                if not tool_func:
+                    logger.error("Tool '%s' not found in tools.", tool_name)
+                    tool_result = {"error": "Tool not found"}
+                else:
+                    try:
+                        validated_args = _validate_tool_arguments(tool_func, arguments)
+                        if inspect.iscoroutinefunction(tool_func):
+                            result = await tool_func(**validated_args)
+                        else:
+                            result = tool_func(**validated_args)
+                        serializable_result = _to_serializable(result)
+                        tool_result = {"result": serializable_result}
+                    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                        logger.exception("Argument validation failed for tool '%s'", tool_name)
+                        tool_result = {"error": f"Argument validation failed: {exc}"}
+                    except Exception as exc:
+                        logger.exception("Error running tool '%s'", tool_name)
+                        tool_result = {"error": str(exc)}
                 tool_message = {
                     "role": "tool",
                     "tool_name": tool_name,

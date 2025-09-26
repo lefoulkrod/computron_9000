@@ -70,8 +70,18 @@ class AssistantResponse(BaseModel):
     final: bool | None = None
 
 
+class DispatchEvent(BaseModel):
+    """Envelope emitted by the dispatcher with context metadata."""
+
+    context_id: str
+    parent_context_id: str | None = None
+    depth: int
+    payload: AssistantResponse
+
+
 __all__ = [
     "AssistantEventPayload",
+    "DispatchEvent",
     "AssistantResponse",
     "AssistantResponseData",
     "ToolCallPayload",

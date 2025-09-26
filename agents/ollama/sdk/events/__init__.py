@@ -10,31 +10,44 @@ This package provides:
 """
 
 from .context import (
-    enable_content_suppression,
+    current_context_depth,
+    current_context_id,
+    current_parent_context_id,
     event_context,
     get_current_dispatcher,
+    make_child_context_id,
     publish_event,
-    reset_content_suppression,
+    reset_context_id,
     reset_current_dispatcher,
     set_current_dispatcher,
-    suppress_content_enabled,
+    use_context_id,
 )
 from .dispatcher import EventDispatcher, Handler
-from .models import AssistantEventPayload, AssistantResponse, AssistantResponseData, ToolCallPayload
+from .models import (
+    AssistantEventPayload,
+    AssistantResponse,
+    AssistantResponseData,
+    DispatchEvent,
+    ToolCallPayload,
+)
 
 __all__ = [
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",
+    "DispatchEvent",
     "EventDispatcher",
     "Handler",
     "ToolCallPayload",
-    "enable_content_suppression",
+    "current_context_depth",
+    "current_context_id",
+    "current_parent_context_id",
     "event_context",
     "get_current_dispatcher",
+    "make_child_context_id",
     "publish_event",
-    "reset_content_suppression",
+    "reset_context_id",
     "reset_current_dispatcher",
     "set_current_dispatcher",
-    "suppress_content_enabled",
+    "use_context_id",
 ]

@@ -15,14 +15,15 @@ Guidelines:
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+import itertools
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
     from collections.abc import AsyncIterator
 
-    from .models import AssistantResponse
+from .models import AssistantResponse, DispatchEvent
 
 from .dispatcher import EventDispatcher, Handler
 
@@ -35,7 +36,14 @@ _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
 )
 
 # Tracks whether content should be suppressed (e.g., while executing tools).
-_suppress_content: ContextVar[bool] = ContextVar("assistant_events_suppress_content", default=False)
+
+# Stack of context identifiers for nested agent/tool executions.
+_context_stack: ContextVar[tuple[str, ...]] = ContextVar("assistant_events_context_stack", default=())
+
+# Monotonic counter for generating child context identifiers.
+_subcontext_counter = itertools.count(1)
+
+DEFAULT_ROOT_CONTEXT_ID = "root"
 
 
 def get_current_dispatcher() -> EventDispatcher | None:
@@ -68,6 +76,72 @@ def reset_current_dispatcher(token: Token) -> None:
     _current_dispatcher.reset(token)
 
 
+def push_context_id(context_id: str | None = None) -> tuple[Token, str]:
+    """Push a new context identifier onto the stack and return the resolved id."""
+
+    stack = list(_context_stack.get())
+    if context_id is None:
+        base = stack[-1] if stack else DEFAULT_ROOT_CONTEXT_ID
+        context_id = f"{base}:{next(_subcontext_counter)}"
+    stack.append(context_id)
+    token = _context_stack.set(tuple(stack))
+    return token, context_id
+
+
+def reset_context_id(token: Token) -> None:
+    """Restore the context stack to the state captured by ``token``."""
+
+    _context_stack.reset(token)
+
+
+def current_context_id() -> str:
+    """Return the current context identifier (or root if none set)."""
+
+    stack = _context_stack.get()
+    if not stack:
+        return DEFAULT_ROOT_CONTEXT_ID
+    return stack[-1]
+
+
+def current_parent_context_id() -> str | None:
+    """Return the parent context id if available."""
+
+    stack = _context_stack.get()
+    if len(stack) < 2:
+        return None
+    return stack[-2]
+
+
+def current_context_depth() -> int:
+    """Return the current context depth (root == 0)."""
+
+    stack = _context_stack.get()
+    if not stack:
+        return 0
+    return len(stack) - 1
+
+
+def make_child_context_id(label: str | None = None) -> str:
+    """Create a deterministic child context id using the current context as base."""
+
+    parent = current_context_id()
+    raw_label = (label or "child").lower()
+    safe_label = "".join(ch if ch.isalnum() else "_" for ch in raw_label).strip("_") or "child"
+    suffix = next(_subcontext_counter)
+    return f"{parent}.{safe_label}.{suffix}"
+
+
+@contextmanager
+def use_context_id(context_id: str | None = None):
+    """Push a context id for the duration of the context manager."""
+
+    token, resolved = push_context_id(context_id)
+    try:
+        yield resolved
+    finally:
+        reset_context_id(token)
+
+
 def publish_event(event: AssistantResponse) -> None:
     """Publish an AssistantResponse via the dispatcher bound to this context.
 
@@ -78,9 +152,6 @@ def publish_event(event: AssistantResponse) -> None:
     Args:
         event: The AssistantResponse instance describing content/thinking/data/event.
     """
-    if suppress_content_enabled() and event.content is not None:
-        event = event.model_copy(update={"content": None})
-
     dispatcher = get_current_dispatcher()
     if dispatcher is None:
         # Intentionally a low-level debug message to avoid noisy logs in contexts
@@ -89,7 +160,13 @@ def publish_event(event: AssistantResponse) -> None:
         return
 
     try:
-        dispatcher.publish(event)
+        dispatch_event = DispatchEvent(
+            context_id=current_context_id(),
+            parent_context_id=current_parent_context_id(),
+            depth=current_context_depth(),
+            payload=event,
+        )
+        dispatcher.publish(dispatch_event)
     except Exception:  # pragma: no cover - defensive logging path
         # We swallow exceptions here to avoid tearing down the message handling
         # flow due to subscriber issues. The dispatcher implementation should
@@ -100,6 +177,8 @@ def publish_event(event: AssistantResponse) -> None:
 @asynccontextmanager
 async def event_context(
     handler: Handler | None = None,
+    *,
+    context_id: str | None = None,
 ) -> AsyncIterator[EventDispatcher]:
     """Create a dispatcher, bind it to context, and optionally subscribe a handler.
 
@@ -116,14 +195,16 @@ async def event_context(
         EventDispatcher: The dispatcher instance bound to the current context.
     """
     dispatcher: EventDispatcher = EventDispatcher()
-    token = set_current_dispatcher(dispatcher)
+    dispatcher_token = set_current_dispatcher(dispatcher)
+    context_token, _ = push_context_id(context_id)
 
     if handler is None:
         try:
             yield dispatcher
         finally:
             try:
-                reset_current_dispatcher(token)
+                reset_context_id(context_token)
+                reset_current_dispatcher(dispatcher_token)
             except Exception:  # pragma: no cover - defensive cleanup
                 logger.exception("Failed to reset dispatcher context in event_context")
         return
@@ -133,21 +214,8 @@ async def event_context(
             yield dispatcher
     finally:
         try:
-            reset_current_dispatcher(token)
+            reset_context_id(context_token)
+            reset_current_dispatcher(dispatcher_token)
         except Exception:  # pragma: no cover - defensive cleanup
             logger.exception("Failed to reset dispatcher context in event_context")
 
-
-def suppress_content_enabled() -> bool:
-    """Return True when content emission is currently suppressed."""
-    return _suppress_content.get()
-
-
-def enable_content_suppression() -> Token:
-    """Enable content suppression for the current context."""
-    return _suppress_content.set(True)
-
-
-def reset_content_suppression(token: Token) -> None:
-    """Restore content suppression state using the provided token."""
-    _suppress_content.reset(token)
