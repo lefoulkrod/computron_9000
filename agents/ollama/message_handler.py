@@ -82,9 +82,9 @@ async def _handle_image_message(
         },
     )
     log_after_model_call(response)
-    # Forward as enriched event in addition to legacy message field
-    # Emit final event (image path implies single-shot completion)
-    yield AssistantResponse(content=content, thinking=thinking, final=True)
+    # Forward as enriched event (non-final). Image flow will receive a final
+    # event only once reworked to route through the centralized tool loop path.
+    yield AssistantResponse(content=content, thinking=thinking)
 
 
 DispatchQueueItem = DispatchEvent
@@ -159,7 +159,11 @@ async def handle_user_message(
                     if not isinstance(item, DispatchEvent):  # pragma: no cover
                         logger.warning("Unexpected queue item type: %s", type(item))
                         continue
-                    yield _sanitize_dispatch_event(item)
+                    payload = _sanitize_dispatch_event(item)
+                    # Only yield final events from the root context (depth == 0) (This is bad)
+                    if payload.final and item.depth > 0:
+                        continue
+                    yield payload
 
                 # Phase 2: Producer finished (may have queued trailing events). Drain remaining.
                 while not queue.empty():
@@ -167,7 +171,10 @@ async def handle_user_message(
                     if not isinstance(item, DispatchEvent):  # pragma: no cover
                         logger.warning("Unexpected queue item type during drain: %s", type(item))
                         continue
-                    yield _sanitize_dispatch_event(item)
+                    payload = _sanitize_dispatch_event(item)
+                    if payload.final and item.depth > 0:
+                        continue
+                    yield payload
 
     except Exception:
         logger.exception("Error handling user message")

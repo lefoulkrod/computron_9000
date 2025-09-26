@@ -1,7 +1,7 @@
 # Agent Event System – Phase 2 Follow-Ups
 
 ## Backend TODOs
-- Emit a terminal `AssistantResponse` with `final=True` (or equivalent flag) when `run_tool_call_loop` finishes so consumers can detect completion without relying on EOF.
+- Emit a terminal `AssistantResponse` with `final=True` (or equivalent flag) when `run_tool_call_loop` finishes so consumers can detect completion without relying on EOF. ✅ Done – implemented as the sole centralized emission point (normal completion + error path) inside `run_tool_call_loop`.
 - Rework `_handle_image_message` to publish `AssistantResponse` objects through the dispatcher (and reuse the queue bridge) so vision flows honor content suppression/settings identical to the text path.
 - Once the final event path exists, simplify `handle_user_message` by removing the sentinel queue plumbing and any legacy fallbacks.
 - After the UI migration (see below), drop legacy serialization branches (`response`, `message` duplication) from `UserMessageEvent`, `stream_events`, and related types.

@@ -255,8 +255,19 @@ async def run_tool_call_loop(
                 logger.exception("Failed to publish model AssistantResponse event")
             if content is not None or thinking is not None:
                 yield content, thinking
+
             if not tool_calls:
+                # Normal completion path: no further tool calls. Emit a terminal
+                # AssistantResponse with final=True so downstream consumers can
+                # detect completion without relying on EOF. This is the ONLY
+                # location in the codebase that sets final=True for successful
+                # runs (centralized per Phase 2 plan).
+                try:
+                    publish_event(AssistantResponse(final=True))
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("Failed to publish terminal AssistantResponse event")
                 break
+
             for tool_call in tool_calls:
                 function = getattr(tool_call, "function", None)
                 if not function:
@@ -264,7 +275,7 @@ async def run_tool_call_loop(
                     continue
                 tool_name = getattr(function, "name", None)
                 arguments = getattr(function, "arguments", {})
-                # Emit a tool_call event prior to executing the tool
+
                 try:
                     publish_event(
                         AssistantResponse(
@@ -273,6 +284,7 @@ async def run_tool_call_loop(
                     )
                 except Exception:  # pragma: no cover - defensive
                     logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
+
                 tool_func = next(
                     (tool for tool in tools if getattr(tool, "__name__", None) == tool_name),
                     None,
@@ -303,6 +315,12 @@ async def run_tool_call_loop(
                 messages.append(tool_message)
             # Do not yield tool results, just continue looping
         except Exception as exc:
+            # Error path: still emit a final event (single source of final=True)
+            # with a generic error message before propagating as ToolLoopError.
             logger.exception("Unhandled exception in tool loop")
-            msg = "An error occurred while processing your message."
-            raise ToolLoopError(msg) from exc
+            error_msg = "An error occurred while processing your message."
+            try:
+                publish_event(AssistantResponse(content=error_msg, final=True))
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Failed to publish terminal error AssistantResponse event")
+            raise ToolLoopError(error_msg) from exc
