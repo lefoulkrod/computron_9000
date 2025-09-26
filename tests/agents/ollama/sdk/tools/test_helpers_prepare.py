@@ -1,10 +1,10 @@
-"""Tests for tool argument validation in the tool loop."""
+"""Tests for the _prepare_tool_arguments helper."""
 
 import json
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.tool_loop import _prepare_tool_arguments
+from agents.ollama.sdk.tools import _prepare_tool_arguments
 from tools.virtual_computer.models import ApplyPatchResult
 
 

@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.tool_loop import _prepare_tool_arguments
+from agents.ollama.sdk.tools import _prepare_tool_arguments
 from tools.web.types import GetWebpageResult, LinkInfo, ReducedWebpage
 from tools.reddit.reddit import RedditSubmission, RedditComment
 from tools.virtual_computer.models import (
