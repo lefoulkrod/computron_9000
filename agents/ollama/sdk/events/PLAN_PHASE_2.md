@@ -1,7 +1,6 @@
 # Agent Event System – Phase 2 Follow-Ups
 
 ## Backend TODOs
-- Replace the ad-hoc `_maybe_dump` helper in `server/aiohttp_app.py::stream_events` with `event.model_dump(mode="json", exclude_none=True)` and reshape the payload from that dict.
 - Emit a terminal `AssistantResponse` with `final=True` (or equivalent flag) when `run_tool_call_loop` finishes so consumers can detect completion without relying on EOF.
 - Rework `_handle_image_message` to publish `AssistantResponse` objects through the dispatcher (and reuse the queue bridge) so vision flows honor content suppression/settings identical to the text path.
 - Once the final event path exists, simplify `handle_user_message` by removing the sentinel queue plumbing and any legacy fallbacks.

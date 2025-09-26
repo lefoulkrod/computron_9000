@@ -4,6 +4,7 @@ import json
 from typing import AsyncIterator
 
 import pytest
+from pydantic import BaseModel
 from aiohttp import web
 
 from server.aiohttp_app import create_app
@@ -11,16 +12,15 @@ from server.aiohttp_app import create_app
 pytestmark = [pytest.mark.unit]
 
 
-class _Event:
-    def __init__(self, message: str, final: bool, thinking: str | None = None):
-        self.message = message
-        self.final = final
-        self.thinking = thinking
+class _Event(BaseModel):
+    message: str
+    final: bool
+    thinking: str | None = None
 
 
 async def _fake_events() -> AsyncIterator[_Event]:
-    yield _Event("hello", False)
-    yield _Event("world", True)
+    yield _Event(message="hello", final=False)
+    yield _Event(message="world", final=True)
 
 
 @pytest.fixture
