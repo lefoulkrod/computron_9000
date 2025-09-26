@@ -113,7 +113,7 @@ async def test_reset_clears_subscribers() -> None:
     """Resetting should remove all subscribers so publish becomes a no-op."""
 
     dispatcher = EventDispatcher()
-    seen: list[AssistantResponse] = []
+    seen: list[DispatchEvent] = []
 
     def handler(evt: DispatchEvent) -> None:
         seen.append(evt)
