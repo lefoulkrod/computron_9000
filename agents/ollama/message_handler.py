@@ -1,22 +1,22 @@
 """Message handler for user prompts."""
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Sequence
 
 from ollama import AsyncClient, Image
 
+from agents.ollama.sdk.events import AssistantResponse, event_context
 from agents.types import Agent, Data, UserMessageEvent
 from config import load_config
 from models.model_configs import get_model_by_name
 
 from .computron import computron
-from .deep_researchV2 import coordinator
 from .sdk import (
     make_log_after_model_call,
     make_log_before_model_call,
     run_tool_call_loop,
 )
-from .web import web_agent
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,18 @@ async def _handle_image_message(
         },
     )
     log_after_model_call(response)
-    yield UserMessageEvent(message=content, final=True, thinking=thinking)
+    # Forward as enriched event in addition to legacy message field
+    yield UserMessageEvent(
+        message=content,
+        content=content,
+        final=True,
+        thinking=thinking,
+        data=None,
+        event=None,
+    )
+
+
+QueueItem = AssistantResponse
 
 
 async def handle_user_message(
@@ -99,42 +110,71 @@ async def handle_user_message(
         UserMessageEvent: Events from the LLM.
 
     """
+    # Bridge published events via a local queue; TaskGroup provides structured
+    # concurrency so we do not need a sentinel or explicit done_event.
+    queue: asyncio.Queue[QueueItem] = asyncio.Queue()
+
+    async def _queue_handler(evt: AssistantResponse) -> None:
+        try:
+            await queue.put(evt)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to enqueue AssistantResponse in message handler")
+
+    def _assistant_response_to_user_event(evt: AssistantResponse) -> UserMessageEvent:
+        return UserMessageEvent(
+            message=evt.content or "",
+            content=evt.content,
+            final=False,
+            thinking=evt.thinking,
+            data=evt.data or None,
+            event=evt.event,
+        )
+
     try:
-        if data and len(data) > 0:
-            async for event in _handle_image_message(message, data):
-                yield event
-            return
+        async with event_context(handler=_queue_handler):
+            if data and len(data) > 0:
+                async for event in _handle_image_message(message, data):
+                    yield event
+                return
 
-        _message_history.append({"role": "user", "content": message})
-        # Use the handoff agent to process the message and run the appropriate agent
-        agent_to_run = "computron"  # await handoff_agent_tool(message)
-        logger.debug("Using agent: %s", agent_to_run)
-        if agent_to_run == "computron":
+            _message_history.append({"role": "user", "content": message})
             agent = computron
-        elif agent_to_run == "web":
-            agent = web_agent
-        elif agent_to_run == "research":
-            agent = coordinator
-        else:
-            agent = computron
-        _insert_system_message(agent)
-        log_before_model_call = make_log_before_model_call(agent)
-        log_after_model_call = make_log_after_model_call(agent)
+            _insert_system_message(agent)
+            log_before_model_call = make_log_before_model_call(agent)
+            log_after_model_call = make_log_after_model_call(agent)
 
-        async for content, thinking in run_tool_call_loop(
-            messages=_message_history,
-            tools=agent.tools,
-            model=agent.model,
-            think=agent.think,
-            model_options=agent.options,
-            before_model_callbacks=[log_before_model_call],
-            after_model_callbacks=[log_after_model_call],
-        ):
-            yield UserMessageEvent(
-                message=content or "",
-                final=False,
-                thinking=thinking,
-            )
+            async def _producer() -> None:
+                async for _context, _thinking in run_tool_call_loop(
+                    messages=_message_history,
+                    tools=agent.tools,
+                    model=agent.model,
+                    think=agent.think,
+                    model_options=agent.options,
+                    before_model_callbacks=[log_before_model_call],
+                    after_model_callbacks=[log_after_model_call],
+                ):
+                    # Discard yielded tuple; authoritative stream is published events
+                    pass
+
+            # Structured concurrency: ensure producer completion or cancellation
+            async with asyncio.TaskGroup() as tg:
+                producer_task = tg.create_task(_producer())
+
+                # Phase 1: Consume events concurrently while producer runs.
+                while not producer_task.done():
+                    item = await queue.get()
+                    if not isinstance(item, AssistantResponse):  # pragma: no cover
+                        logger.warning("Unexpected queue item type: %s", type(item))
+                        continue
+                    yield _assistant_response_to_user_event(item)
+
+                # Phase 2: Producer finished (may have queued trailing events). Drain remaining.
+                while not queue.empty():
+                    item = await queue.get()
+                    if not isinstance(item, AssistantResponse):  # pragma: no cover
+                        logger.warning("Unexpected queue item type during drain: %s", type(item))
+                        continue
+                    yield _assistant_response_to_user_event(item)
 
     except Exception:
         logger.exception("Error handling user message")

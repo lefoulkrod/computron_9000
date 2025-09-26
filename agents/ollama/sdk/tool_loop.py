@@ -4,11 +4,20 @@ import inspect
 import json
 import logging
 from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from ollama import AsyncClient, ChatResponse
+from pydantic import BaseModel
 
 from config import load_config
+
+from .events import (
+    AssistantResponse,
+    ToolCallPayload,
+    enable_content_suppression,
+    publish_event,
+    reset_content_suppression,
+)
 
 
 class ToolLoopError(Exception):
@@ -18,7 +27,13 @@ class ToolLoopError(Exception):
 logger = logging.getLogger(__name__)
 
 
-def _to_serializable(obj: Any) -> Any:
+@runtime_checkable
+class _HasDict(Protocol):
+    def dict(self) -> Mapping[str, object]:  # pragma: no cover - protocol
+        ...
+
+
+def _to_serializable(obj: object) -> object:
     """Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
 
     Args:
@@ -28,9 +43,9 @@ def _to_serializable(obj: Any) -> Any:
         Any: JSON-serializable representation.
 
     """
-    if hasattr(obj, "model_dump"):
+    if isinstance(obj, BaseModel):
         return _to_serializable(obj.model_dump())
-    if hasattr(obj, "dict"):
+    if isinstance(obj, _HasDict):
         return _to_serializable(obj.dict())
     if isinstance(obj, dict):
         return {k: _to_serializable(v) for k, v in obj.items()}
@@ -239,6 +254,11 @@ async def run_tool_call_loop(
                 "thinking": thinking,
             }
             messages.append(assistant_message)
+            # Emit an event for model content/thinking (non-final, actual final decided by loop end)
+            try:
+                publish_event(AssistantResponse(content=content, thinking=thinking))
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Failed to publish model AssistantResponse event")
             if content is not None or thinking is not None:
                 yield content, thinking
             if not tool_calls:
@@ -250,28 +270,44 @@ async def run_tool_call_loop(
                     continue
                 tool_name = getattr(function, "name", None)
                 arguments = getattr(function, "arguments", {})
+                # Emit a tool_call event prior to executing the tool
+                try:
+                    publish_event(
+                        AssistantResponse(
+                            event=ToolCallPayload(type="tool_call", name=str(tool_name))
+                        )
+                    )
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
+                suppression_token = None
                 tool_func = next(
                     (tool for tool in tools if getattr(tool, "__name__", None) == tool_name),
                     None,
                 )
-                if not tool_func:
-                    logger.error("Tool '%s' not found in tools.", tool_name)
-                    tool_result = {"error": "Tool not found"}
-                else:
-                    try:
-                        validated_args = _validate_tool_arguments(tool_func, arguments)
-                        if inspect.iscoroutinefunction(tool_func):
-                            result = await tool_func(**validated_args)
-                        else:
-                            result = tool_func(**validated_args)
-                        serializable_result = _to_serializable(result)
-                        tool_result = {"result": serializable_result}
-                    except (ValueError, TypeError, json.JSONDecodeError) as exc:
-                        logger.exception("Argument validation failed for tool '%s'", tool_name)
-                        tool_result = {"error": f"Argument validation failed: {exc}"}
-                    except Exception as exc:
-                        logger.exception("Error running tool '%s'", tool_name)
-                        tool_result = {"error": str(exc)}
+                if tool_func and getattr(tool_func, "__agent_as_tool_marker__", False):
+                    suppression_token = enable_content_suppression()
+                try:
+                    if not tool_func:
+                        logger.error("Tool '%s' not found in tools.", tool_name)
+                        tool_result = {"error": "Tool not found"}
+                    else:
+                        try:
+                            validated_args = _validate_tool_arguments(tool_func, arguments)
+                            if inspect.iscoroutinefunction(tool_func):
+                                result = await tool_func(**validated_args)
+                            else:
+                                result = tool_func(**validated_args)
+                            serializable_result = _to_serializable(result)
+                            tool_result = {"result": serializable_result}
+                        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                            logger.exception("Argument validation failed for tool '%s'", tool_name)
+                            tool_result = {"error": f"Argument validation failed: {exc}"}
+                        except Exception as exc:
+                            logger.exception("Error running tool '%s'", tool_name)
+                            tool_result = {"error": str(exc)}
+                finally:
+                    if suppression_token is not None:
+                        reset_content_suppression(suppression_token)
                 tool_message = {
                     "role": "tool",
                     "tool_name": tool_name,

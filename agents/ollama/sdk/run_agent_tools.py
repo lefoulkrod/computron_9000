@@ -9,6 +9,11 @@ from agents.types import Agent
 
 from .tool_loop import run_tool_call_loop
 
+
+class AgentToolMarker:
+    """Simple marker mixin to identify agent-backed tool wrappers."""
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -329,4 +334,7 @@ Returns:
     run_agent_as_tool.__name__ = func_name  # type: ignore[attr-defined]
     run_agent_as_tool.__qualname__ = func_name  # type: ignore[attr-defined]
     run_agent_as_tool.__doc__ = docstring
+    # Mark as agent-backed using a simple attribute; tool loop uses this marker
+    # to suppress duplicate content while still emitting thinking/events.
+    run_agent_as_tool.__agent_as_tool_marker__ = True  # type: ignore[attr-defined]
     return run_agent_as_tool

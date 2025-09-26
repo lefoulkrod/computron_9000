@@ -111,12 +111,37 @@ async def stream_events(
         },
     )
     await resp.prepare(request)
+
+    def _maybe_dump(obj: object) -> object:
+        """Return a JSON-serializable representation for Pydantic models or plain objects."""
+        if obj is None:
+            return None
+        if isinstance(obj, BaseModel):
+            # model_dump ensures JSON-serializable dicts (avoids .json roundtrip)
+            return obj.model_dump()
+        if isinstance(obj, (list, tuple)):
+            return [_maybe_dump(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _maybe_dump(v) for k, v in obj.items()}
+        # Fallback: let json handle primitives / unknowns
+        return obj
+
     try:
         async for event in events:
+            # New envelope fields (preferred by clients going forward)
+            content = getattr(event, "content", None)
+            # Backfill content from legacy message if needed for compatibility
+            if content is None:
+                content = getattr(event, "message", None)
             data_out = {
+                # Legacy fields (kept for backward compatibility)
                 "response": getattr(event, "message", None),
                 "final": getattr(event, "final", False),
                 "thinking": getattr(event, "thinking", None),
+                # New schema fields
+                "content": content,
+                "data": _maybe_dump(getattr(event, "data", None)),
+                "event": _maybe_dump(getattr(event, "event", None)),
             }
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
             if data_out.get("final"):

@@ -12,3 +12,6 @@
 - Private fields/methods get a single leading underscore
 - Always include `__init__.py` for public re-exports, avoid exporting private members, do not export internal functions/classes
 - You may ignore Ruff(I001)
+- Write python code compatible with the current Python version 3.12.10
+- Never put implementation details in docstrings
+- Add comments to explain non-obvious code

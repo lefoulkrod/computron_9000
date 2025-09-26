@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from agents.ollama.sdk.events import AssistantEventPayload, AssistantResponseData
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,11 +47,18 @@ class UserMessageEvent(BaseModel):
         message: The message content from the agent.
         final: Whether this is the final response in the sequence.
         thinking: The agent's internal reasoning or thought process, if available.
+        content: Alias for message to align with the new event envelope.
+        data: Optional list of auxiliary payloads attached to the response.
+        event: Optional structured event payload (e.g., tool call metadata).
     """
 
     message: str
     final: bool
     thinking: str | None = None
+    # New, backward-compatible fields for richer events
+    content: str | None = None
+    data: list[AssistantResponseData] | None = None  # type: ignore[type-arg]
+    event: AssistantEventPayload | None = None  # type: ignore[type-arg]
 
 
 class Data(BaseModel):
