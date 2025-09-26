@@ -10,6 +10,7 @@ import json
 from typing import AsyncIterator
 
 import pytest
+from pydantic import BaseModel
 
 from agents.ollama.sdk.events import AssistantResponse, AssistantResponseData, ToolCallPayload
 from server.aiohttp_app import create_app
@@ -27,29 +28,40 @@ def app(monkeypatch):
     app = create_app()
     from server import aiohttp_app as mod
 
+    class _ShimEvent(BaseModel):
+        message: str | None = None
+        final: bool = False
+        thinking: str | None = None
+        content: str | None = None
+        data: list[AssistantResponseData] | None = None
+        event: ToolCallPayload | None = None
+
+    class _FinalEvent(BaseModel):
+        message: str
+        final: bool
+        thinking: str | None
+        content: str
+        data: list[AssistantResponseData]
+        event: ToolCallPayload | None = None
+
     async def _fake_handle_user_message(_msg: str, _data):  # noqa: D401
         async for ev in _fake_events():
-            # Bridge to the legacy UserMessageEvent shape expected by stream_events
-            class _Shim:
-                def __init__(self, r: AssistantResponse):
-                    self.message = r.content
-                    self.final = False
-                    self.thinking = r.thinking
-                    self.content = r.content
-                    self.data = r.data
-                    self.event = r.event
-
-            yield _Shim(ev)
-        # Final enriched event
-        class _Final:
-            message = "done"
-            final = True
-            thinking = None
-            content = "done"
-            data = [AssistantResponseData(content_type="text/plain", content="dGVzdA==")]
-            event = ToolCallPayload(type="tool_call", name="x")
-
-        yield _Final()
+            yield _ShimEvent(
+                message=ev.content,
+                final=False,
+                thinking=ev.thinking,
+                content=ev.content,
+                data=ev.data,
+                event=ev.event,
+            )
+        yield _FinalEvent(
+            message="done",
+            final=True,
+            thinking=None,
+            content="done",
+            data=[AssistantResponseData(content_type="text/plain", content="dGVzdA==")],
+            event=ToolCallPayload(type="tool_call", name="x"),
+        )
 
     monkeypatch.setattr(mod, "handle_user_message", _fake_handle_user_message)
     return app
