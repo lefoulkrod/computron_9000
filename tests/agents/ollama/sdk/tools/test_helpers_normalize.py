@@ -1,9 +1,9 @@
-"""Tests for the tool loop functionality."""
+"""Tests for the _normalize_tool_result helper."""
 
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.tool_loop import _normalize_tool_result
+from agents.ollama.sdk.tools import _normalize_tool_result
 
 
 class DummyModel(BaseModel):
