@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
     "assistant_events_current_dispatcher", default=None
 )
-
 # Tracks whether content should be suppressed (e.g., while executing tools).
 
 # Stack of context identifiers for nested agent/tool executions.
@@ -196,19 +195,13 @@ async def event_context(
         try:
             yield dispatcher
         finally:
-            try:
-                reset_context_id(context_token)
-                reset_current_dispatcher(dispatcher_token)
-            except Exception:  # pragma: no cover - defensive cleanup
-                logger.exception("Failed to reset dispatcher context in event_context")
+            reset_context_id(context_token)
+            reset_current_dispatcher(dispatcher_token)
         return
 
     try:
         async with dispatcher.subscription(handler):
             yield dispatcher
     finally:
-        try:
-            reset_context_id(context_token)
-            reset_current_dispatcher(dispatcher_token)
-        except Exception:  # pragma: no cover - defensive cleanup
-            logger.exception("Failed to reset dispatcher context in event_context")
+        reset_context_id(context_token)
+        reset_current_dispatcher(dispatcher_token)
