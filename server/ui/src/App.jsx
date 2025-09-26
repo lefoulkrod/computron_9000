@@ -94,8 +94,8 @@ function App() {
                     if (!line) continue;
                     try {
                         const data = JSON.parse(line);
-                        // Prefer new 'content' field, fallback to legacy 'response'
-                        const contentField = typeof data.content === 'string' ? data.content : data.response;
+                        // Only support new 'content' field from event system
+                        const contentField = typeof data.content === 'string' ? data.content : '';
                         const hasResponse = typeof contentField === 'string' && contentField.length > 0;
                         const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
 

@@ -14,8 +14,8 @@ Guidelines:
 
 from __future__ import annotations
 
-import logging
 import itertools
+import logging
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING
@@ -23,9 +23,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
     from collections.abc import AsyncIterator
 
-from .models import AssistantResponse, DispatchEvent
-
 from .dispatcher import EventDispatcher, Handler
+from .models import AssistantResponse, DispatchEvent
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,9 @@ _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
 # Tracks whether content should be suppressed (e.g., while executing tools).
 
 # Stack of context identifiers for nested agent/tool executions.
-_context_stack: ContextVar[tuple[str, ...]] = ContextVar("assistant_events_context_stack", default=())
+_context_stack: ContextVar[tuple[str, ...]] = ContextVar(
+    "assistant_events_context_stack", default=()
+)
 
 # Monotonic counter for generating child context identifiers.
 _subcontext_counter = itertools.count(1)
@@ -78,7 +79,6 @@ def reset_current_dispatcher(token: Token) -> None:
 
 def push_context_id(context_id: str | None = None) -> tuple[Token, str]:
     """Push a new context identifier onto the stack and return the resolved id."""
-
     stack = list(_context_stack.get())
     if context_id is None:
         base = stack[-1] if stack else DEFAULT_ROOT_CONTEXT_ID
@@ -90,13 +90,11 @@ def push_context_id(context_id: str | None = None) -> tuple[Token, str]:
 
 def reset_context_id(token: Token) -> None:
     """Restore the context stack to the state captured by ``token``."""
-
     _context_stack.reset(token)
 
 
 def current_context_id() -> str:
     """Return the current context identifier (or root if none set)."""
-
     stack = _context_stack.get()
     if not stack:
         return DEFAULT_ROOT_CONTEXT_ID
@@ -105,7 +103,6 @@ def current_context_id() -> str:
 
 def current_parent_context_id() -> str | None:
     """Return the parent context id if available."""
-
     stack = _context_stack.get()
     if len(stack) < 2:
         return None
@@ -114,7 +111,6 @@ def current_parent_context_id() -> str | None:
 
 def current_context_depth() -> int:
     """Return the current context depth (root == 0)."""
-
     stack = _context_stack.get()
     if not stack:
         return 0
@@ -123,7 +119,6 @@ def current_context_depth() -> int:
 
 def make_child_context_id(label: str | None = None) -> str:
     """Create a deterministic child context id using the current context as base."""
-
     parent = current_context_id()
     raw_label = (label or "child").lower()
     safe_label = "".join(ch if ch.isalnum() else "_" for ch in raw_label).strip("_") or "child"
@@ -134,7 +129,6 @@ def make_child_context_id(label: str | None = None) -> str:
 @contextmanager
 def use_context_id(context_id: str | None = None):
     """Push a context id for the duration of the context manager."""
-
     token, resolved = push_context_id(context_id)
     try:
         yield resolved
@@ -218,4 +212,3 @@ async def event_context(
             reset_current_dispatcher(dispatcher_token)
         except Exception:  # pragma: no cover - defensive cleanup
             logger.exception("Failed to reset dispatcher context in event_context")
-
