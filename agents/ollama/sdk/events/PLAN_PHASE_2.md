@@ -8,7 +8,8 @@
 
 ## Frontend & API Alignment
 - Update `server/ui/src/App.jsx` (and related components) to consume `content`, `thinking`, `data`, and `event` directly, falling back to legacy fields only until the backend cleanup lands.
-- When the React UI is updated, remove the legacy `response`/`thinking` compatibility path entirely (types, serialization, tests).
+- When the React UI is updated, remove the legacy `response`/`thinking` compatibility path entirely (types, serialization, tests). ✅ Done (event-system migration) – legacy `message`/`response` duplication removed; streaming now emits only `content`, tests updated.
+  - Follow-up: `UserMessageEvent` fully removed; server now streams raw `AssistantResponse` (+ final flag) to simplify pipeline.
 
 ## Testing & Verification
 - Add targeted unit tests covering:

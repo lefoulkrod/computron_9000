@@ -67,6 +67,7 @@ class AssistantResponse(BaseModel):
     data: list[AssistantResponseData] = Field(default_factory=list)
     event: AssistantEventPayload | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    final: bool | None = None
 
 
 __all__ = [

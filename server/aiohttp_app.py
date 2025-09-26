@@ -27,7 +27,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing helpers only
     from collections.abc import Awaitable, Callable
 
 from agents import handle_user_message, reset_message_history
-from agents.types import Data, UserMessageEvent
+from agents.types import Data
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +87,19 @@ async def cors_and_error_middleware(
 # ---------------------------------------------------------------------------
 
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from agents.ollama.sdk.events import AssistantResponse
+
+
 async def stream_events(
     request: Request,
-    events: AsyncIterator[UserMessageEvent],  # precise: iterator of UserMessageEvent
+    events: AsyncIterator[AssistantResponse],  # iterator of AssistantResponse
 ) -> StreamResponse:
     """Stream JSONL events to the client.
 
     Args:
         request: Incoming aiohttp request.
-        events: Async iterator yielding `UserMessageEvent` instances produced by
+        events: Async iterator yielding `AssistantResponse` instances produced by
             `handle_user_message`.
 
     Returns:
@@ -119,24 +123,17 @@ async def stream_events(
                 msg = f"stream_events expected BaseModel events; received {type(event)!r}"
                 raise TypeError(msg)
             raw = event.model_dump(mode="json", exclude_none=True)  # type: ignore[arg-type]
-
-            # Legacy compatibility: 'message' mirrored as 'response'; prefer 'content'.
-            message_val = raw.get("message")
-            content_val = raw.get("content") or message_val
             final_flag = bool(raw.get("final", False))
-
+            # Direct pass-through (no legacy duplication)
             data_out: dict[str, object | None] = {
-                "response": message_val,
                 "final": final_flag,
                 "thinking": raw.get("thinking"),
-                "content": content_val,
+                "content": raw.get("content"),
             }
             if "data" in raw:
-                # raw['data'] is already JSON-serializable due to model_dump(mode='json')
                 data_out["data"] = raw["data"]
             if "event" in raw:
                 data_out["event"] = raw["event"]
-
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
             if final_flag:
                 break

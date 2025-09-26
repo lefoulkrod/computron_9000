@@ -29,7 +29,6 @@ def app(monkeypatch):
     from server import aiohttp_app as mod
 
     class _ShimEvent(BaseModel):
-        message: str | None = None
         final: bool = False
         thinking: str | None = None
         content: str | None = None
@@ -37,7 +36,6 @@ def app(monkeypatch):
         event: ToolCallPayload | None = None
 
     class _FinalEvent(BaseModel):
-        message: str
         final: bool
         thinking: str | None
         content: str
@@ -47,7 +45,6 @@ def app(monkeypatch):
     async def _fake_handle_user_message(_msg: str, _data):  # noqa: D401
         async for ev in _fake_events():
             yield _ShimEvent(
-                message=ev.content,
                 final=False,
                 thinking=ev.thinking,
                 content=ev.content,
@@ -55,7 +52,6 @@ def app(monkeypatch):
                 event=ev.event,
             )
         yield _FinalEvent(
-            message="done",
             final=True,
             thinking=None,
             content="done",

@@ -15,10 +15,8 @@ pytestmark = [pytest.mark.unit]
 
 
 class _Event(BaseModel):
-    message: str
     final: bool
     thinking: str | None = None
-    # new enriched fields
     content: str | None = None
 
 
@@ -28,19 +26,19 @@ class _DataModel(BaseModel):
 
 
 class _EventWithPayload(BaseModel):
-    message: str
     final: bool
+    content: str | None = None
     data: list[_DataModel] = []
     event: dict[str, str] | None = None
 
 
 async def _fake_events_enriched() -> AsyncIterator[object]:
-    # first event with legacy-only
-    yield _Event(message="hello", final=False)
+    # first event content only
+    yield _Event(final=False, content="hello")
     # second event with enriched fields
     yield _EventWithPayload(
-        message="done",
         final=True,
+        content="done",
         data=[_DataModel(content_type="text/plain", content="dGVzdA==")],
         event={"type": "tool_call", "name": "foo"},
     )
@@ -69,9 +67,7 @@ async def test_streaming_includes_enriched_fields(aiohttp_client, app):
     # Second line should contain enriched payload
     enriched = json.loads(lines[-1])
     assert enriched["final"] is True
-    # legacy remains
-    assert enriched["response"] == "done"
-    # new fields present
+    # content present (legacy 'response' removed)
     assert enriched["content"] == "done"
     assert isinstance(enriched.get("data"), list)
     assert enriched["data"][0]["content_type"] == "text/plain"

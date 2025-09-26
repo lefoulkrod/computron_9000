@@ -16,7 +16,7 @@
 3. Adjust subscription helpers (`subscribe`, `subscription`, `event_context`) so handlers now receive the full `DispatchEvent` envelope instead of a bare `AssistantResponse`.
 4. Generate deterministic child ids in `make_run_agent_as_tool_function` (e.g., `{parent}.{agent_name}.{counter}`) and push/pop them via a helper context manager before calling `run_tool_call_loop`.
 5. Update `run_tool_call_loop` and other event publishers to hand `AssistantResponse` to `publish_event`; the dispatcher wraps it with the current context metadata on the way out.
-6. Adjust `handle_user_message` (and any other subscribers) to consume `DispatchEvent` objects and gate on `depth == 0` by default so the UI only streams top-level content while still exposing nested events if desired.
+6. Adjust `handle_user_message` (and any other subscribers) to consume `DispatchEvent` objects and emit full content when `depth == 0`, but emit the same event with `content` cleared/desensitized when `depth > 0` so nested activity remains visible without exposing raw text.
 
 ## Implementation Steps
 1. **Context Management**
@@ -33,7 +33,7 @@
    - Enhance `make_run_agent_as_tool_function` so the generated wrapper pushes a child context id before invoking `_run_tool_loop_once`/`run_tool_call_loop` and pops it afterward.
    - Ensure nested agent tools compose ids by basing the child id on the parent id plus agent name and a local counter.
 5. **Message Handler**
-   - Update `handle_user_message` queue bridge to store `DispatchEvent` objects (instead of raw `AssistantResponse`). Filter on `event.depth == 0` for UI streaming but keep all events queued for future observers if needed.
+   - Update `handle_user_message` queue bridge to store `DispatchEvent` objects (instead of raw `AssistantResponse`). Emit events as-is when `depth == 0`; when `depth > 0`, forward the event with `payload.content` cleared so nested activity is visible without duplicating text output.
 6. **Server Stream**
    - Adjust `server/aiohttp_app.py::stream_events` to read from the new event structure (e.g., `event.payload.content`, `event.context_id`).
 7. **Cleanup**

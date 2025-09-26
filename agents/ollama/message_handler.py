@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator, Sequence
 from ollama import AsyncClient, Image
 
 from agents.ollama.sdk.events import AssistantResponse, event_context
-from agents.types import Agent, Data, UserMessageEvent
+from agents.types import Agent, Data
 from config import load_config
 from models.model_configs import get_model_by_name
 
@@ -45,7 +45,7 @@ def _insert_system_message(agent: Agent) -> None:
 async def _handle_image_message(
     message: str,
     data: Sequence[Data],
-) -> AsyncGenerator[UserMessageEvent, None]:
+) -> AsyncGenerator[AssistantResponse, None]:
     """Handles a user message with image data by sending it to the LLM and yielding events.
 
     Args:
@@ -83,14 +83,8 @@ async def _handle_image_message(
     )
     log_after_model_call(response)
     # Forward as enriched event in addition to legacy message field
-    yield UserMessageEvent(
-        message=content,
-        content=content,
-        final=True,
-        thinking=thinking,
-        data=None,
-        event=None,
-    )
+    # Emit final event (image path implies single-shot completion)
+    yield AssistantResponse(content=content, thinking=thinking, final=True)
 
 
 QueueItem = AssistantResponse
@@ -99,7 +93,7 @@ QueueItem = AssistantResponse
 async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None,
-) -> AsyncGenerator[UserMessageEvent, None]:
+) -> AsyncGenerator[AssistantResponse, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
     Args:
@@ -120,14 +114,15 @@ async def handle_user_message(
         except Exception:  # pragma: no cover - defensive logging
             logger.exception("Failed to enqueue AssistantResponse in message handler")
 
-    def _assistant_response_to_user_event(evt: AssistantResponse) -> UserMessageEvent:
-        return UserMessageEvent(
-            message=evt.content or "",
+    def _mark_non_final(evt: AssistantResponse) -> AssistantResponse:
+        if evt.final:
+            return evt
+        return AssistantResponse(
             content=evt.content,
-            final=False,
             thinking=evt.thinking,
-            data=evt.data or None,
+            data=evt.data,
             event=evt.event,
+            final=False,
         )
 
     try:
@@ -166,7 +161,7 @@ async def handle_user_message(
                     if not isinstance(item, AssistantResponse):  # pragma: no cover
                         logger.warning("Unexpected queue item type: %s", type(item))
                         continue
-                    yield _assistant_response_to_user_event(item)
+                    yield _mark_non_final(item)
 
                 # Phase 2: Producer finished (may have queued trailing events). Drain remaining.
                 while not queue.empty():
@@ -174,12 +169,12 @@ async def handle_user_message(
                     if not isinstance(item, AssistantResponse):  # pragma: no cover
                         logger.warning("Unexpected queue item type during drain: %s", type(item))
                         continue
-                    yield _assistant_response_to_user_event(item)
+                    yield _mark_non_final(item)
 
     except Exception:
         logger.exception("Error handling user message")
-        yield UserMessageEvent(
-            message="An error occurred while processing your message.",
-            final=True,
+        yield AssistantResponse(
+            content="An error occurred while processing your message.",
             thinking=None,
+            final=True,
         )
