@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.tool_loop import _to_serializable
+from agents.ollama.sdk.tool_loop import _normalize_tool_result
 
 
 class DummyModel(BaseModel):
@@ -18,27 +18,27 @@ class NestedModel(BaseModel):
 
 
 @pytest.mark.unit
-def test_to_serializable_with_pydantic_model():
+def test_normalize_tool_result_with_pydantic_model():
     """
-    Test that _to_serializable correctly converts a Pydantic model to a dict.
+    Test that _normalize_tool_result correctly converts a Pydantic model to a dict.
     """
     model = DummyModel(x=1, y="foo")
-    result = _to_serializable(model)
+    result = _normalize_tool_result(model)
     assert isinstance(result, dict)
     assert result == {"x": 1, "y": "foo"}
 
 
 @pytest.mark.unit
-def test_to_serializable_with_nested_structures():
+def test_normalize_tool_result_with_nested_structures():
     """
-    Test that _to_serializable recursively converts nested Pydantic models in lists and dicts.
+    Test that _normalize_tool_result recursively converts nested Pydantic models in lists and dicts.
     """
     nested = NestedModel(
         a=DummyModel(x=2, y="bar"),
         b=[DummyModel(x=3, y="baz")],
         c={"k": DummyModel(x=4, y="qux")},
     )
-    result = _to_serializable(nested)
+    result = _normalize_tool_result(nested)
     assert isinstance(result, dict)
     assert result["a"] == {"x": 2, "y": "bar"}
     assert result["b"] == [{"x": 3, "y": "baz"}]
@@ -46,24 +46,24 @@ def test_to_serializable_with_nested_structures():
 
 
 @pytest.mark.unit
-def test_to_serializable_with_primitive_types():
+def test_normalize_tool_result_with_primitive_types():
     """
-    Test that _to_serializable returns primitive types unchanged.
+    Test that _normalize_tool_result returns primitive types unchanged.
     """
-    assert _to_serializable(42) == 42
-    assert _to_serializable("hello") == "hello"
-    assert _to_serializable([1, 2, 3]) == [1, 2, 3]
-    assert _to_serializable({"a": 1}) == {"a": 1}
+    assert _normalize_tool_result(42) == 42
+    assert _normalize_tool_result("hello") == "hello"
+    assert _normalize_tool_result([1, 2, 3]) == [1, 2, 3]
+    assert _normalize_tool_result({"a": 1}) == {"a": 1}
 
 
 @pytest.mark.unit
-def test_to_serializable_with_non_pydantic_object():
+def test_normalize_tool_result_with_non_pydantic_object():
     """
-    Test that _to_serializable falls back to the object itself for unsupported types.
+    Test that _normalize_tool_result falls back to the object itself for unsupported types.
     """
 
     class NotSerializable:
         pass
 
     obj = NotSerializable()
-    assert _to_serializable(obj) == obj
+    assert _normalize_tool_result(obj) == obj

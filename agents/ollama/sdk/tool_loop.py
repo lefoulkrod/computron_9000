@@ -27,7 +27,7 @@ class _HasDict(Protocol):
         ...
 
 
-def _to_serializable(obj: object) -> object:
+def _normalize_tool_result(obj: object) -> object:
     """Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
 
     Args:
@@ -38,13 +38,13 @@ def _to_serializable(obj: object) -> object:
 
     """
     if isinstance(obj, BaseModel):
-        return _to_serializable(obj.model_dump())
+        return _normalize_tool_result(obj.model_dump())
     if isinstance(obj, _HasDict):
-        return _to_serializable(obj.dict())
+        return _normalize_tool_result(obj.dict())
     if isinstance(obj, dict):
-        return {k: _to_serializable(v) for k, v in obj.items()}
+        return {k: _normalize_tool_result(v) for k, v in obj.items()}
     if isinstance(obj, list | tuple | set):
-        return [_to_serializable(i) for i in obj]
+        return [_normalize_tool_result(i) for i in obj]
     return obj
 
 
@@ -299,7 +299,7 @@ async def run_tool_call_loop(
                             result = await tool_func(**validated_args)
                         else:
                             result = tool_func(**validated_args)
-                        serializable_result = _to_serializable(result)
+                        serializable_result = _normalize_tool_result(result)
                         tool_result = {"result": serializable_result}
                     except (ValueError, TypeError, json.JSONDecodeError) as exc:
                         logger.exception("Argument validation failed for tool '%s'", tool_name)
