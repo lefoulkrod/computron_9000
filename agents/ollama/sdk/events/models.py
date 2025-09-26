@@ -81,8 +81,8 @@ class DispatchEvent(BaseModel):
 
 __all__ = [
     "AssistantEventPayload",
-    "DispatchEvent",
     "AssistantResponse",
     "AssistantResponseData",
+    "DispatchEvent",
     "ToolCallPayload",
 ]

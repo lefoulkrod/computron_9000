@@ -3,10 +3,16 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Sequence
+from contextlib import suppress
 
 from ollama import AsyncClient, Image
 
-from agents.ollama.sdk.events import AssistantResponse, DispatchEvent, event_context
+from agents.ollama.sdk.events import (
+    AssistantResponse,
+    DispatchEvent,
+    EventDispatcher,
+    event_context,
+)
 from agents.types import Agent, Data
 from config import load_config
 from models.model_configs import get_model_by_name
@@ -104,77 +110,79 @@ async def handle_user_message(
         AssistantResponse: Events from the LLM.
 
     """
-    # Bridge published events via a local queue; TaskGroup provides structured
-    # concurrency so we do not need a sentinel or explicit done_event.
-    queue: asyncio.Queue[DispatchQueueItem] = asyncio.Queue()
-
-    async def _queue_handler(evt: DispatchEvent) -> None:
-        try:
-            await queue.put(evt)
-        except Exception:  # pragma: no cover - defensive logging
-            logger.exception("Failed to enqueue AssistantResponse in message handler")
-
-    def _sanitize_dispatch_event(evt: DispatchEvent) -> AssistantResponse:
-        payload = evt.payload
-        if evt.depth > 0 and payload.content:
-            payload = payload.model_copy(update={"content": ""})
-        # Ensure non-final events default to final=False instead of None.
-        if payload.final is None:
-            payload = payload.model_copy(update={"final": False})
-        return payload
+    if data and len(data) > 0:
+        async for event in _handle_image_message(message, data):
+            yield event
+        return
 
     try:
-        async with event_context(handler=_queue_handler, context_id="root"):
-            if data and len(data) > 0:
-                async for event in _handle_image_message(message, data):
-                    yield event
-                return
+        # Bridge published events via a local queue so we can stream results to the caller.
+        queue: asyncio.Queue[DispatchQueueItem | None] = asyncio.Queue()
 
-            _message_history.append({"role": "user", "content": message})
-            agent = computron
-            _insert_system_message(agent)
-            log_before_model_call = make_log_before_model_call(agent)
-            log_after_model_call = make_log_after_model_call(agent)
+        async def _queue_handler(evt: DispatchEvent) -> None:
+            try:
+                await queue.put(evt)
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("Failed to enqueue AssistantResponse in message handler")
 
-            async def _producer() -> None:
-                async for _context, _thinking in run_tool_call_loop(
-                    messages=_message_history,
-                    tools=agent.tools,
-                    model=agent.model,
-                    think=agent.think,
-                    model_options=agent.options,
-                    before_model_callbacks=[log_before_model_call],
-                    after_model_callbacks=[log_after_model_call],
-                ):
-                    # Discard yielded tuple; authoritative stream is published events
-                    pass
+        def _sanitize_dispatch_event(evt: DispatchEvent) -> AssistantResponse:
+            payload = evt.payload
+            if evt.depth > 0 and payload.content:
+                payload = payload.model_copy(update={"content": ""})
 
-            # Structured concurrency: ensure producer completion or cancellation
-            async with asyncio.TaskGroup() as tg:
-                producer_task = tg.create_task(_producer())
+            return payload
 
-                # Phase 1: Consume events concurrently while producer runs.
-                while not producer_task.done():
-                    item = await queue.get()
-                    if not isinstance(item, DispatchEvent):  # pragma: no cover
-                        logger.warning("Unexpected queue item type: %s", type(item))
-                        continue
-                    payload = _sanitize_dispatch_event(item)
-                    # Only yield final events from the root context (depth == 0) (This is bad)
-                    if payload.final and item.depth > 0:
-                        continue
-                    yield payload
+        async def _producer() -> None:
+            dispatcher: EventDispatcher | None = None
+            try:
+                async with event_context(
+                    handler=_queue_handler, context_id="root"
+                ) as ctx_dispatcher:
+                    dispatcher = ctx_dispatcher
+                    _message_history.append({"role": "user", "content": message})
+                    agent = computron
+                    _insert_system_message(agent)
+                    log_before_model_call = make_log_before_model_call(agent)
+                    log_after_model_call = make_log_after_model_call(agent)
 
-                # Phase 2: Producer finished (may have queued trailing events). Drain remaining.
-                while not queue.empty():
-                    item = await queue.get()
-                    if not isinstance(item, DispatchEvent):  # pragma: no cover
-                        logger.warning("Unexpected queue item type during drain: %s", type(item))
-                        continue
-                    payload = _sanitize_dispatch_event(item)
-                    if payload.final and item.depth > 0:
-                        continue
-                    yield payload
+                    async for _, _ in run_tool_call_loop(
+                        messages=_message_history,
+                        tools=agent.tools,
+                        model=agent.model,
+                        think=agent.think,
+                        model_options=agent.options,
+                        before_model_callbacks=[log_before_model_call],
+                        after_model_callbacks=[log_after_model_call],
+                    ):
+                        # Discard yielded tuple; authoritative stream is published events
+                        pass
+            finally:
+                if dispatcher is not None:
+                    await dispatcher.drain()
+                await queue.put(None)
+
+        producer_task = asyncio.create_task(_producer())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                if not isinstance(item, DispatchEvent):  # pragma: no cover
+                    logger.warning("Unexpected queue item type: %s", type(item))
+                    continue
+                payload = _sanitize_dispatch_event(item)
+                if payload.final and item.depth > 0:
+                    continue
+                yield payload
+        finally:
+            if not producer_task.done():
+                producer_task.cancel()
+            with suppress(Exception):
+                await producer_task
+
+        while not queue.empty():
+            if queue.get_nowait() is None:
+                continue
 
     except Exception:
         logger.exception("Error handling user message")
