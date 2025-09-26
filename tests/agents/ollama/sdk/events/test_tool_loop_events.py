@@ -14,7 +14,7 @@ from typing import Any, AsyncGenerator, List
 
 import pytest
 
-from agents.ollama.sdk.events import AssistantResponse, ToolCallPayload, event_context
+from agents.ollama.sdk.events import DispatchEvent, ToolCallPayload, event_context
 from agents.ollama.sdk.tool_loop import run_tool_call_loop
 
 
@@ -71,9 +71,9 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
         return {"x": x}
 
     # Capture emitted events via the event_context
-    captured: List[AssistantResponse] = []
+    captured: List[DispatchEvent] = []
 
-    async def _handler(evt: AssistantResponse) -> None:
+    async def _handler(evt: DispatchEvent) -> None:
         captured.append(evt)
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": "ctx"}]
@@ -93,13 +93,15 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     await asyncio.sleep(0)
 
     # Assert: at least two events: one model output and one tool_call
-    assert any(e.content == "partial" and e.thinking == "t" for e in captured)
-    tool_events = [e.event for e in captured if e.event is not None]
+    assert any(e.payload.content == "partial" and e.payload.thinking == "t" for e in captured)
+    tool_events = [e.payload.event for e in captured if e.payload.event is not None]
     assert any(
         isinstance(ev, ToolCallPayload) and ev.type == "tool_call" and ev.name == "echo_tool"
         for ev in tool_events
     )
     # Ensure order: model event occurs before tool_call for the same cycle
-    first_model_idx = next(i for i, e in enumerate(captured) if e.content == "partial")
-    first_tool_idx = next(i for i, e in enumerate(captured) if e.event is not None)
+    first_model_idx = next(i for i, e in enumerate(captured) if e.payload.content == "partial")
+    first_tool_idx = next(i for i, e in enumerate(captured) if e.payload.event is not None)
     assert first_model_idx <= first_tool_idx
+    # Verify context metadata: tool loop runs in root context (depth 0) when invoked directly
+    assert all(e.depth == 0 for e in captured)

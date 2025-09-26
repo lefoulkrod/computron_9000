@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator, Sequence
 
 from ollama import AsyncClient, Image
 
-from agents.ollama.sdk.events import AssistantResponse, event_context
+from agents.ollama.sdk.events import AssistantResponse, DispatchEvent, event_context
 from agents.types import Agent, Data
 from config import load_config
 from models.model_configs import get_model_by_name
@@ -53,7 +53,7 @@ async def _handle_image_message(
         data (Sequence[Data]): Sequence of image data.
 
     Yields:
-        UserMessageEvent: Events from the LLM.
+        AssistantResponse: Events from the LLM.
 
     """
     _message_history.extend(
@@ -87,7 +87,7 @@ async def _handle_image_message(
     yield AssistantResponse(content=content, thinking=thinking, final=True)
 
 
-QueueItem = AssistantResponse
+DispatchQueueItem = DispatchEvent
 
 
 async def handle_user_message(
@@ -101,32 +101,30 @@ async def handle_user_message(
         data (Sequence[Data] | None): Optional sequence of image data.
 
     Yields:
-        UserMessageEvent: Events from the LLM.
+        AssistantResponse: Events from the LLM.
 
     """
     # Bridge published events via a local queue; TaskGroup provides structured
     # concurrency so we do not need a sentinel or explicit done_event.
-    queue: asyncio.Queue[QueueItem] = asyncio.Queue()
+    queue: asyncio.Queue[DispatchQueueItem] = asyncio.Queue()
 
-    async def _queue_handler(evt: AssistantResponse) -> None:
+    async def _queue_handler(evt: DispatchEvent) -> None:
         try:
             await queue.put(evt)
         except Exception:  # pragma: no cover - defensive logging
             logger.exception("Failed to enqueue AssistantResponse in message handler")
 
-    def _mark_non_final(evt: AssistantResponse) -> AssistantResponse:
-        if evt.final:
-            return evt
-        return AssistantResponse(
-            content=evt.content,
-            thinking=evt.thinking,
-            data=evt.data,
-            event=evt.event,
-            final=False,
-        )
+    def _sanitize_dispatch_event(evt: DispatchEvent) -> AssistantResponse:
+        payload = evt.payload
+        if evt.depth > 0 and payload.content:
+            payload = payload.model_copy(update={"content": ""})
+        # Ensure non-final events default to final=False instead of None.
+        if payload.final is None:
+            payload = payload.model_copy(update={"final": False})
+        return payload
 
     try:
-        async with event_context(handler=_queue_handler):
+        async with event_context(handler=_queue_handler, context_id="root"):
             if data and len(data) > 0:
                 async for event in _handle_image_message(message, data):
                     yield event
@@ -158,18 +156,18 @@ async def handle_user_message(
                 # Phase 1: Consume events concurrently while producer runs.
                 while not producer_task.done():
                     item = await queue.get()
-                    if not isinstance(item, AssistantResponse):  # pragma: no cover
+                    if not isinstance(item, DispatchEvent):  # pragma: no cover
                         logger.warning("Unexpected queue item type: %s", type(item))
                         continue
-                    yield _mark_non_final(item)
+                    yield _sanitize_dispatch_event(item)
 
                 # Phase 2: Producer finished (may have queued trailing events). Drain remaining.
                 while not queue.empty():
                     item = await queue.get()
-                    if not isinstance(item, AssistantResponse):  # pragma: no cover
+                    if not isinstance(item, DispatchEvent):  # pragma: no cover
                         logger.warning("Unexpected queue item type during drain: %s", type(item))
                         continue
-                    yield _mark_non_final(item)
+                    yield _sanitize_dispatch_event(item)
 
     except Exception:
         logger.exception("Error handling user message")

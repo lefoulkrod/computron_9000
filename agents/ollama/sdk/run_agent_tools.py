@@ -7,6 +7,7 @@ from ollama import ChatResponse
 
 from agents.types import Agent
 
+from .events import make_child_context_id, use_context_id
 from .tool_loop import run_tool_call_loop
 
 
@@ -301,29 +302,31 @@ Returns:
 
     async def run_agent_as_tool(instructions: str) -> T:
         # DONT PROVIDE A DOCSTRING HERE
-        messages = [
-            {"role": "system", "content": agent.instruction},
-            {"role": "user", "content": instructions},
-        ]
+        child_context_id = make_child_context_id(agent.name)
+        with use_context_id(child_context_id):
+            messages = [
+                {"role": "system", "content": agent.instruction},
+                {"role": "user", "content": instructions},
+            ]
 
-        # For string results, single pass without retry
-        if result_type is str:  # type: ignore[comparison-overlap]
-            return await _run_tool_loop_once(
+            # For string results, single pass without retry
+            if result_type is str:  # type: ignore[comparison-overlap]
+                return await _run_tool_loop_once(
+                    messages=messages,
+                    agent=agent,
+                    before_model_callbacks=before_model_callbacks,
+                    after_model_callbacks=after_model_callbacks,
+                )  # type: ignore[return-value]
+
+            # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
+            return await _run_with_json_retry(
                 messages=messages,
                 agent=agent,
+                result_type=result_type,
                 before_model_callbacks=before_model_callbacks,
                 after_model_callbacks=after_model_callbacks,
-            )  # type: ignore[return-value]
-
-        # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
-        return await _run_with_json_retry(
-            messages=messages,
-            agent=agent,
-            result_type=result_type,
-            before_model_callbacks=before_model_callbacks,
-            after_model_callbacks=after_model_callbacks,
-            max_attempts=5,
-        )
+                max_attempts=5,
+            )
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
     # distinguish multiple agent tools. We assume agent.name values are unique.
@@ -334,7 +337,4 @@ Returns:
     run_agent_as_tool.__name__ = func_name  # type: ignore[attr-defined]
     run_agent_as_tool.__qualname__ = func_name  # type: ignore[attr-defined]
     run_agent_as_tool.__doc__ = docstring
-    # Mark as agent-backed using a simple attribute; tool loop uses this marker
-    # to suppress duplicate content while still emitting thinking/events.
-    run_agent_as_tool.__agent_as_tool_marker__ = True  # type: ignore[attr-defined]
     return run_agent_as_tool

@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from agents.ollama.sdk.events import AssistantResponse, EventDispatcher
+from agents.ollama.sdk.events import AssistantResponse, DispatchEvent, EventDispatcher
 
 
 @pytest.mark.unit
@@ -24,20 +24,25 @@ async def test_publish_to_sync_and_async_handlers(monkeypatch: Any) -> None:
 
     dispatcher = EventDispatcher()
 
-    seen_sync: list[AssistantResponse] = []
-    seen_async: list[AssistantResponse] = []
+    seen_sync: list[DispatchEvent] = []
+    seen_async: list[DispatchEvent] = []
 
-    def sync_handler(evt: AssistantResponse) -> None:
+    def sync_handler(evt: DispatchEvent) -> None:
         seen_sync.append(evt)
 
-    async def async_handler(evt: AssistantResponse) -> None:
+    async def async_handler(evt: DispatchEvent) -> None:
         await asyncio.sleep(0)  # yield control to ensure scheduling works
         seen_async.append(evt)
 
     dispatcher.subscribe(sync_handler)
     dispatcher.subscribe(async_handler)
 
-    evt = AssistantResponse(content="hi")
+    evt = DispatchEvent(
+        context_id="root",
+        parent_context_id=None,
+        depth=0,
+        payload=AssistantResponse(content="hi"),
+    )
     dispatcher.publish(evt)
 
     # Wait deterministically for async handlers
@@ -56,17 +61,31 @@ async def test_subscription_context_manager_auto_unsubscribes() -> None:
 
     calls: list[str] = []
 
-    def handler(evt: AssistantResponse) -> None:  # noqa: ARG001 - unused
+    def handler(evt: DispatchEvent) -> None:  # noqa: ARG001 - unused
         calls.append("called")
 
     async with dispatcher.subscription(handler):
-        dispatcher.publish(AssistantResponse(content="one"))
+        dispatcher.publish(
+            DispatchEvent(
+                context_id="root",
+                parent_context_id=None,
+                depth=0,
+                payload=AssistantResponse(content="one"),
+            )
+        )
         # Yield once so loop.call_soon scheduled sync handler executes.
         await asyncio.sleep(0)
         await dispatcher.drain()
 
     # After exit, publishing should not call handler again
-    dispatcher.publish(AssistantResponse(content="two"))
+    dispatcher.publish(
+        DispatchEvent(
+            context_id="root",
+            parent_context_id=None,
+            depth=0,
+            payload=AssistantResponse(content="two"),
+        )
+    )
     await asyncio.sleep(0)
     await dispatcher.drain()
 
@@ -80,7 +99,7 @@ async def test_unsubscribe_is_idempotent() -> None:
 
     dispatcher = EventDispatcher()
 
-    def handler(evt: AssistantResponse) -> None:  # noqa: ARG001 - unused
+    def handler(evt: DispatchEvent) -> None:  # noqa: ARG001 - unused
         pass
 
     dispatcher.subscribe(handler)
@@ -96,13 +115,20 @@ async def test_reset_clears_subscribers() -> None:
     dispatcher = EventDispatcher()
     seen: list[AssistantResponse] = []
 
-    def handler(evt: AssistantResponse) -> None:
+    def handler(evt: DispatchEvent) -> None:
         seen.append(evt)
 
     dispatcher.subscribe(handler)
     dispatcher.reset()
 
-    dispatcher.publish(AssistantResponse(content="ignored"))
+    dispatcher.publish(
+        DispatchEvent(
+            context_id="root",
+            parent_context_id=None,
+            depth=0,
+            payload=AssistantResponse(content="ignored"),
+        )
+    )
     await dispatcher.drain()
     assert seen == []
 @pytest.mark.unit
@@ -113,16 +139,23 @@ async def test_drain_waits_for_inflight_tasks() -> None:
     dispatcher = EventDispatcher()
     order: list[str] = []
 
-    async def slow(evt: AssistantResponse) -> None:  # noqa: ARG001 - value not used
+    async def slow(evt: DispatchEvent) -> None:  # noqa: ARG001 - value not used
         await asyncio.sleep(0.01)
         order.append("slow")
 
-    def fast(evt: AssistantResponse) -> None:  # noqa: ARG001 - value not used
+    def fast(evt: DispatchEvent) -> None:  # noqa: ARG001 - value not used
         order.append("fast")
 
     dispatcher.subscribe(slow)
     dispatcher.subscribe(fast)
-    dispatcher.publish(AssistantResponse(content="x"))
+    dispatcher.publish(
+        DispatchEvent(
+            context_id="root",
+            parent_context_id=None,
+            depth=0,
+            payload=AssistantResponse(content="x"),
+        )
+    )
 
     # Without drain, order might not include slow yet; with drain it must.
     await dispatcher.drain()
@@ -137,11 +170,18 @@ async def test_drain_is_idempotent_when_no_tasks() -> None:
     dispatcher = EventDispatcher()
     await dispatcher.drain()  # nothing scheduled
     # Schedule a task then drain twice
-    async def h(evt: AssistantResponse) -> None:  # noqa: D401, ARG001
+    async def h(evt: DispatchEvent) -> None:  # noqa: D401, ARG001
         await asyncio.sleep(0)
 
     dispatcher.subscribe(h)
-    dispatcher.publish(AssistantResponse(content="y"))
+    dispatcher.publish(
+        DispatchEvent(
+            context_id="root",
+            parent_context_id=None,
+            depth=0,
+            payload=AssistantResponse(content="y"),
+        )
+    )
     await dispatcher.drain()
     await dispatcher.drain()  # second call should be a no-op
 
@@ -154,17 +194,24 @@ async def test_drain_does_not_raise_on_handler_error() -> None:
     dispatcher = EventDispatcher()
     executed: list[str] = []
 
-    async def bad(evt: AssistantResponse) -> None:  # noqa: ARG001
+    async def bad(evt: DispatchEvent) -> None:  # noqa: ARG001
         executed.append("bad")
         raise RuntimeError("boom")
 
-    async def good(evt: AssistantResponse) -> None:  # noqa: ARG001
+    async def good(evt: DispatchEvent) -> None:  # noqa: ARG001
         executed.append("good")
         await asyncio.sleep(0)
 
     dispatcher.subscribe(bad)
     dispatcher.subscribe(good)
-    dispatcher.publish(AssistantResponse(content="err"))
+    dispatcher.publish(
+        DispatchEvent(
+            context_id="root",
+            parent_context_id=None,
+            depth=0,
+            payload=AssistantResponse(content="err"),
+        )
+    )
     await dispatcher.drain()
 
     assert set(executed) == {"bad", "good"}

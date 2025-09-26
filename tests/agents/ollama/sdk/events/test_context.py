@@ -14,18 +14,21 @@ import pytest
 
 from agents.ollama.sdk.events import (
     AssistantResponse,
+    DispatchEvent,
     get_current_dispatcher,
+    make_child_context_id,
     publish_event,
     reset_current_dispatcher,
     set_current_dispatcher,
+    use_context_id,
 )
 
 
 class _DummyDispatcher:
     def __init__(self) -> None:
-        self.published: list[AssistantResponse] = []
+        self.published: list[DispatchEvent] = []
 
-    def publish(self, event: AssistantResponse) -> None:
+    def publish(self, event: DispatchEvent) -> None:
         self.published.append(event)
 
 
@@ -66,6 +69,23 @@ def test_publish_event_delegates_to_dispatcher() -> None:
     try:
         evt = AssistantResponse(content="hello")
         publish_event(evt)
-        assert d.published == [evt]
+        assert len(d.published) == 1
+        dispatch_evt = d.published[0]
+        assert dispatch_evt.payload is evt
+        assert dispatch_evt.context_id
     finally:
         reset_current_dispatcher(token)
+
+
+@pytest.mark.unit
+def test_child_context_ids_form_hierarchy() -> None:
+    """Child context ids should extend their parent ids deterministically."""
+
+    token = set_current_dispatcher(None)
+    with use_context_id("root") as root_id:
+        child_id = make_child_context_id("nested")
+        assert child_id.startswith(root_id)
+        with use_context_id(child_id) as resolved_child:
+            grandchild_id = make_child_context_id("deep")
+            assert grandchild_id.startswith(resolved_child)
+    reset_current_dispatcher(token)
