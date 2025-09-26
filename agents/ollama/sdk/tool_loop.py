@@ -103,10 +103,10 @@ async def _chat_with_retries(
     raise ToolLoopError(msg)
 
 
-def _validate_tool_arguments(
+def _prepare_tool_arguments(
     tool_func: Callable[..., Any], arguments: dict[str, Any]
 ) -> dict[str, Any]:
-    """Validate and convert tool function arguments according to type hints.
+    """Prepare tool function arguments by validating and converting via type hints.
 
     Args:
         tool_func (Callable[..., Any]): The tool function to validate arguments for.
@@ -122,13 +122,14 @@ def _validate_tool_arguments(
 
     """
     validated_args = {}
+    # Introspect the tool signature so we can coerce each supplied argument.
     sig = inspect.signature(tool_func)
 
     for arg_name, param in sig.parameters.items():
         expected_type = param.annotation
         value = arguments.get(arg_name, param.default)
 
-        # Skip validation if parameter has no default and is missing from arguments
+        # Required parameters without a provided value should surface immediately.
         if value is inspect.Parameter.empty:
             msg = f"Required parameter '{arg_name}' is missing"
             raise ValueError(msg)
@@ -138,12 +139,12 @@ def _validate_tool_arguments(
             if origin is not None and origin is type(None):
                 validated_args[arg_name] = value
             elif origin is list:
-                # Handle list[SomeModel] types
+                # Handle list[SomeModel] style annotations (Pydantic collections, etc.).
                 args = getattr(expected_type, "__args__", ())
                 if args and len(args) == 1:
                     item_type = args[0]
                     if hasattr(item_type, "model_validate") or hasattr(item_type, "parse_obj"):
-                        # Convert list of dicts to list of Pydantic models
+                        # Convert each incoming item to the declared Pydantic model.
                         validated_list = []
                         for item_value in value:
                             parsed_item = item_value
@@ -159,10 +160,12 @@ def _validate_tool_arguments(
                 else:
                     validated_args[arg_name] = value
             elif hasattr(expected_type, "model_validate"):
+                # Pydantic v2 path – accept raw dicts or JSON strings.
                 if isinstance(value, str):
                     value = json.loads(value)
                 validated_args[arg_name] = expected_type.model_validate(value)
             elif hasattr(expected_type, "parse_obj"):  # Fallback for older Pydantic
+                # Pydantic v1 fallback – same idea as above.
                 if isinstance(value, str):
                     value = json.loads(value)
                 validated_args[arg_name] = expected_type.parse_obj(value)
@@ -294,7 +297,7 @@ async def run_tool_call_loop(
                     tool_result = {"error": "Tool not found"}
                 else:
                     try:
-                        validated_args = _validate_tool_arguments(tool_func, arguments)
+                        validated_args = _prepare_tool_arguments(tool_func, arguments)
                         if inspect.iscoroutinefunction(tool_func):
                             result = await tool_func(**validated_args)
                         else:
