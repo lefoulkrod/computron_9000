@@ -63,7 +63,7 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
     return ReducedWebpage(page_text=page_text, links=links)
 
 
-@async_lru_cache(maxsize=10)
+@async_lru_cache()
 async def get_webpage(url: str) -> ReducedWebpage:
     """Downloads the web page at the given URL, strips all HTML tags, and returns the cleaned.
 
