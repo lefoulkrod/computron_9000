@@ -261,8 +261,8 @@ test-quick:
 # =============================================
 # Format code with ruff (formatter) and fix imports
 format:
-    uv run ruff format .
     uv run ruff check --fix .
+    uv run ruff format .
 
 # Verify formatting without making changes (non-mutating)
 format-check:
@@ -277,7 +277,9 @@ typecheck:
     uv run mypy .
 
 # Run all quality checks (non-mutating)
-check: format-check lint typecheck
+# Run the linter before the formatter-check so diagnostics are visible even
+# when the formatter would otherwise report files that *would* be reformatted.
+check: lint typecheck format-check
 
 # Run all checks including tests (pre-commit/CI style)
 ci: check test
