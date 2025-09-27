@@ -77,6 +77,7 @@ def execute_nodejs_program_with_playwright(
     packages: list[str] | None = None,
 ) -> dict[str, str | None]:
     """Execute a Node.js program in a container that has Playwright and browsers preinstalled, suitable for web navigation tasks.
+
     This tool can alos be used to execute any arbitrary Node.js code, not just Playwright scripts.
 
     Args:
@@ -91,5 +92,5 @@ def execute_nodejs_program_with_playwright(
 
     """
     packages = packages or []
-    all_packages = list(set(packages + ["playwright@1.53.1"]))
+    all_packages = list({*packages, "playwright@1.53.1"})
     return execute_nodejs_program(program_text=program_text, packages=all_packages)

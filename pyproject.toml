@@ -59,6 +59,7 @@ ignore = [
     "COM812",   # Missing trailing comma in Python 3.6+
     "TD003",    # No issue link TODO
     "FIX002",   # Consider resolving this issue
+    "TRY301",   # Abstract raise to inner function - globally ignored per project preference
 ]
 
 [tool.ruff.lint.pydocstyle]
