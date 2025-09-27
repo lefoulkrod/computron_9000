@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
 from agents.ollama.browser import browser_agent_tool
@@ -70,7 +71,7 @@ computron_agent: Agent = Agent(
 before_model_call_callback = make_log_before_model_call(computron_agent)
 after_model_call_callback = make_log_after_model_call(computron_agent)
 
-computron_agent_tool = make_run_agent_as_tool_function(
+computron_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
     agent=computron_agent,
     tool_description=computron_agent.description,
     before_model_callbacks=[before_model_call_callback],
