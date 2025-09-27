@@ -65,7 +65,9 @@ async def _summarize_text_full(text: str) -> str:
 
 
 async def summarize_text_sections(text: str) -> list[SectionSummary]:
-    """Summarize the text by dividing it into sections and calling the LLM to generate a concise summary for each section.
+    """Summarize the text by dividing it into sections and calling the LLM to.
+
+    generate a concise summary for each section.
 
     Args:
         text: The text to summarize.
@@ -92,9 +94,7 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
             break
         i += section_size - overlap
 
-    logger.debug(
-        "Divided text length %d into %d parts for summarization.", len(text), len(sections)
-    )
+    logger.debug("Divided text length %d into %d parts for summarization.", len(text), len(sections))
     try:
         summaries: list[SectionSummary] = []
         total_parts = len(sections)

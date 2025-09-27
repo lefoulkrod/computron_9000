@@ -28,8 +28,10 @@ async def html_find_elements(
 
     Args:
         html (str): The HTML string to parse.
-        selectors (Union[str, List[str]]): CSS selector(s) to search for (e.g., 'a', 'div', '.classname', ['a', '.foo']).
-        text (Optional[str]): Optional text to match against the element's contained text.
+        selectors (Union[str, List[str]]): CSS selector(s) to search for. Examples:
+            'a', 'div', '.classname', or ['a', '.foo'].
+        text (Optional[str]): Optional text to match against the element's contained
+            text.
 
     Returns:
         List[HtmlElementResult]: List of matching elements as HTML strings.
@@ -49,9 +51,7 @@ async def html_find_elements(
                 text_matches = [
                     el
                     for el in elements
-                    if el.string
-                    and isinstance(el.string, str)
-                    and text.lower() in el.string.lower()
+                    if el.string and isinstance(el.string, str) and text.lower() in el.string.lower()
                 ]
                 all_matches.extend(text_matches)
             else:

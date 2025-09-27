@@ -37,7 +37,8 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
         url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
 
     Returns:
-        GetWebpageResult: An object containing the original URL, the raw HTML content of the page, and the HTTP response code.
+        GetWebpageResult: An object containing the original URL, the raw HTML
+            content of the page, and the HTTP response code.
 
     Raises:
         GetWebpageError: For client or unknown errors.

@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "run unit tests",
+            "label": "backend - run unit tests",
             "type": "shell",
             "command": "bash",
             "args": [
