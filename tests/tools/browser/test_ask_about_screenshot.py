@@ -48,6 +48,10 @@ class FakePage:
     def locator(self, selector: str) -> FakeLocator:
         return self._locator_map.get(selector, FakeLocator(b"", exists=False))
 
+    def get_by_text(self, value: str, exact: bool = True) -> FakeLocator:
+        # Screenshot tool no longer resolves via text; return a non-existing locator.
+        return FakeLocator(b"", exists=False)
+
 
 class FakeBrowser:
     def __init__(self, page: FakePage) -> None:
@@ -179,60 +183,25 @@ async def test_ask_about_screenshot_selector_mode(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_expand_selector_candidates_and_normalization() -> None:
-    """Ensure comma-delimited selectors are split and :contains translated."""
-    import importlib
-
-    module = importlib.import_module("tools.browser.ask_about_screenshot")
-    raw = "button:contains('Book Now'), a:contains(\"Sign In\") ,  .cta.primary"
-    expanded = module._expand_selector_candidates(raw)
-    assert expanded == [
-        "button:has-text('Book Now')",
-        'a:has-text("Sign In")',
-        ".cta.primary",
-    ]
-
-
-@pytest.mark.unit
-def test_normalize_selector_expression_noop() -> None:
-    """Selectors without :contains remain unchanged after expansion."""
-    import importlib
-
-    module = importlib.import_module("tools.browser.ask_about_screenshot")
-    raw = "#pricing, .plan-tier:first-of-type"
-    expanded = module._expand_selector_candidates(raw)
-    assert expanded == ["#pricing", ".plan-tier:first-of-type"]
-
-
-@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_multi_candidate_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """First candidate missing, second matches and returns screenshot."""
-    second_selector = ".cta.primary"
-    locator = FakeLocator(b"second-bytes")
-    page = FakePage(b"page", locator_map={second_selector: locator})
+async def test_selector_requires_non_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    page = FakePage(b"page")
     browser = FakeBrowser(page)
 
     async def fake_get_browser() -> FakeBrowser:
         return browser
 
-    fake_model = FakeModel()
     module = importlib.import_module("tools.browser.ask_about_screenshot")
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
-    monkeypatch.setattr(module, "AsyncClient", FakeClient)
-    monkeypatch.setattr(module, "get_model_by_name", lambda name: fake_model)
-    monkeypatch.setattr(module, "load_config", lambda: FakeConfig())
 
-    answer = await ask_about_screenshot(
-        "Describe CTA", mode="selector", selector=f".missing,{second_selector}"
-    )
-    assert answer == "Mock answer"
+    with pytest.raises(BrowserToolError):
+        await ask_about_screenshot("prompt", mode="selector", selector="   ")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_selector_all_fail_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When all selector candidates fail, error message lists tried selectors."""
+async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single selector missing should raise a clear error message."""
     page = FakePage(b"page")
     browser = FakeBrowser(page)
 
@@ -243,10 +212,6 @@ async def test_selector_all_fail_message(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
 
     with pytest.raises(BrowserToolError) as excinfo:
-        await ask_about_screenshot(
-            "Anything", mode="selector", selector=".one, .two, .three"
-        )
-    msg = str(excinfo.value)
-    assert "No elements matched any selector candidate" in msg
-    for part in [".one", ".two", ".three"]:
-        assert part in msg
+        await ask_about_screenshot("Anything", mode="selector", selector="#missing")
+
+    assert "No element matched selector '#missing'" in str(excinfo.value)
