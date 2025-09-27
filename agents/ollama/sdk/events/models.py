@@ -67,7 +67,9 @@ class AssistantResponse(BaseModel):
     data: list[AssistantResponseData] = Field(default_factory=list)
     event: AssistantEventPayload | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    final: bool | None = None
+    # Final is a boolean flag indicating terminal/complete event. Default to
+    # False so consumers can rely on a boolean value instead of None.
+    final: bool = False
 
 
 class DispatchEvent(BaseModel):
