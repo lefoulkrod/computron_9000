@@ -1,13 +1,8 @@
-"""Browser search/extraction tools.
+"""Browser search and text extraction utilities.
 
-Currently exposes:
-    * ``extract_text`` - Extract visible text content from elements identified
-      either by a CSS selector or (fallback) a visible text string.
-
-Design goals:
-    * Mirror error + logging patterns of other browser tools (``open_url``, ``click``)
-    * Provide strongly typed, JSON-serializable Pydantic return models
-    * Be resilient to transient Playwright failures (best-effort extraction)
+This module provides the ``extract_text`` helper which extracts visible text
+from elements identified by a CSS selector or by visible text. Results are
+returned as Pydantic models for safe serialization.
 """
 
 from __future__ import annotations
@@ -15,10 +10,10 @@ from __future__ import annotations
 import logging
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from tools.browser.core import get_browser
+from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.snapshot import _element_css_selector  # internal helper for selector paths
 
@@ -29,7 +24,7 @@ class TextExtractionResult(BaseModel):
     """Single element text extraction result.
 
     Attributes:
-        selector: Best-effort CSS selector (or synthetic indicator like ``text=...``)
+        selector: Best-effort CSS selector (or synthetic indicator like ``"text=..."``)
             identifying the source element.
         text: Trimmed visible text content (possibly truncated).
     """
@@ -72,100 +67,82 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
 
     results: list[TextExtractionResult] = []
 
-    # First attempt: exact visible text match (mirrors click tool ordering)
-    text_locator = None
-    try:  # Attempt exact match first
-        potential = page.get_by_text(clean_target, exact=True)
-        if await potential.count() > 0:  # pragma: no branch - simple branch
-            text_locator = potential.first
-    except PlaywrightError:  # pragma: no cover - defensive
-        text_locator = None
-
-    if text_locator is not None:
-        try:
-            raw_text = await text_locator.inner_text()
-        except PlaywrightError as exc:  # pragma: no cover - defensive
-            logger.debug("Failed to read inner_text for exact text %s: %s", clean_target, exc)
-        else:
-            text_val = (raw_text or "").strip().replace("\n", " ")
-            if text_val:
-                # Attempt to compute a concrete CSS selector path for the matched element.
-                css_selector = ""
-                try:
-                    # Some test doubles may not provide element handle semantics.
-                    if hasattr(text_locator, "element_handle"):
-                        handle = await text_locator.element_handle()  # type: ignore[attr-defined]
-                        if handle is not None:  # pragma: no branch - simple guard
-                            css_selector = await _element_css_selector(handle)
-                except PlaywrightError:  # pragma: no cover - defensive
-                    css_selector = ""
-                # Fallback to synthetic text= marker if we could not compute.
-                selector_value = css_selector or f"text={clean_target}"[:200]
-                results.append(
-                    TextExtractionResult(
-                        selector=selector_value[:200],
-                        text=text_val[:limit],
-                    )
-                )
-                return results
-
-    # Fallback: treat as CSS selector
     try:
-        locator = page.locator(clean_target).first
-        if await locator.count() == 0:
-            # Final fallback: non-exact text search (substring / partial)
-            try:
-                substring_locator = page.get_by_text(clean_target, exact=False).first
-                try:
-                    await substring_locator.wait_for(timeout=2000)
-                except PlaywrightTimeoutError:
-                    return results
-                raw_text = await substring_locator.inner_text()
-                text_val = (raw_text or "").strip().replace("\n", " ")
-                if text_val:
-                    css_selector = ""
-                    try:
-                        if hasattr(substring_locator, "element_handle"):
-                            handle = await substring_locator.element_handle()  # type: ignore[attr-defined]
-                            if handle is not None:
-                                css_selector = await _element_css_selector(handle)
-                    except PlaywrightError:  # pragma: no cover - defensive
-                        css_selector = ""
-                    selector_value = css_selector or f"text~={clean_target}"[:200]
-                    results.append(
-                        TextExtractionResult(
-                            selector=selector_value[:200],
-                            text=text_val[:limit],
-                        )
-                    )
-            except PlaywrightError as exc:  # pragma: no cover - defensive
-                logger.debug("Substring text fallback failed for %s: %s", clean_target, exc)
-            return results
+        resolution: _LocatorResolution | None = await _resolve_locator(
+            page,
+            clean_target,
+            allow_substring_text=True,
+            require_single_match=False,
+            tool_name="extract_text",
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.exception("Locator resolution failed for extract_text target %s", clean_target)
+        msg = "Unable to resolve locator for text extraction"
+        raise BrowserToolError(msg, tool="extract_text") from exc
 
-        # We have at least one element for the CSS selector; gather all matches.
-        # Re-query full set (not just .first) to count and iterate.
-        full_locator = page.locator(clean_target)
-        count = await full_locator.count()
+    if resolution is None:
+        return results
+
+    if resolution.strategy == "css":
+        locator = resolution.locator
+        try:
+            count = resolution.match_count
+        except AttributeError:  # pragma: no cover - defensive
+            count = await locator.count()
         for idx in range(count):
-            handle = full_locator.nth(idx)
+            handle = locator.nth(idx)
             try:
                 raw_text = await handle.inner_text()
             except PlaywrightError as exc:  # pragma: no cover - defensive per-element
-                logger.debug("Failed inner_text for element %s at %s: %s", idx, clean_target, exc)
+                logger.debug(
+                    "Failed inner_text for element %s at %s: %s",
+                    idx,
+                    clean_target,
+                    exc,
+                )
                 continue
             text_val = (raw_text or "").strip().replace("\n", " ")
             if text_val:
                 suffix = f":nth-of-type({idx + 1})" if count > 1 else ""
-                sel_render = f"{clean_target}{suffix}"[:200]
+                base_selector = resolution.resolved_selector
+                sel_render = f"{base_selector}{suffix}"[:200]
                 results.append(
                     TextExtractionResult(
                         selector=sel_render,
                         text=text_val[:limit],
                     )
                 )
-    except PlaywrightError as exc:  # pragma: no cover - selector failure
-        logger.debug("Selector processing failed for %s: %s", clean_target, exc)
+        return results
 
+    locator = resolution.locator
+    try:
+        raw_text = await locator.inner_text()
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.debug("Failed to read inner_text for text %s: %s", clean_target, exc)
+        return results
+
+    text_val = (raw_text or "").strip().replace("\n", " ")
+    if not text_val:
+        return results
+
+    css_selector = ""
+    try:
+        if hasattr(locator, "element_handle"):
+            element_handle = await locator.element_handle()
+            if element_handle is not None:
+                css_selector = await _element_css_selector(element_handle)
+    except PlaywrightError:  # pragma: no cover - defensive
+        css_selector = ""
+
+    selector_value = css_selector or resolution.resolved_selector
+    results.append(
+        TextExtractionResult(
+            selector=selector_value[:200],
+            text=text_val[:limit],
+        )
+    )
     return results
 
 
