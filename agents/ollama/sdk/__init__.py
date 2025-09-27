@@ -1,3 +1,8 @@
+"""Public exports for the Ollama agent SDK helpers used by the project.
+
+This module re-exports commonly used helpers for convenience.
+"""
+
 from agents.types import Agent
 
 from .llm_runtime_stats import LLMRuntimeStats, llm_runtime_stats

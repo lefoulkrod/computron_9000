@@ -370,8 +370,10 @@ async def _execute_steps_with_coder(
     """Iterate through plan steps and execute each with the coder agent.
 
     Args:
-        steps: Ordered list of plan steps to implement.
-    tooling: Top-level tooling selection from the plan used by downstream agents.
+        steps (list[PlanStep]): Ordered list of plan steps to implement.
+        tooling (ToolingSelection): Top-level tooling selection from the plan used by
+            downstream agents. This controls which tool implementations should be used
+            when invoking the coder and verifier agents.
 
     Yields:
         StepYield dictionaries containing per-step results.
@@ -389,9 +391,7 @@ async def _execute_steps_with_coder(
             while True:
                 attempt += 1
                 logger.info("Executing step %s (attempt %s)", step.id, attempt)
-                step_result_msg, plan_instrs = await _run_coder_agent(
-                    step, tooling, fixes=fixes_for_retry
-                )
+                step_result_msg, plan_instrs = await _run_coder_agent(step, tooling, fixes=fixes_for_retry)
                 success, fixes = await _verify_step_result(
                     step=step,
                     result=step_result_msg,

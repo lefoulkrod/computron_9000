@@ -1,3 +1,8 @@
+"""Logging callback factories used to log model inputs and outputs during agent runs.
+
+Provides helpers that produce before/after model-call logging callbacks for agents.
+"""
+
 import logging
 import pprint
 from collections.abc import Callable
@@ -30,8 +35,7 @@ def make_log_before_model_call(
             )
         else:
             log_text = (
-                f"\n========== [before_model_call] =========="
-                f"\nChat history sent to LLM:\n{pprint.pformat(messages)}"
+                f"\n========== [before_model_call] ==========\nChat history sent to LLM:\n{pprint.pformat(messages)}"
             )
         logger.debug("\033[32m%s\033[0m", log_text)
 

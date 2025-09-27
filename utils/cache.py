@@ -1,3 +1,8 @@
+"""Simple async-aware caching helpers backed by cachetools.
+
+Provides an async-compatible LRU cache decorator used across the project.
+"""
+
 import functools
 import logging
 from collections.abc import Awaitable, Callable

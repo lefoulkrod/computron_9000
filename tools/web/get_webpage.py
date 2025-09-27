@@ -1,3 +1,9 @@
+"""Higher-level webpage utilities for extraction and summarization.
+
+This module provides functions that reduce webpage HTML to plain text and
+generate summaries suitable for LLM consumption.
+"""
+
 import logging
 
 import bs4
@@ -59,7 +65,8 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
 
 @async_lru_cache(maxsize=10)
 async def get_webpage(url: str) -> ReducedWebpage:
-    """Downloads the web page at the given URL, strips all HTML tags, and returns the cleaned
+    """Downloads the web page at the given URL, strips all HTML tags, and returns the cleaned.
+
     text content along with any links found on the page in the order they appear.
 
     Args:
@@ -75,9 +82,7 @@ async def get_webpage(url: str) -> ReducedWebpage:
     raw_result = await _get_webpage_raw(url)
     html: str = raw_result.html
     try:
-        reduced: ReducedWebpage = (
-            _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
-        )
+        reduced: ReducedWebpage = _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
     except Exception as exc:
         logger.exception("Error reducing webpage content for %s", url)
         raise GetWebpageError(exc) from exc

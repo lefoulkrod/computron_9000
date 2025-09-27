@@ -1,3 +1,9 @@
+"""Web utilities package exposing HTML fetching and summarization helpers.
+
+This package contains tools used to fetch webpages, extract visible text, and
+generate summaries used elsewhere in the project.
+"""
+
 from .get_webpage import (
     get_webpage,
     get_webpage_substring,
