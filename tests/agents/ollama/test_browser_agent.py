@@ -2,7 +2,7 @@ import pytest
 
 from agents.ollama.browser import browser_agent, browser_agent_tool
 from tools.browser.ask_about_screenshot import ask_about_screenshot
-from tools.browser import open_url, current_page, extract_text
+from tools.browser import current_page, extract_text, fill_field, open_url
 from tools.browser.interactions import click
 
 
@@ -10,12 +10,13 @@ from tools.browser.interactions import click
 def test_browser_agent_basic_config() -> None:
     """Browser agent should expose all registered browsing tools in order."""
     assert browser_agent.name == "BROWSER_AGENT"
-    assert browser_agent.tools and len(browser_agent.tools) == 5
+    assert browser_agent.tools and len(browser_agent.tools) == 6
     assert browser_agent.tools[0] is open_url
     assert browser_agent.tools[1] is click
     assert browser_agent.tools[2] is extract_text
     assert browser_agent.tools[3] is ask_about_screenshot
     assert browser_agent.tools[4] is current_page
+    assert browser_agent.tools[5] is fill_field
 
 
 @pytest.mark.unit

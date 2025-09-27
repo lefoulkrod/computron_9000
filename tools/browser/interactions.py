@@ -1,13 +1,10 @@
 """Browser interaction tools.
 
 This module exposes helpers for interacting with the active browser page. The
-primary exported function is ``click`` which clicks an element specified by
-visible text or a CSS selector and returns a fresh ``PageSnapshot`` of the
-active page.
-
-The function attempts to detect navigation triggered by the click and includes
-the navigation response when building the snapshot; when no navigation occurs
-within a short timeout the snapshot is still built from the current page state.
+``click`` function clicks an element specified by visible text or a CSS selector
+and returns a fresh ``PageSnapshot`` of the active page. The ``fill_field``
+function enters text into an input or textarea located by the shared selector
+resolution helper and also returns an updated ``PageSnapshot``.
 """
 
 from __future__ import annotations
@@ -111,4 +108,102 @@ async def click(target: str) -> PageSnapshot:
         raise BrowserToolError(msg, tool="click", details=details) from exc
 
 
-__all__ = ["click"]
+async def fill_field(target: str, value: str | int | float | bool) -> PageSnapshot:
+    """Type into a text-like input located by visible text or CSS selector.
+
+    Args:
+        target: Visible text or CSS selector identifying the input element.
+        value: Textual value (converted to string) to type into the control.
+
+    Returns:
+        PageSnapshot: Snapshot of the page after the fill operation completes.
+
+    Raises:
+        BrowserToolError: If the element cannot be located, is unsupported, or
+            Playwright raises an error while typing.
+    """
+    clean_target = target.strip()
+    if not clean_target:
+        msg = "target must be a non-empty string"
+        raise BrowserToolError(msg, tool="fill_field")
+
+    if value is None:
+        msg = "value must not be None"
+        raise BrowserToolError(msg, tool="fill_field")
+
+    text_value = str(value)
+
+    try:
+        browser = await get_browser()
+        page = await browser.current_page()
+    except (PlaywrightError, RuntimeError) as exc:  # pragma: no cover - defensive wiring
+        logger.exception("Unable to access browser page for fill_field")
+        msg = "Unable to access browser page"
+        raise BrowserToolError(msg, tool="fill_field") from exc
+
+    if page.url in {"", "about:blank"}:
+        msg = "Navigate to a page before attempting to fill elements."
+        raise BrowserToolError(msg, tool="fill_field")
+
+    try:
+        resolution: _LocatorResolution | None = await _resolve_locator(
+            page,
+            clean_target,
+            allow_substring_text=False,
+            require_single_match=True,
+            tool_name="fill_field",
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.exception("Locator resolution failed for fill target %s", clean_target)
+        msg = f"Failed to locate element for target '{clean_target}'."
+        raise BrowserToolError(msg, tool="fill_field") from exc
+
+    if resolution is None:
+        msg = f"No element found matching text or selector '{clean_target}'."
+        raise BrowserToolError(msg, tool="fill_field")
+
+    locator = resolution.locator
+    details = {
+        "strategy": resolution.strategy,
+        "query": resolution.query,
+        "selector": resolution.resolved_selector,
+    }
+
+    tag_name = ""
+    input_type = ""
+    try:
+        handle = await locator.element_handle()
+        if handle is not None:
+            tag_name = await handle.evaluate("el => el.tagName.toLowerCase()")
+            if tag_name == "input":
+                raw_type = await handle.get_attribute("type")
+                input_type = (raw_type or "text").lower()
+    except PlaywrightError as exc:  # pragma: no cover - defensive introspection aid
+        logger.debug("Failed to introspect element for fill_field: %s", exc)
+
+    if tag_name != "input" and tag_name != "textarea":
+        msg = "fill_field only supports input and textarea elements"
+        raise BrowserToolError(msg, tool="fill_field", details=details)
+
+    unsupported_inputs = {"checkbox", "radio", "submit", "button", "image", "file", "hidden"}
+    if tag_name == "input" and input_type in unsupported_inputs:
+        msg = f"Input type '{input_type}' is not supported by fill_field."
+        raise BrowserToolError(msg, tool="fill_field", details=details)
+
+    try:
+        await locator.click()
+        await locator.fill("")
+        await locator.type(text_value)
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:
+        logger.exception("Playwright error during fill_field for target %s", clean_target)
+        msg = f"Playwright error filling element: {exc}"
+        raise BrowserToolError(msg, tool="fill_field", details=details) from exc
+
+    return await _build_page_snapshot(page, None)
+
+
+__all__ = ["click", "fill_field"]
