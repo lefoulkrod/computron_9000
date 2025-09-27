@@ -20,8 +20,7 @@ if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency
 
 DEFAULT_UA = (
     # A realistic, stable Chromium UA (tweak as needed)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 
@@ -111,8 +110,7 @@ class Browser:
         proxy: ProxySettings | None = None,
         accept_downloads: bool = True,
         geolocation: Geolocation | None = None,  # {"latitude": 37.7749, "longitude": -122.4194}
-        permissions: list[str]
-        | None = None,  # e.g. ["geolocation", "clipboard-read", "clipboard-write"]
+        permissions: list[str] | None = None,  # e.g. ["geolocation", "clipboard-read", "clipboard-write"]
         extra_headers: dict[str, str] | None = None,  # sent with every request
         args: list[str] | None = None,  # extra Chromium args
     ) -> Browser:
@@ -248,7 +246,7 @@ async def get_browser() -> Browser:
     Returns:
         _Browser: The persistent browser instance used for agent tools.
     """
-    global _browser  # noqa: PLW0603
+    global _browser
     if _browser is None:
         # initialize once and keep it for the lifetime of the process
         config = load_config()
@@ -265,7 +263,7 @@ async def close_browser() -> None:
     Returns:
         None
     """
-    global _browser  # noqa: PLW0603
+    global _browser
     if _browser is not None:
         await _browser.close()
         _browser = None

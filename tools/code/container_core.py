@@ -13,6 +13,9 @@ from podman.domain.containers import Container
 
 logger = logging.getLogger(__name__)
 
+# Expected tuple length when demux=True: (stdout, stderr)
+EXPECTED_OUTPUT_LEN = 2
+
 
 class CodeExecutionError(Exception):
     """Custom exception for code execution errors."""
@@ -164,11 +167,12 @@ def _run_code_in_container(
         exit_code = exit_code if exit_code is not None else -1
         result = _parse_container_output(exit_code, output)
         logger.debug("Execution completed: %s", result)
-        return result
     except Exception as e:
         logger.exception("Execution in container failed")
         msg = f"Execution in container failed: {e}"
         raise CodeExecutionError(msg) from e
+    else:
+        return result
     finally:
         if ctr is not None:
             try:

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import inspect
 import json
-from collections.abc import Callable, Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 from pydantic import BaseModel
 
@@ -29,9 +31,7 @@ def _normalize_tool_result(obj: object) -> object:
     return obj
 
 
-def _prepare_tool_arguments(
-    tool_func: Callable[..., Any], arguments: dict[str, Any]
-) -> dict[str, Any]:
+def _prepare_tool_arguments(tool_func: Callable[..., Any], arguments: dict[str, Any]) -> dict[str, Any]:
     """Prepare tool function arguments by validating and converting via type hints."""
     validated_args = {}
     # Introspect the tool signature so we can coerce each supplied argument.
@@ -72,12 +72,12 @@ def _prepare_tool_arguments(
                 else:
                     validated_args[arg_name] = value
             elif hasattr(expected_type, "model_validate"):
-                # Pydantic v2 path – accept raw dicts or JSON strings.
+                # Pydantic v2 path - accept raw dicts or JSON strings.
                 if isinstance(value, str):
                     value = json.loads(value)
                 validated_args[arg_name] = expected_type.model_validate(value)
             elif hasattr(expected_type, "parse_obj"):  # Fallback for older Pydantic
-                # Pydantic v1 fallback – same idea as above.
+                # Pydantic v1 fallback - same idea as above.
                 if isinstance(value, str):
                     value = json.loads(value)
                 validated_args[arg_name] = expected_type.parse_obj(value)

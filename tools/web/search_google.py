@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from html import unescape
+from http import HTTPStatus
 from typing import Any
 
 import aiohttp
@@ -158,7 +159,7 @@ async def _perform_request(
                 "Google Search API responded with status %s",
                 response.status,
             )
-            if response.status != 200:
+            if response.status != HTTPStatus.OK:
                 message = _extract_error_message(body)
                 msg = f"Google Search API returned status {response.status}: {message}"
                 raise GoogleSearchError(msg)
@@ -200,10 +201,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
 
     api_key = os.getenv("GOOGLE_SEARCH_API_KEY")
     if not api_key:
-        msg = (
-            "Google Search API key not configured. Set the GOOGLE_SEARCH_API_KEY environment "
-            "variable."
-        )
+        msg = "Google Search API key not configured. Set the GOOGLE_SEARCH_API_KEY environment variable."
         logger.error(msg)
         raise GoogleSearchError(msg)
 
