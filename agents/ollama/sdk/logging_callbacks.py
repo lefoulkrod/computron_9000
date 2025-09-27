@@ -80,7 +80,8 @@ def make_log_after_model_call(
         try:
             response_data = response.model_dump()
             log_text += f"\nLLM response:\n{pprint.pformat(response_data)}"
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
+            # model_dump may raise attribute/type/serialization errors; handle them gracefully
             log_text += "\nLLM response: <model_dump failed>"
         logger.debug("\033[33m%s\033[0m", log_text)
 

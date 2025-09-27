@@ -83,7 +83,7 @@ async def get_webpage(url: str) -> ReducedWebpage:
     html: str = raw_result.html
     try:
         reduced: ReducedWebpage = _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
-    except Exception as exc:
+    except (ValueError, RuntimeError) as exc:
         logger.exception("Error reducing webpage content for %s", url)
         raise GetWebpageError(exc) from exc
     return reduced
@@ -108,7 +108,7 @@ async def get_webpage_summary(url: str) -> str:
     try:
         reduced: ReducedWebpage = await get_webpage(url)
         return await _summarize_text_full(reduced.page_text)
-    except Exception as exc:
+    except (GetWebpageError, ValueError, RuntimeError) as exc:
         logger.exception("Error summarizing webpage for %s", url)
         msg = f"Error summarizing webpage: {exc}"
         raise GetWebpageError(msg) from exc
@@ -134,7 +134,7 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
     """
     try:
         reduced: ReducedWebpage = await get_webpage(url)
-    except Exception as exc:
+    except BaseException as exc:  # Intentionally broad: wrap any error from get_webpage -> GetWebpageError
         logger.exception("Error fetching webpage for substring: %s", url)
         msg = f"Error fetching webpage: {exc}"
         raise GetWebpageError(msg) from exc
@@ -150,7 +150,7 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
         raise ValueError(msg)
     try:
         return page_text[start:end]
-    except Exception as exc:
+    except (IndexError, ValueError) as exc:
         logger.exception("Error getting webpage substring for %s", url)
         msg = f"Error getting webpage substring: {exc}"
         raise GetWebpageError(msg) from exc
@@ -176,6 +176,6 @@ async def get_webpage_summary_sections(url: str) -> list[SectionSummary]:
     try:
         reduced: ReducedWebpage = await get_webpage(url)
         return await summarize_text_sections(reduced.page_text)
-    except Exception as exc:
+    except (GetWebpageError, ValueError, RuntimeError) as exc:
         logger.exception("Error summarizing webpage in sections for %s", url)
         raise GetWebpageError(str(exc)) from exc

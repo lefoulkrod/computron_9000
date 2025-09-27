@@ -1,4 +1,5 @@
 # Standard library imports
+# ruff: noqa: BLE001
 """aiohttp web server exposing the COMPUTRON_9000 agent API.
 
 This module now exposes a create_app() factory instead of instantiating the
@@ -164,9 +165,7 @@ async def chat_handler(request: Request) -> StreamResponse:
         return web.json_response({"error": "Message field is required."}, status=400)
     data_objs: list[Data] | None = None
     if payload.data:
-        data_objs = [
-            Data(base64_encoded=a.base64, content_type=a.content_type) for a in payload.data
-        ]
+        data_objs = [Data(base64_encoded=a.base64, content_type=a.content_type) for a in payload.data]
     return await stream_events(request, handle_user_message(user_query, data_objs))
 
 
