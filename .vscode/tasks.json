@@ -42,6 +42,26 @@
             ],
             "group": "test",
             "problemMatcher": []
+        },
+        {
+            "label": "backend - run quality checks",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "just check"
+            ],
+            "group": "none"
+        },
+        {
+            "label": "backend - format code",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "just format"
+            ],
+            "group": "none"
         }
     ]
 }
