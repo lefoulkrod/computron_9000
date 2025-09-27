@@ -6,7 +6,6 @@ Usage:
 
 This ensures the 'tools' package is available for import.
 """
-# flake8: noqa: T201
 
 import asyncio
 import logging

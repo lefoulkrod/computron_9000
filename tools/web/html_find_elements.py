@@ -1,3 +1,5 @@
+"""Utilities to find HTML elements using CSS selectors and BeautifulSoup."""
+
 import logging
 
 from bs4 import BeautifulSoup
@@ -57,6 +59,6 @@ async def html_find_elements(
                 all_matches.extend(matches)
 
         return [HtmlElementResult(html_element=str(el)) for el in all_matches]
-    except Exception as e:
-        logger.error(f"Error in html_find_elements: {e}")
+    except Exception:
+        logger.exception("Error in html_find_elements")
         return []
