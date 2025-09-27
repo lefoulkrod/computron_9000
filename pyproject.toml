@@ -37,7 +37,7 @@ target-version = "py312"
 line-length = 120
 extend-exclude = ["tests/*", "repls/**"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 # Allow prints in REPL helper scripts under repls/
 "repls/*" = ["T201"]
 
@@ -46,7 +46,7 @@ select = [
     "ALL",
     "D",
 ]
-extend-select = ["I"]
+extend-select = ["I", "BLE"]
 ignore = [
     # Ignore all complexity rules
     "C90",  # McCabe complexity
