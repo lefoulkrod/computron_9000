@@ -42,9 +42,14 @@ Guidelines
 - Each step performs exactly one short command or one file creation/modification.
 - Derive implementation_details from the architect's design and assignment, listing
   precise requirements without code.
-- For code-related steps (e.g., module or file implementations), make implementation_details highly detailed:
-  - Break down functional requirements into specific, actionable bullet points covering all aspects from the design (e.g., methods, members, interfaces, preconditions, postconditions, exceptions).
-  - Focus exclusively on implementation requirements; do NOT include unit test specifications or test cases, as a downstream agent will handle test planning and creation.
+    - For code-related steps (e.g., module or file implementations), make
+        implementation_details highly detailed:
+        - Break down functional requirements into specific, actionable bullet points
+            covering all aspects from the design (e.g., methods, members, interfaces,
+            preconditions, postconditions, exceptions).
+        - Focus exclusively on implementation requirements; do NOT include unit
+            test specifications or test cases, as a downstream agent will handle test
+            planning and creation.
 - Avoid long-running commands, servers, or watchers.
 - Final step MUST add a README explaining how to install dependencies, run the app,
   and execute tests (using the selected test framework).
