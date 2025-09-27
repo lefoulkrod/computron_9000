@@ -38,10 +38,7 @@ async def generate_completion(
     """
     try:
         cfg = load_config()
-        if getattr(cfg, "llm", None) and cfg.llm.host:
-            client = AsyncClient(host=cfg.llm.host)
-        else:
-            client = AsyncClient()
+        client = AsyncClient(host=cfg.llm.host) if getattr(cfg, "llm", None) and cfg.llm.host else AsyncClient()
         response = await client.generate(
             model=model,
             prompt=prompt,  # prompt_to_send,

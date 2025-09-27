@@ -137,10 +137,7 @@ def grep(
         ]
 
         # Merge default excludes with user-provided excludes
-        if exclude_globs is None:
-            exclude_globs = default_excludes
-        else:
-            exclude_globs = exclude_globs + default_excludes
+        exclude_globs = default_excludes if exclude_globs is None else exclude_globs + default_excludes
 
         # Root is the home/workspace directory path of '.'
         root_abs, _home, root_rel = resolve_under_home(".")
@@ -171,11 +168,7 @@ def grep(
             searched += 1
             for i, line in enumerate(text.splitlines(keepends=False), start=1):
                 for m in patt.finditer(line):
-                    rel_path = (
-                        str(fpath.relative_to(root_abs))
-                        if fpath.is_relative_to(root_abs)
-                        else str(fpath)
-                    )
+                    rel_path = str(fpath.relative_to(root_abs)) if fpath.is_relative_to(root_abs) else str(fpath)
                     matches.append(
                         GrepMatch(
                             file_path=(f"{root_rel}/{rel_path}" if root_rel else rel_path),

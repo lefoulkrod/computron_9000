@@ -1,5 +1,4 @@
 # Standard library imports
-# ruff: noqa: BLE001
 """aiohttp web server exposing the COMPUTRON_9000 agent API.
 
 This module now exposes a create_app() factory instead of instantiating the
@@ -23,9 +22,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
     from aiohttp.web_request import Request
     from aiohttp.web_response import Response, StreamResponse
-
-if TYPE_CHECKING:  # pragma: no cover - typing helpers only
-    from collections.abc import Awaitable, Callable
 
 from agents import handle_user_message, reset_message_history
 from agents.types import Data

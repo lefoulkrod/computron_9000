@@ -109,10 +109,7 @@ async def run_tool_call_loop(
 
     """  # noqa: E501
     cfg = load_config()
-    if getattr(cfg, "llm", None) and cfg.llm.host:
-        client = AsyncClient(host=cfg.llm.host)
-    else:
-        client = AsyncClient()
+    client = AsyncClient(host=cfg.llm.host) if getattr(cfg, "llm", None) and cfg.llm.host else AsyncClient()
     tools = tools or []
     while True:
         if before_model_callbacks:
@@ -171,11 +168,7 @@ async def run_tool_call_loop(
                 arguments = getattr(function, "arguments", {})
 
                 try:
-                    publish_event(
-                        AssistantResponse(
-                            event=ToolCallPayload(type="tool_call", name=str(tool_name))
-                        )
-                    )
+                    publish_event(AssistantResponse(event=ToolCallPayload(type="tool_call", name=str(tool_name))))
                 except Exception:  # pragma: no cover - defensive
                     logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
 
