@@ -70,7 +70,8 @@ def list_directory_contents(path: str) -> DirectoryContents:
         path_obj = Path(path)
         contents = [item.name for item in path_obj.iterdir()]
         return DirectoryContents(status="success", contents=contents)
-    except Exception as e:
+    except (FileNotFoundError, NotADirectoryError, PermissionError, OSError) as e:
+        # Expected filesystem errors: return the error result so callers can handle it.
         return DirectoryContents(status="error", contents=[], error_message=str(e))
 
 
@@ -121,7 +122,7 @@ def get_path_details(path: str) -> PathDetails:
             "created": st.st_ctime,
         }
         return PathDetails(status="success", details=details)
-    except Exception as e:
+    except (FileNotFoundError, PermissionError, OSError) as e:
         return PathDetails(status="error", details={}, error_message=str(e))
 
 
@@ -155,7 +156,9 @@ def read_file_contents(path: str) -> FileContents:
         with path_obj.open(encoding="utf-8") as f:
             contents = f.read()
         return FileContents(status="success", contents=contents)
-    except Exception as e:
+    except UnicodeDecodeError as e:
+        return FileContents(status="error", contents="", error_message="File is not valid UTF-8: " + str(e))
+    except (FileNotFoundError, PermissionError, OSError) as e:
         return FileContents(status="error", contents="", error_message=str(e))
 
 
@@ -185,16 +188,14 @@ def search_files(pattern: str) -> SearchResults:
         # Handle recursive patterns properly with Path.rglob for ** patterns
         if "**" in pattern:
             # For recursive patterns, use rglob
-            base_pattern = (
-                pattern.split("**/")[-1] if "**/" in pattern else pattern.replace("**", "*")
-            )
+            base_pattern = pattern.split("**/")[-1] if "**/" in pattern else pattern.replace("**", "*")
             path_matches = list(Path().rglob(base_pattern))
         else:
             path_matches = list(Path().glob(pattern))
         # Convert Path objects to strings for compatibility
         matches = [str(match) for match in path_matches]
         return SearchResults(status="success", matches=matches)
-    except Exception as e:
+    except OSError as e:
         return SearchResults(status="error", matches=[], error_message=str(e))
 
 
@@ -211,8 +212,10 @@ def write_text_file(contents: str, filename: str) -> WriteResults:
     """
     try:
         file_path = Path("/home/larry/.computron_9000") / filename
+        # Ensure directory exists
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         with file_path.open("w", encoding="utf-8") as f:
             f.write(contents)
         return WriteResults(status="success")
-    except Exception as e:
+    except (PermissionError, OSError) as e:
         return WriteResults(status="error", error_message=str(e))

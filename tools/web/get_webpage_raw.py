@@ -1,9 +1,17 @@
+"""Low-level webpage fetcher that returns raw HTML and response metadata.
+
+This module provides a helper used by higher-level webpage utilities to fetch
+HTML content with browser-like headers and error handling.
+"""
+
 import logging
 
 import aiohttp
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 from tools.web.types import GetWebpageError, GetWebpageResult
+
+RESPONSE_OK = 200
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +31,12 @@ def _validate_url(url: str) -> str:
     """
     try:
         TypeAdapter(HttpUrl).validate_python(url)
-        return url
     except ValidationError as e:
-        logger.error(f"Invalid URL: {url} | {e}")
-        raise GetWebpageError(f"Invalid URL: {e}") from e
+        logger.exception("Invalid URL: %s", url)
+        msg = f"Invalid URL: {e}"
+        raise GetWebpageError(msg) from e
+    else:
+        return url
 
 
 async def _get_webpage_raw(url: str) -> GetWebpageResult:
@@ -36,7 +46,8 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
         url (str): The URL of the web page to fetch. Must be a valid HTTP or HTTPS URL.
 
     Returns:
-        GetWebpageResult: An object containing the original URL, the raw HTML content of the page, and the HTTP response code.
+        GetWebpageResult: An object containing the original URL, the raw HTML
+            content of the page, and the HTTP response code.
 
     Raises:
         GetWebpageError: For client or unknown errors.
@@ -65,19 +76,21 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
             response_code = response.status
             try:
                 html = await response.text()
-            except Exception as e:
-                logger.error(f"Failed to read response body for {url}: {e}")
+            except Exception:
+                logger.exception("Failed to read response body for %s", url)
                 html = ""
-            if response_code != 200:
-                logger.debug(f"Non-200 response for {url}: HTTP {response_code}")
+            if response_code != RESPONSE_OK:
+                logger.debug("Non-200 response for %s: HTTP %s", url, response_code)
         return GetWebpageResult(
             url=validated_url,
             html=html,
             response_code=response_code,
         )
     except aiohttp.ClientError as e:
-        logger.error(f"aiohttp error for {url}: {e}")
-        raise GetWebpageError(f"aiohttp error: {e}") from e
+        logger.exception("aiohttp error for %s", url)
+        msg = f"aiohttp error: {e}"
+        raise GetWebpageError(msg) from e
     except Exception as e:
-        logger.error(f"Unexpected error for {url}: {e}")
-        raise GetWebpageError(f"Unexpected error: {e}") from e
+        logger.exception("Unexpected error for %s", url)
+        msg = f"Unexpected error: {e}"
+        raise GetWebpageError(msg) from e

@@ -7,6 +7,8 @@ import logging
 # Third-party imports
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
 
 class DateTimeResult(BaseModel):
     """Result model for the datetime tool."""
@@ -30,5 +32,6 @@ def datetime_tool() -> DateTimeResult:
         tzname = now.tzname() or "Unknown"
         return DateTimeResult(status="success", datetime=formatted, timezone=tzname)
     except Exception as e:
-        logging.exception(f"Failed to get system datetime: {e}")
+        # Use module logger and let logger.exception include exception info.
+        logger.exception("Failed to get system datetime")
         return DateTimeResult(status="error", error_message=str(e))

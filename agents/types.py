@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Agent",
     "Data",
-    "UserMessageEvent",
 ]
 
 
@@ -36,20 +35,6 @@ class Agent(BaseModel):
     options: dict[str, Any]
     tools: list[Callable[..., Any]]
     think: bool = False
-
-
-class UserMessageEvent(BaseModel):
-    """Represents a message event from an agent.
-
-    Attributes:
-        message: The message content from the agent.
-        final: Whether this is the final response in the sequence.
-        thinking: The agent's internal reasoning or thought process, if available.
-    """
-
-    message: str
-    final: bool
-    thinking: str | None = None
 
 
 class Data(BaseModel):

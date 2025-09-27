@@ -23,9 +23,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from aiohttp.web_request import Request
     from aiohttp.web_response import Response, StreamResponse
 
-if TYPE_CHECKING:  # pragma: no cover - typing helpers only
-    from collections.abc import Awaitable, Callable
-
 from agents import handle_user_message, reset_message_history
 from agents.types import Data
 
@@ -87,15 +84,20 @@ async def cors_and_error_middleware(
 # ---------------------------------------------------------------------------
 
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from agents.ollama.sdk.events import AssistantResponse
+
+
 async def stream_events(
     request: Request,
-    events: AsyncIterator[object],  # iterator of objects with message, final, thinking
+    events: AsyncIterator[AssistantResponse],  # iterator of AssistantResponse
 ) -> StreamResponse:
     """Stream JSONL events to the client.
 
     Args:
         request: Incoming aiohttp request.
-        events: Async iterator of event objects with attributes message, final, thinking.
+        events: Async iterator yielding `AssistantResponse` instances produced by
+            `handle_user_message`.
 
     Returns:
         StreamResponse prepared and fully written (EOF sent).
@@ -111,15 +113,26 @@ async def stream_events(
         },
     )
     await resp.prepare(request)
+
     try:
         async for event in events:
-            data_out = {
-                "response": getattr(event, "message", None),
-                "final": getattr(event, "final", False),
-                "thinking": getattr(event, "thinking", None),
+            if not isinstance(event, BaseModel):  # pragma: no cover - defensive
+                msg = f"stream_events expected BaseModel events; received {type(event)!r}"
+                raise TypeError(msg)
+            raw = event.model_dump(mode="json", exclude_none=True)  # type: ignore[arg-type]
+            final_flag = bool(raw.get("final", False))
+            # Direct pass-through (no legacy duplication)
+            data_out: dict[str, object | None] = {
+                "final": final_flag,
+                "thinking": raw.get("thinking"),
+                "content": raw.get("content"),
             }
+            if "data" in raw:
+                data_out["data"] = raw["data"]
+            if "event" in raw:
+                data_out["event"] = raw["event"]
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
-            if data_out.get("final"):
+            if final_flag:
                 break
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Error while streaming events")
@@ -148,9 +161,7 @@ async def chat_handler(request: Request) -> StreamResponse:
         return web.json_response({"error": "Message field is required."}, status=400)
     data_objs: list[Data] | None = None
     if payload.data:
-        data_objs = [
-            Data(base64_encoded=a.base64, content_type=a.content_type) for a in payload.data
-        ]
+        data_objs = [Data(base64_encoded=a.base64, content_type=a.content_type) for a in payload.data]
     return await stream_events(request, handle_user_message(user_query, data_objs))
 
 

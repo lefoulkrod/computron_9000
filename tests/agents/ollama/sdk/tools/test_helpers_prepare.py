@@ -1,10 +1,10 @@
-"""Tests for tool argument validation in the tool loop."""
+"""Tests for the _prepare_tool_arguments helper."""
 
 import json
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.tool_loop import _validate_tool_arguments
+from agents.ollama.sdk.tools import _prepare_tool_arguments
 from tools.virtual_computer.models import ApplyPatchResult
 
 
@@ -16,7 +16,7 @@ class PydanticTestModel(BaseModel):
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_basic_types():
+def test_prepare_tool_arguments_basic_types():
     """
     Test argument validation with basic Python types.
     """
@@ -30,7 +30,7 @@ def test_validate_tool_arguments_basic_types():
         "active": "true"
     }
     
-    result = _validate_tool_arguments(sample_tool, arguments)
+    result = _prepare_tool_arguments(sample_tool, arguments)
     
     assert result["name"] == "test"
     assert result["count"] == 42
@@ -42,7 +42,7 @@ def test_validate_tool_arguments_basic_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_with_defaults():
+def test_prepare_tool_arguments_with_defaults():
     """
     Test argument validation when some parameters have default values.
     """
@@ -51,7 +51,7 @@ def test_validate_tool_arguments_with_defaults():
     
     arguments = {"name": "test"}
     
-    result = _validate_tool_arguments(sample_tool, arguments)
+    result = _prepare_tool_arguments(sample_tool, arguments)
     
     assert result["name"] == "test"
     assert result["count"] == 10
@@ -59,7 +59,7 @@ def test_validate_tool_arguments_with_defaults():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_no_type_hints():
+def test_prepare_tool_arguments_no_type_hints():
     """
     Test argument validation when parameters have no type hints.
     """
@@ -68,14 +68,14 @@ def test_validate_tool_arguments_no_type_hints():
     
     arguments = {"name": "test", "count": 42}
     
-    result = _validate_tool_arguments(sample_tool, arguments)
+    result = _prepare_tool_arguments(sample_tool, arguments)
     
     assert result["name"] == "test"
     assert result["count"] == 42
 
 
 @pytest.mark.unit 
-def test_validate_tool_arguments_pydantic_model():
+def test_prepare_tool_arguments_pydantic_model():
     """
     Test argument validation with Pydantic model parsing.
     """
@@ -84,7 +84,7 @@ def test_validate_tool_arguments_pydantic_model():
     
     # Test with JSON string
     arguments = {"model": '{"name": "test", "value": 42}'}
-    result = _validate_tool_arguments(sample_tool, arguments)
+    result = _prepare_tool_arguments(sample_tool, arguments)
     
     assert isinstance(result["model"], PydanticTestModel)
     assert result["model"].name == "test"
@@ -92,7 +92,7 @@ def test_validate_tool_arguments_pydantic_model():
     
     # Test with dict
     arguments = {"model": {"name": "test2", "value": 24}}
-    result = _validate_tool_arguments(sample_tool, arguments)
+    result = _prepare_tool_arguments(sample_tool, arguments)
     
     assert isinstance(result["model"], PydanticTestModel)
     assert result["model"].name == "test2"
@@ -100,7 +100,7 @@ def test_validate_tool_arguments_pydantic_model():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_optional_type():
+def test_prepare_tool_arguments_optional_type():
     """
     Test argument validation with optional (None) type hints.
     """
@@ -109,14 +109,14 @@ def test_validate_tool_arguments_optional_type():
     
     arguments = {"name": "test", "optional_param": None}
     
-    result = _validate_tool_arguments(sample_tool, arguments)
+    result = _prepare_tool_arguments(sample_tool, arguments)
     
     assert result["name"] == "test"
     assert result["optional_param"] is None
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_type_conversion_errors():
+def test_prepare_tool_arguments_type_conversion_errors():
     """
     Test argument validation when type conversion fails.
     """
@@ -126,11 +126,11 @@ def test_validate_tool_arguments_type_conversion_errors():
     arguments = {"count": "not_a_number"}
     
     with pytest.raises(ValueError):
-        _validate_tool_arguments(sample_tool, arguments)
+        _prepare_tool_arguments(sample_tool, arguments)
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_json_decode_error():
+def test_prepare_tool_arguments_json_decode_error():
     """
     Test argument validation when JSON parsing fails for Pydantic model.
     """
@@ -140,11 +140,11 @@ def test_validate_tool_arguments_json_decode_error():
     arguments = {"model": "invalid json"}
     
     with pytest.raises(json.JSONDecodeError):
-        _validate_tool_arguments(sample_tool, arguments)
+        _prepare_tool_arguments(sample_tool, arguments)
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_missing_required_param():
+def test_prepare_tool_arguments_missing_required_param():
     """
     Test argument validation when a required parameter is missing.
     """
@@ -154,11 +154,11 @@ def test_validate_tool_arguments_missing_required_param():
     arguments = {"name": "test"}  # missing 'count'
     
     with pytest.raises(ValueError, match="Required parameter 'count' is missing"):
-        _validate_tool_arguments(sample_tool, arguments)
+        _prepare_tool_arguments(sample_tool, arguments)
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_bool_conversion():
+def test_prepare_tool_arguments_bool_conversion():
     """
     Test boolean argument validation with various input types.
     """
@@ -178,12 +178,12 @@ def test_validate_tool_arguments_bool_conversion():
     
     for input_val, expected in test_cases:
         arguments = {"flag": input_val}
-        result = _validate_tool_arguments(sample_tool, arguments)
+        result = _prepare_tool_arguments(sample_tool, arguments)
         assert result["flag"] == expected, f"Input {input_val} should result in {expected}"
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_mixed_types():
+def test_prepare_tool_arguments_mixed_types():
     """
     Test argument validation with a mix of different type hints.
     """
@@ -208,7 +208,7 @@ def test_validate_tool_arguments_mixed_types():
         "no_hint": "any_value"
     }
     
-    result = _validate_tool_arguments(complex_tool, arguments)
+    result = _prepare_tool_arguments(complex_tool, arguments)
     
     assert result["name"] == "test"
     assert result["count"] == 100
@@ -222,7 +222,7 @@ def test_validate_tool_arguments_mixed_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_execute_python_program_example():
+def test_prepare_tool_arguments_execute_python_program_example():
     """
     Test argument validation with the exact example from the user's request.
     
@@ -239,7 +239,7 @@ def test_validate_tool_arguments_execute_python_program_example():
         "program_text": "print('Hello World')"
     }
     
-    result = _validate_tool_arguments(execute_python_program, arguments)
+    result = _prepare_tool_arguments(execute_python_program, arguments)
     
     assert result["packages"] == []
     assert isinstance(result["packages"], list)
@@ -248,7 +248,7 @@ def test_validate_tool_arguments_execute_python_program_example():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_apply_text_patch_example():
+def test_prepare_tool_arguments_apply_text_patch_example():
     """
     Test argument validation with the apply_text_patch tool function.
     
@@ -267,7 +267,7 @@ def test_validate_tool_arguments_apply_text_patch_example():
         "replacement": "def new_function():\n    return 'updated'\n"
     }
     
-    result = _validate_tool_arguments(apply_text_patch, arguments)
+    result = _prepare_tool_arguments(apply_text_patch, arguments)
     
     assert result["path"] == "src/main.py"
     assert isinstance(result["path"], str)
@@ -280,7 +280,7 @@ def test_validate_tool_arguments_apply_text_patch_example():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_list_edge_cases():
+def test_prepare_tool_arguments_list_edge_cases():
     """
     Test argument validation for list types with various edge cases.
     """
@@ -292,7 +292,7 @@ def test_validate_tool_arguments_list_edge_cases():
         "empty_list": []
     }
     
-    result = _validate_tool_arguments(tool_with_list_args, arguments)
+    result = _prepare_tool_arguments(tool_with_list_args, arguments)
     
     assert result["simple_list"] == ["item1", "item2", "item3"]
     assert isinstance(result["simple_list"], list)
@@ -301,7 +301,7 @@ def test_validate_tool_arguments_list_edge_cases():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_list_with_json_strings():
+def test_prepare_tool_arguments_list_with_json_strings():
     """
     Test argument validation for list of Pydantic models with JSON string inputs.
     """
@@ -313,7 +313,7 @@ def test_validate_tool_arguments_list_with_json_strings():
         "models": ['{"name": "first", "value": 10}', '{"name": "second", "value": 20}']
     }
     
-    result = _validate_tool_arguments(tool_with_pydantic_list, arguments)
+    result = _prepare_tool_arguments(tool_with_pydantic_list, arguments)
     
     assert isinstance(result["models"], list)
     assert len(result["models"]) == 2

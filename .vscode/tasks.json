@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "run unit tests",
+            "label": "backend - run unit tests",
             "type": "shell",
             "command": "bash",
             "args": [
@@ -42,6 +42,26 @@
             ],
             "group": "test",
             "problemMatcher": []
+        },
+        {
+            "label": "backend - run quality checks",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "just check"
+            ],
+            "group": "none"
+        },
+        {
+            "label": "backend - format code",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "just format"
+            ],
+            "group": "none"
         }
     ]
 }

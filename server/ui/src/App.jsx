@@ -94,7 +94,9 @@ function App() {
                     if (!line) continue;
                     try {
                         const data = JSON.parse(line);
-                        const hasResponse = typeof data.response === 'string' && data.response.length > 0;
+                        // Only support new 'content' field from event system
+                        const contentField = typeof data.content === 'string' ? data.content : '';
+                        const hasResponse = typeof contentField === 'string' && contentField.length > 0;
                         const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
 
                         // If thinking arrives AFTER we've already shown a response in this segment,
@@ -134,7 +136,7 @@ function App() {
                                 // and existing content does not already end with a newline, insert a newline separator.
                                 // This addresses cases where the backend sends multiple discrete "response" chunks
                                 // that should appear on separate lines (e.g., when two JSON objects / paragraphs arrive).
-                                let toAppend = data.response;
+                                let toAppend = contentField;
                                 if (existingContent) {
                                     const endsWithNewline = /\n\s*$/.test(existingContent);
                                     const startsWithBlock = /^\s*(?:```|\n)/.test(toAppend);
