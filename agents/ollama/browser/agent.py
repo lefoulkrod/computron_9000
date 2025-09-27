@@ -17,7 +17,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
-from tools.browser import current_page, extract_text, open_url
+from tools.browser import current_page, extract_text, fill_field, open_url
 from tools.browser.ask_about_screenshot import ask_about_screenshot
 from tools.browser.interactions import click
 
@@ -31,7 +31,7 @@ SYSTEM_PROMPT = dedent(
     """
     You are a lightweight browser agent.
 
-    You have five tools:
+    You have six tools:
     - open_url(url): opens a webpage and returns title, snippet (first ~800 visible characters),
       elements (anchors and forms; up to 20 anchors + all forms), and status code.
     - click(target): clicks an element on the current page. `target` can be the visible text of an
@@ -46,6 +46,9 @@ SYSTEM_PROMPT = dedent(
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
       Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
+    - fill_field(target, value): fills an input or textarea located by visible text or CSS selector
+      and returns the updated page snapshot. Use this before submitting forms or triggering actions
+      that require typed input.
 
     Guidelines:
     - Call open_url exactly with the provided URL when the user requests to open or summarize a
@@ -73,7 +76,7 @@ browser_agent = Agent(
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[open_url, click, extract_text, ask_about_screenshot, current_page],
+    tools=[open_url, click, extract_text, ask_about_screenshot, current_page, fill_field],
     think=model.think,
 )
 
