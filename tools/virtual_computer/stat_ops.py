@@ -6,9 +6,12 @@ Thin LLM-friendly wrappers around path_exists.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from .file_ops import path_exists
-from .models import PathExistsResult
+
+if TYPE_CHECKING:
+    from .models import PathExistsResult
 
 logger = logging.getLogger(__name__)
 

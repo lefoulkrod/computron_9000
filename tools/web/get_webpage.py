@@ -1,3 +1,9 @@
+"""Higher-level webpage utilities for extraction and summarization.
+
+This module provides functions that reduce webpage HTML to plain text and
+generate summaries suitable for LLM consumption.
+"""
+
 import logging
 
 import bs4
@@ -57,9 +63,10 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
     return ReducedWebpage(page_text=page_text, links=links)
 
 
-@async_lru_cache(maxsize=10)
+@async_lru_cache()
 async def get_webpage(url: str) -> ReducedWebpage:
-    """Downloads the web page at the given URL, strips all HTML tags, and returns the cleaned
+    """Downloads the web page at the given URL, strips all HTML tags, and returns the cleaned.
+
     text content along with any links found on the page in the order they appear.
 
     Args:
@@ -75,10 +82,8 @@ async def get_webpage(url: str) -> ReducedWebpage:
     raw_result = await _get_webpage_raw(url)
     html: str = raw_result.html
     try:
-        reduced: ReducedWebpage = (
-            _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
-        )
-    except Exception as exc:
+        reduced: ReducedWebpage = _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
+    except (ValueError, RuntimeError) as exc:
         logger.exception("Error reducing webpage content for %s", url)
         raise GetWebpageError(exc) from exc
     return reduced
@@ -103,7 +108,7 @@ async def get_webpage_summary(url: str) -> str:
     try:
         reduced: ReducedWebpage = await get_webpage(url)
         return await _summarize_text_full(reduced.page_text)
-    except Exception as exc:
+    except (GetWebpageError, ValueError, RuntimeError) as exc:
         logger.exception("Error summarizing webpage for %s", url)
         msg = f"Error summarizing webpage: {exc}"
         raise GetWebpageError(msg) from exc
@@ -129,7 +134,7 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
     """
     try:
         reduced: ReducedWebpage = await get_webpage(url)
-    except Exception as exc:
+    except BaseException as exc:  # Intentionally broad: wrap any error from get_webpage -> GetWebpageError
         logger.exception("Error fetching webpage for substring: %s", url)
         msg = f"Error fetching webpage: {exc}"
         raise GetWebpageError(msg) from exc
@@ -145,7 +150,7 @@ async def get_webpage_substring(url: str, start: int, end: int) -> str:
         raise ValueError(msg)
     try:
         return page_text[start:end]
-    except Exception as exc:
+    except (IndexError, ValueError) as exc:
         logger.exception("Error getting webpage substring for %s", url)
         msg = f"Error getting webpage substring: {exc}"
         raise GetWebpageError(msg) from exc
@@ -171,6 +176,6 @@ async def get_webpage_summary_sections(url: str) -> list[SectionSummary]:
     try:
         reduced: ReducedWebpage = await get_webpage(url)
         return await summarize_text_sections(reduced.page_text)
-    except Exception as exc:
+    except (GetWebpageError, ValueError, RuntimeError) as exc:
         logger.exception("Error summarizing webpage in sections for %s", url)
         raise GetWebpageError(str(exc)) from exc

@@ -10,33 +10,15 @@ from ollama import AsyncClient, ChatResponse
 
 from config import load_config
 
+from .events import AssistantResponse, ToolCallPayload, publish_event
+from .tools import _normalize_tool_result, _prepare_tool_arguments
+
 
 class ToolLoopError(Exception):
     """Custom exception for errors in the tool loop."""
 
 
 logger = logging.getLogger(__name__)
-
-
-def _to_serializable(obj: Any) -> Any:
-    """Recursively convert Pydantic models and custom objects to JSON-serializable dicts.
-
-    Args:
-        obj (Any): The object to convert.
-
-    Returns:
-        Any: JSON-serializable representation.
-
-    """
-    if hasattr(obj, "model_dump"):
-        return _to_serializable(obj.model_dump())
-    if hasattr(obj, "dict"):
-        return _to_serializable(obj.dict())
-    if isinstance(obj, dict):
-        return {k: _to_serializable(v) for k, v in obj.items()}
-    if isinstance(obj, list | tuple | set):
-        return [_to_serializable(i) for i in obj]
-    return obj
 
 
 async def _chat_with_retries(
@@ -94,85 +76,6 @@ async def _chat_with_retries(
     raise ToolLoopError(msg)
 
 
-def _validate_tool_arguments(
-    tool_func: Callable[..., Any], arguments: dict[str, Any]
-) -> dict[str, Any]:
-    """Validate and convert tool function arguments according to type hints.
-
-    Args:
-        tool_func (Callable[..., Any]): The tool function to validate arguments for.
-        arguments (dict[str, Any]): The raw arguments from the tool call.
-
-    Returns:
-        dict[str, Any]: The validated and converted arguments.
-
-    Raises:
-        ValueError: If argument validation fails.
-        TypeError: If argument type conversion fails.
-        json.JSONDecodeError: If JSON parsing fails for Pydantic objects.
-
-    """
-    validated_args = {}
-    sig = inspect.signature(tool_func)
-
-    for arg_name, param in sig.parameters.items():
-        expected_type = param.annotation
-        value = arguments.get(arg_name, param.default)
-
-        # Skip validation if parameter has no default and is missing from arguments
-        if value is inspect.Parameter.empty:
-            msg = f"Required parameter '{arg_name}' is missing"
-            raise ValueError(msg)
-
-        if expected_type is not inspect.Parameter.empty:
-            origin = getattr(expected_type, "__origin__", None)
-            if origin is not None and origin is type(None):
-                validated_args[arg_name] = value
-            elif origin is list:
-                # Handle list[SomeModel] types
-                args = getattr(expected_type, "__args__", ())
-                if args and len(args) == 1:
-                    item_type = args[0]
-                    if hasattr(item_type, "model_validate") or hasattr(item_type, "parse_obj"):
-                        # Convert list of dicts to list of Pydantic models
-                        validated_list = []
-                        for item_value in value:
-                            parsed_item = item_value
-                            if isinstance(item_value, str):
-                                parsed_item = json.loads(item_value)
-                            if hasattr(item_type, "model_validate"):
-                                validated_list.append(item_type.model_validate(parsed_item))
-                            else:  # Fallback for older Pydantic
-                                validated_list.append(item_type.parse_obj(parsed_item))
-                        validated_args[arg_name] = validated_list
-                    else:
-                        validated_args[arg_name] = value
-                else:
-                    validated_args[arg_name] = value
-            elif hasattr(expected_type, "model_validate"):
-                if isinstance(value, str):
-                    value = json.loads(value)
-                validated_args[arg_name] = expected_type.model_validate(value)
-            elif hasattr(expected_type, "parse_obj"):  # Fallback for older Pydantic
-                if isinstance(value, str):
-                    value = json.loads(value)
-                validated_args[arg_name] = expected_type.parse_obj(value)
-            elif expected_type is str:
-                validated_args[arg_name] = str(value)
-            elif expected_type is int:
-                validated_args[arg_name] = int(value)
-            elif expected_type is float:
-                validated_args[arg_name] = float(value)
-            elif expected_type is bool:
-                validated_args[arg_name] = bool(value)
-            else:
-                validated_args[arg_name] = value
-        else:
-            validated_args[arg_name] = value
-
-    return validated_args
-
-
 async def run_tool_call_loop(
     messages: list[dict[str, Any]],
     tools: Sequence[Callable[..., Any]] | None = None,
@@ -206,10 +109,7 @@ async def run_tool_call_loop(
 
     """  # noqa: E501
     cfg = load_config()
-    if getattr(cfg, "llm", None) and cfg.llm.host:
-        client = AsyncClient(host=cfg.llm.host)
-    else:
-        client = AsyncClient()
+    client = AsyncClient(host=cfg.llm.host) if getattr(cfg, "llm", None) and cfg.llm.host else AsyncClient()
     tools = tools or []
     while True:
         if before_model_callbacks:
@@ -239,10 +139,26 @@ async def run_tool_call_loop(
                 "thinking": thinking,
             }
             messages.append(assistant_message)
+            # Emit an event for model content/thinking (non-final, actual final decided by loop end)
+            try:
+                publish_event(AssistantResponse(content=content, thinking=thinking))
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Failed to publish model AssistantResponse event")
             if content is not None or thinking is not None:
                 yield content, thinking
+
             if not tool_calls:
+                # Normal completion path: no further tool calls. Emit a terminal
+                # AssistantResponse with final=True so downstream consumers can
+                # detect completion without relying on EOF. This is the ONLY
+                # location in the codebase that sets final=True for successful
+                # runs (centralized per Phase 2 plan).
+                try:
+                    publish_event(AssistantResponse(final=True))
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("Failed to publish terminal AssistantResponse event")
                 break
+
             for tool_call in tool_calls:
                 function = getattr(tool_call, "function", None)
                 if not function:
@@ -250,6 +166,12 @@ async def run_tool_call_loop(
                     continue
                 tool_name = getattr(function, "name", None)
                 arguments = getattr(function, "arguments", {})
+
+                try:
+                    publish_event(AssistantResponse(event=ToolCallPayload(type="tool_call", name=str(tool_name))))
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
+
                 tool_func = next(
                     (tool for tool in tools if getattr(tool, "__name__", None) == tool_name),
                     None,
@@ -259,12 +181,12 @@ async def run_tool_call_loop(
                     tool_result = {"error": "Tool not found"}
                 else:
                     try:
-                        validated_args = _validate_tool_arguments(tool_func, arguments)
+                        validated_args = _prepare_tool_arguments(tool_func, arguments)
                         if inspect.iscoroutinefunction(tool_func):
                             result = await tool_func(**validated_args)
                         else:
                             result = tool_func(**validated_args)
-                        serializable_result = _to_serializable(result)
+                        serializable_result = _normalize_tool_result(result)
                         tool_result = {"result": serializable_result}
                     except (ValueError, TypeError, json.JSONDecodeError) as exc:
                         logger.exception("Argument validation failed for tool '%s'", tool_name)
@@ -280,6 +202,12 @@ async def run_tool_call_loop(
                 messages.append(tool_message)
             # Do not yield tool results, just continue looping
         except Exception as exc:
+            # Error path: still emit a final event (single source of final=True)
+            # with a generic error message before propagating as ToolLoopError.
             logger.exception("Unhandled exception in tool loop")
-            msg = "An error occurred while processing your message."
-            raise ToolLoopError(msg) from exc
+            error_msg = "An error occurred while processing your message."
+            try:
+                publish_event(AssistantResponse(content=error_msg, final=True))
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("Failed to publish terminal error AssistantResponse event")
+            raise ToolLoopError(error_msg) from exc

@@ -2,7 +2,7 @@
 
 These tests mock the chat client to emit tool_calls and verify that tool
 results are serialized into tool messages as JSON with either a "result"
-payload (Pydantic/dicts converted via _to_serializable) or an "error" payload
+payload (Pydantic/dicts converted via _normalize_tool_result) or an "error" payload
 when tools raise.
 """
 

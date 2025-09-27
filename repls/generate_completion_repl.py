@@ -1,4 +1,3 @@
-# flake8: noqa: T201
 """REPL for generate_completion using command-line input.
 
 Allows toggling 'think' or 'no_think' mode.

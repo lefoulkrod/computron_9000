@@ -31,8 +31,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_UA = (
     # A realistic, stable Chromium UA (tweak as needed)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 
@@ -129,10 +128,10 @@ class Browser:
         timezone_id: str = "America/Chicago",
         proxy: ProxySettings | None = None,
         accept_downloads: bool = True,
-        geolocation: Geolocation | None = None,
-        permissions: list[str] | None = None,
-        extra_headers: dict[str, str] | None = None,
-        args: list[str] | None = None,
+        geolocation: Geolocation | None = None,  # {"latitude": 37.7749, "longitude": -122.4194}
+        permissions: list[str] | None = None,  # e.g. ["geolocation", "clipboard-read", "clipboard-write"]
+        extra_headers: dict[str, str] | None = None,  # sent with every request
+        args: list[str] | None = None,  # extra Chromium args
     ) -> Browser:
         """Start a persistent Chromium context and return a ``Browser``.
 
@@ -324,7 +323,7 @@ async def get_browser() -> Browser:
     Returns:
         _Browser: The persistent browser instance used for agent tools.
     """
-    global _browser  # noqa: PLW0603
+    global _browser
     if _browser is None:
         # initialize once and keep it for the lifetime of the process
         config = load_config()
@@ -341,7 +340,7 @@ async def close_browser() -> None:
     Returns:
         None
     """
-    global _browser  # noqa: PLW0603
+    global _browser
     if _browser is None:
         logger.debug("close_browser called but no browser instance exists")
         return
@@ -350,9 +349,7 @@ async def close_browser() -> None:
     except PlaywrightError as exc:  # pragma: no cover - defensive
         # Should generally be handled inside Browser.close already, but we add
         # an outer guard in case of future changes.
-        logger.warning(
-            "Suppressed exception in close_browser wrapper: %s: %s", type(exc).__name__, exc
-        )
+        logger.warning("Suppressed exception in close_browser wrapper: %s: %s", type(exc).__name__, exc)
     except Exception as exc:  # noqa: BLE001  pragma: no cover - highly defensive
         logger.warning(
             "Suppressed unexpected exception in close_browser wrapper: %s: %s",

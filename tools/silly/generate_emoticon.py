@@ -3,6 +3,8 @@
 Intended for occasional light-hearted responses to add personality.
 """
 
+# ruff: noqa: RUF001
+
 from __future__ import annotations
 
 import logging
@@ -34,6 +36,7 @@ class EmoticonResult(BaseModel):
     error_message: str | None = None
 
     # Public registry of valid emoticons (kept small and curated)
+    # The list intentionally contains unicode emoticons; ruff ignored at file-level.
     EMOTICONS: ClassVar[list[str]] = [
         "(~v\\¬)",
         "(>‿<)",

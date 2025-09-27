@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from html import unescape
+from http import HTTPStatus
 from typing import Any
 
 import aiohttp
@@ -45,7 +46,7 @@ class GoogleSearchError(Exception):
     """Custom exception raised for Google search failures."""
 
 
-def _normalize_text(value: Any) -> str:
+def _normalize_text(value: object) -> str:
     """Return a trimmed string value from ``value`` if possible."""
     if isinstance(value, str):
         return value.strip()
@@ -158,17 +159,17 @@ async def _perform_request(
                 "Google Search API responded with status %s",
                 response.status,
             )
-            if response.status != 200:
+            if response.status != HTTPStatus.OK:
                 message = _extract_error_message(body)
-                raise GoogleSearchError(
-                    f"Google Search API returned status {response.status}: {message}",
-                )
+                msg = f"Google Search API returned status {response.status}: {message}"
+                raise GoogleSearchError(msg)
 
             try:
                 payload: dict[str, Any] = json.loads(body)
             except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
-                logger.error("Invalid JSON received from Google Search API: %s", exc)
-                raise GoogleSearchError("Google Search API returned invalid JSON") from exc
+                logger.exception("Invalid JSON received from Google Search API")
+                msg = "Google Search API returned invalid JSON"
+                raise GoogleSearchError(msg) from exc
 
             error_message = _error_message_from_payload(payload)
             if error_message:
@@ -176,11 +177,13 @@ async def _perform_request(
 
             return payload
     except TimeoutError as exc:
-        logger.error("Google Search API request timed out: %s", exc)
-        raise GoogleSearchError("Google Search API request timed out") from exc
+        logger.exception("Google Search API request timed out")
+        msg = "Google Search API request timed out"
+        raise GoogleSearchError(msg) from exc
     except ClientError as exc:
-        logger.error("Error communicating with Google Search API: %s", exc)
-        raise GoogleSearchError(f"Error communicating with Google Search API: {exc}") from exc
+        logger.exception("Error communicating with Google Search API")
+        msg = f"Error communicating with Google Search API: {exc}"
+        raise GoogleSearchError(msg) from exc
 
 
 async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults:
@@ -188,8 +191,9 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
     try:
         validated = GoogleSearchInput(query=query, max_results=max_results)
     except ValidationError as exc:
-        logger.error("Invalid Google search input: %s", exc)
-        raise GoogleSearchError(f"Invalid input: {exc}") from exc
+        logger.exception("Invalid Google search input")
+        msg = f"Invalid input: {exc}"
+        raise GoogleSearchError(msg) from exc
 
     if validated.max_results <= 0:
         logger.debug("Max results <= 0, returning empty result set for query '%s'", query)
@@ -197,10 +201,7 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
 
     api_key = os.getenv("GOOGLE_SEARCH_API_KEY")
     if not api_key:
-        msg = (
-            "Google Search API key not configured. Set the GOOGLE_SEARCH_API_KEY environment "
-            "variable."
-        )
+        msg = "Google Search API key not configured. Set the GOOGLE_SEARCH_API_KEY environment variable."
         logger.error(msg)
         raise GoogleSearchError(msg)
 
@@ -245,11 +246,12 @@ async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults
             except GoogleSearchError as exc:
                 message = str(exc)
                 if not search_engine_id and "cx" in message.lower():
-                    raise GoogleSearchError(
+                    msg = (
                         "Google Search API requires a Programmable Search Engine identifier. "
                         "Set the GOOGLE_SEARCH_ENGINE_ID environment variable or configure "
                         "`search_engine_id` in the search_google tool settings."
-                    ) from exc
+                    )
+                    raise GoogleSearchError(msg) from exc
                 raise
 
             items = payload.get("items")

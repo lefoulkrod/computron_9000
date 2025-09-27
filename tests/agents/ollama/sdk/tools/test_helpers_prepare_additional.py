@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.tool_loop import _validate_tool_arguments
+from agents.ollama.sdk.tools import _prepare_tool_arguments
 from tools.web.types import GetWebpageResult, LinkInfo, ReducedWebpage
 from tools.reddit.reddit import RedditSubmission, RedditComment
 from tools.virtual_computer.models import (
@@ -14,7 +14,7 @@ from config import SearchGoogleConfig, WebToolsConfig, ToolsConfig
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_web_types():
+def test_prepare_tool_arguments_web_types():
     """
     Test argument validation with web-related Pydantic models.
     """
@@ -33,7 +33,7 @@ def test_validate_tool_arguments_web_types():
         ]
     }
     
-    result = _validate_tool_arguments(web_tool, arguments)
+    result = _prepare_tool_arguments(web_tool, arguments)
     
     assert isinstance(result["result"], GetWebpageResult)
     assert result["result"].url == "https://example.com"
@@ -45,7 +45,7 @@ def test_validate_tool_arguments_web_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_reddit_types():
+def test_prepare_tool_arguments_reddit_types():
     """
     Test argument validation with Reddit Pydantic models.
     """
@@ -77,7 +77,7 @@ def test_validate_tool_arguments_reddit_types():
         ]
     }
     
-    result = _validate_tool_arguments(reddit_tool, arguments)
+    result = _prepare_tool_arguments(reddit_tool, arguments)
     
     assert isinstance(result["submission"], RedditSubmission)
     assert result["submission"].title == "Test Post"
@@ -89,7 +89,7 @@ def test_validate_tool_arguments_reddit_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_virtual_computer_complex_types():
+def test_prepare_tool_arguments_virtual_computer_complex_types():
     """
     Test argument validation with complex virtual computer result models.
     """
@@ -122,7 +122,7 @@ def test_validate_tool_arguments_virtual_computer_complex_types():
         }
     }
     
-    result = _validate_tool_arguments(file_tool, arguments)
+    result = _prepare_tool_arguments(file_tool, arguments)
     
     assert isinstance(result["grep_result"], GrepResult)
     assert result["grep_result"].success is True
@@ -138,7 +138,7 @@ def test_validate_tool_arguments_virtual_computer_complex_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_config_types():
+def test_prepare_tool_arguments_config_types():
     """
     Test argument validation with configuration Pydantic models.
     """
@@ -162,7 +162,7 @@ def test_validate_tool_arguments_config_types():
         }
     }
     
-    result = _validate_tool_arguments(config_tool, arguments)
+    result = _prepare_tool_arguments(config_tool, arguments)
     
     assert isinstance(result["tools_config"], ToolsConfig)
     assert isinstance(result["tools_config"].web, WebToolsConfig)
@@ -175,7 +175,7 @@ def test_validate_tool_arguments_config_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_union_types():
+def test_prepare_tool_arguments_union_types():
     """
     Test argument validation with Union types (like ReadResult).
     
@@ -198,7 +198,7 @@ def test_validate_tool_arguments_union_types():
         }
     }
     
-    result = _validate_tool_arguments(read_tool, arguments)
+    result = _prepare_tool_arguments(read_tool, arguments)
     
     # Union types currently pass through as dicts without validation
     assert isinstance(result["result"], dict)
@@ -216,7 +216,7 @@ def test_validate_tool_arguments_union_types():
         }
     }
     
-    result = _validate_tool_arguments(read_tool, arguments)
+    result = _prepare_tool_arguments(read_tool, arguments)
     
     # Union types currently pass through as dicts without validation
     assert isinstance(result["result"], dict)
@@ -225,7 +225,7 @@ def test_validate_tool_arguments_union_types():
 
 
 @pytest.mark.unit
-def test_validate_tool_arguments_nested_optional_fields():
+def test_prepare_tool_arguments_nested_optional_fields():
     """
     Test argument validation with complex models containing optional fields.
     """
@@ -249,7 +249,7 @@ def test_validate_tool_arguments_nested_optional_fields():
         }
     }
     
-    result = _validate_tool_arguments(result_tool, arguments)
+    result = _prepare_tool_arguments(result_tool, arguments)
     
     assert isinstance(result["write_result"], WriteFileResult)
     assert result["write_result"].success is True
@@ -262,7 +262,7 @@ def test_validate_tool_arguments_nested_optional_fields():
 
 
 @pytest.mark.unit 
-def test_validate_tool_arguments_self_referencing_models():
+def test_prepare_tool_arguments_self_referencing_models():
     """
     Test argument validation with self-referencing models like RedditComment.
     """
@@ -290,7 +290,7 @@ def test_validate_tool_arguments_self_referencing_models():
         }
     }
     
-    result = _validate_tool_arguments(comment_tool, arguments)
+    result = _prepare_tool_arguments(comment_tool, arguments)
     
     assert isinstance(result["comment"], RedditComment)
     assert result["comment"].id == "parent"

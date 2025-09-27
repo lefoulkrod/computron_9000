@@ -1,6 +1,7 @@
-"""Module for executing basic Python or Node.js programs in isolated containers.
+"""Module for executing Python and Node.js programs in isolated containers.
 
-This tool provides functions to execute code snippets in either Python or Node.js environments using containers. It supports capturing stdout, stderr, and exit codes. Containers are stopped after execution and removed.
+Provides helpers to run code snippets inside containers while capturing
+stdout, stderr, and exit codes. Containers are stopped and removed after use.
 """
 
 import logging
@@ -76,20 +77,24 @@ def execute_nodejs_program_with_playwright(
     program_text: str,
     packages: list[str] | None = None,
 ) -> dict[str, str | None]:
-    """Execute a Node.js program in a container that has Playwright and browsers preinstalled, suitable for web navigation tasks.
-    This tool can alos be used to execute any arbitrary Node.js code, not just Playwright scripts.
+    """Execute a Node.js program in a container with Playwright & browsers installed.
+
+    This helper is intended for web navigation tasks but can run arbitrary Node.js
+    code (it's not limited to Playwright scripts).
 
     Args:
         program_text (str): The Node.js script to execute.
-        packages (Optional[List[str]]): List of npm packages to install before execution.
+        packages (Optional[List[str]]): List of npm packages to install before
+            execution.
 
     Returns:
-        Dict[str, Optional[str]]: Dictionary with 'stdout', 'stderr', and 'exit_code'.
+        Dict[str, Optional[str]]: Dictionary with 'stdout', 'stderr', and
+            'exit_code'.
 
     Raises:
         CodeExecutionError: If execution or package installation fails.
 
     """
     packages = packages or []
-    all_packages = list(set(packages + ["playwright@1.53.1"]))
+    all_packages = list({*packages, "playwright@1.53.1"})
     return execute_nodejs_program(program_text=program_text, packages=all_packages)

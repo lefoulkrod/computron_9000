@@ -1,3 +1,5 @@
+"""Utilities to find HTML elements using CSS selectors and BeautifulSoup."""
+
 import logging
 
 from bs4 import BeautifulSoup
@@ -26,8 +28,10 @@ async def html_find_elements(
 
     Args:
         html (str): The HTML string to parse.
-        selectors (Union[str, List[str]]): CSS selector(s) to search for (e.g., 'a', 'div', '.classname', ['a', '.foo']).
-        text (Optional[str]): Optional text to match against the element's contained text.
+        selectors (Union[str, List[str]]): CSS selector(s) to search for. Examples:
+            'a', 'div', '.classname', or ['a', '.foo'].
+        text (Optional[str]): Optional text to match against the element's contained
+            text.
 
     Returns:
         List[HtmlElementResult]: List of matching elements as HTML strings.
@@ -47,9 +51,7 @@ async def html_find_elements(
                 text_matches = [
                     el
                     for el in elements
-                    if el.string
-                    and isinstance(el.string, str)
-                    and text.lower() in el.string.lower()
+                    if el.string and isinstance(el.string, str) and text.lower() in el.string.lower()
                 ]
                 all_matches.extend(text_matches)
             else:
@@ -57,6 +59,6 @@ async def html_find_elements(
                 all_matches.extend(matches)
 
         return [HtmlElementResult(html_element=str(el)) for el in all_matches]
-    except Exception as e:
-        logger.error(f"Error in html_find_elements: {e}")
+    except Exception:
+        logger.exception("Error in html_find_elements")
         return []

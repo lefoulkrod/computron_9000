@@ -13,9 +13,6 @@
 - Always include `__init__.py` for public re-exports, avoid exporting private members, do not export internal functions/classes
 - You may ignore Ruff(I001)
 - No backward compatible refactors unless prompted
-- Write Python code with type hints compliant with PEP 484.
-  - Use built-in types (int, str, list, dict, etc.) where possible.
-  - Use typing.List, typing.Dict, typing.Optional when needed.
-  - Add return types for all functions.
-  - Add type annotations for class attributes.
-  - Default to Any only if type cannot be determined.
+- Write python code compatible with the current Python version 3.12.10
+- Never put implementation details in docstrings
+- Add comments to explain non-obvious code
