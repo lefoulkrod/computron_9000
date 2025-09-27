@@ -3,6 +3,10 @@
     "python.analysis.supportAllPythonDocuments": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.diagnosticMode": "workspace",
+    "mypy-type-checker.importStrategy": "fromEnvironment",
+    "mypy-type-checker.args": [
+        "--config-file=${workspaceFolder}/pyproject.toml"
+    ],
     "files.exclude": {
         "**/__pycache__": true,
         "**/*.egg-info": true,
