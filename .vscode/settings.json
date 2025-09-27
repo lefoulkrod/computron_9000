@@ -26,6 +26,9 @@
     "python.analysis.extraPaths": [
         "${workspaceFolder}"
     ],
+    "python.analysis.exclude": [
+        "${workspaceFolder}/repls/**"
+    ],
     "python.testing.pytestArgs": [
         "tests"
     ],

@@ -35,7 +35,7 @@ dev = [
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-extend-exclude = ["tests/*"]
+extend-exclude = ["tests/*", "repls/**"]
 
 [tool.ruff.per-file-ignores]
 # Allow prints in REPL helper scripts under repls/
@@ -92,7 +92,7 @@ explicit_package_bases = true           # Force explicit top-level package roots
 show_error_codes = true                 # Show mypy error codes (useful with Ruff autofixes)
 allow_redefinition = false              # Prevent accidental variable reassign in same scope
 pretty = true                           # Nicer formatted errors
-exclude = "^tests/"                     # Skip type-checking tests (can be relaxed later)
+exclude = "^(tests|repls)/"                     # Skip type-checking tests and REPL scripts
 
 # 🔌 Plugins
 plugins = ["pydantic.mypy"]             # Enable Pydantic plugin for proper model typing
