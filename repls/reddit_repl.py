@@ -42,17 +42,24 @@ async def main() -> None:
                 for i, submission in enumerate(results, 1):
                     print(f"{i}. {submission.title} (r/{submission.subreddit})")
                     print(f"   URL: {submission.url}")
-                    print(
-                        f"   Author: {submission.author} | Score: {submission.score} | Comments: {submission.num_comments} | Created: {submission.created_utc}",
+                    # keep this metadata line under the configured line-length
+                    meta_line = (
+                        f"   Author: {submission.author} | Score: {submission.score} | "
+                        f"Comments: {submission.num_comments} | Created: {submission.created_utc}"
                     )
+                    print(meta_line)
                     print(f"   Permalink: https://reddit.com{submission.permalink}")
-                    print(
-                        f"   Selftext: {submission.selftext[:1000]}{'...' if len(submission.selftext) > 1000 else ''}",
-                    )
+                    max_self_preview = 1000
+                    preview = submission.selftext[:max_self_preview]
+                    if len(submission.selftext) > max_self_preview:
+                        preview += "..."
+                    print(f"   Selftext: {preview}")
                     print()
-            except Exception as e:
-                logger.exception(f"Error during Reddit search: {e}")
-                print(f"Error: {e}")
+            except Exception:
+                # Avoid embedding exception object in the message; logger.exception will
+                # include the exception info automatically.
+                logger.exception("Error during Reddit search")
+                print("Error during Reddit search")
                 results = []
                 continue
         print(

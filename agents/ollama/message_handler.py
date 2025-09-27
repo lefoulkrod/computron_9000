@@ -42,7 +42,7 @@ def _insert_system_message(agent: Agent) -> None:
 
     Args:
         agent (Agent): The agent whose instruction will be set as the new system message.
-    """  # noqa: E501
+    """
     if _message_history and _message_history[0].get("role") == "system":
         _message_history.pop(0)
     _message_history.insert(0, {"role": "system", "content": agent.instruction})

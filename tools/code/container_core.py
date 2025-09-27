@@ -1,6 +1,7 @@
-"""Container core functions for code execution tools (Python, Node.js) using containers.
+"""Container core functions for code execution tools (Python, Node.js).
 
-This module provides container management, code upload, and package installation utilities for use by code execution tools.
+Provides container management, code upload, and package installation utilities
+used by the code execution tools in this project.
 """
 
 import io
@@ -91,9 +92,7 @@ def _install_packages(ctr: Container, language: str, packages: list[str]) -> Non
     exit_code, output = ctr.exec_run(install_cmd, stdout=True, stderr=True, demux=True)
     logger.debug("Package install output: %s Exit code: %s", output, exit_code)
     if exit_code != 0:
-        stderr = (
-            output[1].decode().strip() if output and isinstance(output, tuple) and output[1] else ""
-        )
+        stderr = output[1].decode().strip() if output and isinstance(output, tuple) and output[1] else ""
         msg = f"Package installation failed: {stderr}"
         raise CodeExecutionError(msg)
 
