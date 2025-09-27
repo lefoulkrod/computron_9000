@@ -1,9 +1,17 @@
+"""Low-level webpage fetcher that returns raw HTML and response metadata.
+
+This module provides a helper used by higher-level webpage utilities to fetch
+HTML content with browser-like headers and error handling.
+"""
+
 import logging
 
 import aiohttp
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 from tools.web.types import GetWebpageError, GetWebpageResult
+
+RESPONSE_OK = 200
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +31,12 @@ def _validate_url(url: str) -> str:
     """
     try:
         TypeAdapter(HttpUrl).validate_python(url)
-        return url
     except ValidationError as e:
         logger.exception("Invalid URL: %s", url)
         msg = f"Invalid URL: {e}"
         raise GetWebpageError(msg) from e
+    else:
+        return url
 
 
 async def _get_webpage_raw(url: str) -> GetWebpageResult:
@@ -70,7 +79,7 @@ async def _get_webpage_raw(url: str) -> GetWebpageResult:
             except Exception:
                 logger.exception("Failed to read response body for %s", url)
                 html = ""
-            if response_code != 200:
+            if response_code != RESPONSE_OK:
                 logger.debug("Non-200 response for %s: HTTP %s", url, response_code)
         return GetWebpageResult(
             url=validated_url,

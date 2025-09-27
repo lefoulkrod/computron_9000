@@ -1,3 +1,9 @@
+"""Helpers to wrap agents as callable tools and convert tool outputs.
+
+Provides utilities to convert assistant text into typed Python values and to
+produce async tool-call wrappers from agent instances.
+"""
+
 import json
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -138,15 +144,10 @@ def _convert_result_to_type[T](raw_text: str, result_type: type[T]) -> T:
             raise AgentToolConversionError(AgentToolConversionError.ERR_CAST)
 
         # If element type is a Pydantic model, validate each item
-        if elem_type is not None and (
-            hasattr(elem_type, "model_validate") or hasattr(elem_type, "parse_obj")
-        ):
+        if elem_type is not None and (hasattr(elem_type, "model_validate") or hasattr(elem_type, "parse_obj")):
             return cast(
                 "T",
-                [
-                    _validate_pydantic_model(elem_type, item, context="for list element type")
-                    for item in parsed
-                ],
+                [_validate_pydantic_model(elem_type, item, context="for list element type") for item in parsed],
             )
 
         # For non-Pydantic element types, return parsed list as-is
@@ -330,9 +331,7 @@ Returns:
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
     # distinguish multiple agent tools. We assume agent.name values are unique.
-    safe_agent_name = (
-        "".join(ch.lower() if ch.isalnum() else "_" for ch in agent.name).strip("_") or "agent"
-    )
+    safe_agent_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in agent.name).strip("_") or "agent"
     func_name = f"run_{safe_agent_name}_as_tool"
     run_agent_as_tool.__name__ = func_name  # type: ignore[attr-defined]
     run_agent_as_tool.__qualname__ = func_name  # type: ignore[attr-defined]

@@ -1,3 +1,9 @@
+"""Typed models used by the web utilities package.
+
+Defines Pydantic models and exception types used by web scraping and
+summarization helpers.
+"""
+
 from pydantic import BaseModel
 
 __all__ = [
