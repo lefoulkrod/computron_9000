@@ -32,6 +32,11 @@ MAX_ARIA_LABEL_LEN = 40
 async def _fast_element_selector(el: ElementHandle, tag: str | None = None) -> str | None:
     """Return a quick, valid CSS selector using only cheap attribute reads.
 
+    This helper prefers inexpensive attribute reads and returns a concise
+    selector when possible. Callers should prefer using ``_best_selector``
+    which orchestrates a fast-path attempt via this function and falls back
+    to ``_element_css_selector`` when this returns ``None``.
+
     Heuristics (in priority order):
         1. id -> ``#id``
         2. data-testid/test/qa/cy -> ``[data-testid="val"]`` etc.
@@ -190,6 +195,9 @@ async def _element_css_selector(element: ElementHandle) -> str:
     This produces selectors that are readable yet usually robust enough to re-select the
     element in subsequent interactions without being overly verbose (we stop early on id).
     """
+    # Note: Prefer callers to use ``_best_selector`` which will attempt
+    # the fast-path in ``_fast_element_selector`` before invoking this
+    # more-expensive DOM-walking fallback.
     script = (
         "(el) => {"
         "  try {"
@@ -229,6 +237,29 @@ async def _element_css_selector(element: ElementHandle) -> str:
     return selector
 
 
+async def _best_selector(element: ElementHandle, tag: str | None = None) -> str:
+    """Return the best available selector for an element.
+
+    This coroutine first attempts the cheap, heuristic-based selection via
+    ``_fast_element_selector``. If that returns a non-empty result, it is
+    returned. Otherwise the function falls back to the more expensive DOM
+    traversal implemented by ``_element_css_selector``.
+
+    Always returns a string (empty string only on unexpected failures).
+    """
+    try:
+        fast = await _fast_element_selector(element, tag=tag)
+    except PlaywrightError:
+        fast = None
+    if fast:
+        return fast
+    try:
+        css = await _element_css_selector(element)
+    except PlaywrightError:
+        css = ""
+    return css or ""
+
+
 async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
     """Extract interesting interactive elements (anchors, forms) from the page.
 
@@ -259,13 +290,8 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             if truncated:
                 text = text + " (truncated)"
 
-            # Selector via fast path then CSS fallback
-            css_selector = await _fast_element_selector(b, tag="button")
-            if not css_selector:
-                try:
-                    css_selector = await _element_css_selector(b)
-                except PlaywrightError:  # pragma: no cover - defensive
-                    css_selector = ""
+            # Selector via centralized best-selector helper
+            css_selector = await _best_selector(b, tag="button")
             try:
                 role_val = await b.get_attribute("role")
             except PlaywrightError:  # pragma: no cover - defensive
@@ -303,13 +329,8 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                 truncated = True
             if truncated:
                 text = text + " (truncated)"
-            # Fast path selector first
-            css_selector = await _fast_element_selector(a, tag="a")
-            if not css_selector:
-                try:
-                    css_selector = await _element_css_selector(a)
-                except PlaywrightError:  # pragma: no cover - defensive
-                    css_selector = ""
+            # Centralized selector selection (fast then fallback)
+            css_selector = await _best_selector(a, tag="a")
             try:
                 role_val = await a.get_attribute("role")
             except PlaywrightError:  # pragma: no cover - defensive
@@ -359,12 +380,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             if truncated:
                 text = text + " (truncated)"
 
-            css_selector = await _fast_element_selector(iframe, tag="iframe")
-            if not css_selector:
-                try:
-                    css_selector = await _element_css_selector(iframe)
-                except PlaywrightError:  # pragma: no cover - defensive
-                    css_selector = ""
+            css_selector = await _best_selector(iframe, tag="iframe")
 
             elements.append(
                 Element(
@@ -423,13 +439,11 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             except PlaywrightError:  # pragma: no cover - defensive
                 inputs = []
 
-            # Prefer fast path for forms
-            css_selector = await _fast_element_selector(form_el, tag="form")
+            # Centralized selector selection for forms
+            css_selector = await _best_selector(form_el, tag="form")
             if not css_selector:
-                try:
-                    css_selector = await _element_css_selector(form_el)
-                except PlaywrightError:  # pragma: no cover - defensive
-                    css_selector = selector  # fallback to logical selector
+                # if DOM-walk failed, fall back to our logical selector
+                css_selector = selector
 
             elements.append(
                 Element(
