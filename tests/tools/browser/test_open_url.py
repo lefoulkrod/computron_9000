@@ -99,6 +99,8 @@ class FakePage:
             return self._anchors
         if selector == "form":
             return self._forms
+        if selector in {"button, [role=button]", "iframe"}:
+            return []
         raise AssertionError(f"Unexpected selector: {selector}")
 
     async def close(self) -> None:  # noqa: D401 - stub
