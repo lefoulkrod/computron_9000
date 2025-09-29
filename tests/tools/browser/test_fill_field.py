@@ -15,6 +15,16 @@ from tools.browser import BrowserToolError
 from tools.browser.interactions import fill_field
 
 
+async def _passthrough_human_click(locator: FakeLocator) -> None:
+    await locator.click()
+
+
+async def _passthrough_human_type(locator: FakeLocator, text: str, *, clear_existing: bool = True) -> None:
+    if clear_existing:
+        await locator.fill("")
+    await locator.type(text)
+
+
 class FakeElementHandle:
     """Minimal element handle supporting tag/type inspection."""
 
@@ -153,6 +163,8 @@ async def test_fill_field_by_css(monkeypatch: pytest.MonkeyPatch) -> None:
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
+    monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     snapshot = await fill_field(".search-box", "chips")
     assert "Filled value: chips" in snapshot.snippet
@@ -171,6 +183,8 @@ async def test_fill_field_by_visible_text(monkeypatch: pytest.MonkeyPatch) -> No
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
+    monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     snapshot = await fill_field("Email", "user@example.com")
     assert "user@example.com" in snapshot.snippet
@@ -188,6 +202,8 @@ async def test_fill_field_rejects_checkbox(monkeypatch: pytest.MonkeyPatch) -> N
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
+    monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     with pytest.raises(BrowserToolError):
         await fill_field("#agree", True)
@@ -204,6 +220,8 @@ async def test_fill_field_requires_non_empty_selector(monkeypatch: pytest.Monkey
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
+    monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     with pytest.raises(BrowserToolError):
         await fill_field("   ", "value")
@@ -221,6 +239,8 @@ async def test_fill_field_select_element(monkeypatch: pytest.MonkeyPatch) -> Non
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
+    monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     with pytest.raises(BrowserToolError):
         await fill_field("#country", "us")

@@ -32,6 +32,9 @@ async def ask_about_screenshot(
 ) -> str:
     """Capture a screenshot and ask a vision model a question about it.
 
+    This tool can only answer questions about the visual elements on the screen
+    it cannot answer questions about the underlying HTML or metadata.
+
     Args:
         prompt: Question the model should answer about the screenshot.
         mode: One of ``"full_page"``, ``"viewport"``, or ``"selector"``. Determines

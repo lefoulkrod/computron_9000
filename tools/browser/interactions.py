@@ -18,6 +18,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
+from tools.browser.core.human import human_click, human_type
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 
 logger = logging.getLogger(__name__)
@@ -87,12 +88,12 @@ async def click(target: str) -> PageSnapshot:
         try:
             # Short timeout: many clicks won't navigate; we don't want to stall.
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=3000) as nav_ctx:
-                await locator.click()
+                await human_click(locator)
             # nav_ctx.value is an awaitable returning a Response
             response = cast("Any", await nav_ctx.value)  # Response | None
         except PlaywrightTimeoutError:
             # Click likely did not trigger navigation; perform direct click as fallback.
-            await locator.click()
+            await human_click(locator)
         except PlaywrightError as exc:
             logger.exception("Playwright error during click for target %s", clean_target)
             msg = f"Playwright error clicking element: {exc}"
@@ -108,7 +109,7 @@ async def click(target: str) -> PageSnapshot:
         raise BrowserToolError(msg, tool="click", details=details) from exc
 
 
-async def fill_field(target: str, value: str | int | float | bool) -> PageSnapshot:
+async def fill_field(target: str, value: str | int | float | bool | None) -> PageSnapshot:
     """Type into a text-like input located by visible text or CSS selector.
 
     Args:
@@ -127,11 +128,9 @@ async def fill_field(target: str, value: str | int | float | bool) -> PageSnapsh
         msg = "target must be a non-empty string"
         raise BrowserToolError(msg, tool="fill_field")
 
-    if value is None:
-        msg = "value must not be None"
-        raise BrowserToolError(msg, tool="fill_field")
-
-    text_value = str(value)
+    # Allow callers to pass None; convert to empty string for typing into fields.
+    # This keeps the runtime behavior flexible while still typing the parameter.
+    text_value = "" if value is None else str(value)
 
     try:
         browser = await get_browser()
@@ -183,7 +182,7 @@ async def fill_field(target: str, value: str | int | float | bool) -> PageSnapsh
     except PlaywrightError as exc:  # pragma: no cover - defensive introspection aid
         logger.debug("Failed to introspect element for fill_field: %s", exc)
 
-    if tag_name != "input" and tag_name != "textarea":
+    if tag_name not in {"input", "textarea"}:
         msg = "fill_field only supports input and textarea elements"
         raise BrowserToolError(msg, tool="fill_field", details=details)
 
@@ -193,9 +192,8 @@ async def fill_field(target: str, value: str | int | float | bool) -> PageSnapsh
         raise BrowserToolError(msg, tool="fill_field", details=details)
 
     try:
-        await locator.click()
-        await locator.fill("")
-        await locator.type(text_value)
+        await human_click(locator)
+        await human_type(locator, text_value, clear_existing=True)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:

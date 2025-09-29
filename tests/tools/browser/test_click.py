@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 import pytest
 
 from tools.browser import BrowserToolError, PageSnapshot
 from tools.browser.interactions import click
+
+
+async def _human_click_passthrough(locator: FakeLocator) -> None:
+    await locator.click()
 
 
 class FakeResponse:
@@ -125,6 +131,7 @@ async def test_click_by_text(monkeypatch: pytest.MonkeyPatch) -> None:
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     snap: PageSnapshot = await click("Continue")
     assert snap.url == "https://example.test/after"
@@ -145,6 +152,7 @@ async def test_click_by_css_selector(monkeypatch: pytest.MonkeyPatch) -> None:
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     snap = await click(".cta")
     assert snap.url.endswith("/cta")
@@ -163,6 +171,7 @@ async def test_click_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
         return fake_browser
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     with pytest.raises(BrowserToolError):
         await click("Does Not Exist")
