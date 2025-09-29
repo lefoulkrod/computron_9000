@@ -1,5 +1,11 @@
 """Browser tools package.
 
+Important: the browser used by these tools is long-lived within the process
+and maintains browser state between tool calls. This includes cookies,
+localStorage/sessionStorage, open pages/tabs, and other session-specific
+state. Call ``close_browser`` (or restart the process) to fully reset the
+browser and clear that state when needed.
+
 Public API:
 - open_url: Open a URL and return title, url, snippet, elements, status_code.
 - ask_about_screenshot: Capture the current page and answer a prompt about it.
@@ -23,10 +29,10 @@ __all__ = [
     "TextExtractionResult",
     "ask_about_screenshot",
     "click",
-    "fill_field",
     "close_browser",
     "current_page",
     "extract_text",
+    "fill_field",
     "get_browser",
     "open_url",
 ]

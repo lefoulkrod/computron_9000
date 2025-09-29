@@ -70,6 +70,9 @@ SYSTEM_PROMPT = dedent(
         Tool use best practices and safety:
         - Minimize browser usage when a web search will do; browsers are slower and have
             greater privacy/side-effect risk.
+        - NOTE: The browser tool used by the browser agent is long-lived within the
+            process and preserves session state between calls (cookies, localStorage,
+            open tabs/pages, etc.).
         - When using the browser, avoid performing destructive actions (purchases,
             account changes) unless explicitly authorized and only after confirming intent.
         - Prefer stable, authoritative sources for facts; when web results conflict, collect
