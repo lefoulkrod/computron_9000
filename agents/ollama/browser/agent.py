@@ -53,9 +53,14 @@ SYSTEM_PROMPT = dedent(
     Guidelines:
     - Call open_url exactly with the provided URL when the user requests to open or summarize a
       page.
-    - After opening a page, use click when you need to follow a link or activate an element before
-      further analysis. Prefer visible text for `target` when possible; fall back to a precise CSS
-      selector if needed.
+    - After opening a page, use `click` to follow links or activate elements. When choosing a
+      target, prefer the `selector` field provided in the page snapshot's `elements` list as the
+      primary locator. Do NOT rely on or assume any internal browser APIs — you only have access
+      to the tools listed above (open_url, click, extract_text, ask_about_screenshot, current_page,
+      fill_field). Call these tools with the element's `selector` when available.
+    - If the `selector` does not work, you may instead provide the element's visible text to the
+      tool as a fallback (for example, `click("Sign in")`), but always attempt the `selector`
+      first.
     - Use extract_text to pull structured text from specific regions or elements instead of taking
       a screenshot when plain text suffices.
     - Use ask_about_screenshot when you need visual details (e.g., "What does the banner say?"),
@@ -70,8 +75,7 @@ SYSTEM_PROMPT = dedent(
 browser_agent = Agent(
     name="BROWSER_AGENT",
     description=(
-        "An agent that opens a URL, summarizes the page, and can ask visual questions "
-        "about a captured screenshot."
+        "An agent that opens a URL, summarizes the page, and can ask visual questions about a captured screenshot."
     ),
     instruction=SYSTEM_PROMPT,
     model=model.model,
