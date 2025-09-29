@@ -14,7 +14,7 @@ def test_element_text_truncation_indicator():
     # Simulate truncation logic outcome: construction does not itself truncate, logic lives in extractor.
     # Here we mimic the post-extraction value to assert convention.
     displayed = long_text[:120] + " (truncated)"
-    el = Element(text=displayed, role=None, name=displayed, selector="#x", tag="a", href="https://x")
+    el = Element(text=displayed, role=None, selector="#x", tag="a", href="https://x")
     assert el.text.endswith("(truncated)")
     # Should not exceed model max_length (140) and should be longer than the base clip.
     assert 120 < len(el.text) <= 140
