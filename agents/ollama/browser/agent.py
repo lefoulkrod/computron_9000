@@ -8,6 +8,7 @@ of the Coder agent for consistency across agents.
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
 from agents.ollama.sdk import (
@@ -51,6 +52,12 @@ SYSTEM_PROMPT = dedent(
       triggering actions that require typed input.
 
     Guidelines:
+    - The browser used by these tools is long-lived and preserves session state between calls
+      (cookies, localStorage, open pages/tabs). When attempting to access or summarize a page,
+      first prefer `current_page()` to see if a relevant page is already open. If the current
+      page is relevant to the user's request, reuse it rather than calling `open_url` which may
+      create a new page or duplicate navigation. Only call `open_url` when no suitable open page
+      exists or when the user explicitly provided a different URL to navigate to.
     - Call open_url exactly with the provided URL when the user requests to open or summarize a
       page.
     - After opening a page, use `click` to follow links or activate elements. When choosing a
@@ -87,7 +94,7 @@ browser_agent = Agent(
 before_model_call_callback = make_log_before_model_call(browser_agent)
 after_model_call_callback = make_log_after_model_call(browser_agent)
 
-browser_agent_tool = make_run_agent_as_tool_function(
+browser_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
     agent=browser_agent,
     tool_description="An agent that can use a browser to interact with web pages.",
     before_model_callbacks=[before_model_call_callback],
