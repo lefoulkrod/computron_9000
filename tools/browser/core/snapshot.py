@@ -143,7 +143,7 @@ class Element(BaseModel):
         tag: Lower-case tag name (e.g. ``a``, ``form``).
         href: Optional href for anchor-like elements.
         src: Optional source URL for elements that expose it (for example, ``iframe.src``).
-        inputs: For form elements, collected field names (excludes hidden & submit types).
+        fields: For form elements, a list of collected form field metadata.
         action: For form elements, the form action attribute if any.
     """
 
@@ -152,10 +152,34 @@ class Element(BaseModel):
     selector: str
     tag: str
     href: str | None = None
-    inputs: list[str] | None = None
+    # For form elements, collected fields with metadata (replaces legacy `inputs`)
+    fields: list[FormField] | None = None
     action: str | None = None
     # Optional src attribute for elements like iframes
     src: str | None = None
+
+
+class FormField(BaseModel):
+    """Metadata for a single form control within a form element.
+
+    Attributes:
+        selector: A CSS selector that targets the field from the page root.
+        name: The value of the ``name`` attribute when present.
+        field_type: The control type (for inputs this is the ``type`` attr,
+            otherwise the tag name such as ``textarea`` or ``select``).
+        placeholder: The ``placeholder`` attribute value when present.
+        required: Whether the control has the ``required`` attribute.
+        options: For ``select`` elements, a list of option dicts with
+            ``value`` and ``label`` keys representing option value and
+            visible text respectively.
+    """
+
+    selector: str
+    name: str | None = None
+    field_type: str
+    placeholder: str | None = None
+    required: bool = False
+    options: list[dict] | None = None
 
 
 class PageSnapshot(BaseModel):
@@ -413,31 +437,79 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             else:
                 selector = f"form:nth-of-type({idx})"
 
-            # Collect inputs
-            inputs: list[str] = []
+            # Collect detailed form fields
+            form_fields: list[FormField] = []
             try:
-                fields = await form_el.query_selector_all("input, textarea, select")
-                for field in fields:
+                controls = await form_el.query_selector_all("input, textarea, select")
+                for control in controls:
                     try:
-                        tag = await field.evaluate("(el) => el.tagName.toLowerCase()")
-                        if tag == "input":
-                            input_type = await field.get_attribute("type")
-                            if (input_type or "").lower() in {
-                                "hidden",
-                                "submit",
-                                "button",
-                                "image",
-                                "reset",
-                                "file",
-                            }:
-                                continue
-                        name_attr = await field.get_attribute("name")
-                        if name_attr:
-                            inputs.append(name_attr)
+                        tag = await control.evaluate("(el) => el.tagName.toLowerCase()")
                     except PlaywrightError:  # pragma: no cover - defensive
                         continue
+
+                    try:
+                        name_attr = await control.get_attribute("name")
+                    except PlaywrightError:
+                        name_attr = None
+
+                    # Determine type: for inputs use type attribute, otherwise tag
+                    field_type: str
+                    if tag == "input":
+                        try:
+                            input_type = await control.get_attribute("type")
+                        except PlaywrightError:
+                            input_type = None
+                        input_type = (input_type or "text").lower()
+                        # Skip hidden/submit-like controls
+                        if input_type in {"hidden", "submit", "button", "image", "reset", "file"}:
+                            continue
+                        field_type = input_type
+                    else:
+                        field_type = tag
+
+                    try:
+                        placeholder = await control.get_attribute("placeholder")
+                    except PlaywrightError:
+                        placeholder = None
+
+                    try:
+                        required_attr = await control.get_attribute("required")
+                    except PlaywrightError:
+                        required_attr = None
+                    required = required_attr is not None
+
+                    # Best selector for the control
+                    control_selector = await _best_selector(control, tag=tag)
+
+                    options_val: list[dict] | None = None
+                    if tag == "select":
+                        # enumerate options with visible text/value
+                        try:
+                            option_handles = await control.query_selector_all("option")
+                        except PlaywrightError:
+                            option_handles = []
+                        opts: list[dict] = []
+                        for opt in option_handles:
+                            try:
+                                val = await opt.get_attribute("value")
+                                label = await opt.inner_text()
+                                opts.append({"value": val or "", "label": (label or "").strip()})
+                            except PlaywrightError:
+                                continue
+                        options_val = opts or None
+
+                    form_fields.append(
+                        FormField(
+                            selector=control_selector or "",
+                            name=name_attr,
+                            field_type=field_type,
+                            placeholder=placeholder,
+                            required=required,
+                            options=options_val,
+                        )
+                    )
             except PlaywrightError:  # pragma: no cover - defensive
-                inputs = []
+                form_fields = []
 
             # Centralized selector selection for forms
             css_selector = await _best_selector(form_el, tag="form")
@@ -451,7 +523,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                     role=None,
                     selector=css_selector or selector,
                     tag="form",
-                    inputs=inputs,
+                    fields=form_fields or None,
                     action=action,
                 )
             )
@@ -498,4 +570,4 @@ async def _build_page_snapshot(page: Page, response: Response | None) -> PageSna
     )
 
 
-__all__ = ["Element", "PageSnapshot", "_build_page_snapshot"]
+__all__ = ["Element", "FormField", "PageSnapshot", "_build_page_snapshot"]
