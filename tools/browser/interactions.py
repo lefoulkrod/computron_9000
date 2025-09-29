@@ -12,13 +12,22 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.human import human_click, human_press_keys, human_type
+from tools.browser.core.human import (
+    human_click,
+    human_press_keys,
+    human_scroll,
+    human_type,
+)
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 
 logger = logging.getLogger(__name__)
@@ -254,3 +263,45 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
 
 
 __all__.append("press_keys")
+
+
+async def scroll_page(direction: str = "down", amount: int | None = None) -> PageSnapshot:
+    """Scroll the page in the given direction and return the updated page snapshot.
+
+    Args:
+        direction: One of {"down", "up", "page_down", "page_up", "top", "bottom"}.
+        amount: Optional pixel distance for fine-grained scrolling when direction
+            is "down" or "up". If omitted, a viewport-sized scroll is performed.
+
+    Returns:
+        PageSnapshot: Snapshot of the page state after scrolling.
+
+    Raises:
+        BrowserToolError: If direction is invalid or the page is not navigated.
+    """
+    if not isinstance(direction, str) or not direction:
+        raise BrowserToolError("direction must be a non-empty string", tool="scroll_page")
+
+    try:
+        browser = await get_browser()
+        page = await browser.current_page()
+    except (PlaywrightError, RuntimeError) as exc:  # pragma: no cover - defensive wiring
+        logger.exception("Unable to access browser page for scroll_page")
+        raise BrowserToolError("Unable to access browser page", tool="scroll_page") from exc
+
+    if page.url in {"", "about:blank"}:
+        raise BrowserToolError("Navigate to a page before attempting to scroll.", tool="scroll_page")
+
+    try:
+        # delegate low-level scrolling to human helper
+        await human_scroll(page, direction=direction, amount=amount)
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:
+        logger.exception("Playwright error during scroll_page for direction %s", direction)
+        raise BrowserToolError(f"Playwright error performing scroll: {exc}", tool="scroll_page") from exc
+
+    return await _build_page_snapshot(page, None)
+
+
+__all__.append("scroll_page")

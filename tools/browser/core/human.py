@@ -216,4 +216,77 @@ async def human_press_keys(page: Page, keys: list[str]) -> None:
             raise BrowserToolError(f"Failed to press key '{key}': {exc}", tool="press_keys") from exc
 
 
-__all__ = ["human_click", "human_press_keys", "human_type"]
+__all__ = ["human_click", "human_press_keys", "human_scroll", "human_type"]
+
+
+async def human_scroll(page: Page, direction: str = "down", amount: int | None = None) -> None:
+    """Perform a human-like scroll on the provided Playwright Page.
+
+    Args:
+        page: Playwright Page instance to operate on.
+        direction: One of {"down", "up", "page_down", "page_up", "top", "bottom"}.
+        amount: Optional pixel distance for fine-grained scrolling when direction is
+            "down" or "up". If omitted, a viewport-sized scroll (page-style) is used.
+
+    Raises:
+        BrowserToolError: On invalid input or missing page APIs.
+    """
+    cfg = _get_human_config()
+
+    if not isinstance(direction, str) or not direction:
+        raise BrowserToolError("direction must be a non-empty string", tool="scroll_page")
+
+    dir_norm = direction.lower()
+    allowed = {"down", "up", "page_down", "page_up", "top", "bottom"}
+    if dir_norm not in allowed:
+        raise BrowserToolError(f"Invalid scroll direction '{direction}'", tool="scroll_page")
+
+    # Prefer keyboard PageDown/PageUp for page-style scrolling for simplicity.
+    # For pixel/step scrolling use window.scroll via evaluate if available.
+    try:
+        if dir_norm in {"top", "bottom"}:
+            key = "Home" if dir_norm == "top" else "End"
+            if hasattr(page, "keyboard") and page.keyboard is not None:
+                await page.keyboard.press(key)
+            else:
+                # fallback to evaluate
+                await page.evaluate(f"() => window.scrollTo(0, document.{'documentElement'}.{'scrollHeight'} )")
+        elif dir_norm in {"page_down", "page_up"}:
+            key = "PageDown" if dir_norm == "page_down" else "PageUp"
+            if hasattr(page, "keyboard") and page.keyboard is not None:
+                await page.keyboard.press(key)
+            else:
+                # simulate by scrolling by viewport height
+                await page.evaluate(
+                    "() => { window.scrollBy(0, window.innerHeight * (arguments[0])); }",
+                    1 if dir_norm == "page_down" else -1,
+                )
+        else:
+            # 'down' or 'up' with optional pixel amount
+            if amount is None:
+                # default to viewport scroll using page.viewport_size when available
+                if hasattr(page, "viewport_size") and page.viewport_size:
+                    height = page.viewport_size.get("height", 800)
+                else:
+                    height = 800
+                delta = round(height) if dir_norm == "down" else -round(height)
+            else:
+                if not isinstance(amount, int):
+                    raise BrowserToolError("amount must be an integer number of pixels", tool="scroll_page")
+                delta = amount if dir_norm == "down" else -amount
+
+            # Add jitter using config offset as fraction
+            jitter = round(cfg.offset_px) if cfg.offset_px else 0
+            if jitter > 0:
+                delta += random.randint(-jitter, jitter)
+
+            # Use evaluate to perform smooth-ish scroll
+            await page.evaluate(
+                "(dy) => window.scrollBy({ top: dy, left: 0, behavior: 'smooth' })",
+                delta,
+            )
+
+        # small pause to allow lazy loading
+        await _sleep_ms(random.randint(100, 300))
+    except Exception as exc:  # pragma: no cover - Playwright runtime errors
+        raise BrowserToolError(f"Failed to perform scroll: {exc}", tool="scroll_page") from exc
