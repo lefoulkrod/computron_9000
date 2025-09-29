@@ -145,7 +145,9 @@ async def test_build_snapshot_truncation_and_filters() -> None:
     assert len(anchor_elements) == 20  # truncated
     assert all(isinstance(e, Element) for e in anchor_elements)
     assert form_elements[0].action is None
-    assert form_elements[0].inputs == ["username", "password"]
+    # New fields structure: ensure names and types are captured
+    assert form_elements[0].fields is not None
+    assert [f.name for f in form_elements[0].fields] == ["username", "password"]
     # CSS selector extraction should produce non-empty strings for anchors
     assert all(e.selector for e in anchor_elements)
 
@@ -241,3 +243,108 @@ async def test_buttons_and_iframes_extracted() -> None:
     assert any(i.text == "Frame Title" and i.src and "example.com" in i.src for i in ifs)
     # second iframe should synthesize hostname label
     assert any(i.text.startswith("iframe ⇒ sub.host") for i in ifs)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_form_field_metadata_extracted() -> None:
+    """Verify placeholder, required flag, and select options are captured."""
+
+    class _FakeSelectOption:
+        def __init__(self, value: str, text: str):
+            self._value = value
+            self._text = text
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "value":
+                return self._value
+            return None
+
+        async def inner_text(self) -> str:
+            return self._text
+
+
+    class _FakeSelect:
+        def __init__(self, name: str, options: list[_FakeSelectOption]):
+            self._name = name
+            self._options = options
+
+        async def evaluate(self, script: str) -> str:
+            return "select"
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "name":
+                return self._name
+            return None
+
+        async def query_selector_all(self, selector: str) -> list[_FakeSelectOption]:
+            assert selector == "option"
+            return self._options
+
+
+    class _FakeInput:
+        def __init__(self, name: str, type_: str, placeholder: str | None = None, required: bool = False):
+            self._name = name
+            self._type = type_
+            self._placeholder = placeholder
+            self._required = required
+
+        async def evaluate(self, script: str) -> str:
+            return "input"
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "name":
+                return self._name
+            if name == "type":
+                return self._type
+            if name == "placeholder":
+                return self._placeholder
+            if name == "required":
+                return "" if self._required else None
+            return None
+
+
+    fake_select = _FakeSelect("country", [
+        _FakeSelectOption("us", "United States"),
+        _FakeSelectOption("ca", "Canada"),
+    ])
+    fake_input = _FakeInput("email", "email", placeholder="you@example.com", required=True)
+
+    class _FakeForm2:
+        def __init__(self):
+            self._action = None
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "action":
+                return None
+            if name == "id":
+                return None
+            return None
+
+        async def query_selector_all(self, selector: str) -> list:
+            # return our two controls
+            assert selector == "input, textarea, select"
+            return [fake_input, fake_select]
+
+    page = _FakePage(
+        title="T",
+        body="Body",
+        anchors=[],
+        forms=[_FakeForm2()],
+    )
+
+    response = _FakeResponse(url="https://x", status=200)
+    snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
+
+    forms = [e for e in snap.elements if e.tag == "form"]
+    assert forms
+    fields = forms[0].fields or []
+    # Expect two fields: email and country (select)
+    names = [f.name for f in fields]
+    assert "email" in names and "country" in names
+    email_field = next(f for f in fields if f.name == "email")
+    assert email_field.placeholder == "you@example.com"
+    assert email_field.required is True
+    country_field = next(f for f in fields if f.name == "country")
+    assert country_field.options is not None
+    assert any(o["value"] == "us" and o["label"] == "United States" for o in country_field.options)

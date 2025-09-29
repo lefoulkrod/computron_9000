@@ -166,7 +166,8 @@ async def test_open_url_basic(monkeypatch: pytest.MonkeyPatch) -> None:
     assert anchor_elements[0].href == "https://example.com/0"
     assert len(form_elements) == 1
     assert form_elements[0].action == "/login"
-    assert form_elements[0].inputs == ["username", "password"]
+    assert form_elements[0].fields is not None
+    assert [f.name for f in form_elements[0].fields] == ["username", "password"]
 
 
 @pytest.mark.unit
