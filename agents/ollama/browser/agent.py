@@ -35,21 +35,23 @@ SYSTEM_PROMPT = dedent(
     You have six tools:
     - open_url(url): opens a webpage and returns title, snippet (first ~800 visible characters),
       elements (anchors and forms; up to 20 anchors + all forms), and status code.
-    - click(target): clicks an element on the current page. `target` can be the visible text of an
-      element or a selector handle (for example `.btn.primary`, `button#submit`, `input[name='q']`). Returns
-      an updated page snapshot after the click (including any navigation changes).
-    - extract_text(target, limit=1000): extract visible text from elements. Tries exact visible
-      text first, then treats `target` as a selector handle, finally a substring text search. Returns
-      a list of {selector, text} objects (selector is a best-effort selector handle) truncated to `limit`.
+    - click(selector): clicks an element on the current page. Prefer passing the element's
+      `selector` handle returned in page snapshots; if no selector is available you may provide
+      the element's visible text as a fallback (for example `click("Sign in")`). Returns an
+      updated page snapshot after the click (including any navigation changes).
+    - extract_text(selector, limit=1000): extract visible text from elements. Prefer a selector
+      handle (for example `div.hours p`) returned in a page snapshot; if none is available, you
+      may provide visible text to locate elements. Returns a list of {selector, text} objects
+      (selector is a best-effort selector handle) truncated to `limit`.
     - ask_about_screenshot(prompt, *, mode="full_page", selector=None): captures a screenshot of
-      the current page (full page, viewport, or a specific selector handle) and sends it to a vision model
-      to answer the prompt.
+      the current page (full page, viewport, or a specific selector handle) and sends it to a vision
+      model to answer the prompt. Use the `selector` parameter to focus screenshots when available.
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
       Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
-    - fill_field(target, value): types text into an input or textarea located by visible text or
-      CSS selector and returns the updated page snapshot. Use this before submitting forms or
-      triggering actions that require typed input.
+    - fill_field(selector, value): types text into an input or textarea located by a selector
+      handle (preferred) or by visible text (fallback) and returns the updated page snapshot.
+      Use this before submitting forms or triggering actions that require typed input.
 
     Guidelines:
     - The browser used by these tools is long-lived and preserves session state between calls

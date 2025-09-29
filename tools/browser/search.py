@@ -33,12 +33,14 @@ class TextExtractionResult(BaseModel):
     text: str = Field(..., max_length=1000)
 
 
-async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionResult]:
-    """Extract visible text by CSS selector or by visible text string.
+async def extract_text(selector: str, limit: int = 1000) -> list[TextExtractionResult]:
+    """Extract visible text by selector handle or by visible text string.
 
     Args:
-        target: Either a selector handle (for example ``div.hours p``) or a visible text
-            snippet (``Business Hours``). Leading/trailing whitespace ignored.
+        selector: Either a selector handle (for example ``div.hours p``) or a visible text
+            snippet (``Business Hours``). Leading/trailing whitespace ignored. Prefer the
+            `selector` field returned in page snapshots; fall back to visible text when no
+            selector is available.
         limit: Maximum number of characters to keep per element's text (default 1000).
 
     Returns:
@@ -48,9 +50,9 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
         BrowserToolError: If the browser/page cannot be accessed or if ``target``
             is empty.
     """
-    clean_target = target.strip()
-    if not clean_target:
-        msg = "target must be a non-empty string"
+    clean_selector = selector.strip()
+    if not clean_selector:
+        msg = "selector must be a non-empty string"
         raise BrowserToolError(msg, tool="extract_text")
 
     try:
@@ -70,7 +72,7 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
     try:
         resolution: _LocatorResolution | None = await _resolve_locator(
             page,
-            clean_target,
+            clean_selector,
             allow_substring_text=True,
             require_single_match=False,
             tool_name="extract_text",
@@ -78,7 +80,7 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for extract_text target %s", clean_target)
+        logger.exception("Locator resolution failed for extract_text selector %s", clean_selector)
         msg = "Unable to resolve locator for text extraction"
         raise BrowserToolError(msg, tool="extract_text") from exc
 
@@ -99,7 +101,7 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
                 logger.debug(
                     "Failed inner_text for element %s at %s: %s",
                     idx,
-                    clean_target,
+                    clean_selector,
                     exc,
                 )
                 continue
@@ -120,7 +122,7 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
     try:
         raw_text = await locator.inner_text()
     except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.debug("Failed to read inner_text for text %s: %s", clean_target, exc)
+        logger.debug("Failed to read inner_text for text %s: %s", clean_selector, exc)
         return results
 
     text_val = (raw_text or "").strip().replace("\n", " ")
