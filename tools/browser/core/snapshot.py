@@ -134,7 +134,6 @@ class Element(BaseModel):
         text: The inner visible text of the element. If truncated,
             the text ends with " (truncated)".
         role: Value of the ``role`` attribute if present.
-        name: Accessible name approximation (currently same as ``text``).
         selector: A selector that can be used to interact with the element.
         tag: Lower-case tag name (e.g. ``a``, ``form``).
         href: Optional href for anchor-like elements.
@@ -144,7 +143,6 @@ class Element(BaseModel):
 
     text: str = Field(..., max_length=140)
     role: str | None = None
-    name: str | None = None
     selector: str
     tag: str
     href: str | None = None
@@ -271,7 +269,6 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                 Element(
                     text=text,
                     role=role_val,
-                    name=text,  # simplified; could use accessibility API later
                     selector=css_selector,
                     tag="a",
                     href=href,
@@ -337,7 +334,6 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                 Element(
                     text=selector,  # using selector as a readable label for the form
                     role=None,
-                    name=selector,
                     selector=css_selector or selector,
                     tag="form",
                     inputs=inputs,
