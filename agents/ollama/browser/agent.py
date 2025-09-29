@@ -46,9 +46,9 @@ SYSTEM_PROMPT = dedent(
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
       Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
-    - fill_field(target, value): fills an input or textarea located by visible text or CSS selector
-      and returns the updated page snapshot. Use this before submitting forms or triggering actions
-      that require typed input.
+    - fill_field(target, value): types text into an input or textarea located by visible text or
+      CSS selector and returns the updated page snapshot. Use this before submitting forms or
+      triggering actions that require typed input.
 
     Guidelines:
     - Call open_url exactly with the provided URL when the user requests to open or summarize a

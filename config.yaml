@@ -72,6 +72,21 @@ tools:
       state_file: ".browser-state.json"
       no_save_state: false
       timeout: 6000
+  browser:
+    human:
+      pointer:
+        move_steps: 12
+        offset_px: 4.0
+        hover_min_ms: 90
+        hover_max_ms: 180
+        click_hold_min_ms: 35
+        click_hold_max_ms: 75
+      typing:
+        delay_min_ms: 45
+        delay_max_ms: 140
+        extra_pause_every_chars: 6
+        extra_pause_min_ms: 160
+        extra_pause_max_ms: 320
 agents:
   web:
     think: false
@@ -82,4 +97,3 @@ agents:
 # Otherwise, this YAML value is used as the default.
 llm:
   host: http://127.0.0.1:11434
-

@@ -131,11 +131,11 @@ class Element(BaseModel):
     """Generic element returned in a page snapshot.
 
     Attributes:
-        text: Inner text truncated to ``MAX_ELEMENT_TEXT_LEN``; if clipped the
-            suffix " (truncated)" is appended.
+        text: The inner visible text of the element. If truncated,
+            the text ends with " (truncated)".
         role: Value of the ``role`` attribute if present.
         name: Accessible name approximation (currently same as ``text``).
-        css: Best-effort CSS selector derived via ``_element_css_selector``.
+        selector: A selector that can be used to interact with the element.
         tag: Lower-case tag name (e.g. ``a``, ``form``).
         href: Optional href for anchor-like elements.
         inputs: For form elements, collected field names (excludes hidden & submit types).
@@ -145,7 +145,7 @@ class Element(BaseModel):
     text: str = Field(..., max_length=140)
     role: str | None = None
     name: str | None = None
-    css: str
+    selector: str
     tag: str
     href: str | None = None
     inputs: list[str] | None = None
@@ -257,7 +257,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             if truncated:
                 text = text + " (truncated)"
             # Fast path selector first
-            css_selector: str | None = await _fast_element_selector(a, tag="a")
+            css_selector = await _fast_element_selector(a, tag="a")
             if not css_selector:
                 try:
                     css_selector = await _element_css_selector(a)
@@ -272,7 +272,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                     text=text,
                     role=role_val,
                     name=text,  # simplified; could use accessibility API later
-                    css=css_selector,
+                    selector=css_selector,
                     tag="a",
                     href=href,
                 )
@@ -326,7 +326,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                 inputs = []
 
             # Prefer fast path for forms
-            css_selector: str | None = await _fast_element_selector(form_el, tag="form")
+            css_selector = await _fast_element_selector(form_el, tag="form")
             if not css_selector:
                 try:
                     css_selector = await _element_css_selector(form_el)
@@ -338,7 +338,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                     text=selector,  # using selector as a readable label for the form
                     role=None,
                     name=selector,
-                    css=css_selector or selector,
+                    selector=css_selector or selector,
                     tag="form",
                     inputs=inputs,
                     action=action,

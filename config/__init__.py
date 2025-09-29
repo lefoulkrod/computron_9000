@@ -64,6 +64,40 @@ class SearchGoogleConfig(BaseModel):
     )
 
 
+class HumanTypingConfig(BaseModel):
+    """Typing simulation configuration."""
+
+    delay_min_ms: int = 40
+    delay_max_ms: int = 120
+    extra_pause_every_chars: int = 6
+    extra_pause_min_ms: int = 150
+    extra_pause_max_ms: int = 300
+
+
+class HumanPointerConfig(BaseModel):
+    """Pointer movement simulation configuration."""
+
+    move_steps: int = 10
+    offset_px: float = 3.0
+    hover_min_ms: int = 80
+    hover_max_ms: int = 160
+    click_hold_min_ms: int = 25
+    click_hold_max_ms: int = 60
+
+
+class BrowserHumanConfig(BaseModel):
+    """Configuration for human-like browser interactions."""
+
+    pointer: HumanPointerConfig = Field(default_factory=HumanPointerConfig)
+    typing: HumanTypingConfig = Field(default_factory=HumanTypingConfig)
+
+
+class BrowserToolsConfig(BaseModel):
+    """Settings for browser tools."""
+
+    human: BrowserHumanConfig = Field(default_factory=BrowserHumanConfig)
+
+
 class WebToolsConfig(BaseModel):
     """Settings for web tools."""
 
@@ -74,6 +108,7 @@ class ToolsConfig(BaseModel):
     """Settings for tools."""
 
     web: WebToolsConfig = Field(default_factory=WebToolsConfig)
+    browser: BrowserToolsConfig = Field(default_factory=BrowserToolsConfig)
 
 
 class AgentConfig(BaseModel):

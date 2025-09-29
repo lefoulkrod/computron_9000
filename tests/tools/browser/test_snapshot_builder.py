@@ -145,7 +145,7 @@ async def test_build_snapshot_truncation_and_filters():
     assert form_elements[0].action is None
     assert form_elements[0].inputs == ["username", "password"]
     # CSS selector extraction should produce non-empty strings for anchors
-    assert all(e.css for e in anchor_elements)
+    assert all(e.selector for e in anchor_elements)
 
 
 @pytest.mark.unit
@@ -158,6 +158,6 @@ async def test_fast_attribute_selectors():
     page = _FakePage(title="T", body="Body", anchors=[a1, a2], forms=[])
     response = _FakeResponse(url="https://x", status=200)
     snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
-    css_map = {e.text: e.css for e in snap.elements if e.tag == "a"}
+    css_map = {e.text: e.selector for e in snap.elements if e.tag == "a"}
     assert css_map["Models"] in {"#models-link", "#models-link"}
     assert css_map["Login"].startswith("[data-testid='primary']")
