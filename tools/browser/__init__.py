@@ -17,7 +17,7 @@ from .ask_about_screenshot import ask_about_screenshot
 from .core import Browser, close_browser, get_browser
 from .core.exceptions import BrowserToolError
 from .core.snapshot import Element, PageSnapshot
-from .interactions import click, fill_field, press_keys
+from .interactions import click, fill_field, press_keys, scroll_page
 from .page import current_page, open_url
 from .search import TextExtractionResult, extract_text
 
@@ -36,4 +36,5 @@ __all__ = [
     "get_browser",
     "open_url",
     "press_keys",
+    "scroll_page",
 ]

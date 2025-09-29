@@ -18,7 +18,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
-from tools.browser import current_page, extract_text, fill_field, open_url, press_keys
+from tools.browser import current_page, extract_text, fill_field, open_url, press_keys, scroll_page
 from tools.browser.ask_about_screenshot import ask_about_screenshot
 from tools.browser.interactions import click
 
@@ -32,7 +32,7 @@ SYSTEM_PROMPT = dedent(
     """
     You are a lightweight browser agent.
 
-    You have six tools:
+    You have tools to interact with web pages:
     - open_url(url): opens a webpage and returns title, snippet (first ~800 visible characters),
       elements (anchors and forms; up to 20 anchors + all forms), and status code.
     - click(selector): clicks an element on the current page. Prefer passing the element's
@@ -57,6 +57,12 @@ SYSTEM_PROMPT = dedent(
       currently focused element. This lets the agent submit forms, navigate suggestion
       lists, or dismiss modals via keyboard-driven UI flows. Returns the updated page
       snapshot after the key presses.
+    - scroll_page(direction, amount=None): Scroll the page to reveal off-screen content
+      and trigger lazy-loading. ``direction`` should be one of {"down", "up",
+      "page_down", "page_up", "top", "bottom"}. When ``direction`` is "down" or
+      "up" you may optionally provide ``amount`` (an integer number of pixels) for
+      finer-grained control. The tool returns an updated page snapshot reflecting any
+      newly loaded content.
 
     Guidelines:
     - The browser used by these tools is long-lived and preserves session state between calls
@@ -69,9 +75,10 @@ SYSTEM_PROMPT = dedent(
       page.
     - After opening a page, use `click` to follow links or activate elements. When choosing a
       target, prefer the `selector` field provided in the page snapshot's `elements` list as the
-      primary locator. Do NOT rely on or assume any internal browser APIs  you only have access
+      primary locator. Do NOT rely on or assume any internal browser APIs — you only have access
       to the tools listed above (open_url, click, extract_text, ask_about_screenshot, current_page,
-      fill_field). Call these tools with the element's `selector` handle when available.
+      fill_field, press_keys, scroll_page). Call these tools with the element's `selector` handle
+      when available.
     - If the `selector` handle does not work, you may instead provide the element's visible text to the
       tool as a fallback (for example, `click("Sign in")`), but always attempt the `selector`
       first.
@@ -94,7 +101,7 @@ browser_agent = Agent(
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[open_url, click, extract_text, ask_about_screenshot, current_page, fill_field, press_keys],
+    tools=[open_url, click, extract_text, ask_about_screenshot, current_page, fill_field, press_keys, scroll_page],
     think=model.think,
 )
 
