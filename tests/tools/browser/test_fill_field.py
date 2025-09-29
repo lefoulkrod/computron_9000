@@ -15,11 +15,11 @@ from tools.browser import BrowserToolError
 from tools.browser.interactions import fill_field
 
 
-async def _passthrough_human_click(locator: FakeLocator) -> None:
+async def _passthrough_human_click(page: object, locator: FakeLocator) -> None:
     await locator.click()
 
 
-async def _passthrough_human_type(locator: FakeLocator, text: str, *, clear_existing: bool = True) -> None:
+async def _passthrough_human_type(page: object, locator: FakeLocator, text: str, *, clear_existing: bool = True) -> None:
     if clear_existing:
         await locator.fill("")
     await locator.type(text)

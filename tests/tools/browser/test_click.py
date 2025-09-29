@@ -6,7 +6,7 @@ from tools.browser import BrowserToolError, PageSnapshot
 from tools.browser.interactions import click
 
 
-async def _human_click_passthrough(locator: FakeLocator) -> None:
+async def _human_click_passthrough(page: object, locator: FakeLocator) -> None:
     await locator.click()
 
 

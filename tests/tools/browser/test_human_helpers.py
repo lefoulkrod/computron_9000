@@ -15,7 +15,7 @@ import random
 from types import SimpleNamespace
 from typing import cast
 
-from playwright.async_api import Locator
+from playwright.async_api import Locator, Page
 
 import pytest
 
@@ -98,7 +98,7 @@ class DummyPage:
 
 
 @pytest.mark.unit
-async def test_human_click_sequence_and_fallback(monkeypatch):
+async def test_human_click_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder: list[str] = []
 
     # deterministic random values
@@ -128,7 +128,7 @@ async def test_human_click_sequence_and_fallback(monkeypatch):
         extra_pause_max_ms=0,
     ))
 
-    await human_click(cast(Locator, locator))
+    await human_click(cast(Page, page), cast(Locator, locator))
 
     # Expect move + down + up in order; coordinates centered
     assert any(r.startswith("move:") for r in recorder)
@@ -139,13 +139,15 @@ async def test_human_click_sequence_and_fallback(monkeypatch):
     handle_no_frame = DummyElementHandle(bounding_box=box, frame=None)
     locator2 = DummyLocator(handle_no_frame)
 
-    # human_click should call locator.click fallback (which raises NotImplementedError here)
-    with pytest.raises(NotImplementedError):
-        await human_click(cast(Locator, locator2))
+    # human_click now raises BrowserToolError when no frame/page is present
+    from tools.browser.core.exceptions import BrowserToolError
+
+    with pytest.raises(BrowserToolError):
+        await human_click(cast(Page, page), cast(Locator, locator2))
 
 
 @pytest.mark.unit
-async def test_human_type_sequence_and_fallback(monkeypatch):
+async def test_human_type_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder: list[str] = []
 
     monkeypatch.setattr(random, "randint", lambda a, b: (a + b) // 2)
@@ -172,12 +174,61 @@ async def test_human_type_sequence_and_fallback(monkeypatch):
     ))
 
     # Test typing with clear_existing True -> expect Control+A, Backspace, then per-char type
-    await human_type(cast(Locator, locator), "ab", clear_existing=True)
+    await human_type(cast(Page, page), cast(Locator, locator), "ab", clear_existing=True)
     assert recorder[:2] == ["press:Control+A", "press:Backspace"]
     assert recorder[2:] == ["type:a:10", "type:b:10"]
 
-    # Test fallback when no page -> locator.fill should be called
+    # When no frame/page is present, human_type now raises BrowserToolError
     handle_no_frame = DummyElementHandle(bounding_box=None, frame=None)
     locator2 = DummyLocator(handle_no_frame)
-    await human_type(cast(Locator, locator2), "xyz", clear_existing=False)
-    assert locator2._filled == "xyz"
+    from tools.browser.core.exceptions import BrowserToolError
+
+    with pytest.raises(BrowserToolError):
+        await human_type(cast(Page, page), cast(Locator, locator2), "xyz", clear_existing=False)
+
+
+@pytest.mark.unit
+async def test_human_press_keys_modifier_chord_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder: list[str] = []
+
+    keyboard = DummyKeyboard(recorder)
+    # add down/up methods to DummyKeyboard for chords
+    async def down(key: str) -> None:
+        recorder.append(f"down:{key}")
+
+    async def up(key: str) -> None:
+        recorder.append(f"up:{key}")
+
+    keyboard.down = down  # type: ignore
+    keyboard.up = up  # type: ignore
+
+    page = DummyPage(keyboard=keyboard)
+
+    # Monkeypatch get_browser/current_page to return our dummy page
+    class DummyBrowser:
+        async def current_page(self) -> object:
+            return page
+
+    async def fake_get_browser() -> object:
+        return DummyBrowser()
+
+    # Press a modifier chord using the dummy page directly
+    from tools.browser.core.human import human_press_keys
+
+    await human_press_keys(cast(Page, page), ["Control+Shift+P"])  # should record some keyboard activity
+
+    # Ensure some keyboard activity was recorded (down/press/up). Exact ordering
+    # or naming can vary between environments; check for at least one down and one press/up.
+    assert any(r.startswith("down:") for r in recorder)
+    assert any(r.startswith("press:") or r.startswith("up:") for r in recorder)
+
+    # Now test fallback when keyboard not available -> monkeypatch get_browser to raise
+    async def fail_get_browser() -> None:
+        raise RuntimeError("no browser")
+
+    # Now test fallback when keyboard not available -> call helper with a page lacking keyboard
+    page_no_keyboard = DummyPage(keyboard=None)
+    from tools.browser.core.exceptions import BrowserToolError
+
+    with pytest.raises(BrowserToolError):
+        await human_press_keys(cast(Page, page_no_keyboard), ["Enter"])  # should raise BrowserToolError via helper

@@ -18,7 +18,7 @@ from agents.ollama.sdk import (
 )
 from agents.types import Agent
 from models import get_default_model
-from tools.browser import current_page, extract_text, fill_field, open_url
+from tools.browser import current_page, extract_text, fill_field, open_url, press_keys
 from tools.browser.ask_about_screenshot import ask_about_screenshot
 from tools.browser.interactions import click
 
@@ -52,6 +52,11 @@ SYSTEM_PROMPT = dedent(
     - fill_field(selector, value): types text into an input or textarea located by a selector
       handle (preferred) or by visible text (fallback) and returns the updated page snapshot.
       Use this before submitting forms or triggering actions that require typed input.
+    - press_keys(keys): send an ordered list of keyboard key names (for example
+      `press_keys(["Tab", "Enter"])` or `press_keys(["Control+Shift+P"])`) to the
+      currently focused element. This lets the agent submit forms, navigate suggestion
+      lists, or dismiss modals via keyboard-driven UI flows. Returns the updated page
+      snapshot after the key presses.
 
     Guidelines:
     - The browser used by these tools is long-lived and preserves session state between calls
@@ -89,7 +94,7 @@ browser_agent = Agent(
     instruction=SYSTEM_PROMPT,
     model=model.model,
     options=model.options,
-    tools=[open_url, click, extract_text, ask_about_screenshot, current_page, fill_field],
+    tools=[open_url, click, extract_text, ask_about_screenshot, current_page, fill_field, press_keys],
     think=model.think,
 )
 
