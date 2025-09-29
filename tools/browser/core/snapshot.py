@@ -137,6 +137,7 @@ class Element(BaseModel):
         selector: A selector that can be used to interact with the element.
         tag: Lower-case tag name (e.g. ``a``, ``form``).
         href: Optional href for anchor-like elements.
+        src: Optional source URL for elements that expose it (for example, ``iframe.src``).
         inputs: For form elements, collected field names (excludes hidden & submit types).
         action: For form elements, the form action attribute if any.
     """
@@ -148,6 +149,8 @@ class Element(BaseModel):
     href: str | None = None
     inputs: list[str] | None = None
     action: str | None = None
+    # Optional src attribute for elements like iframes
+    src: str | None = None
 
 
 class PageSnapshot(BaseModel):
@@ -157,8 +160,10 @@ class PageSnapshot(BaseModel):
         title: Page ``<title>`` text (empty string on failure).
         url: Final URL (navigation response URL if available, else current ``page.url``).
         snippet: First 500 characters of visible ``<body>`` text (trimmed & truncated).
-        elements: Interactive elements: up to 20 anchors plus all forms. Anchor ``text`` may end
-            with " (truncated)" if clipped. Form entries use selector string as ``text``/``name``.
+        elements: Interactive elements: up to 20 anchors plus all forms, plus
+            buttons and iframes. Anchor or button ``text`` may end with
+            " (truncated)" if clipped. Form entries use selector string as
+            ``text``/``name``. Iframe entries include an optional ``src`` field.
         status_code: HTTP status code from the main navigation response or ``None`` if unavailable.
     """
 
@@ -231,6 +236,50 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
     """
     elements: list[Element] = []
 
+    # Buttons (including elements with role=button)
+    try:
+        buttons = await page.query_selector_all("button, [role=button]")
+    except PlaywrightError:  # pragma: no cover - defensive
+        buttons = None
+    if buttons:
+        for idx, b in enumerate(buttons, start=1):
+            try:
+                raw_text = await b.inner_text()
+            except PlaywrightError as exc:  # pragma: no cover - defensive
+                logger.debug("Skipping button due to error: %s", exc)
+                continue
+            text = (raw_text or "").strip()
+            if not text:
+                # Fallback to a short synthetic structural label
+                text = f"Button #{idx}"
+            truncated = False
+            if len(text) > MAX_ELEMENT_TEXT_LEN:
+                text = text[:MAX_ELEMENT_TEXT_LEN]
+                truncated = True
+            if truncated:
+                text = text + " (truncated)"
+
+            # Selector via fast path then CSS fallback
+            css_selector = await _fast_element_selector(b, tag="button")
+            if not css_selector:
+                try:
+                    css_selector = await _element_css_selector(b)
+                except PlaywrightError:  # pragma: no cover - defensive
+                    css_selector = ""
+            try:
+                role_val = await b.get_attribute("role")
+            except PlaywrightError:  # pragma: no cover - defensive
+                role_val = None
+
+            elements.append(
+                Element(
+                    text=text,
+                    role=role_val,
+                    selector=css_selector,
+                    tag="button",
+                )
+            )
+
     # Anchors
     try:
         anchors = await page.query_selector_all("a")
@@ -272,6 +321,58 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                     selector=css_selector,
                     tag="a",
                     href=href,
+                )
+            )
+
+    # Iframes
+    try:
+        iframes = await page.query_selector_all("iframe")
+    except PlaywrightError:  # pragma: no cover - defensive
+        iframes = None
+    if iframes:
+        from urllib.parse import urlparse
+
+        for iframe in iframes:
+            try:
+                title_val = await iframe.get_attribute("title")
+                src_val = await iframe.get_attribute("src")
+            except PlaywrightError:  # pragma: no cover - defensive
+                logger.debug("Skipping iframe due to attribute read error")
+                continue
+
+            src = src_val or ""
+            # Prefer title attribute for human readable text
+            text = (title_val or "").strip()
+            if not text:
+                # Synthesize concise label from src hostname when possible
+                hostname = ""
+                try:
+                    hostname = urlparse(src).hostname or ""
+                except (ValueError, AttributeError):
+                    hostname = ""
+                text = f"iframe ⇒ {hostname}" if hostname else "iframe"
+
+            truncated = False
+            if len(text) > MAX_ELEMENT_TEXT_LEN:
+                text = text[:MAX_ELEMENT_TEXT_LEN]
+                truncated = True
+            if truncated:
+                text = text + " (truncated)"
+
+            css_selector = await _fast_element_selector(iframe, tag="iframe")
+            if not css_selector:
+                try:
+                    css_selector = await _element_css_selector(iframe)
+                except PlaywrightError:  # pragma: no cover - defensive
+                    css_selector = ""
+
+            elements.append(
+                Element(
+                    text=text,
+                    role=None,
+                    selector=css_selector,
+                    tag="iframe",
+                    src=src or None,
                 )
             )
 

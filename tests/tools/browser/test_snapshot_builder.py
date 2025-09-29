@@ -95,12 +95,14 @@ class _FakePage:
         assert selector == "body"
         return self._body
 
-    async def query_selector_all(self, selector: str):  # noqa: D401
+    async def query_selector_all(self, selector: str) -> list:  # noqa: D401
         if selector == "a":
             return self._anchors
         if selector == "form":
             return self._forms
-        raise AssertionError
+        if selector in {"button, [role=button]", "iframe"}:
+            return []
+        raise AssertionError(selector)
 
 
 class _FakeResponse:
@@ -111,7 +113,7 @@ class _FakeResponse:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_build_snapshot_truncation_and_filters():
+async def test_build_snapshot_truncation_and_filters() -> None:
     anchors = [_FakeAnchor(text="link" + str(i), href=f"https://h/{i}") for i in range(30)]
     # Add one empty
     anchors.append(_FakeAnchor(text="   ", href="https://h/zzz"))
@@ -150,7 +152,7 @@ async def test_build_snapshot_truncation_and_filters():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fast_attribute_selectors():
+async def test_fast_attribute_selectors() -> None:
     # Anchor with id should produce #id
     a1 = _FakeAnchor(text="Models", href="/models", el_id="models-link")
     # Anchor with data-testid should produce [data-testid='primary']
@@ -161,3 +163,81 @@ async def test_fast_attribute_selectors():
     css_map = {e.text: e.selector for e in snap.elements if e.tag == "a"}
     assert css_map["Models"] in {"#models-link", "#models-link"}
     assert css_map["Login"].startswith("[data-testid='primary']")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_buttons_and_iframes_extracted() -> None:
+    class _FakeButton:
+        def __init__(self, text: str | None, role: str | None = None, css: str | None = None):
+            self._text = text
+            self._role = role
+            self._css = css or "body > div > button.btn"
+
+        async def inner_text(self) -> str:
+            return self._text or ""
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "role":
+                return self._role
+            if name == "id":
+                return None
+            return None
+
+        async def evaluate(self, script: str) -> str:
+            return self._css
+
+    class _FakeIframe:
+        def __init__(self, title: str | None, src: str | None, css: str | None = None):
+            self._title = title
+            self._src = src
+            self._css = css or "body > div > iframe"
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "title":
+                return self._title
+            if name == "src":
+                return self._src
+            return None
+
+        async def evaluate(self, script: str) -> str:
+            return self._css
+
+    page = _FakePage(
+        title="T",
+        body="Body",
+        anchors=[],
+        forms=[],
+    )
+
+    # Monkeypatch query_selector_all to return buttons/iframes appropriately
+    async def query_selector_all(selector: str) -> list:
+        if selector == "button, [role=button]":
+            return [_FakeButton("Click me", role=None), _FakeButton(None, role="button")]
+        if selector == "a":
+            return []
+        if selector == "form":
+            return []
+        if selector == "iframe":
+            return [_FakeIframe("Frame Title", "https://example.com/frame"), _FakeIframe(None, "https://sub.host/path")]
+        raise AssertionError(selector)
+
+    # Attach our custom query_selector_all onto page
+    page.query_selector_all = query_selector_all  # type: ignore[method-assign]
+
+    response = _FakeResponse(url="https://x", status=200)
+    snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
+
+    btns = [e for e in snap.elements if e.tag == "button"]
+    ifs = [e for e in snap.elements if e.tag == "iframe"]
+
+    assert len(btns) == 2
+    assert any(b.text == "Click me" for b in btns)
+    # second button had no inner text; fallback label should exist
+    assert any(b.text.startswith("Button #") for b in btns)
+
+    assert len(ifs) == 2
+    # first iframe should use title
+    assert any(i.text == "Frame Title" and i.src and "example.com" in i.src for i in ifs)
+    # second iframe should synthesize hostname label
+    assert any(i.text.startswith("iframe ⇒ sub.host") for i in ifs)
