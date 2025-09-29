@@ -1,8 +1,8 @@
 """Browser interaction tools.
 
 This module exposes helpers for interacting with the active browser page. The
-``click`` function clicks an element specified by visible text or a CSS selector
-and returns a fresh ``PageSnapshot`` of the active page. The ``fill_field``
+``click`` function clicks an element specified by visible text or a selector
+handle and returns a fresh ``PageSnapshot`` of the active page. The ``fill_field``
 function enters text into an input or textarea located by the shared selector
 resolution helper and also returns an updated ``PageSnapshot``.
 """
@@ -28,9 +28,10 @@ async def click(target: str) -> PageSnapshot:
     """Click an element by visible text or CSS selector and snapshot the page.
 
     Args:
-        target: Either a visible text string (e.g. ``"Book Now"``) or a CSS
-            selector (e.g. ``"button#submit"``, ``"input[name='q']"``). Leading
-            and trailing whitespace is ignored for text matching.
+        target: Either a visible text string (e.g. ``"Book Now"``) or a selector
+            handle (for example a CSS selector string like ``"button#submit"`` or
+            an internal selector handle returned in page snapshots). Leading and
+            trailing whitespace is ignored for text matching.
 
     Returns:
         PageSnapshot: Structured snapshot of the page after performing the click.
@@ -113,7 +114,7 @@ async def fill_field(target: str, value: str | int | float | bool | None) -> Pag
     """Type into a text-like input located by visible text or CSS selector.
 
     Args:
-        target: Visible text or CSS selector identifying the input element.
+        target: Visible text or selector handle identifying the input element.
         value: Textual value (converted to string) to type into the control.
 
     Returns:
