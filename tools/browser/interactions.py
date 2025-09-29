@@ -24,14 +24,16 @@ from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 logger = logging.getLogger(__name__)
 
 
-async def click(target: str) -> PageSnapshot:
-    """Click an element by visible text or CSS selector and snapshot the page.
+async def click(selector: str) -> PageSnapshot:
+    """Click an element by visible text or selector handle and snapshot the page.
 
     Args:
-        target: Either a visible text string (e.g. ``"Book Now"``) or a selector
+        selector: Either a visible text string (e.g. ``"Book Now"``) or a selector
             handle (for example a CSS selector string like ``"button#submit"`` or
             an internal selector handle returned in page snapshots). Leading and
-            trailing whitespace is ignored for text matching.
+            trailing whitespace is ignored for text matching. Prefer passing the
+            element's `selector` from page snapshots; fall back to visible text only
+            when no selector is available.
 
     Returns:
         PageSnapshot: Structured snapshot of the page after performing the click.
@@ -40,9 +42,9 @@ async def click(target: str) -> PageSnapshot:
         BrowserToolError: If the target is empty, no element is found, the page is
             blank, the click fails, or another browser error occurs.
     """
-    clean_target = target.strip()
-    if not clean_target:
-        msg = "target must be a non-empty string"
+    clean_selector = selector.strip()
+    if not clean_selector:
+        msg = "selector must be a non-empty string"
         raise BrowserToolError(msg, tool="click")
 
     try:
@@ -60,7 +62,7 @@ async def click(target: str) -> PageSnapshot:
     try:
         resolution: _LocatorResolution | None = await _resolve_locator(
             page,
-            clean_target,
+            clean_selector,
             allow_substring_text=False,
             require_single_match=True,
             tool_name="click",
@@ -68,12 +70,12 @@ async def click(target: str) -> PageSnapshot:
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for target %s", clean_target)
-        msg = f"Failed to locate element for target '{clean_target}'."
+        logger.exception("Locator resolution failed for selector %s", clean_selector)
+        msg = f"Failed to locate element for selector '{clean_selector}'."
         raise BrowserToolError(msg, tool="click") from exc
 
     if resolution is None:
-        msg = f"No element found matching text or selector '{clean_target}'."
+        msg = f"No element found matching text or selector '{clean_selector}'."
         raise BrowserToolError(msg, tool="click")
 
     locator = resolution.locator
@@ -96,7 +98,7 @@ async def click(target: str) -> PageSnapshot:
             # Click likely did not trigger navigation; perform direct click as fallback.
             await human_click(locator)
         except PlaywrightError as exc:
-            logger.exception("Playwright error during click for target %s", clean_target)
+            logger.exception("Playwright error during click for selector %s", clean_selector)
             msg = f"Playwright error clicking element: {exc}"
             raise BrowserToolError(msg, tool="click", details=details) from exc
 
@@ -105,16 +107,17 @@ async def click(target: str) -> PageSnapshot:
     except BrowserToolError:
         raise  # already wrapped
     except PlaywrightError as exc:  # pragma: no cover - final safety net
-        logger.exception("Failed to build snapshot after click for target %s", clean_target)
+        logger.exception("Failed to build snapshot after click for selector %s", clean_selector)
         msg = "Failed to complete click operation"
         raise BrowserToolError(msg, tool="click", details=details) from exc
 
 
-async def fill_field(target: str, value: str | int | float | bool | None) -> PageSnapshot:
-    """Type into a text-like input located by visible text or CSS selector.
+async def fill_field(selector: str, value: str | int | float | bool | None) -> PageSnapshot:
+    """Type into a text-like input located by visible text or selector handle.
 
     Args:
-        target: Visible text or selector handle identifying the input element.
+        selector: Visible text or selector handle identifying the input element. Prefer
+            the `selector` field from page snapshots and fall back to visible text.
         value: Textual value (converted to string) to type into the control.
 
     Returns:
@@ -124,9 +127,9 @@ async def fill_field(target: str, value: str | int | float | bool | None) -> Pag
         BrowserToolError: If the element cannot be located, is unsupported, or
             Playwright raises an error while typing.
     """
-    clean_target = target.strip()
-    if not clean_target:
-        msg = "target must be a non-empty string"
+    clean_selector = selector.strip()
+    if not clean_selector:
+        msg = "selector must be a non-empty string"
         raise BrowserToolError(msg, tool="fill_field")
 
     # Allow callers to pass None; convert to empty string for typing into fields.
@@ -148,7 +151,7 @@ async def fill_field(target: str, value: str | int | float | bool | None) -> Pag
     try:
         resolution: _LocatorResolution | None = await _resolve_locator(
             page,
-            clean_target,
+            clean_selector,
             allow_substring_text=False,
             require_single_match=True,
             tool_name="fill_field",
@@ -156,12 +159,12 @@ async def fill_field(target: str, value: str | int | float | bool | None) -> Pag
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for fill target %s", clean_target)
-        msg = f"Failed to locate element for target '{clean_target}'."
+        logger.exception("Locator resolution failed for fill selector %s", clean_selector)
+        msg = f"Failed to locate element for selector '{clean_selector}'."
         raise BrowserToolError(msg, tool="fill_field") from exc
 
     if resolution is None:
-        msg = f"No element found matching text or selector '{clean_target}'."
+        msg = f"No element found matching text or selector '{clean_selector}'."
         raise BrowserToolError(msg, tool="fill_field")
 
     locator = resolution.locator
@@ -198,7 +201,7 @@ async def fill_field(target: str, value: str | int | float | bool | None) -> Pag
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
-        logger.exception("Playwright error during fill_field for target %s", clean_target)
+        logger.exception("Playwright error during fill_field for selector %s", clean_selector)
         msg = f"Playwright error filling element: {exc}"
         raise BrowserToolError(msg, tool="fill_field", details=details) from exc
 
