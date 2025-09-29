@@ -18,7 +18,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.human import human_click, human_type
+from tools.browser.core.human import human_click, human_press_keys, human_type
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 
 logger = logging.getLogger(__name__)
@@ -91,12 +91,12 @@ async def click(selector: str) -> PageSnapshot:
         try:
             # Short timeout: many clicks won't navigate; we don't want to stall.
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=3000) as nav_ctx:
-                await human_click(locator)
+                await human_click(page, locator)
             # nav_ctx.value is an awaitable returning a Response
             response = cast("Any", await nav_ctx.value)  # Response | None
         except PlaywrightTimeoutError:
             # Click likely did not trigger navigation; perform direct click as fallback.
-            await human_click(locator)
+            await human_click(page, locator)
         except PlaywrightError as exc:
             logger.exception("Playwright error during click for selector %s", clean_selector)
             msg = f"Playwright error clicking element: {exc}"
@@ -196,8 +196,8 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
         raise BrowserToolError(msg, tool="fill_field", details=details)
 
     try:
-        await human_click(locator)
-        await human_type(locator, text_value, clear_existing=True)
+        await human_click(page, locator)
+        await human_type(page, locator, text_value, clear_existing=True)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -209,3 +209,48 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
 
 
 __all__ = ["click", "fill_field"]
+
+
+async def press_keys(keys: list[str]) -> PageSnapshot:
+    """Press one or more keyboard keys in order and return an updated page snapshot.
+
+    Args:
+        keys: Ordered list of key names (for example: "Enter", "Escape", "ArrowDown",
+            or modifier chords such as "Control+Shift+P"). Keys are applied to the
+            currently focused element on the active page.
+
+    Returns:
+        PageSnapshot: Snapshot of the page state after the keys are pressed.
+
+    Raises:
+        BrowserToolError: If keys are invalid, the page is not navigated, or key presses fail.
+    """
+    if not isinstance(keys, list) or len(keys) == 0:
+        raise BrowserToolError("keys must be a non-empty list of key names", tool="press_keys")
+
+    try:
+        browser = await get_browser()
+        page = await browser.current_page()
+    except (PlaywrightError, RuntimeError) as exc:  # pragma: no cover - defensive wiring
+        logger.exception("Unable to access browser page for press_keys")
+        msg = "Unable to access browser page"
+        raise BrowserToolError(msg, tool="press_keys") from exc
+
+    if page.url in {"", "about:blank"}:
+        msg = "Navigate to a page before attempting to press keys."
+        raise BrowserToolError(msg, tool="press_keys")
+
+    try:
+        # Delegate to human helper which performs the low-level keyboard operations
+        await human_press_keys(page, keys)
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:
+        logger.exception("Playwright error during press_keys for keys %s", keys)
+        msg = f"Playwright error pressing keys: {exc}"
+        raise BrowserToolError(msg, tool="press_keys") from exc
+
+    return await _build_page_snapshot(page, None)
+
+
+__all__.append("press_keys")
