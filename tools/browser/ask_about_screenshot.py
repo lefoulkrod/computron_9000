@@ -39,7 +39,8 @@ async def ask_about_screenshot(
         prompt: Question the model should answer about the screenshot.
         mode: One of ``"full_page"``, ``"viewport"``, or ``"selector"``. Determines
             which area of the page to capture.
-        selector: When ``mode == "selector"``, a CSS selector targeting the element to capture.
+        selector: When ``mode == "selector"``, a selector string (selector handle)
+            targeting the element to capture.
 
     Returns:
         The model's answer as a plain string.
@@ -87,7 +88,7 @@ async def ask_about_screenshot(
                 tool_name="ask_about_screenshot",
             )
             if resolution is None:
-                msg = f"No element matched selector '{clean_selector}'"
+                msg = f"No element matched selector handle '{clean_selector}'"
                 raise BrowserToolError(msg, tool="ask_about_screenshot")
             locator = resolution.locator
             screenshot_bytes = await locator.screenshot(type="png")

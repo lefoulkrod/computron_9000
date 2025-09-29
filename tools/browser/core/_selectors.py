@@ -1,9 +1,10 @@
 """Locator resolution utilities used by browser tools.
 
 Provides ``_resolve_locator`` which resolves a caller-provided target string
-into a Playwright ``Locator`` using strategies: exact visible text, CSS selector,
-or substring text. The function returns a ``_LocatorResolution`` dataclass with
-metadata about the chosen strategy and matched elements.
+into a Playwright ``Locator`` using strategies: exact visible text, selector
+handle lookup (commonly a CSS selector), or substring text. The function
+returns a ``_LocatorResolution`` dataclass with metadata about the chosen
+strategy and matched elements.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ async def _resolve_locator(
 
     Args:
         page: Active Playwright page.
-        target: Text or CSS selector supplied by the caller.
+        target: Text or selector handle supplied by the caller.
         allow_substring_text: Whether to fall back to substring text matches.
         require_single_match: Whether multiple matches should trigger an error.
         tool_name: Tool identifier used for ``BrowserToolError``.
@@ -90,7 +91,9 @@ async def _resolve_locator(
                     "matches": count,
                     "query": clean_target,
                 }
-                msg = f"Multiple elements match the exact text '{clean_target}'. Provide a more specific CSS selector."
+                msg = (
+                    f"Multiple elements match the exact text '{clean_target}'. Provide a more specific selector handle."
+                )
                 raise BrowserToolError(msg, tool=tool_name, details=details)
             locator = exact_locator.first
             return _LocatorResolution(
@@ -101,12 +104,12 @@ async def _resolve_locator(
                 resolved_selector=f"text={clean_target}",
             )
 
-    # 2) CSS selector
+    # 2) Selector handle (commonly a CSS selector)
     try:
         css_locator = page.locator(clean_target)
         count = await css_locator.count()
     except PlaywrightError as exc:
-        logger.debug("CSS selector lookup failed for %s: %s", clean_target, exc)
+        logger.debug("Selector handle lookup failed for %s: %s", clean_target, exc)
     else:
         if count > 0:
             if count > 1 and require_single_match:
@@ -115,7 +118,7 @@ async def _resolve_locator(
                     "matches": count,
                     "query": clean_target,
                 }
-                msg = f"CSS selector '{clean_target}' matched multiple elements. Provide a more specific selector."
+                msg = f"Selector handle '{clean_target}' matched multiple elements. Provide a more specific selector."
                 raise BrowserToolError(msg, tool=tool_name, details=details)
             locator = css_locator.first if require_single_match else css_locator
             return _LocatorResolution(
@@ -150,7 +153,7 @@ async def _resolve_locator(
             "matches": count,
             "query": clean_target,
         }
-        msg = f"Multiple elements contain the text '{clean_target}'. Provide a more specific CSS selector."
+        msg = f"Multiple elements contain the text '{clean_target}'. Provide a more specific selector handle."
         raise BrowserToolError(msg, tool=tool_name, details=details)
 
     locator = substring_locator.first

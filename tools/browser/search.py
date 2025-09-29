@@ -1,7 +1,7 @@
 """Browser search and text extraction utilities.
 
 This module provides the ``extract_text`` helper which extracts visible text
-from elements identified by a CSS selector or by visible text. Results are
+from elements identified by a selector handle or by visible text. Results are
 returned as Pydantic models for safe serialization.
 """
 
@@ -24,7 +24,7 @@ class TextExtractionResult(BaseModel):
     """Single element text extraction result.
 
     Attributes:
-        selector: Best-effort CSS selector (or synthetic indicator like ``"text=..."``)
+        selector: Best-effort selector handle (or synthetic indicator like ``"text=..."``)
             identifying the source element.
         text: Trimmed visible text content (possibly truncated).
     """
@@ -37,7 +37,7 @@ async def extract_text(target: str, limit: int = 1000) -> list[TextExtractionRes
     """Extract visible text by CSS selector or by visible text string.
 
     Args:
-        target: Either a CSS selector (``div.hours p``) or a visible text
+        target: Either a selector handle (for example ``div.hours p``) or a visible text
             snippet (``Business Hours``). Leading/trailing whitespace ignored.
         limit: Maximum number of characters to keep per element's text (default 1000).
 

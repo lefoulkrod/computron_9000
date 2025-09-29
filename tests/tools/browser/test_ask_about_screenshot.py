@@ -214,4 +214,9 @@ async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None
     with pytest.raises(BrowserToolError) as excinfo:
         await ask_about_screenshot("Anything", mode="selector", selector="#missing")
 
-    assert "No element matched selector '#missing'" in str(excinfo.value)
+    # Accept either the old wording or the new 'selector handle' wording for compatibility
+    msg = str(excinfo.value)
+    assert (
+        "No element matched selector '#missing'" in msg
+        or "No element matched selector handle '#missing'" in msg
+    )
