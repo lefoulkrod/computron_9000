@@ -96,6 +96,24 @@ class BrowserToolsConfig(BaseModel):
     """Settings for browser tools."""
 
     human: BrowserHumanConfig = Field(default_factory=BrowserHumanConfig)
+    waits: "BrowserWaitConfig" = Field(default_factory=lambda: BrowserWaitConfig())
+
+
+class BrowserWaitConfig(BaseModel):
+    """Configuration controlling browser wait/settle timeouts."""
+
+    # Maximum time to wait for a navigation to begin/complete (ms)
+    navigation_timeout_ms: int = 8000
+    # When a navigation is detected, wait up to this many ms for network idle
+    post_navigation_idle_timeout_ms: int = 6000
+    # Cap for DOM mutation observer before giving up (ms)
+    dom_mutation_timeout_ms: int = 1500
+    # Window of quiet DOM mutations required before settling (ms)
+    dom_quiet_window_ms: int = 200
+
+
+# Note: BrowserWaitConfig is referenced as a forward-ref above to avoid
+# reordering issues; Pydantic will resolve it when models are used.
 
 
 class WebToolsConfig(BaseModel):

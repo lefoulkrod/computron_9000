@@ -166,6 +166,13 @@ async def test_fill_field_by_css(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
+    called = {"count": 0}
+
+    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
+        called["count"] += 1
+
+    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
+
     snapshot = await fill_field(".search-box", "chips")
     assert "Filled value: chips" in snapshot.snippet
     assert snapshot.url.endswith("/form")
@@ -186,8 +193,16 @@ async def test_fill_field_by_visible_text(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
+    called = {"count": 0}
+
+    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
+        called["count"] += 1
+
+    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
+
     snapshot = await fill_field("Email", "user@example.com")
     assert "user@example.com" in snapshot.snippet
+    assert called["count"] == 1
 
 
 @pytest.mark.unit
