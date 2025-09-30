@@ -132,6 +132,12 @@ async def test_click_by_text(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
+    called = {"count": 0}
+
+    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
+        called["count"] += 1
+
+    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
 
     snap: PageSnapshot = await click("Continue")
     assert snap.url == "https://example.test/after"
@@ -154,9 +160,17 @@ async def test_click_by_css_selector(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
+    called = {"count": 0}
+
+    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
+        called["count"] += 1
+
+    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
+
     snap = await click(".cta")
     assert snap.url.endswith("/cta")
     assert snap.title == "After Click"
+    assert called["count"] == 1
 
 
 @pytest.mark.unit

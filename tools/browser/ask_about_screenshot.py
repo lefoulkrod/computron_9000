@@ -33,7 +33,8 @@ async def ask_about_screenshot(
     """Capture a screenshot and ask a vision model a question about it.
 
     This tool can only answer questions about the visual elements on the screen
-    it cannot answer questions about the underlying HTML or metadata.
+    it cannot answer questions about the underlying HTML or metadata. The tool can
+    provide bounding boxes for elements if asked (format: [x, y, width, height] in pixel coordinates).
 
     Args:
         prompt: Question the model should answer about the screenshot.

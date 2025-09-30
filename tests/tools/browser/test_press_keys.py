@@ -72,8 +72,16 @@ async def test_press_keys_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
     monkeypatch.setattr("tools.browser.interactions.human_press_keys", fake_human_press_keys)
 
+    called = {"count": 0}
+
+    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
+        called["count"] += 1
+
+    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
+
     snap: PageSnapshot = await press_keys(["Enter"])  # should return a snapshot
     assert isinstance(snap, PageSnapshot)
+    assert called["count"] == 1
 
 
 @pytest.mark.unit
