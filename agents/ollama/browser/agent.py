@@ -75,13 +75,12 @@ SYSTEM_PROMPT = dedent(
       page.
     - After opening a page, use `click` to follow links or activate elements. When choosing a
       target, prefer the `selector` field provided in the page snapshot's `elements` list as the
-      primary locator. Do NOT rely on or assume any internal browser APIs — you only have access
-      to the tools listed above (open_url, click, extract_text, ask_about_screenshot, current_page,
-      fill_field, press_keys, scroll_page). Call these tools with the element's `selector` handle
-      when available.
-    - If the `selector` handle does not work, you may instead provide the element's visible text to the
-      tool as a fallback (for example, `click("Sign in")`), but always attempt the `selector`
-      first.
+      primary locator. Selectors are opaque handles (they may look like text, `#id`, or a longer
+      string); use them exactly as provided. Do NOT rely on or assume any internal browser APIs —
+      you only have access to the tools listed above (open_url, click, extract_text,
+      ask_about_screenshot, current_page, fill_field, press_keys, scroll_page).
+    - If the provided `selector` fails, fall back to the element's visible text (for example,
+      `click("Sign in")`), but always try the selector first.
     - Use extract_text to pull structured text from specific regions or elements instead of taking
       a screenshot when plain text suffices.
     - Use ask_about_screenshot when you need visual details (e.g., "What does the banner say?"),

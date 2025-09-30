@@ -162,9 +162,32 @@ async def test_fast_attribute_selectors() -> None:
     page = _FakePage(title="T", body="Body", anchors=[a1, a2], forms=[])
     response = _FakeResponse(url="https://x", status=200)
     snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
-    css_map = {e.text: e.selector for e in snap.elements if e.tag == "a"}
-    assert css_map["Models"] in {"#models-link", "#models-link"}
-    assert css_map["Login"].startswith("[data-testid='primary']")
+    locator_map = {e.text: e.selector for e in snap.elements if e.tag == "a"}
+    assert locator_map["Models"] in {"#models-link", "#models-link"}
+    assert locator_map["Login"].startswith("[data-testid='primary']")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_duplicate_text_anchors_get_distinct_selectors() -> None:
+    a1_css = "body > header > a:nth-of-type(1)"
+    a2_css = "body > footer > a:nth-of-type(2)"
+    a1 = _FakeAnchor(text="Download", href="/download", css=a1_css)
+    a2 = _FakeAnchor(text="Download", href="/download", css=a2_css)
+    page = _FakePage(title="T", body="Body", anchors=[a1, a2], forms=[])
+    response = _FakeResponse(url="https://x", status=200)
+    snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
+    download_elements = [
+        e.selector
+        for e in snap.elements
+        if e.tag == "a" and e.text.startswith("Download")
+    ]
+    assert len(download_elements) == 2
+    selectors = set(download_elements)
+    assert selectors == {
+        "a[href='/download'] >> nth=0",
+        "a[href='/download'] >> nth=1",
+    }
 
 
 @pytest.mark.unit
