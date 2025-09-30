@@ -18,6 +18,7 @@ produce a ``PageSnapshot`` instance.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 
 from playwright.async_api import ElementHandle, Page, Response
 from playwright.async_api import Error as PlaywrightError
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 MAX_ELEMENT_TEXT_LEN = 120
 MAX_ARIA_LABEL_LEN = 40
+MAX_TEXT_SELECTOR_LEN = 60
 
 
 async def _fast_element_selector(el: ElementHandle, tag: str | None = None) -> str | None:
@@ -136,15 +138,14 @@ class Element(BaseModel):
     """Generic element returned in a page snapshot.
 
     Attributes:
-        text: The inner visible text of the element. If truncated,
-            the text ends with " (truncated)".
-        role: Value of the ``role`` attribute if present.
-        selector: A selector that can be used to interact with the element.
-        tag: Lower-case tag name (e.g. ``a``, ``form``).
-        href: Optional href for anchor-like elements.
-        src: Optional source URL for elements that expose it (for example, ``iframe.src``).
-        fields: For form elements, a list of collected form field metadata.
-        action: For form elements, the form action attribute if any.
+        text: Visible text for the element (may end with " (truncated)" if clipped).
+        role: Optional ARIA role string when present on the element.
+        selector: A selector handle that can be used to interact with the element.
+        tag: The element tag name (for example "a", "button", "form", "iframe").
+        href: For anchors, the href value when present.
+        fields: For forms, a list of `FormField` entries describing controls contained in the form.
+        action: For forms, the form's action attribute when present.
+        src: For iframes, the src attribute when present.
     """
 
     text: str = Field(..., max_length=140)
@@ -152,10 +153,8 @@ class Element(BaseModel):
     selector: str
     tag: str
     href: str | None = None
-    # For form elements, collected fields with metadata (replaces legacy `inputs`)
     fields: list[FormField] | None = None
     action: str | None = None
-    # Optional src attribute for elements like iframes
     src: str | None = None
 
 
@@ -236,10 +235,7 @@ async def _element_css_selector(element: ElementHandle) -> str:
         "        segments.unshift(seg);"
         "        break;"
         "      } else {"
-        "        if (current.classList && current.classList.length) {"
-        "          const classes = [...current.classList].slice(0,2).map(escapeClass);"
-        "          if (classes.length) { seg += '.' + classes.join('.'); }"
-        "        }"
+        "        // Intentionally avoid appending class selectors to keep CSS simple"
         "        let nth = 1; let sib = current;"
         "        while ((sib = sib.previousElementSibling)) {"
         "          if (sib.nodeName === current.nodeName) nth++;"
@@ -284,6 +280,47 @@ async def _best_selector(element: ElementHandle, tag: str | None = None) -> str:
     return css or ""
 
 
+def _normalize_visible_text(value: str) -> str:
+    """Normalize visible text for uniqueness comparisons."""
+    if not value:
+        return ""
+    return " ".join(value.split()).strip().lower()
+
+
+async def _best_locator_for_snapshot(
+    element: ElementHandle,
+    *,
+    tag: str | None,
+    text: str,
+    text_unique: bool,
+) -> str:
+    """Return the most succinct Playwright selector for an element."""
+    try:
+        fast = await _fast_element_selector(element, tag=tag)
+    except PlaywrightError:
+        fast = None
+    if fast:
+        return fast
+
+    normalized_text = text.strip()
+    if text_unique and normalized_text and len(normalized_text) <= MAX_TEXT_SELECTOR_LEN:
+        escaped = normalized_text.replace('"', '\\"')
+        return f'text="{escaped}"'
+
+    try:
+        css = await _element_css_selector(element)
+    except PlaywrightError:
+        css = ""
+    if css:
+        return css
+
+    if normalized_text:
+        escaped = normalized_text.replace('"', '\\"')
+        return f'text="{escaped}"'
+
+    return ""
+
+
 async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
     """Extract interesting interactive elements (anchors, forms) from the page.
 
@@ -297,35 +334,70 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
     except PlaywrightError:  # pragma: no cover - defensive
         buttons = None
     if buttons:
+        button_data: list[dict] = []
         for idx, b in enumerate(buttons, start=1):
             try:
                 raw_text = await b.inner_text()
             except PlaywrightError as exc:  # pragma: no cover - defensive
                 logger.debug("Skipping button due to error: %s", exc)
                 continue
-            text = (raw_text or "").strip()
-            if not text:
-                # Fallback to a short synthetic structural label
-                text = f"Button #{idx}"
+            trimmed_text = (raw_text or "").strip()
+            display_text = trimmed_text or f"Button #{idx}"
             truncated = False
-            if len(text) > MAX_ELEMENT_TEXT_LEN:
-                text = text[:MAX_ELEMENT_TEXT_LEN]
+            if len(display_text) > MAX_ELEMENT_TEXT_LEN:
+                display_text = display_text[:MAX_ELEMENT_TEXT_LEN]
                 truncated = True
             if truncated:
-                text = text + " (truncated)"
-
-            # Selector via centralized best-selector helper
-            css_selector = await _best_selector(b, tag="button")
+                display_text = display_text + " (truncated)"
             try:
                 role_val = await b.get_attribute("role")
             except PlaywrightError:  # pragma: no cover - defensive
                 role_val = None
 
+            button_data.append(
+                {
+                    "handle": b,
+                    "display": display_text,
+                    "raw": trimmed_text,
+                    "normalized": _normalize_visible_text(trimmed_text),
+                    "role": role_val,
+                    "tag": "button",
+                }
+            )
+
+        button_counts = Counter(entry["normalized"] for entry in button_data if entry["normalized"])
+
+        for entry in button_data:
+            text_unique = bool(entry["normalized"]) and button_counts[entry["normalized"]] == 1
+            selector_value = await _best_locator_for_snapshot(
+                entry["handle"],
+                tag="button",
+                text=entry["raw"],
+                text_unique=text_unique,
+            )
+            if not selector_value:
+                selector_value = await _best_selector(entry["handle"], tag="button")
+            entry["selector"] = selector_value
+
+        button_selector_counts = Counter(entry.get("selector") for entry in button_data if entry.get("selector"))
+
+        duplicate_button_keys: set[str] = {key for key, count in button_selector_counts.items() if key and count > 1}
+        if duplicate_button_keys:
+            # initialize per-key usage counters with correct typing
+            button_usage: dict[str, int] = dict.fromkeys(duplicate_button_keys, 0)
+            for entry in button_data:
+                key = entry.get("selector", "")
+                if key in duplicate_button_keys:
+                    idx = button_usage[key]
+                    entry["selector"] = f"{key} >> nth={idx}"
+                    button_usage[key] = idx + 1
+
+        for entry in button_data:
             elements.append(
                 Element(
-                    text=text,
-                    role=role_val,
-                    selector=css_selector,
+                    text=entry["display"],
+                    role=entry["role"],
+                    selector=entry.get("selector", ""),
                     tag="button",
                 )
             )
@@ -336,36 +408,78 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
     except PlaywrightError:  # pragma: no cover - defensive
         anchors = None
     if anchors:
-        for a in anchors[:link_limit]:
+        anchor_handles = anchors[:link_limit]
+        anchor_data: list[dict] = []
+        for a in anchor_handles:
             try:
                 raw_text = await a.inner_text()
                 href_val = await a.get_attribute("href")
             except PlaywrightError as exc:  # pragma: no cover - defensive
                 logger.debug("Skipping anchor due to error: %s", exc)
                 continue
-            text = (raw_text or "").strip()
+            trimmed_text = (raw_text or "").strip()
             href = href_val or ""
-            if not text or not href:
+            if not trimmed_text or not href:
                 continue
+            display_text = trimmed_text
             truncated = False
-            if len(text) > MAX_ELEMENT_TEXT_LEN:
-                text = text[:MAX_ELEMENT_TEXT_LEN]
+            if len(display_text) > MAX_ELEMENT_TEXT_LEN:
+                display_text = display_text[:MAX_ELEMENT_TEXT_LEN]
                 truncated = True
             if truncated:
-                text = text + " (truncated)"
-            # Centralized selector selection (fast then fallback)
-            css_selector = await _best_selector(a, tag="a")
+                display_text = display_text + " (truncated)"
             try:
                 role_val = await a.get_attribute("role")
             except PlaywrightError:  # pragma: no cover - defensive
                 role_val = None
+
+            anchor_data.append(
+                {
+                    "handle": a,
+                    "display": display_text,
+                    "raw": trimmed_text,
+                    "normalized": _normalize_visible_text(trimmed_text),
+                    "role": role_val,
+                    "href": href,
+                    "tag": "a",
+                }
+            )
+
+        anchor_counts = Counter(entry["normalized"] for entry in anchor_data if entry["normalized"])
+
+        for entry in anchor_data:
+            text_unique = bool(entry["normalized"]) and anchor_counts[entry["normalized"]] == 1
+            selector_value = await _best_locator_for_snapshot(
+                entry["handle"],
+                tag="a",
+                text=entry["raw"],
+                text_unique=text_unique,
+            )
+            if not selector_value:
+                selector_value = await _best_selector(entry["handle"], tag="a")
+            entry["selector"] = selector_value
+
+        anchor_selector_counts = Counter(entry.get("selector") for entry in anchor_data if entry.get("selector"))
+
+        duplicate_anchor_keys: set[str] = {key for key, count in anchor_selector_counts.items() if key and count > 1}
+        if duplicate_anchor_keys:
+            # initialize per-key usage counters with correct typing
+            anchor_usage: dict[str, int] = dict.fromkeys(duplicate_anchor_keys, 0)
+            for entry in anchor_data:
+                key = entry.get("selector", "")
+                if key in duplicate_anchor_keys:
+                    idx = anchor_usage[key]
+                    entry["selector"] = f"{key} >> nth={idx}"
+                    anchor_usage[key] = idx + 1
+
+        for entry in anchor_data:
             elements.append(
                 Element(
-                    text=text,
-                    role=role_val,
-                    selector=css_selector,
+                    text=entry["display"],
+                    role=entry["role"],
+                    selector=entry.get("selector", ""),
                     tag="a",
-                    href=href,
+                    href=entry["href"],
                 )
             )
 
