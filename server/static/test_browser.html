@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Browser Tools Demo Fixture</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+      line-height: 1.5;
+    }
+
+    body {
+      margin: 0;
+      padding: 2rem 3rem 4rem;
+      background: #f6f7fb;
+    }
+
+    header {
+      margin-bottom: 2rem;
+    }
+
+    h1,
+    h2 {
+      margin: 0 0 1rem;
+    }
+
+    section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .cards {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .card {
+      border: 1px solid #d6d9e6;
+      border-radius: 10px;
+      padding: 1rem;
+      background: linear-gradient(135deg, #ffffff 0%, #f9fbff 100%);
+      position: relative;
+    }
+
+
+    .inline-meta {
+      margin-top: .6rem;
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      font-size: .85rem;
+    }
+
+    .icon-button {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #fcd34d, #f59e0b);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .plan-buttons {
+      display: grid;
+      gap: .6rem;
+      margin-top: .4rem;
+    }
+
+    .tier-button,
+    .newsletter-submit,
+    .support-submit {
+      background: #10b981;
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: .55rem 1.3rem;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .newsletter-form {
+      display: grid;
+      gap: .75rem;
+    }
+
+    .support-form {
+      display: grid;
+      gap: .75rem;
+    }
+
+    .success-banner {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 10px;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+      font-weight: 600;
+    }
+
+    .selector-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      background: #eef2ff;
+      color: #312e81;
+      padding: 0.2rem 0.45rem;
+      border-radius: 6px;
+    }
+
+    .selector-badge::before {
+      content: "selector";
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-size: .65rem;
+      color: #6366f1;
+    }
+
+    .bbox-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      background: #ecfdf5;
+      color: #047857;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bbox-pill::before {
+      content: "bbox";
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-size: .65rem;
+      color: #0f766e;
+    }
+
+    form {
+      display: grid;
+      gap: 1rem;
+      max-width: 460px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    textarea {
+      padding: .6rem .75rem;
+      border: 1px solid #cbd5f5;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 999px;
+      padding: .75rem 1.75rem;
+      background: #4338ca;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: transform .12s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.2rem;
+      font-size: .95rem;
+    }
+
+    th,
+    td {
+      border: 1px solid #d0d7f0;
+      padding: .55rem .75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef2ff;
+      font-weight: 700;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: .9rem;
+      background: rgba(67, 56, 202, .12);
+      padding: 0 .35rem;
+      border-radius: 4px;
+    }
+
+    .bbox {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .note {
+      font-size: .9rem;
+      color: #475569;
+      margin-top: .6rem;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1 id="fixture-title">Browser Tools Demo</h1>
+    <p>This fixture is intentionally labeled so your tools can ground, extract, and interact predictably. Every panel
+      below shows the selector you should see in snapshots plus the coordinates detected at runtime.</p>
+  </header>
+
+  <section id="quick-actions">
+    <h2>Actions &amp; Buttons</h2>
+    <div class="cards">
+      <div class="card" id="primary-cta-card">
+        <strong>Primary CTA</strong>
+        <p>Triggers a navigation in the demo agent.</p>
+        <button id="primary-cta" data-testid="primary-cta">Continue to Dashboard</button>
+        <div class="inline-meta">
+          <span class="selector-badge">#primary-cta</span>
+          <span class="bbox-pill" data-bbox-for="#primary-cta">[x1, y1, x2, y2]</span>
+        </div>
+      </div>
+      <div class="card" id="secondary-cta-card">
+        <strong>Secondary CTA</strong>
+        <p>Use this to test grounding vs. text clicks.</p>
+        <button id="secondary-cta">Maybe Later</button>
+        <div class="inline-meta">
+          <span class="selector-badge">#secondary-cta</span>
+          <span class="bbox-pill" data-bbox-for="#secondary-cta">[x1, y1, x2, y2]</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section id="selector-playground">
+    <h2>Selector Playground</h2>
+    <div class="cards">
+      <div class="card" id="menu-card">
+        <strong>ARIA Role Button</strong>
+        <p>Pure <code>div</code> with <code>role="button"</code> + <code>aria-label</code>.</p>
+        <div class="icon-button" role="button" aria-label="Open navigation" tabindex="0"></div>
+        <div class="inline-meta">
+          <span class="selector-badge">[aria-label='Open navigation']</span>
+          <span class="bbox-pill" data-bbox-for="[role='button'][aria-label='Open navigation']">[x1, y1, x2, y2]</span>
+        </div>
+      </div>
+
+      <div class="card" id="plan-options">
+        <strong>Duplicate Text Buttons</strong>
+        <p>Two buttons without ids/data attributes to trigger CSS fallbacks.</p>
+        <div class="plan-buttons">
+          <button class="tier-button">Choose Plan</button>
+          <button class="tier-button">Choose Plan</button>
+        </div>
+        <div class="inline-meta">
+          <span class="selector-badge">#plan-options .tier-button:nth-of-type(1)</span>
+          <span class="bbox-pill" data-bbox-for="#plan-options .tier-button:nth-of-type(1)">[x1, y1, x2, y2]</span>
+        </div>
+        <div class="inline-meta">
+          <span class="selector-badge">#plan-options .tier-button:nth-of-type(2)</span>
+          <span class="bbox-pill" data-bbox-for="#plan-options .tier-button:nth-of-type(2)">[x1, y1, x2, y2]</span>
+        </div>
+      </div>
+
+      <div class="card" id="newsletter-card">
+        <strong>Form with Action URL</strong>
+        <p>Exercises <code>form[action]</code> selectors and a bare submit button.</p>
+        <form action="/newsletter/signup" class="newsletter-form">
+          <label>
+            Email
+            <input name="signup_email" type="email" placeholder="you@example.com">
+          </label>
+          <button type="submit" class="newsletter-submit">Join Now</button>
+        </form>
+        <div class="inline-meta">
+          <span class="selector-badge">form[action='/newsletter/signup']</span>
+          <span class="bbox-pill" data-bbox-for="form[action='/newsletter/signup']">[x1, y1, x2, y2]</span>
+        </div>
+        <div class="inline-meta">
+          <span class="selector-badge">input[name='signup_email']</span>
+          <span class="bbox-pill" data-bbox-for="form[action='/newsletter/signup'] input[name='signup_email']">[x1, y1, x2, y2]</span>
+        </div>
+        <div class="inline-meta">
+          <span class="selector-badge">form[action='/newsletter/signup'] .newsletter-submit</span>
+          <span class="bbox-pill" data-bbox-for="form[action='/newsletter/signup'] .newsletter-submit">[x1, y1, x2, y2]</span>
+        </div>
+      </div>
+
+      <div class="card" id="support-card">
+        <strong>Duplicate Field Names</strong>
+        <p>Two forms share <code>name="signup_email"</code> to force scoped selectors.</p>
+        <form action="/support/contact" class="support-form">
+          <label>
+            Email
+            <input name="signup_email" type="email" placeholder="contact@example.com">
+          </label>
+          <button type="submit" class="support-submit">Contact Us</button>
+        </form>
+        <div class="inline-meta">
+          <span class="selector-badge">form[action='/support/contact']</span>
+          <span class="bbox-pill" data-bbox-for="form[action='/support/contact']">[x1, y1, x2, y2]</span>
+        </div>
+        <div class="inline-meta">
+          <span class="selector-badge">form[action='/support/contact'] input[name='signup_email']</span>
+          <span class="bbox-pill" data-bbox-for="form[action='/support/contact'] input[name='signup_email']">[x1, y1, x2, y2]</span>
+        </div>
+        <div class="inline-meta">
+          <span class="selector-badge">form[action='/support/contact'] .support-submit</span>
+          <span class="bbox-pill" data-bbox-for="form[action='/support/contact'] .support-submit">[x1, y1, x2, y2]</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="links">
+    <h2>Key Links</h2>
+    <ul>
+      <li>
+        <a id="pricing-link" href="#pricing">View Pricing</a>
+        <div class="inline-meta">
+          <span class="selector-badge">#pricing-link</span>
+          <span class="bbox-pill" data-bbox-for="#pricing-link">[x1, y1, x2, y2]</span>
+        </div>
+      </li>
+      <li>
+        <a id="docs-link" href="#docs">Read Documentation</a>
+        <div class="inline-meta">
+          <span class="selector-badge">#docs-link</span>
+          <span class="bbox-pill" data-bbox-for="#docs-link">[x1, y1, x2, y2]</span>
+        </div>
+      </li>
+      <li>
+        <a id="status-link" href="#status">Check System Status</a>
+        <div class="inline-meta">
+          <span class="selector-badge">#status-link</span>
+          <span class="bbox-pill" data-bbox-for="#status-link">[x1, y1, x2, y2]</span>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <script>
+    const trackedElements = [
+      { label: 'Primary CTA', selector: '#primary-cta' },
+      { label: 'Secondary CTA', selector: '#secondary-cta' },
+      { label: 'ARIA Button', selector: "[role='button'][aria-label='Open navigation']" },
+      { label: 'Plan Button 1', selector: '#plan-options .tier-button:nth-of-type(1)' },
+      { label: 'Plan Button 2', selector: '#plan-options .tier-button:nth-of-type(2)' },
+      { label: 'Newsletter Form', selector: "form[action='/newsletter/signup']" },
+      { label: 'Newsletter Email Field', selector: "form[action='/newsletter/signup'] input[name='signup_email']" },
+      { label: 'Newsletter Submit', selector: "form[action='/newsletter/signup'] .newsletter-submit" },
+      { label: 'Support Form', selector: "form[action='/support/contact']" },
+      { label: 'Support Email Field', selector: "form[action='/support/contact'] input[name='signup_email']" },
+      { label: 'Support Submit', selector: "form[action='/support/contact'] .support-submit" },
+      { label: 'Pricing Link', selector: '#pricing-link' },
+      { label: 'Documentation Link', selector: '#docs-link' },
+      { label: 'Status Link', selector: '#status-link' }
+    ];
+
+    function updateBoundingBoxes() {
+      trackedElements.forEach(({ selector }) => {
+        const node = document.querySelector(selector);
+        const targets = document.querySelectorAll(`[data-bbox-for="${selector}"]`);
+        if (targets.length === 0) {
+          return;
+        }
+        if (!node) {
+          targets.forEach((target) => {
+            target.textContent = '[not found]';
+          });
+          return;
+        }
+
+        const rect = node.getBoundingClientRect();
+        const values = [rect.left, rect.top, rect.right, rect.bottom]
+          .map((v) => Math.round(v));
+        const text = `[${values.join(', ')}]`;
+        targets.forEach((target) => {
+          target.textContent = text;
+        });
+      });
+    }
+
+    window.addEventListener('load', () => {
+      updateBoundingBoxes();
+
+      const form = document.getElementById('demo-form');
+      const banner = document.getElementById('signup-success');
+      if (form && banner) {
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const params = new URLSearchParams();
+          for (const [key, value] of data.entries()) {
+            if (value !== null && value !== undefined) {
+              params.append(key, value.toString());
+            }
+          }
+
+          const url = new URL(window.location.href);
+          url.search = params.toString();
+          history.replaceState(null, '', url);
+
+          banner.hidden = false;
+          banner.textContent = `Thanks, ${new Date().toLocaleTimeString()} submission received!`; // timestamp makes it obvious the handler fired
+          banner.focus();
+        });
+      }
+    });
+    window.addEventListener('resize', updateBoundingBoxes);
+    window.addEventListener('scroll', updateBoundingBoxes, { passive: true });
+  </script>
+</body>
+
+</html>
