@@ -56,7 +56,7 @@ models:
     model: qwen2.5vl:32b
     options:
       num_ctx: 32000
-      temperature: 0.1
+      temperature: 0.0
     think: false
 settings:
   home_dir: /home/larry/.computron_9000
