@@ -141,82 +141,57 @@ class FakePage:
         self._text_locators[text] = FakeLocator(self, tag=tag, input_type=input_type, exists=True)
 
 
-class FakeBrowser:
-    """Browser stub returning a single page instance."""
-
-    def __init__(self, page: FakePage) -> None:
-        self._page = page
-
-    async def current_page(self) -> FakePage:  # noqa: D401
-        return self._page
-
-
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fill_field_by_css(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fill_field_by_css(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+    settle_tracker,
+) -> None:
     """Types into an input located via CSS selector and returns updated snapshot."""
     page = FakePage()
     page.add_css_input(".search-box")
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:  # noqa: D401
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
-
-    called = {"count": 0}
-
-    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
-        called["count"] += 1
-
-    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
 
     snapshot = await fill_field(".search-box", "chips")
     assert "Filled value: chips" in snapshot.snippet
     assert snapshot.url.endswith("/form")
+    assert settle_tracker["count"] == 1
+    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fill_field_by_visible_text(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fill_field_by_visible_text(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+    settle_tracker,
+) -> None:
     """Falls back to exact visible text to locate the input field."""
     page = FakePage()
     page.add_text_input("Email")
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
-    called = {"count": 0}
-
-    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
-        called["count"] += 1
-
-    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
-
     snapshot = await fill_field("Email", "user@example.com")
     assert "user@example.com" in snapshot.snippet
-    assert called["count"] == 1
+    assert settle_tracker["count"] == 1
+    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fill_field_rejects_checkbox(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fill_field_rejects_checkbox(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+) -> None:
     """Rejects unsupported input types such as checkbox."""
     page = FakePage()
     page.add_css_input("#agree", input_type="checkbox")
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
@@ -226,15 +201,13 @@ async def test_fill_field_rejects_checkbox(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fill_field_requires_non_empty_selector(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fill_field_requires_non_empty_selector(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+) -> None:
     """Rejects whitespace-only selectors."""
     page = FakePage()
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
@@ -244,16 +217,14 @@ async def test_fill_field_requires_non_empty_selector(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fill_field_select_element(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fill_field_select_element(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+) -> None:
     """Raising error for select elements which are no longer supported."""
     page = FakePage()
     page.add_css_input("#country", tag="select")
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 

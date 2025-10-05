@@ -18,6 +18,9 @@ class _FakeField:
             return self._tag
         if "el.checked === true" in script:
             return bool(self._checked)
+        # If testing property access for value (el => el.value), return the stored value
+        if "el.value" in script or "el => el.value" in script:
+            return self._value
         return self._css
 
     async def get_attribute(self, name: str) -> str | None:  # noqa: D401
