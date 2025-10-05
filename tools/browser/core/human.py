@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
 import math
 import random
 from dataclasses import dataclass
@@ -11,6 +13,8 @@ from playwright.async_api import Locator, Page
 
 from config import load_config
 from tools.browser.core.exceptions import BrowserToolError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,6 +63,123 @@ async def _sleep_ms(duration_ms: int) -> None:
     await asyncio.sleep(duration_ms / 1000.0)
 
 
+# A developer-visible, in-page faux cursor overlay to help debugging and visual
+# tracing of automated mouse movements. This is strictly a cosmetic DOM element
+# that does not affect the real OS pointer. Failures are intentionally ignored
+# (CSP, sandboxed pages, or other restrictions) so automation continues to
+# function even when the overlay cannot be installed.
+_CURSOR_OVERLAY_SCRIPT = """
+(() => {
+    if (window.__llmCursorSet) return;
+        const ring = document.createElement('div');
+        ring.id = '__llm_cursor_ring__';
+        ring.style.cssText = `
+            position:fixed;
+            width:96px;
+            height:96px;
+            border:8px solid #fff;
+            border-radius:50%;
+            background:rgba(0,0,0,0.35);
+            box-shadow:0 0 18px rgba(0,0,0,0.45);
+            pointer-events:none;
+            z-index:2147483647;
+            left:-9999px;
+            top:-9999px;
+            transform:translate(-50%,-50%);
+            transition:left 90ms ease-out, top 90ms ease-out;
+        `;
+        const dot = document.createElement('div');
+        dot.id = '__llm_cursor_dot__';
+        dot.style.cssText = `
+            position:fixed;
+            width:16px;
+            height:16px;
+            border-radius:50%;
+            background:rgba(255,60,60,0.95);
+            box-shadow:0 0 8px rgba(255,60,60,0.9);
+            pointer-events:none;
+            z-index:2147483648;
+            left:-9999px;
+            top:-9999px;
+            transform:translate(-50%,-50%);
+        `;
+        document.body.appendChild(ring);
+        document.body.appendChild(dot);
+    // Store last set position so move helpers can read it and animate from there.
+        window.__llmCursorPos = [-9999, -9999];
+        window.__llmCursorSet = (x, y) => {
+            ring.style.left = x + 'px';
+            ring.style.top = y + 'px';
+            dot.style.left = x + 'px';
+            dot.style.top = y + 'px';
+            window.__llmCursorPos = [x, y];
+        };
+    window.__llmCursorGet = () => window.__llmCursorPos;
+})();
+"""
+
+
+async def _ensure_cursor_overlay(page: Page) -> None:
+    """Try to install the in-page visual cursor overlay.
+
+    This swallows all exceptions so pages that disallow script injection or
+    throw for other reasons won't break normal interaction flows.
+    """
+    # Best-effort only; ignore failures so clicks/typing proceed. Log outcome
+    with contextlib.suppress(Exception):
+        await page.evaluate(_CURSOR_OVERLAY_SCRIPT)
+
+    # Check presence (best-effort) and log whether overlay is available. Use a
+    # suppress so evaluation failures don't raise.
+    installed = False
+    with contextlib.suppress(Exception):
+        installed = await page.evaluate("() => !!window.__llmCursorSet")
+    if installed:
+        logger.debug("Injected fake cursor overlay into page %s", getattr(page, "url", "<unknown>"))
+    else:
+        logger.debug("Fake cursor overlay not present on page %s", getattr(page, "url", "<unknown>"))
+
+
+async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps: int) -> None:
+    """Move the Playwright mouse while updating the in-page fake cursor overlay.
+
+    This is a small wrapper that ensures the overlay exists and is updated
+    (best-effort) before delegating to Playwright's mouse.move.
+    """
+    await _ensure_cursor_overlay(page)
+
+    # Try to read the overlay's last-known position so we can animate from it.
+    start_x = x
+    start_y = y
+    with contextlib.suppress(Exception):
+        pos = await page.evaluate("() => window.__llmCursorGet ? window.__llmCursorGet() : null")
+        if isinstance(pos, list) and len(pos) == 2:
+            with contextlib.suppress(Exception):
+                sx = float(pos[0])
+                sy = float(pos[1])
+                # If the stored position is the sentinel off-screen value, treat as unset.
+                if not (math.isfinite(sx) and math.isfinite(sy)) or (sx == -9999 and sy == -9999):
+                    sx = x
+                    sy = y
+                start_x, start_y = sx, sy
+
+    # Animate the overlay and move the real mouse in small increments so the
+    # in-page fake cursor visibly follows the pointer during movement.
+    steps_count = max(1, int(steps))
+    for step_idx in range(1, steps_count + 1):
+        t = step_idx / steps_count
+        xi = start_x + (x - start_x) * t
+        yi = start_y + (y - start_y) * t
+        with contextlib.suppress(Exception):
+            await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [xi, yi])
+        # Move the real mouse a small step; using steps=1 keeps movement discrete
+        # and lets us control the overlay per-step.
+        await page.mouse.move(xi, yi, steps=1)
+        # Small pause to let the browser render the overlay movement. Keep this
+        # brief to avoid slowing tests too much while still producing visible motion.
+        await asyncio.sleep(0.03)
+
+
 async def human_click(page: Page, locator: Locator) -> None:
     """Perform a human-like click on a locator using an explicit Playwright page.
 
@@ -103,11 +224,15 @@ async def human_click(page: Page, locator: Locator) -> None:
         target_y += math.sin(angle) * radius
 
     mouse = page.mouse
-    await mouse.move(target_x, target_y, steps=cfg.move_steps)
+    # Use the mouse-move wrapper which also updates the visual overlay.
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.down()
     await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
     await mouse.up()
+    # Ensure overlay is finally positioned on the click point (best-effort).
+    with contextlib.suppress(Exception):
+        await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
 
 
 async def human_type(page: Page, locator: Locator, text: str, *, clear_existing: bool = True) -> None:
