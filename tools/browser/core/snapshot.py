@@ -24,7 +24,16 @@ from playwright.async_api import ElementHandle, Page, Response
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field
 
+from tools.browser.core._dom_utils import _element_bool_state
+
 logger = logging.getLogger(__name__)
+
+# Debug dump controls: enabled unconditionally (rate-limited) for local debugging.
+_EVAL_DEBUG_ENABLED = True
+
+# Simple rate limiter for debug dumps in this process (avoid noisy logs).
+_EVAL_DEBUG_COUNT = 0
+_EVAL_DEBUG_LIMIT = 10
 
 MAX_ELEMENT_TEXT_LEN = 120
 MAX_ARIA_LABEL_LEN = 40
@@ -48,7 +57,6 @@ async def _fast_element_selector(el: ElementHandle, tag: str | None = None) -> s
         6. button: id, name, or type=submit
         7. aria-label + role combination
     Falls back to ``None`` if no succinct selector available.
-    Only produces pure CSS (no :has-text, no Playwright-specific selectors).
     """
     try:
         tag_name = tag or await el.evaluate("(n)=>n.tagName.toLowerCase()")
@@ -162,15 +170,18 @@ class FormField(BaseModel):
     """Metadata for a single form control within a form element.
 
     Attributes:
-        selector: A CSS selector that targets the field from the page root.
-        name: The value of the ``name`` attribute when present.
-        field_type: The control type (for inputs this is the ``type`` attr,
-            otherwise the tag name such as ``textarea`` or ``select``).
-        placeholder: The ``placeholder`` attribute value when present.
+        selector: CSS or Playwright selector string that targets the control.
+        name: ``name`` attribute value when present.
+        field_type: Control type (input ``type`` or tag name).
+        placeholder: ``placeholder`` attribute value when present.
         required: Whether the control has the ``required`` attribute.
-        options: For ``select`` elements, a list of option dicts with
-            ``value`` and ``label`` keys representing option value and
-            visible text respectively.
+        value: Current ``value`` attribute for inputs/textareas/selects (empty string
+            allowed). Not populated for types where reading value is non-trivial (e.g. file).
+        selected: For checkbox/radio, whether the control is currently selected/checked.
+            For other field types this remains False.
+        options: For select elements, a list of option descriptors with ``value``, ``label`` and
+            ``selected`` flags indicating which options are currently chosen (multi-select may
+            have multiple selected).
     """
 
     selector: str
@@ -178,6 +189,8 @@ class FormField(BaseModel):
     field_type: str
     placeholder: str | None = None
     required: bool = False
+    value: str | None = None
+    selected: bool = False
     options: list[dict] | None = None
 
 
@@ -222,37 +235,83 @@ async def _element_css_selector(element: ElementHandle) -> str:
     # the fast-path in ``_fast_element_selector`` before invoking this
     # more-expensive DOM-walking fallback.
     script = (
-        "(el) => {"
-        "  try {"
-        "    if (!el || !(el instanceof Element)) return '';"
-        "    const escapeClass = (cls) => cls.replace(/:/g, '\\:');"
-        "    const segments = [];"
-        "    let current = el;"
-        "    while (current && current.nodeType === Node.ELEMENT_NODE) {"
-        "      let seg = current.nodeName.toLowerCase();"
-        "      if (current.id) {"
-        "        seg = '#' + current.id;"
-        "        segments.unshift(seg);"
-        "        break;"
-        "      } else {"
-        "        // Intentionally avoid appending class selectors to keep CSS simple"
-        "        let nth = 1; let sib = current;"
-        "        while ((sib = sib.previousElementSibling)) {"
-        "          if (sib.nodeName === current.nodeName) nth++;"
-        "        }"
-        "        if (nth > 1) { seg += ':nth-of-type(' + nth + ')'; }"
+        "function(el){"
+        "try {"
+        "  if (!el || !(el instanceof Element)) return '';"
+        "  var segments = [];"
+        "  var current = el;"
+        "  while (current && current.nodeType === Node.ELEMENT_NODE) {"
+        "    var seg = current.nodeName.toLowerCase();"
+        "    if (current.id) {"
+        "      segments.unshift('#' + current.id);"
+        "      break;"
+        "    } else {"
+        "      var nth = 1; var sib = current;"
+        "      while ((sib = sib.previousElementSibling)) {"
+        "        if (sib.nodeName === current.nodeName) nth++;"
         "      }"
-        "      segments.unshift(seg);"
-        "      current = current.parentElement;"
+        "      if (nth > 1) { seg += ':nth-of-type(' + nth + ')'; }"
         "    }"
-        "    return segments.join(' > ');"
-        "  } catch (e) { return ''; }"
+        "    segments.unshift(seg);"
+        "    current = current.parentElement;"
+        "  }"
+        "  return segments.join(' > ');"
+        "} catch (e) { return ''; }"
         "}"
     )
     try:
         selector: str = await element.evaluate(script)
     except (PlaywrightError, AttributeError) as exc:  # pragma: no cover - defensive
-        logger.debug("Failed to compute element CSS selector: %s", exc)
+        # Some Playwright environments surface JS SyntaxError as "Unexpected end of input"
+        # when a script is malformed or truncated.
+        msg = str(exc)
+        logger.debug("Element.evaluate failed: %s", msg)
+
+        # Log a short preview of the script so we can see if it looks truncated
+        # or contains suspicious characters. If debug is enabled, emit a small
+        # safe-element dump (rate-limited) underneath to help correlate the
+        # failing element without dumping massive HTML.
+        logger.debug(
+            "Element.evaluate failed; script_len=%d script_preview=%s...%s",
+            len(script),
+            script[:60],
+            script[-60:],
+        )
+
+        global _EVAL_DEBUG_COUNT
+        if _EVAL_DEBUG_ENABLED and _EVAL_DEBUG_COUNT < _EVAL_DEBUG_LIMIT:
+            try:
+                _EVAL_DEBUG_COUNT += 1
+                try:
+                    tag = await element.evaluate("(el)=>el.tagName.toLowerCase()")
+                except (PlaywrightError, AttributeError):
+                    tag = None
+                try:
+                    eid = await element.evaluate("(el)=>el.id || null")
+                except (PlaywrightError, AttributeError):
+                    eid = None
+                try:
+                    classes = await element.evaluate("(el)=>Array.from(el.classList).slice(0,3)")
+                except (PlaywrightError, AttributeError):
+                    classes = None
+                try:
+                    outer = await element.evaluate(
+                        "(el)=>{const s=el.outerHTML||'';return s.length>200?s.slice(0,200)+'...':s}"
+                    )
+                except (PlaywrightError, AttributeError):
+                    outer = None
+
+                logger.debug(
+                    "Eval debug dump (preview) tag=%s id=%s classes=%s outer_snippet=%s",
+                    tag,
+                    eid,
+                    classes,
+                    outer,
+                )
+            except (PlaywrightError, AttributeError):
+                pass
+
+        # If we can't evaluate the main script, give up and return empty selector.
         return ""
     return selector
 
@@ -287,14 +346,25 @@ def _normalize_visible_text(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
-async def _best_locator_for_snapshot(
+async def _get_element_locator(
     element: ElementHandle,
     *,
     tag: str | None,
     text: str,
     text_unique: bool,
 ) -> str:
-    """Return the most succinct Playwright selector for an element."""
+    """Return the most succinct selector to expose in snapshots.
+
+    Resolution order:
+    1. ``_fast_element_selector`` (ids, data-test ids, form/action, etc.).
+    2. If ``text_unique`` is True and the text is short enough, emit a
+       Playwright ``text="..."`` selector so the agent sees the human label.
+    3. Fall back to ``_best_selector`` which ultimately uses
+       ``_element_css_selector`` to produce a stable CSS path.
+
+    The goal is to surface the easiest-to-reuse selector for the agent, even if
+    that means mixing CSS and Playwright text selectors.
+    """
     try:
         fast = await _fast_element_selector(element, tag=tag)
     except PlaywrightError:
@@ -369,7 +439,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
 
         for entry in button_data:
             text_unique = bool(entry["normalized"]) and button_counts[entry["normalized"]] == 1
-            selector_value = await _best_locator_for_snapshot(
+            selector_value = await _get_element_locator(
                 entry["handle"],
                 tag="button",
                 text=entry["raw"],
@@ -449,7 +519,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
 
         for entry in anchor_data:
             text_unique = bool(entry["normalized"]) and anchor_counts[entry["normalized"]] == 1
-            selector_value = await _best_locator_for_snapshot(
+            selector_value = await _get_element_locator(
                 entry["handle"],
                 tag="a",
                 text=entry["raw"],
@@ -530,6 +600,8 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                 )
             )
 
+    seen_global_selectors: set[str] = set()
+
     # Forms
     try:
         form_elements = await page.query_selector_all("form")
@@ -537,6 +609,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
         form_elements = None
     if form_elements:
         for idx, form_el in enumerate(form_elements, start=1):
+            field_selectors_seen: set[str] = set()
             try:
                 action = await form_el.get_attribute("action")
                 form_id = await form_el.get_attribute("id")
@@ -551,8 +624,18 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             else:
                 selector = f"form:nth-of-type({idx})"
 
+            locator = await _get_element_locator(
+                form_el,
+                tag="form",
+                text="",
+                text_unique=False,
+            )
+            effective_selector = locator or selector
+
             # Collect detailed form fields
             form_fields: list[FormField] = []
+            radio_selector_counters: dict[str, int] = {}
+
             try:
                 controls = await form_el.query_selector_all("input, textarea, select")
                 for control in controls:
@@ -592,25 +675,154 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                         required_attr = None
                     required = required_attr is not None
 
-                    # Best selector for the control
-                    control_selector = await _best_selector(control, tag=tag)
-
                     options_val: list[dict] | None = None
+                    current_value: str | None = None
+                    selected_flag: bool = False
+                    if field_type == "radio" and name_attr:
+                        # Assign stable per-radio selector without aggregating options.
+                        idx_counter = radio_selector_counters.get(name_attr, 0)
+                        control_selector = f"input[type='radio'][name='{name_attr}'] >> nth={idx_counter}"
+                        radio_selector_counters[name_attr] = idx_counter + 1
+                        try:
+                            raw_val = await control.get_attribute("value")
+                        except PlaywrightError as exc:
+                            logger.debug(
+                                "Radio value attribute read failed for name=%s index=%s: %s",
+                                name_attr,
+                                idx_counter,
+                                exc,
+                            )
+                            raw_val = None
+                        current_value = raw_val or ""
+                        # Prefer DOM property for accuracy; fallback to attribute
+                        selected_flag = await _element_bool_state(
+                            control,
+                            prop_script="el => el.checked === true",
+                            attr="checked",
+                            default=False,
+                            context="radio",
+                        )
+                    else:
+                        control_selector = await _get_element_locator(
+                            control,
+                            tag=tag,
+                            text="",
+                            text_unique=False,
+                        )
+                        if (
+                            not control_selector
+                            or control_selector in field_selectors_seen
+                            or control_selector in seen_global_selectors
+                        ):
+                            try:
+                                css_fallback = await _element_css_selector(control)
+                            except PlaywrightError:
+                                css_fallback = ""
+                            control_selector = css_fallback or control_selector
+
+                        # Prefer a form-scoped CSS path when available to avoid cross-form
+                        # collisions for fields sharing the same name (e.g. signup_email
+                        # appearing in multiple forms). This ensures the first occurrence
+                        # also uses a unique selector; tests depend on this behavior.
+                        if name_attr and (action or form_id):
+                            try:
+                                scoped_css = await _element_css_selector(control)
+                            except PlaywrightError:
+                                scoped_css = ""
+                            if scoped_css:
+                                control_selector = scoped_css
+
                     if tag == "select":
                         # enumerate options with visible text/value
                         try:
                             option_handles = await control.query_selector_all("option")
-                        except PlaywrightError:
+                        except PlaywrightError as exc:
+                            logger.debug(
+                                "Select option enumeration failed (name=%s): %s",
+                                name_attr,
+                                exc,
+                            )
                             option_handles = []
                         opts: list[dict] = []
                         for opt in option_handles:
                             try:
                                 val = await opt.get_attribute("value")
                                 label = await opt.inner_text()
-                                opts.append({"value": val or "", "label": (label or "").strip()})
-                            except PlaywrightError:
+                                # Prefer DOM property for selection state; fallback to attribute
+                                opt_selected = await _element_bool_state(
+                                    opt,
+                                    prop_script="o => o.selected === true",
+                                    attr="selected",
+                                    default=False,
+                                    context="select_option",
+                                )
+                                opts.append(
+                                    {
+                                        "value": val or "",
+                                        "label": (label or "").strip(),
+                                        "selected": opt_selected,
+                                    }
+                                )
+                                if opt_selected and current_value is None:
+                                    current_value = val or ""
+                            except PlaywrightError as exc:
+                                logger.debug(
+                                    "Select option processing failed (name=%s): %s",
+                                    name_attr,
+                                    exc,
+                                )
                                 continue
                         options_val = opts or None
+                        if current_value is None and opts:
+                            # Fallback: first option if none marked selected
+                            current_value = opts[0]["value"]
+                    elif field_type not in {"radio", "checkbox"}:
+                        # Try to read value for standard inputs / textareas
+                        try:
+                            raw_val = await control.get_attribute("value")
+                        except PlaywrightError as exc:
+                            logger.debug(
+                                "Field value attribute read failed (type=%s name=%s): %s",
+                                field_type,
+                                name_attr,
+                                exc,
+                            )
+                            raw_val = None
+                        if raw_val is not None:
+                            current_value = raw_val
+                    elif field_type == "checkbox":
+                        try:
+                            raw_val = await control.get_attribute("value")
+                        except PlaywrightError as exc:
+                            logger.debug(
+                                "Checkbox value attribute read failed (name=%s): %s",
+                                name_attr,
+                                exc,
+                            )
+                            raw_val = None
+                        current_value = raw_val or "on"  # HTML default for checkbox value
+                        # Use DOM property first, fallback to attribute
+                        selected_flag = await _element_bool_state(
+                            control,
+                            prop_script="el => el.checked === true",
+                            attr="checked",
+                            default=False,
+                            context="checkbox",
+                        )
+                    # No special options collection for radio groups; each radio stands alone.
+
+                    if control_selector and (
+                        control_selector in field_selectors_seen or control_selector in seen_global_selectors
+                    ):
+                        base_selector = control_selector
+                        suffix = 0
+                        while control_selector in field_selectors_seen or control_selector in seen_global_selectors:
+                            control_selector = f"{base_selector} >> nth={suffix}"
+                            suffix += 1
+
+                    if control_selector:
+                        field_selectors_seen.add(control_selector)
+                        seen_global_selectors.add(control_selector)
 
                     form_fields.append(
                         FormField(
@@ -619,17 +831,19 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                             field_type=field_type,
                             placeholder=placeholder,
                             required=required,
+                            value=current_value,
+                            selected=selected_flag,
                             options=options_val,
                         )
                     )
             except PlaywrightError:  # pragma: no cover - defensive
                 form_fields = []
 
-            # Centralized selector selection for forms
-            css_selector = await _best_selector(form_el, tag="form")
-            if not css_selector:
-                # if DOM-walk failed, fall back to our logical selector
-                css_selector = selector
+            # NOTE: Radio groups are intentionally NOT aggregated. Each radio input
+            # remains a distinct FormField with its own selector (including nth suffix)
+            # so an LLM/tooling layer can target and click specific options directly.
+
+            css_selector = effective_selector or selector
 
             elements.append(
                 Element(

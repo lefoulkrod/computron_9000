@@ -15,6 +15,7 @@ def setup_logging() -> None:
     # Individual tools can raise their own logger levels when deeper diagnostics are needed.
     logging.getLogger("tools").setLevel(logging.WARNING)
     logging.getLogger("tools.virtual_computer").setLevel(logging.INFO)
+    logging.getLogger("tools.browser").setLevel(logging.DEBUG)
     logging.getLogger("ollama").setLevel(logging.WARNING)
     logging.getLogger("agents.ollama").setLevel(logging.DEBUG)
     logging.getLogger("agents.ollama.deep_researchV2").setLevel(logging.DEBUG)

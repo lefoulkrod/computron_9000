@@ -39,13 +39,26 @@ class _FakeAnchor:
 
 
 class _FakeField:
-    def __init__(self, tag: str, name: str | None = None, type_: str | None = None) -> None:
+    def __init__(
+        self,
+        tag: str,
+        name: str | None = None,
+        type_: str | None = None,
+        *,
+        css: str | None = None,
+    ) -> None:
         self._tag = tag
         self._name = name
         self._type = type_
+        if css is None:
+            suffix = (name or tag or "field").replace(" ", "-")
+            css = f"form > {tag}.{suffix}"
+        self._css = css
 
     async def evaluate(self, script: str) -> str:  # noqa: D401
-        return self._tag
+        if "tagName" in script:
+            return self._tag
+        return self._css
 
     async def get_attribute(self, name: str) -> str | None:  # noqa: D401
         if name == "name":
@@ -69,8 +82,12 @@ class _FakeForm:
         return None
 
     async def query_selector_all(self, selector: str) -> list[_FakeField]:
-        assert selector == "input, textarea, select"
-        return self._fields
+        if selector == "input, textarea, select":
+            return self._fields
+        if selector.startswith("input[type='radio'][name='") and selector.endswith("']"):
+            name = selector[len("input[type='radio'][name='"):-2]
+            return [field for field in self._fields if getattr(field, "_type", None) == "radio" and getattr(field, "_name", None) == name]
+        return []
 
 
 class _FakePage:
@@ -100,7 +117,9 @@ class _FakePage:
             return self._anchors
         if selector == "form":
             return self._forms
-        if selector in {"button, [role=button]", "iframe"}:
+        if selector == "button, [role=button]":
+            return []
+        if selector == "iframe":
             return []
         raise AssertionError(selector)
 
@@ -147,7 +166,8 @@ async def test_build_snapshot_truncation_and_filters() -> None:
     assert form_elements[0].action is None
     # New fields structure: ensure names and types are captured
     assert form_elements[0].fields is not None
-    assert [f.name for f in form_elements[0].fields] == ["username", "password"]
+    names = [f.name for f in form_elements[0].fields if f.field_type != "hidden"]
+    assert names == ["username", "password"]
     # CSS selector extraction should produce non-empty strings for anchors
     assert all(e.selector for e in anchor_elements)
 
@@ -277,6 +297,7 @@ async def test_form_field_metadata_extracted() -> None:
         def __init__(self, value: str, text: str):
             self._value = value
             self._text = text
+            self._selected = False
 
         async def get_attribute(self, name: str) -> str | None:
             if name == "value":
@@ -285,6 +306,11 @@ async def test_form_field_metadata_extracted() -> None:
 
         async def inner_text(self) -> str:
             return self._text
+
+        async def evaluate(self, script: str) -> object:  # noqa: D401
+            if "o.selected" in script:
+                return bool(self._selected)
+            return None
 
 
     class _FakeSelect:
@@ -334,7 +360,7 @@ async def test_form_field_metadata_extracted() -> None:
     fake_input = _FakeInput("email", "email", placeholder="you@example.com", required=True)
 
     class _FakeForm2:
-        def __init__(self):
+        def __init__(self) -> None:
             self._action = None
 
         async def get_attribute(self, name: str) -> str | None:
@@ -353,7 +379,7 @@ async def test_form_field_metadata_extracted() -> None:
         title="T",
         body="Body",
         anchors=[],
-        forms=[_FakeForm2()],
+        forms=[_FakeForm2()],  # type: ignore[list-item]
     )
 
     response = _FakeResponse(url="https://x", status=200)
@@ -371,3 +397,201 @@ async def test_form_field_metadata_extracted() -> None:
     country_field = next(f for f in fields if f.name == "country")
     assert country_field.options is not None
     assert any(o["value"] == "us" and o["label"] == "United States" for o in country_field.options)
+
+
+class _FakeLabelHandle:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    async def inner_text(self) -> str:
+        return self._text
+
+
+class _FakeRadioField(_FakeField):
+    def __init__(
+        self,
+        *,
+        name: str,
+        value: str,
+        label: str,
+        checked: bool = False,
+        css: str | None = None,
+    ) -> None:
+        super().__init__("input", name=name, type_="radio", css=css)
+        self._value = value
+        self._label = label
+        self._checked = checked
+
+    async def get_attribute(self, name: str) -> str | None:
+        if name == "value":
+            return self._value
+        if name == "checked":
+            return "" if self._checked else None
+        return await super().get_attribute(name)
+
+    async def evaluate_handle(self, script: str):  # noqa: D401
+        if "closest('label')" in script:
+            return _FakeLabelHandle(self._label)
+        return None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_form_field_selectors_are_unique_across_forms() -> None:
+    """Ensure duplicate field names fall back to scoped selectors."""
+
+    css_form_one = "form[action='/newsletter/signup'] input[name='signup_email']"
+    css_form_two = "form[action='/support/contact'] input[name='signup_email']"
+
+    newsletter_form = _FakeForm(
+        action="/newsletter/signup",
+        form_id=None,
+        fields=[
+            _FakeField(
+                "input",
+                name="signup_email",
+                type_="email",
+                css=css_form_one,
+            )
+        ],
+    )
+    support_form = _FakeForm(
+        action="/support/contact",
+        form_id=None,
+        fields=[
+            _FakeField(
+                "input",
+                name="signup_email",
+                type_="email",
+                css=css_form_two,
+            )
+        ],
+    )
+
+    page = _FakePage(
+        title="T",
+        body="Body",
+        anchors=[],
+        forms=[newsletter_form, support_form],
+    )
+
+    response = _FakeResponse(url="https://x", status=200)
+    snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
+
+    all_fields = [
+        (form.text, field.selector)
+        for form in snap.elements
+        if form.tag == "form" and form.fields
+        for field in form.fields
+    ]
+
+    selectors = [selector for _, selector in all_fields if selector]
+    assert len(selectors) == len(set(selectors))
+
+    selectors_by_form: dict[str, list[str]] = {}
+    for form_label, selector in all_fields:
+        if selector:
+            selectors_by_form.setdefault(form_label, []).append(selector)
+
+    newsletter_selectors = selectors_by_form.get("form[action='/newsletter/signup']", [])
+    support_selectors = selectors_by_form.get("form[action='/support/contact']", [])
+
+    assert newsletter_selectors == [css_form_one]
+    assert support_selectors == [css_form_two]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_duplicate_fields_inside_single_form_use_distinct_selectors() -> None:
+    """Controls sharing the same name within a form should still have unique selectors."""
+
+    css_radio_one = "form[action='/preferences'] input[type='radio'][value='daily']"
+    css_radio_two = "form[action='/preferences'] input[type='radio'][value='weekly']"
+
+    class _FakeRadio(_FakeField):
+        def __init__(self, value: str, css: str) -> None:
+            super().__init__(
+                "input",
+                name="frequency",
+                type_="radio",
+                css=css,
+            )
+            self._value = value
+
+        async def get_attribute(self, name: str) -> str | None:
+            if name == "value":
+                return self._value
+            return await super().get_attribute(name)
+
+        async def evaluate_handle(self, script: str):  # noqa: D401
+            return None
+
+    preferences_form = _FakeForm(
+        action="/preferences",
+        form_id=None,
+        fields=[
+            _FakeRadio("daily", css_radio_one),
+            _FakeRadio("weekly", css_radio_two),
+        ],
+    )
+
+    page = _FakePage(
+        title="T",
+        body="Body",
+        anchors=[],
+        forms=[preferences_form],
+    )
+
+    response = _FakeResponse(url="https://x", status=200)
+    snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
+
+    form_entry = next(e for e in snap.elements if e.tag == "form" and e.fields)
+    selectors = [field.selector for field in form_entry.fields or [] if field.selector]
+    assert len(selectors) == len(set(selectors))
+    assert selectors == [
+        "input[type='radio'][name='frequency'] >> nth=0",
+        "input[type='radio'][name='frequency'] >> nth=1",
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_duplicate_fallback_selectors_gain_nth_suffix() -> None:
+    """If fallback CSS collides, ensure nth suffix disambiguates selectors."""
+
+    base_css = "form[action='/dup'] input.same"
+
+    class _BasicField(_FakeField):
+        def __init__(self) -> None:
+            super().__init__(
+                "input",
+                name=None,
+                type_=None,
+                css=base_css,
+            )
+
+        async def get_attribute(self, name: str) -> str | None:
+            return None
+
+    dup_form = _FakeForm(
+        action="/dup",
+        form_id=None,
+        fields=[_BasicField(), _BasicField()],
+    )
+
+    page = _FakePage(
+        title="T",
+        body="Body",
+        anchors=[],
+        forms=[dup_form],
+    )
+
+    response = _FakeResponse(url="https://x", status=200)
+    snap = await _build_page_snapshot(page, response)  # type: ignore[arg-type]
+
+    form_entry = next(e for e in snap.elements if e.tag == "form" and e.fields)
+    selectors = [field.selector for field in form_entry.fields or [] if field.selector]
+    assert len(selectors) == 2
+    assert len(set(selectors)) == 2
+    assert any(sel.endswith(" >> nth=0") for sel in selectors)
+    assert base_css in selectors
