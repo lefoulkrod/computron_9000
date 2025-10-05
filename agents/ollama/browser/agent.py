@@ -22,7 +22,6 @@ from tools.browser import (
     current_page,
     extract_text,
     fill_field,
-    ground_elements_by_text,
     open_url,
     press_keys,
     scroll_page,
@@ -54,11 +53,6 @@ SYSTEM_PROMPT = dedent(
     - ask_about_screenshot(prompt, *, mode="full_page", selector=None): captures a screenshot of
       the current page (full page, viewport, or a specific selector handle) and sends it to a vision
       model to answer the prompt. Use the `selector` parameter to focus screenshots when available.
-    - ground_elements_by_text(visible_text): capture a viewport screenshot and use the vision model
-      to locate UI elements that match the provided visible text (for example "Login" or "Submit").
-      Returns a list of grounding results including bounding boxes, best-effort selector handles,
-      and element metadata. Use this when you need to locate elements visually before interacting
-      with them (for example when selectors are not present in the page snapshot).
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
       Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
@@ -118,7 +112,6 @@ browser_agent = Agent(
         click,
         extract_text,
         ask_about_screenshot,
-        ground_elements_by_text,
         current_page,
         fill_field,
         press_keys,
