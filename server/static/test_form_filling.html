@@ -1,166 +1,181 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Form Filling Fixture</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: system-ui, sans-serif;
-        line-height: 1.5;
-      }
-      body {
-        margin: 0;
-        padding: 2rem 3rem 4rem;
-        background: #fefefe;
-      }
-      header {
-        margin-bottom: 2rem;
-      }
-      section {
-        background: #fff;
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
-      }
-      form {
-        display: grid;
-        gap: 1rem;
-        max-width: 520px;
-      }
-      label {
-        display: flex;
-        flex-direction: column;
-        gap: .4rem;
-        font-weight: 600;
-      }
-      input,
-      select,
-      textarea {
-        padding: .6rem .75rem;
-        border: 1px solid #cbd5f5;
-        border-radius: 8px;
-        font-size: 1rem;
-      }
-      fieldset {
-        border: 1px solid #d4d4d8;
-        border-radius: 10px;
-        padding: 0.75rem 1rem 1rem;
-      }
-      legend {
-        font-weight: 700;
-      }
-      .checkbox-option,
-      .radio-option {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        font-weight: 500;
-      }
-      .submit-row {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-      }
-      button {
-        border: none;
-        border-radius: 999px;
-        padding: .75rem 1.75rem;
-        background: #4338ca;
-        color: #fff;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .banner {
-        margin-bottom: 1rem;
-        padding: 1rem;
-        border-radius: 10px;
-        background: #dcfce7;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-        font-weight: 600;
-      }
-      .result {
-        margin-top: 1.25rem;
-        padding: 1rem;
-        border-radius: 10px;
-        background: #eef2ff;
-        color: #1e1b4b;
-        border: 1px solid #c7d2fe;
-        font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-        white-space: pre-wrap;
-      }
 
-      .form-layout {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 2rem;
-        align-items: flex-start;
-      }
+<head>
+  <meta charset="utf-8">
+  <title>Form Filling Fixture</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+      line-height: 1.5;
+    }
 
-      .form-column {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        flex: 1 1 360px;
-      }
+    body {
+      margin: 0;
+      padding: 2rem 3rem 4rem;
+      background: #fefefe;
+    }
 
-      .bbox-panel {
-        background: #fff7ed;
-        border-radius: 12px;
-        padding: 1rem 1.2rem;
-        border: 1px solid #fed7aa;
-        box-shadow: 0 8px 16px rgba(124, 45, 18, 0.08);
-        min-width: 320px;
-        flex: 1 1 300px;
-      }
+    header {
+      margin-bottom: 2rem;
+    }
 
-      .bbox-panel h2 {
-        margin-top: 0;
-        font-size: 1.1rem;
-      }
+    section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    }
 
-      .bbox-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.9rem;
-      }
+    form {
+      display: grid;
+      gap: 1rem;
+      max-width: 520px;
+    }
 
-      .bbox-table th,
-      .bbox-table td {
-        border: 1px solid #fed7aa;
-        padding: 0.4rem 0.55rem;
-        text-align: left;
-      }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+      font-weight: 600;
+    }
 
-      .bbox-table th {
-        background: #ffedd5;
-      }
+    input,
+    select,
+    textarea {
+      padding: .6rem .75rem;
+      border: 1px solid #cbd5f5;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
 
-      .bbox-table code {
-        font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-        font-size: 0.85rem;
-      }
+    fieldset {
+      border: 1px solid #d4d4d8;
+      border-radius: 10px;
+      padding: 0.75rem 1rem 1rem;
+    }
 
-      .bbox-table td[data-bbox-for] {
-        font-variant-numeric: tabular-nums;
-      }
-    </style>
-  </head>
-  <body>
-    <header>
-      <h1>Form Filling Fixture</h1>
-      <p>Use this page to practice filling a single form end-to-end and verifying submission feedback.</p>
-    </header>
+    legend {
+      font-weight: 700;
+    }
 
-    <section class="form-layout">
-      <div class="form-column">
-        <div id="form-banner" class="banner" role="status">
-          All fields marked with * are required.
-        </div>
-        <form id="full-demo-form">
+    .checkbox-option,
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 500;
+    }
+
+    .submit-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: .75rem 1.75rem;
+      background: #4338ca;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .banner {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      border-radius: 10px;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+      font-weight: 600;
+    }
+
+    .result {
+      margin-top: 1.25rem;
+      padding: 1rem;
+      border-radius: 10px;
+      background: #eef2ff;
+      color: #1e1b4b;
+      border: 1px solid #c7d2fe;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+
+    .form-layout {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2rem;
+      align-items: flex-start;
+    }
+
+    .form-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      flex: 1 1 360px;
+    }
+
+    .bbox-panel {
+      background: #fff7ed;
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      border: 1px solid #fed7aa;
+      box-shadow: 0 8px 16px rgba(124, 45, 18, 0.08);
+      min-width: 320px;
+      flex: 1 1 300px;
+    }
+
+    .bbox-panel h2 {
+      margin-top: 0;
+      font-size: 1.1rem;
+    }
+
+    .bbox-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .bbox-table th,
+    .bbox-table td {
+      border: 1px solid #fed7aa;
+      padding: 0.4rem 0.55rem;
+      text-align: left;
+    }
+
+    .bbox-table th {
+      background: #ffedd5;
+    }
+
+    .bbox-table code {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+    }
+
+    .bbox-table td[data-bbox-for] {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Form Filling Fixture</h1>
+    <p>Use this page to practice filling a single form end-to-end and verifying submission feedback.</p>
+  </header>
+
+  <section class="form-layout">
+    <div class="form-column">
+      <div id="form-banner" class="banner" role="status">
+        All fields marked with * are required.
+      </div>
+      <form id="full-demo-form">
         <label for="person-name">
           Full Name *
           <input id="person-name" name="full_name" type="text" placeholder="Ada Lovelace" required>
@@ -214,106 +229,99 @@
           <button id="form-submit" type="submit">Submit Form</button>
           <span id="form-status" aria-live="polite"></span>
         </div>
-        </form>
+      </form>
 
-        <div id="form-result" class="result" hidden aria-live="polite"></div>
-      </div>
-      <aside class="bbox-panel">
-        <h2>Live Bounding Boxes</h2>
-        <table class="bbox-table">
-          <thead>
-            <tr>
-              <th>Element</th>
-              <th>Selector</th>
-              <th>BBox [x1, y1, x2, y2]</th>
-            </tr>
-          </thead>
-          <tbody id="bbox-table-body">
-            <tr>
-              <td>Full Name</td>
-              <td><code>#person-name</code></td>
-              <td data-bbox-for="#person-name">[x1, y1, x2, y2]</td>
-            </tr>
-            <tr>
-              <td>Email</td>
-              <td><code>#person-email</code></td>
-              <td data-bbox-for="#person-email">[x1, y1, x2, y2]</td>
-            </tr>
-            <tr>
-              <td>Role</td>
-              <td><code>#person-role</code></td>
-              <td data-bbox-for="#person-role">[x1, y1, x2, y2]</td>
-            </tr>
-            <tr>
-              <td>Updates Checkbox</td>
-              <td><code>#form-updates</code></td>
-              <td data-bbox-for="#form-updates">[x1, y1, x2, y2]</td>
-            </tr>
-            <tr>
-              <td>Contact Preference</td>
-              <td><code>#form-contact input[name='contact_pref']</code></td>
-              <td data-bbox-for="#form-contact">[x1, y1, x2, y2]</td>
-            </tr>
-            <tr>
-              <td>Bio</td>
-              <td><code>#person-bio</code></td>
-              <td data-bbox-for="#person-bio">[x1, y1, x2, y2]</td>
-            </tr>
-            <tr>
-              <td>Submit Button</td>
-              <td><code>#form-submit</code></td>
-              <td data-bbox-for="#form-submit">[x1, y1, x2, y2]</td>
-            </tr>
-          </tbody>
-        </table>
-      </aside>
-    </section>
+      <div id="form-result" class="result" hidden aria-live="polite"></div>
+    </div>
+    <aside class="bbox-panel">
+      <h2>Live Bounding Boxes</h2>
+      <table class="bbox-table">
+        <thead>
+          <tr>
+            <th>Element</th>
+            <th>BBox [x1, y1, x2, y2]</th>
+          </tr>
+        </thead>
+        <tbody id="bbox-table-body">
+          <tr>
+            <td>Full Name</td>
+            <td data-bbox-for="#person-name">[x1, y1, x2, y2]</td>
+          </tr>
+          <tr>
+            <td>Email</td>
+            <td data-bbox-for="#person-email">[x1, y1, x2, y2]</td>
+          </tr>
+          <tr>
+            <td>Role</td>
+            <td data-bbox-for="#person-role">[x1, y1, x2, y2]</td>
+          </tr>
+          <tr>
+            <td>Updates Checkbox</td>
+            <td data-bbox-for="#form-updates">[x1, y1, x2, y2]</td>
+          </tr>
+          <tr>
+            <td>Contact Preference</td>
+            <td data-bbox-for="#form-contact">[x1, y1, x2, y2]</td>
+          </tr>
+          <tr>
+            <td>Bio</td>
+            <td data-bbox-for="#person-bio">[x1, y1, x2, y2]</td>
+          </tr>
+          <tr>
+            <td>Submit Button</td>
+            <td data-bbox-for="#form-submit">[x1, y1, x2, y2]</td>
+          </tr>
+        </tbody>
+      </table>
+    </aside>
+  </section>
 
-    <script>
-      const form = document.getElementById('full-demo-form');
-      const banner = document.getElementById('form-banner');
-      const status = document.getElementById('form-status');
-      const result = document.getElementById('form-result');
-      const trackedElements = [
-        ['Full Name', '#person-name'],
-        ['Email', '#person-email'],
-        ['Role', '#person-role'],
-        ['Updates Checkbox', '#form-updates'],
-        ['Contact Preference', '#form-contact'],
-        ['Bio', '#person-bio'],
-        ['Submit', '#form-submit'],
-      ];
+  <script>
+    const form = document.getElementById('full-demo-form');
+    const banner = document.getElementById('form-banner');
+    const status = document.getElementById('form-status');
+    const result = document.getElementById('form-result');
+    const trackedElements = [
+      ['Full Name', '#person-name'],
+      ['Email', '#person-email'],
+      ['Role', '#person-role'],
+      ['Updates Checkbox', '#form-updates'],
+      ['Contact Preference', '#form-contact'],
+      ['Bio', '#person-bio'],
+      ['Submit', '#form-submit'],
+    ];
 
-      function updateBoundingBoxes() {
-        trackedElements.forEach(([label, selector]) => {
-          document.querySelectorAll(`[data-bbox-for="${selector}"]`).forEach((cell) => {
-            const node = document.querySelector(selector);
-            if (!node) {
-              cell.textContent = '[not found]';
-              return;
-            }
-            const rect = node.getBoundingClientRect();
-            const values = [rect.left, rect.top, rect.right, rect.bottom].map((v) => Math.round(v));
-            cell.textContent = `[${values.join(', ')}]`;
-          });
+    function updateBoundingBoxes() {
+      trackedElements.forEach(([label, selector]) => {
+        document.querySelectorAll(`[data-bbox-for="${selector}"]`).forEach((cell) => {
+          const node = document.querySelector(selector);
+          if (!node) {
+            cell.textContent = '[not found]';
+            return;
+          }
+          const rect = node.getBoundingClientRect();
+          const values = [rect.left, rect.top, rect.right, rect.bottom].map((v) => Math.round(v));
+          cell.textContent = `[${values.join(', ')}]`;
         });
-      }
-
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const url = new URL(window.location.href);
-        url.search = 'submitted=true';
-        history.replaceState(null, '', url);
-
-        const timestamp = new Date().toLocaleTimeString();
-        banner.textContent = `Submission received at ${timestamp}.`;
-        status.textContent = '✓ Form submitted';
-        result.hidden = true;
-        updateBoundingBoxes();
       });
+    }
 
-  window.addEventListener('load', updateBoundingBoxes);
-  window.addEventListener('resize', updateBoundingBoxes);
-</script>
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const url = new URL(window.location.href);
+      url.search = 'submitted=true';
+      history.replaceState(null, '', url);
+
+      const timestamp = new Date().toLocaleTimeString();
+      banner.textContent = `Submission received at ${timestamp}.`;
+      status.textContent = '✓ Form submitted';
+      result.hidden = true;
+      updateBoundingBoxes();
+    });
+
+    window.addEventListener('load', updateBoundingBoxes);
+    window.addEventListener('resize', updateBoundingBoxes);
+  </script>
 </body>
+
 </html>
