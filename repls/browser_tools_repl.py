@@ -202,17 +202,17 @@ def _format_result(result: Any) -> str:
     try:
         # Pydantic BaseModel or dataclass-like objects
         if hasattr(result, "model_dump"):
-            return json.dumps(result.model_dump(), indent=2)[:4000]
+            return json.dumps(result.model_dump(), indent=2)
         if isinstance(result, list):
             return json.dumps(
                 [r.model_dump() if hasattr(r, "model_dump") else r for r in result],
                 indent=2,
-            )[:4000]
+            )
         if isinstance(result, (dict, tuple)):
-            return json.dumps(result if isinstance(result, dict) else list(result), indent=2)[:4000]
-        return str(result)[:4000]
+            return json.dumps(result if isinstance(result, dict) else list(result), indent=2)
+        return str(result)
     except Exception:
-        return str(result)[:4000]
+        return str(result)
 
 
 def _print_menu() -> None:

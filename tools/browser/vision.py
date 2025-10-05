@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 from typing import Any, cast
 
 from ollama import AsyncClient, Image
@@ -20,23 +21,48 @@ from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.snapshot import _best_selector, _build_page_snapshot
 
+_BBOX_DEBUG_ENV = "COMPUTRON_VISION_DEBUG"
+_BBOX_OVERLAY_SCRIPT = """
+((bbox) => {
+  const [x1, y1, x2, y2] = bbox;
+  const id = '__vision_bbox_overlay__';
+  const remove = () => {
+    const existing = document.getElementById(id);
+    if (existing) existing.remove();
+  };
+  remove();
+  if (!Array.isArray(bbox) || bbox.length !== 4) return;
+  const overlay = document.createElement('div');
+  overlay.id = id;
+  overlay.style.position = 'fixed';
+  overlay.style.left = `${x1}px`;
+  overlay.style.top = `${y1}px`;
+  overlay.style.width = `${Math.max(0, x2 - x1)}px`;
+  overlay.style.height = `${Math.max(0, y2 - y1)}px`;
+  overlay.style.border = '2px solid #ff0062';
+  overlay.style.background = 'rgba(255, 0, 98, 0.15)';
+  overlay.style.pointerEvents = 'none';
+  overlay.style.zIndex = '2147483647';
+  document.body.appendChild(overlay);
+})
+"""
+
 logger = logging.getLogger(__name__)
 
 _SCREENSHOT_TOOL_NAME = "ask_about_screenshot"
 _GROUNDING_TOOL_NAME = "ground_elements_by_text"
-_PROMPT_TEMPLATE = """You are a UI grounding assistant.
-You are given a screenshot of a browser viewport. Find every element that matches {text_json}.
-
+_PROMPT_TEMPLATE = """
+You will extract bounding boxes for interactive elements on a webpage screenshot.
+You are given a screenshot of a browser viewport with these dimensions:
+{width}x{height} pixels (origin at top-left corner).
+Return all bounding boxes for elements described by the following text: {text_json}.
 Return JSON only (no prose, no code fences). If nothing matches, return [].
-
-Focus on interactive targets a user can click or tap (buttons, links, icons, toggles, menu items). Skip
-purely static text unless that text is itself the clickable surface.
 
 For each match emit an object with:
  - "text": visible label inside the clickable region (string or null)
  - "element_type": best-guess HTML role or tag such as "button", "a", "input", "icon", "checkbox" (string or null)
  - "bbox": [x1, y1, x2, y2] in viewport pixels; (x1, y1) is the top-left, (x2, y2) the bottom-right
-   corner. Make the box tight around the clickable surface so the center falls inside the hit area.
+     corner. Make the box tight around the clickable surface so the center falls inside the hit area.
 
 Example:
 [{{"text":"Submit","element_type":"button","bbox":[10,20,110,60]}}]
@@ -181,11 +207,21 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         msg = "Unexpected failure capturing screenshot."
         raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
 
+    width_px = height_px = 0
+    try:
+        viewport_size = getattr(page, "viewport_size", None)
+        if isinstance(viewport_size, dict):
+            width_px = int(viewport_size.get("width") or 0)
+            height_px = int(viewport_size.get("height") or 0)
+    except (TypeError, ValueError) as exc:
+        # viewport width/height weren't numeric or convertible to int
+        logger.debug("Unable to read viewport_size: %s", exc)
+        width_px = height_px = 0
     encoded_image = _encode_image(screenshot_bytes)
 
     client, model = _make_vision_client(tool_name=_GROUNDING_TOOL_NAME)
-    prompt = _render_prompt(clean_text)
-
+    prompt = _render_prompt(clean_text, width=width_px, height=height_px)
+    logger.debug("Grounding prompt: %s", prompt)
     try:
         response = await client.generate(
             model=model.model,
@@ -254,7 +290,10 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
     for entry in parsed:
         try:
             bbox_raw = entry.get("bbox")
-            if not isinstance(bbox_raw, list | tuple) or len(bbox_raw) != 4:
+            if isinstance(bbox_raw, str):
+                parts = [p.strip() for p in bbox_raw.split(",") if p.strip()]
+                bbox_raw = parts
+            if not isinstance(bbox_raw, (list | tuple)) or len(bbox_raw) != 4:
                 raise ValueError("bbox must be a sequence of four numbers")
             try:
                 # round(...) without ndigits returns an int for float inputs
@@ -281,6 +320,12 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
             # The center coordinates are computed and rounded to integers.
             cx = round((x1 + x2) / 2)
             cy = round((y1 + y2) / 2)
+
+            if os.getenv(_BBOX_DEBUG_ENV):
+                try:
+                    await page.evaluate(_BBOX_OVERLAY_SCRIPT, [x1, y1, x2, y2])
+                except PlaywrightError:
+                    logger.debug("Failed to inject bbox overlay for %s", validated.bbox)
 
             # Call into the page to compute a selector handle for the element at the center.
             # _best_selector is a helper that lives on the Python side; we call document.elementFromPoint
@@ -390,10 +435,10 @@ def _encode_image(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
 
-def _render_prompt(visible_text: str) -> str:
+def _render_prompt(visible_text: str, *, width: int, height: int) -> str:
     """Build the grounding prompt with JSON-compliant quoting."""
     quoted = json.dumps(visible_text)
-    return _PROMPT_TEMPLATE.format(text_json=quoted)
+    return _PROMPT_TEMPLATE.format(text_json=quoted, width=width, height=height)
 
 
 __all__ = [
