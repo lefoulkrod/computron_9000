@@ -107,12 +107,14 @@ async def _wait_for_page_settle(
 
 
 async def click(selector: str) -> PageSnapshot:
-    """Click an element by visible text or selector handle and snapshot the page.
+    """Click any visible element by its text or a selector.
+
+    Click can only be performed on elements that are visible on the page.
 
     Args:
         selector: Either a visible text string (e.g. ``"Book Now"``) or a selector
             handle (for example a CSS selector string like ``"button#submit"`` or
-            an internal selector handle returned in page snapshots). Leading and
+            a selector handle returned in page snapshots). Leading and
             trailing whitespace is ignored for text matching. Prefer passing the
             element's `selector` from page snapshots; fall back to visible text only
             when no selector is available.
