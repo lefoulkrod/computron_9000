@@ -172,6 +172,7 @@ async def click(selector: str) -> PageSnapshot:
     try:
         try:
             # Short timeout: many clicks won't navigate; use configured navigation timeout
+            # Perform the click inside the expect_navigation context so we only click once.
             async with page.expect_navigation(
                 wait_until="domcontentloaded",
                 timeout=wait_cfg.navigation_timeout_ms,
@@ -182,9 +183,9 @@ async def click(selector: str) -> PageSnapshot:
             # Allow the page to settle after navigation
             await _wait_for_page_settle(page, expect_navigation=True, waits=wait_cfg)
         except PlaywrightTimeoutError:
-            # Click likely did not trigger navigation; perform direct click as fallback.
-            await human_click(page, locator)
-            # For non-navigation interactions, give SPA JS time to update
+            # Navigation wait timed out. The click already fired inside the
+            # expect_navigation context, so skip a second click and only allow
+            # the page to settle for SPA updates.
             await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
         except PlaywrightError as exc:
             logger.exception("Playwright error during click for selector %s", clean_selector)
