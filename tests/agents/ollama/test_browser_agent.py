@@ -18,16 +18,15 @@ from tools.browser.vision import ask_about_screenshot
 def test_browser_agent_basic_config() -> None:
     """Browser agent should expose all registered browsing tools in order."""
     assert browser_agent.name == "BROWSER_AGENT"
-    assert browser_agent.tools and len(browser_agent.tools) == 9
+    assert browser_agent.tools and len(browser_agent.tools) == 8
     assert browser_agent.tools[0] is open_url
     assert browser_agent.tools[1] is click
     assert browser_agent.tools[2] is extract_text
     assert browser_agent.tools[3] is ask_about_screenshot
-    assert browser_agent.tools[4] is ground_elements_by_text
-    assert browser_agent.tools[5] is current_page
-    assert browser_agent.tools[6] is fill_field
-    assert browser_agent.tools[7] is press_keys
-    assert browser_agent.tools[8] is scroll_page
+    assert browser_agent.tools[4] is current_page
+    assert browser_agent.tools[5] is fill_field
+    assert browser_agent.tools[6] is press_keys
+    assert browser_agent.tools[7] is scroll_page
 
 
 @pytest.mark.unit
