@@ -134,80 +134,66 @@ class FakePage:
 
 
 class FakeBrowser:
-    def __init__(self, page: FakePage) -> None:  # noqa: D401
+    """Minimal fake browser exposing current_page() for tests."""
+
+    def __init__(self, page: FakePage) -> None:
         self._page = page
 
-    async def current_page(self) -> FakePage:  # noqa: D401 - stub
+    async def current_page(self) -> FakePage:
         return self._page
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_click_by_text(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_click_by_text(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+    settle_tracker,
+) -> None:
     """Clicking by visible text performs navigation and returns a snapshot."""
 
     page = FakePage()
     page.add_text_element("Continue", navigates_to="https://example.test/after")
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:  # noqa: D401 - stub
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
-    called = {"count": 0}
-
-    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
-        called["count"] += 1
-
-    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
 
     snap: PageSnapshot = await click("Continue")
     assert snap.url == "https://example.test/after"
     assert snap.title == "After Click"
     assert "Arrived" in snap.snippet
+    assert settle_tracker["count"] == 1
+    assert settle_tracker["expect_flags"] == [True]
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_click_by_css_selector(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_click_by_css_selector(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+    settle_tracker,
+) -> None:
     """Falls back to CSS selector when no text match exists."""
 
     page = FakePage()
     page.add_css_element(".cta", navigates_to="https://example.test/cta")
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:  # noqa: D401 - stub
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
-
-    called = {"count": 0}
-
-    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
-        called["count"] += 1
-
-    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
 
     snap = await click(".cta")
     assert snap.url.endswith("/cta")
     assert snap.title == "After Click"
-    assert called["count"] == 1
+    assert settle_tracker["count"] == 1
+    assert settle_tracker["expect_flags"] == [True]
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_click_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_click_not_found(monkeypatch: pytest.MonkeyPatch, patch_interactions_browser) -> None:
     """Raises BrowserToolError when element can't be located."""
 
     page = FakePage()
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:  # noqa: D401 - stub
-        return fake_browser
-
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
+    # Use shared patch_interactions_browser fixture to patch get_browser
+    patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     with pytest.raises(BrowserToolError):

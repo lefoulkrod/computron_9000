@@ -44,23 +44,16 @@ class FakePage:
         return []
 
 
-class FakeBrowser:
-    def __init__(self, page: FakePage) -> None:
-        self._page = page
-
-    async def current_page(self) -> FakePage:
-        return self._page
-
-
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_press_keys_success(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_press_keys_success(
+    monkeypatch: pytest.MonkeyPatch,
+    patch_interactions_browser,
+    settle_tracker,
+) -> None:
     keyboard = FakeKeyboard()
     page = FakePage(keyboard)
-    fake_browser = FakeBrowser(page)
-
-    async def fake_get_browser() -> FakeBrowser:
-        return fake_browser
+    patch_interactions_browser(page)
 
     async def fake_human_press_keys(page: object, keys: list[str]) -> None:
         # simulate pressing keys by delegating to page.keyboard
@@ -69,19 +62,12 @@ async def test_press_keys_success(monkeypatch: pytest.MonkeyPatch) -> None:
             await cast(Any, page).keyboard.press(k)
         
 
-    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
     monkeypatch.setattr("tools.browser.interactions.human_press_keys", fake_human_press_keys)
-
-    called = {"count": 0}
-
-    async def fake_wait(page: object, *, expect_navigation: bool, waits: object) -> None:
-        called["count"] += 1
-
-    monkeypatch.setattr("tools.browser.interactions._wait_for_page_settle", fake_wait)
 
     snap: PageSnapshot = await press_keys(["Enter"])  # should return a snapshot
     assert isinstance(snap, PageSnapshot)
-    assert called["count"] == 1
+    assert settle_tracker["count"] == 1
+    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit
