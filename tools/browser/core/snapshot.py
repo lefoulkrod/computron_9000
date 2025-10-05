@@ -777,17 +777,34 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                             # Fallback: first option if none marked selected
                             current_value = opts[0]["value"]
                     elif field_type not in {"radio", "checkbox"}:
-                        # Try to read value for standard inputs / textareas
+                        # Try to read value for standard inputs / textareas.
+                        # Prefer the DOM property (el.value) which reflects runtime
+                        # changes made by scripts or user typing. Fall back to the
+                        # attribute when the property read fails or is unavailable.
+                        raw_val = None
                         try:
-                            raw_val = await control.get_attribute("value")
+                            # Use evaluate to access the live property on the element
+                            raw_val = await control.evaluate("el => el.value")
                         except PlaywrightError as exc:
                             logger.debug(
-                                "Field value attribute read failed (type=%s name=%s): %s",
+                                "Field value property read failed (type=%s name=%s): %s",
                                 field_type,
                                 name_attr,
                                 exc,
                             )
                             raw_val = None
+                        if raw_val is None:
+                            try:
+                                raw_attr = await control.get_attribute("value")
+                            except PlaywrightError as exc:
+                                logger.debug(
+                                    "Field value attribute read failed (type=%s name=%s): %s",
+                                    field_type,
+                                    name_attr,
+                                    exc,
+                                )
+                                raw_attr = None
+                            raw_val = raw_attr
                         if raw_val is not None:
                             current_value = raw_val
                     elif field_type == "checkbox":
