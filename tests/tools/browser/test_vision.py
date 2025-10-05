@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import importlib
+import json
 from types import SimpleNamespace
 from typing import cast
 
@@ -58,10 +59,16 @@ class _GroundingFakePage:
     def __init__(self, screenshot_bytes: bytes, url: str = "https://example.com") -> None:
         self._screenshot_bytes = screenshot_bytes
         self.url = url
+        self.evaluate_calls: list[tuple[str, list[int]]] = []
 
     async def screenshot(self, *, full_page: bool = True, type: str = "png") -> bytes:  # noqa: A003
         assert type == "png"
         return self._screenshot_bytes
+
+    async def evaluate_handle(self, script: str, args: list[int]) -> "_FakeJSHandle":
+        self.evaluate_calls.append((script, args))
+        assert script.startswith("([x,y]) => document.elementFromPoint")
+        return _FakeJSHandle()
 
 
 class _FakeBrowser:
@@ -112,7 +119,7 @@ class _GroundingClient:
         _GroundingClient.last_prompt = cast(str | None, kwargs.get("prompt"))
         _GroundingClient.last_model = kwargs.get("model")
         _GroundingClient.last_images = kwargs.get("images")
-        payload = '[{"element": "button", "text": "Login", "bbox": [10, 20, 30, 40]}]'
+        payload = '[{"element_type": "checkbox", "text": null, "bbox": [10, 20, 30, 40]}]'
         return SimpleNamespace(response=payload)
 
 
@@ -126,6 +133,28 @@ class _GroundingDummyClient:
 
 async def _fake_snapshot(*args: object, **kwargs: object) -> None:  # noqa: ARG001, D401
     return None
+
+
+class _FakeElementHandle:
+    def __init__(self) -> None:
+        self.disposed = False
+
+    def as_element(self) -> "_FakeElementHandle":
+        return self
+
+    async def dispose(self) -> None:
+        self.disposed = True
+
+
+class _FakeJSHandle:
+    def __init__(self) -> None:
+        self._element = _FakeElementHandle()
+
+    def as_element(self) -> _FakeElementHandle:
+        return self._element
+
+    async def dispose(self) -> None:
+        await self._element.dispose()
 
 
 @pytest.mark.unit
@@ -294,22 +323,27 @@ async def test_request_grounding_by_text_success(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
+    selector_calls: list[_FakeElementHandle] = []
+
+    async def fake_best_selector(element: _FakeElementHandle) -> str:
+        selector_calls.append(element)
+        return "#resolved"
+
+    monkeypatch.setattr(module, "_best_selector", fake_best_selector)
+
     result = await ground_elements_by_text("Login")
 
     assert isinstance(result, list)
     assert len(result) == 1
     first = result[0]
     assert isinstance(first, GroundingResult)
-    assert first.text == "Login"
+    assert first.text is None
     assert first.bbox == (10, 20, 30, 40)
-    # selector resolution is best-effort; ensure the field exists (may be None)
-    assert hasattr(first, "selector")
+    assert first.selector == "#resolved"
+    assert selector_calls  # ensure _best_selector was invoked
+    assert selector_calls[0].disposed is True
 
-    expected_prompt = (
-        "You are a UI grounding assistant.\n"
-        "Given this screenshot, return bounding boxes for all elements that match the description \"Login\".\n"
-        "Format the output strictly as JSON: [{\"element\": \"...\", \"text\": \"...\", \"bbox\": [x,y,width,height]}]"
-    )
+    expected_prompt = module._PROMPT_TEMPLATE.format(text_json=json.dumps("Login"))
     assert _GroundingClient.last_prompt == expected_prompt
     assert _GroundingClient.last_model == _FakeModel().model
     assert _GroundingClient.last_host == _FakeConfig.llm.host
