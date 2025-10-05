@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import typing
 import pytest
 
 from tools.browser import BrowserToolError, PageSnapshot
@@ -33,6 +35,9 @@ class FakeLocator:
             self._page.url = self._navigates_to
             self._page._title = "After Click"
             self._page._body_text = "Arrived after navigation"
+            # Signal navigation to any wait_for_event watchers in tests
+            if hasattr(self._page, "_nav_event"):
+                self._page._nav_event.set()
 
     @property
     def first(self) -> "FakeLocator":  # noqa: D401 - Playwright API parity
@@ -55,11 +60,11 @@ class FakeNavContext:
         return None
 
     @property
-    def value(self):  # noqa: D401 - mimic Playwright property returning awaitable
+    def value(self) -> object:  # noqa: D401 - mimic Playwright property returning awaitable
         async def _get() -> FakeResponse:
             return FakeResponse(self._page.url, 200)
 
-        return _get()
+        return typing.cast(object, _get())
 
 
 class FakePage:
@@ -73,6 +78,9 @@ class FakePage:
         self._anchors: list[object] = []  # no links needed for tests
         self._forms: list[object] = []
         self._all_locators: set[FakeLocator] = set()
+        # Minimal primitives to emulate Playwright event/load_state APIs for tests
+        self._nav_event = asyncio.Event()
+        self.main_frame = object()
 
     # Playwright subset used by snapshot builder
     async def title(self) -> str:  # noqa: D401 - stub
@@ -99,6 +107,21 @@ class FakePage:
         loc = FakeLocator(self, navigates_to=navigates_to)
         self._css_locators[selector] = loc
         self._all_locators.add(loc)
+
+    async def wait_for_event(self, name: str, *, predicate: object | None = None) -> object | None:  # pragma: no cover - test helper
+        # Only support framenavigated predicate for test doubles
+        if name != "framenavigated":
+            raise RuntimeError("Unsupported event in FakePage")
+        # Wait until navigation is signaled by the locator click behavior
+        await self._nav_event.wait()
+        # Reset for future navigations
+        self._nav_event.clear()
+        return None
+
+    async def wait_for_load_state(self, state: str, timeout: int | None = None) -> None:  # pragma: no cover - test helper
+        # For tests, domcontentloaded can be considered immediate after navigation
+        # If the page hasn't navigated, return immediately (no-op)
+        return None
 
     def get_by_text(self, text: str, exact: bool = True) -> FakeLocator:  # noqa: D401 - stub
         return self._text_locators.get(text, FakeLocator(self))

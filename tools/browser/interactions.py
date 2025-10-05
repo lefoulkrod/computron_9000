@@ -9,6 +9,8 @@ resolution helper and also returns an updated ``PageSnapshot``.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 
 from playwright.async_api import (
@@ -16,6 +18,7 @@ from playwright.async_api import (
 )
 from playwright.async_api import (
     Page,
+    Response,
 )
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
@@ -164,33 +167,87 @@ async def click(selector: str) -> PageSnapshot:
         "selector": resolution.resolved_selector,
     }
 
-    # Attempt click & detect navigation (best-effort)
-    response = None
+    # Attempt click & detect navigation (best-effort) using a short probe so
+    # non-navigation clicks (dropdowns/checkboxes) don't incur a long navigation
+    # timeout. We create two watchers: a framenavigated event watcher filtered to
+    # the main frame which will fire as soon as navigation kicks off, and a
+    # full wait_for_navigation which will yield the Response if navigation
+    # completes. We give the framenavigated watcher only a short probe window
+    # (navigation_probe_timeout_ms) to complete; if it does, treat the click as
+    # navigation and await the navigation response + full settle. Otherwise,
+    # cancel both watchers and follow the non-navigation settle path.
+    response: Response | None = None
     # Load wait configuration
     wait_cfg = load_config().tools.browser.waits
+    nav_probe_ms = getattr(wait_cfg, "navigation_probe_timeout_ms", 250)
 
     try:
-        try:
-            # Short timeout: many clicks won't navigate; use configured navigation timeout
-            # Perform the click inside the expect_navigation context so we only click once.
+        # Use the fast probe approach: start a framenavigated watcher (which
+        # real Playwright pages implement) filtered to the main frame. Tests
+        # must provide fakes that implement the same minimal API.
+        # Start watchers before clicking so they can observe navigation that
+        # begins immediately after the click.
+        nav_start_task = asyncio.create_task(
+            page.wait_for_event(
+                "framenavigated",
+                predicate=lambda frame: frame == page.main_frame,
+            )
+        )
+
+        # Start a background task that waits for the navigation response using
+        # Playwright's expect_navigation context manager. This returns a
+        # Response-like object (or raises a TimeoutError) and keeps typing
+        # consistent for static checks. Tests should provide a compatible
+        # FakeNavContext via page.expect_navigation.
+        async def _await_nav_response() -> Response | None:
             async with page.expect_navigation(
                 wait_until="domcontentloaded",
                 timeout=wait_cfg.navigation_timeout_ms,
             ) as nav_ctx:
-                await human_click(page, locator)
-            # nav_ctx.value is an awaitable returning a Response
-            response = await nav_ctx.value
-            # Allow the page to settle after navigation
+                return await nav_ctx.value
+
+        nav_response_task = asyncio.create_task(_await_nav_response())
+
+        # Perform the click once
+        await human_click(page, locator)
+
+        # Give the quick probe a short time to detect navigation start
+        done, _ = await asyncio.wait(
+            {nav_start_task},
+            timeout=nav_probe_ms / 1000,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        if nav_start_task in done:
+            # Navigation started within the probe window. Ensure we surface any
+            # unexpected errors from the start watcher, then await the full
+            # navigation response (which may time out) and run the navigation
+            # settle logic.
+            try:
+                await nav_start_task  # surface unexpected errors
+            except PlaywrightError:
+                logger.debug("framenavigated watcher raised; continuing without navigation context")
+            try:
+                # nav_response_task may be a load_state wait returning None
+                response = await nav_response_task
+            except PlaywrightTimeoutError:
+                logger.debug("Navigation response wait timed out after %d ms", wait_cfg.navigation_timeout_ms)
             await _wait_for_page_settle(page, expect_navigation=True, waits=wait_cfg)
-        except PlaywrightTimeoutError:
-            # Navigation wait timed out. The click already fired inside the
-            # expect_navigation context, so skip a second click and only allow
-            # the page to settle for SPA updates.
+        else:
+            # Probe timed out; cancel watchers and proceed with non-navigation
+            # settle. Cancelling both tasks avoids waiting the full navigation
+            # timeout for clicks that don't navigate.
+            nav_start_task.cancel()
+            nav_response_task.cancel()
+            # Suppress cancellation/timeout errors from the background watchers
+            with contextlib.suppress(asyncio.CancelledError):
+                await nav_start_task
+            with contextlib.suppress(asyncio.CancelledError, PlaywrightTimeoutError):
+                await nav_response_task
             await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-        except PlaywrightError as exc:
-            logger.exception("Playwright error during click for selector %s", clean_selector)
-            msg = f"Playwright error clicking element: {exc}"
-            raise BrowserToolError(msg, tool="click", details=details) from exc
+        # Note: do not fall back here; test doubles should implement
+        # wait_for_event and wait_for_load_state if needed. The probe logic
+        # below will cancel/watch the background tasks appropriately.
 
         # Build snapshot (response may be None if no navigation)
         return await _build_page_snapshot(page, response)
