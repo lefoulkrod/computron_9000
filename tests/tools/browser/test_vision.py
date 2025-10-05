@@ -41,6 +41,7 @@ class _ScreenshotFakePage:
         self._screenshot_bytes = screenshot_bytes
         self._locator_map = locator_map or {}
         self.url = url
+        self.viewport_size = {"width": 1024, "height": 768}
 
     async def screenshot(self, *, full_page: bool = False, type: str = "png") -> bytes:  # noqa: A003
         assert type == "png"
@@ -59,6 +60,7 @@ class _GroundingFakePage:
     def __init__(self, screenshot_bytes: bytes, url: str = "https://example.com") -> None:
         self._screenshot_bytes = screenshot_bytes
         self.url = url
+        self.viewport_size = {"width": 1024, "height": 768}
         self.evaluate_calls: list[tuple[str, list[int]]] = []
 
     async def screenshot(self, *, full_page: bool = True, type: str = "png") -> bytes:  # noqa: A003
@@ -135,12 +137,32 @@ async def _fake_snapshot(*args: object, **kwargs: object) -> None:  # noqa: ARG0
     return None
 
 
+class _GroundingStringBBoxClient:
+    def __init__(self, host: str | None = None) -> None:  # noqa: D401, ANN204
+        self._host = host
+
+    async def generate(self, **kwargs: object) -> SimpleNamespace:  # noqa: ARG002
+        return SimpleNamespace(response='[{"text": null, "element_type": "button", "bbox": "10,20,30,40"}]')
+
+
 class _FakeElementHandle:
     def __init__(self) -> None:
         self.disposed = False
 
     def as_element(self) -> "_FakeElementHandle":
         return self
+
+    async def evaluate(self, script: str):  # noqa: ARG002
+        return None
+
+    async def get_attribute(self, name: str) -> None:  # noqa: ARG002
+        return None
+
+    async def bounding_box(self) -> dict[str, float]:
+        return {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0}
+
+    async def query_selector(self, selector: str):  # noqa: ARG002
+        return None
 
     async def dispose(self) -> None:
         self.disposed = True
@@ -343,7 +365,11 @@ async def test_request_grounding_by_text_success(monkeypatch: pytest.MonkeyPatch
     assert selector_calls  # ensure _best_selector was invoked
     assert selector_calls[0].disposed is True
 
-    expected_prompt = module._PROMPT_TEMPLATE.format(text_json=json.dumps("Login"))
+    expected_prompt = module._PROMPT_TEMPLATE.format(
+        text_json=json.dumps("Login"),
+        width=1024,
+        height=768,
+    )
     assert _GroundingClient.last_prompt == expected_prompt
     assert _GroundingClient.last_model == _FakeModel().model
     assert _GroundingClient.last_host == _FakeConfig.llm.host
@@ -394,3 +420,25 @@ async def test_request_grounding_by_text_invalid_json(monkeypatch: pytest.Monkey
 
     with pytest.raises(BrowserToolError):
         await ground_elements_by_text("Login")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_grounding_accepts_string_bbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    """String bbox values should be parsed into numeric coordinates."""
+
+    page = _GroundingFakePage(b"fake", url="https://example.com")
+    browser = _FakeBrowser(page)
+    module = importlib.import_module("tools.browser.vision")
+
+    async def fake_get_browser() -> _FakeBrowser:
+        return browser
+
+    monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "_build_page_snapshot", _fake_snapshot)
+    monkeypatch.setattr(module, "AsyncClient", _GroundingStringBBoxClient)
+    monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
+    monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
+
+    result = await ground_elements_by_text("Button")
+    assert result[0].bbox == (10, 20, 30, 40)
