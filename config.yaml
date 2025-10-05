@@ -90,6 +90,7 @@ tools:
         extra_pause_max_ms: 320
     waits:
       navigation_timeout_ms: 8000
+      navigation_probe_timeout_ms: 250
       post_navigation_idle_timeout_ms: 6000
       dom_mutation_timeout_ms: 1500
       dom_quiet_window_ms: 200
