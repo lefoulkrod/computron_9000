@@ -18,15 +18,29 @@ from models.model_configs import get_model_by_name
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.snapshot import _build_page_snapshot
+from tools.browser.core.snapshot import _best_selector, _build_page_snapshot
 
 logger = logging.getLogger(__name__)
 
 _SCREENSHOT_TOOL_NAME = "ask_about_screenshot"
 _GROUNDING_TOOL_NAME = "ground_elements_by_text"
 _PROMPT_TEMPLATE = """You are a UI grounding assistant.
-Given this screenshot, return bounding boxes for all elements that match the description {text_json}.
-Format the output strictly as JSON: [{{"element": "...", "text": "...", "bbox": [x,y,width,height]}}]"""
+You are given a screenshot of a browser viewport. Find every element that matches {text_json}.
+
+Return JSON only (no prose, no code fences). If nothing matches, return [].
+
+Focus on interactive targets a user can click or tap (buttons, links, icons, toggles, menu items). Skip
+purely static text unless that text is itself the clickable surface.
+
+For each match emit an object with:
+ - "text": visible label inside the clickable region (string or null)
+ - "element_type": best-guess HTML role or tag such as "button", "a", "input", "icon", "checkbox" (string or null)
+ - "bbox": [x1, y1, x2, y2] in viewport pixels; (x1, y1) is the top-left, (x2, y2) the bottom-right
+   corner. Make the box tight around the clickable surface so the center falls inside the hit area.
+
+Example:
+[{{"text":"Submit","element_type":"button","bbox":[10,20,110,60]}}]
+"""
 
 
 class GroundingResult(BaseModel):
@@ -34,11 +48,11 @@ class GroundingResult(BaseModel):
 
     Fields:
         text: visible text the model matched
-        bbox: (x, y, width, height) in viewport pixel coordinates
+        bbox: (x1, y1, x2, y2) viewport pixel coordinates (top-left, bottom-right)
         selector: best-effort selector handle resolved from the page at the bbox center
     """
 
-    text: str = Field(..., max_length=200)
+    text: str | None = Field(default=None, max_length=200)
     bbox: tuple[int, int, int, int]
     selector: str | None = None
 
@@ -239,91 +253,72 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
     results: list[GroundingResult] = []
     for entry in parsed:
         try:
-            # Expect entries like {"element": "...", "text": "...", "bbox": [x,y,w,h]}
+            bbox_raw = entry.get("bbox")
+            if not isinstance(bbox_raw, list | tuple) or len(bbox_raw) != 4:
+                raise ValueError("bbox must be a sequence of four numbers")
+            try:
+                # round(...) without ndigits returns an int for float inputs
+                x1, y1, x2, y2 = (round(float(v)) for v in bbox_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("bbox values must be numeric") from exc
+
             validated = GroundingResult.model_validate(
                 {
                     "text": entry.get("text"),
-                    "bbox": tuple(entry.get("bbox", [])),
+                    "bbox": (x1, y1, x2, y2),
                     "selector": None,
                 },
                 strict=False,
             )
-        except ValidationError as exc:
+        except (ValidationError, ValueError) as exc:
             logger.exception("Vision model produced an invalid grounding entry: %s", entry)
             msg = "Vision model returned invalid bounding box entries."
             raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
 
         # Resolve selector from bbox center using document.elementFromPoint via page.evaluate
         try:
-            x, y, w, h = validated.bbox
-            cx = int(x + w / 2)
-            cy = int(y + h / 2)
+            x1, y1, x2, y2 = validated.bbox
+            # The center coordinates are computed and rounded to integers.
+            cx = round((x1 + x2) / 2)
+            cy = round((y1 + y2) / 2)
 
             # Call into the page to compute a selector handle for the element at the center.
             # _best_selector is a helper that lives on the Python side; we call document.elementFromPoint
             # to obtain an element's unique identifier then pass it into _best_selector via a temporary
             # element attribute. This keeps selector resolution robust in tests by using the page JS context.
-            handle = None
+            element_handle = None
             try:
-                # Run an in-page helper to build a best-effort selector for the element
-                # at the center point. This prefers id, data-selector, named attributes,
-                # unique class selectors, and falls back to a tag > ... > nth-child path.
-                js = """([x, y]) => {
-  const el = document.elementFromPoint(x, y);
-  if (!el) return null;
-  if (el.id) return '#' + el.id;
-  const ds = el.getAttribute('data-selector');
-  if (ds) return ds;
-  const attrs = ['name','aria-label','alt','title','role'];
-  for (const a of attrs) {
-    const v = el.getAttribute(a);
-    if (v) return el.tagName.toLowerCase() + '[' + a + '"' + v + '"' + ']';
-  }
-  if (el.classList && el.classList.length) {
-    const classes = Array.from(el.classList).slice(0,3);
-    const cls = el.tagName.toLowerCase() + '.' + classes.join('.');
-    try { if (document.querySelectorAll(cls).length === 1) return cls; } catch(e) {}
-  }
-  function pathFor(elm) {
-    const parts = [];
-    while (elm && elm.nodeType === Node.ELEMENT_NODE && elm.tagName.toLowerCase() !== 'html') {
-      let part = elm.tagName.toLowerCase();
-      if (elm.id) { parts.unshift(part + '#' + elm.id); break; }
-      if (elm.classList && elm.classList.length) { part += '.' + Array.from(elm.classList).slice(0,2).join('.'); }
-      const parent = elm.parentNode;
-      if (!parent) { parts.unshift(part); break; }
-      const idx = Array.prototype.indexOf.call(parent.children, elm) + 1;
-      part += ':nth-child(' + idx + ')';
-      parts.unshift(part); elm = parent;
-    }
-    return parts.join(' > ');
-  }
-  try { return pathFor(el); } catch (e) { return null; }
-}"""
-                selector_candidate = await page.evaluate(js, [cx, cy])
-                logger.debug(
-                    "Tried bbox candidate %s -> center %s,%s selector=%s",
-                    (x, y, w, h),
-                    cx,
-                    cy,
-                    selector_candidate,
+                handle = await page.evaluate_handle(
+                    "([x,y]) => document.elementFromPoint(x, y)",
+                    [cx, cy],
                 )
-                if selector_candidate:
-                    handle = str(selector_candidate)
+                element_handle = handle.as_element() if handle else None
             except PlaywrightError:
                 logger.exception(
-                    "Selector resolution via elementFromPoint failed for bbox center %s,%s",
-                    cx,
-                    cy,
-                )
-            except Exception:
-                logger.exception(
-                    "Selector resolution via elementFromPoint failed for bbox center %s,%s",
+                    "document.elementFromPoint failed for bbox center %s,%s",
                     cx,
                     cy,
                 )
 
-            validated.selector = handle
+            if element_handle is not None:
+                try:
+                    selector_candidate = await _best_selector(element_handle)
+                    logger.debug(
+                        "Best selector for bbox %s center %s,%s -> %s",
+                        (x1, y1, x2, y2),
+                        cx,
+                        cy,
+                        selector_candidate,
+                    )
+                    validated.selector = selector_candidate or None
+                except PlaywrightError:
+                    logger.exception(
+                        "_best_selector failed for bbox center %s,%s",
+                        cx,
+                        cy,
+                    )
+                finally:
+                    await element_handle.dispose()
         except PlaywrightError:
             # Guard selector resolution; don't abort the entire call if one entry fails to resolve
             logger.exception("Failed to resolve selector for grounding entry: %s", entry)
