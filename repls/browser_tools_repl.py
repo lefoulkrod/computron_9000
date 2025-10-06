@@ -41,6 +41,7 @@ from logging_config import setup_logging
 from repls.repl_logging import get_repl_logger
 from tools.browser import (
     ask_about_screenshot,
+    list_anchors,
     click,
     close_browser,
     current_page,
@@ -178,6 +179,7 @@ _TOOLS: list[_ToolSpec] = [
     _ToolSpec("extract_text", extract_text, "Extract visible text for a selector or text."),
     _ToolSpec("ask_about_screenshot", ask_about_screenshot, "Ask vision model about a screenshot."),
     _ToolSpec("ground_elements_by_text", ground_elements_by_text, "Ground UI elements by description."),
+    _ToolSpec("list_anchors", list_anchors, "List anchors with pagination/filtering."),
 ]
 
 _EXIT_COMMANDS = {"/exit", "exit", "quit", ":q", ":qa"}
@@ -208,8 +210,18 @@ def _format_result(result: Any) -> str:
                 [r.model_dump() if hasattr(r, "model_dump") else r for r in result],
                 indent=2,
             )
-        if isinstance(result, (dict, tuple)):
-            return json.dumps(result if isinstance(result, dict) else list(result), indent=2)
+        # Handle dicts which may contain Pydantic models as values (for example
+        # the updated scroll_page returns {"snapshot": PageSnapshot, "scroll": {...}}).
+        if isinstance(result, dict):
+            serializable = {}
+            for k, v in result.items():
+                if hasattr(v, "model_dump"):
+                    serializable[k] = v.model_dump()
+                else:
+                    serializable[k] = v
+            return json.dumps(serializable, indent=2)
+        if isinstance(result, tuple):
+            return json.dumps(list(result), indent=2)
         return str(result)
     except Exception:
         return str(result)
