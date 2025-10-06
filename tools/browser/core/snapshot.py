@@ -346,7 +346,7 @@ def _normalize_visible_text(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
-async def _get_element_locator(
+async def _resolve_element_selector(
     element: ElementHandle,
     *,
     tag: str | None,
@@ -389,6 +389,106 @@ async def _get_element_locator(
         return f'text="{escaped}"'
 
     return ""
+
+
+async def _collect_anchors(page: Page) -> list[Element]:
+    """Collect anchor elements from the page and return a list of Element models.
+
+    This helper encapsulates the anchor extraction logic previously in
+    ``_extract_elements`` so it can be reused (for pagination, listing, etc.).
+
+    Args:
+        page: Playwright Page to query anchors from.
+        limit: Optional maximum number of anchors to consider (apply before
+            selector disambiguation). When ``None``, all anchors are processed.
+
+    Returns:
+        List of ``Element`` instances for anchors found on the page.
+    """
+    results: list[Element] = []
+    try:
+        anchors = await page.query_selector_all("a")
+    except PlaywrightError:  # pragma: no cover - defensive
+        anchors = None
+    if not anchors:
+        return results
+
+    anchor_handles = anchors
+    anchor_data: list[dict] = []
+    for a in anchor_handles:
+        try:
+            raw_text = await a.inner_text()
+            href_val = await a.get_attribute("href")
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("Skipping anchor due to error: %s", exc)
+            continue
+        trimmed_text = (raw_text or "").strip()
+        href = href_val or ""
+        if not trimmed_text or not href:
+            continue
+        display_text = trimmed_text
+        truncated = False
+        if len(display_text) > MAX_ELEMENT_TEXT_LEN:
+            display_text = display_text[:MAX_ELEMENT_TEXT_LEN]
+            truncated = True
+        if truncated:
+            display_text = display_text + " (truncated)"
+        try:
+            role_val = await a.get_attribute("role")
+        except PlaywrightError:  # pragma: no cover - defensive
+            role_val = None
+
+        anchor_data.append(
+            {
+                "handle": a,
+                "display": display_text,
+                "raw": trimmed_text,
+                "normalized": _normalize_visible_text(trimmed_text),
+                "role": role_val,
+                "href": href,
+                "tag": "a",
+            }
+        )
+
+    anchor_counts = Counter(entry["normalized"] for entry in anchor_data if entry["normalized"])
+
+    for entry in anchor_data:
+        text_unique = bool(entry["normalized"]) and anchor_counts[entry["normalized"]] == 1
+        selector_value = await _resolve_element_selector(
+            entry["handle"],
+            tag="a",
+            text=entry["raw"],
+            text_unique=text_unique,
+        )
+        if not selector_value:
+            selector_value = await _best_selector(entry["handle"], tag="a")
+        entry["selector"] = selector_value
+
+    anchor_selector_counts = Counter(entry.get("selector") for entry in anchor_data if entry.get("selector"))
+
+    duplicate_anchor_keys: set[str] = {key for key, count in anchor_selector_counts.items() if key and count > 1}
+    if duplicate_anchor_keys:
+        # initialize per-key usage counters with correct typing
+        anchor_usage: dict[str, int] = dict.fromkeys(duplicate_anchor_keys, 0)
+        for entry in anchor_data:
+            key = entry.get("selector", "")
+            if key in duplicate_anchor_keys:
+                idx = anchor_usage[key]
+                entry["selector"] = f"{key} >> nth={idx}"
+                anchor_usage[key] = idx + 1
+
+    for entry in anchor_data:
+        results.append(
+            Element(
+                text=entry["display"],
+                role=entry["role"],
+                selector=entry.get("selector", ""),
+                tag="a",
+                href=entry["href"],
+            )
+        )
+
+    return results
 
 
 async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
@@ -439,7 +539,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
 
         for entry in button_data:
             text_unique = bool(entry["normalized"]) and button_counts[entry["normalized"]] == 1
-            selector_value = await _get_element_locator(
+            selector_value = await _resolve_element_selector(
                 entry["handle"],
                 tag="button",
                 text=entry["raw"],
@@ -473,85 +573,8 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             )
 
     # Anchors
-    try:
-        anchors = await page.query_selector_all("a")
-    except PlaywrightError:  # pragma: no cover - defensive
-        anchors = None
-    if anchors:
-        anchor_handles = anchors[:link_limit]
-        anchor_data: list[dict] = []
-        for a in anchor_handles:
-            try:
-                raw_text = await a.inner_text()
-                href_val = await a.get_attribute("href")
-            except PlaywrightError as exc:  # pragma: no cover - defensive
-                logger.debug("Skipping anchor due to error: %s", exc)
-                continue
-            trimmed_text = (raw_text or "").strip()
-            href = href_val or ""
-            if not trimmed_text or not href:
-                continue
-            display_text = trimmed_text
-            truncated = False
-            if len(display_text) > MAX_ELEMENT_TEXT_LEN:
-                display_text = display_text[:MAX_ELEMENT_TEXT_LEN]
-                truncated = True
-            if truncated:
-                display_text = display_text + " (truncated)"
-            try:
-                role_val = await a.get_attribute("role")
-            except PlaywrightError:  # pragma: no cover - defensive
-                role_val = None
-
-            anchor_data.append(
-                {
-                    "handle": a,
-                    "display": display_text,
-                    "raw": trimmed_text,
-                    "normalized": _normalize_visible_text(trimmed_text),
-                    "role": role_val,
-                    "href": href,
-                    "tag": "a",
-                }
-            )
-
-        anchor_counts = Counter(entry["normalized"] for entry in anchor_data if entry["normalized"])
-
-        for entry in anchor_data:
-            text_unique = bool(entry["normalized"]) and anchor_counts[entry["normalized"]] == 1
-            selector_value = await _get_element_locator(
-                entry["handle"],
-                tag="a",
-                text=entry["raw"],
-                text_unique=text_unique,
-            )
-            if not selector_value:
-                selector_value = await _best_selector(entry["handle"], tag="a")
-            entry["selector"] = selector_value
-
-        anchor_selector_counts = Counter(entry.get("selector") for entry in anchor_data if entry.get("selector"))
-
-        duplicate_anchor_keys: set[str] = {key for key, count in anchor_selector_counts.items() if key and count > 1}
-        if duplicate_anchor_keys:
-            # initialize per-key usage counters with correct typing
-            anchor_usage: dict[str, int] = dict.fromkeys(duplicate_anchor_keys, 0)
-            for entry in anchor_data:
-                key = entry.get("selector", "")
-                if key in duplicate_anchor_keys:
-                    idx = anchor_usage[key]
-                    entry["selector"] = f"{key} >> nth={idx}"
-                    anchor_usage[key] = idx + 1
-
-        for entry in anchor_data:
-            elements.append(
-                Element(
-                    text=entry["display"],
-                    role=entry["role"],
-                    selector=entry.get("selector", ""),
-                    tag="a",
-                    href=entry["href"],
-                )
-            )
+    anchor_elements = await _collect_anchors(page)
+    elements.extend(anchor_elements[:link_limit])
 
     # Iframes
     try:
@@ -624,7 +647,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
             else:
                 selector = f"form:nth-of-type({idx})"
 
-            locator = await _get_element_locator(
+            locator = await _resolve_element_selector(
                 form_el,
                 tag="form",
                 text="",
@@ -703,7 +726,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                             context="radio",
                         )
                     else:
-                        control_selector = await _get_element_locator(
+                        control_selector = await _resolve_element_selector(
                             control,
                             tag=tag,
                             text="",
