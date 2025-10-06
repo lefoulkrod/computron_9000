@@ -22,6 +22,7 @@ from tools.browser import (
     current_page,
     extract_text,
     fill_field,
+    list_anchors,
     open_url,
     press_keys,
     scroll_page,
@@ -64,6 +65,9 @@ SYSTEM_PROMPT = dedent(
       currently focused element. This lets the agent submit forms, navigate suggestion
       lists, or dismiss modals via keyboard-driven UI flows. Returns the updated page
       snapshot after the key presses.
+    - list_anchors(after=None, limit=20, contains=None): list anchors on the current page.
+      Optional `after` is a selector cursor (string) to page after, `limit` bounds results,
+      and `contains` filters anchors by visible text or href (case-insensitive).
     - scroll_page(direction, amount=None): Scroll the page to reveal off-screen content
       and trigger lazy-loading. ``direction`` should be one of {"down", "up",
       "page_down", "page_up", "top", "bottom"}. When ``direction`` is "down" or
@@ -111,6 +115,7 @@ browser_agent = Agent(
         open_url,
         click,
         extract_text,
+        list_anchors,
         ask_about_screenshot,
         current_page,
         fill_field,

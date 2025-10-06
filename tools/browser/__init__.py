@@ -18,7 +18,7 @@ from .core import Browser, close_browser, get_browser
 from .core.exceptions import BrowserToolError
 from .core.snapshot import Element, PageSnapshot
 from .interactions import click, fill_field, press_keys, scroll_page
-from .page import current_page, open_url
+from .page import current_page, list_anchors, open_url
 from .search import TextExtractionResult, extract_text
 from .vision import GroundingResult, ask_about_screenshot, ground_elements_by_text
 
@@ -37,6 +37,7 @@ __all__ = [
     "fill_field",
     "get_browser",
     "ground_elements_by_text",
+    "list_anchors",
     "open_url",
     "press_keys",
     "scroll_page",
