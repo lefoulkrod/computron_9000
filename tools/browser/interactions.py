@@ -10,8 +10,8 @@ resolution helper and also returns an updated ``PageSnapshot``.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
+from typing import Any
 
 from playwright.async_api import (
     Error as PlaywrightError,
@@ -37,6 +37,20 @@ from tools.browser.core.human import (
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 
 logger = logging.getLogger(__name__)
+
+
+def _log_task_cleanup(name: str, task: asyncio.Task[Any]) -> None:
+    """Log the outcome of a watcher task while consuming expected exceptions."""
+    try:
+        task.result()
+    except PlaywrightTimeoutError:
+        logger.debug("%s watcher timed out without navigation", name)
+    except asyncio.CancelledError:
+        logger.debug("%s watcher cancelled before completion", name)
+    except Exception:
+        logger.exception("%s watcher ended with unexpected error", name)
+    else:
+        logger.debug("%s watcher completed successfully", name)
 
 
 async def _wait_for_page_settle(
@@ -183,6 +197,9 @@ async def click(selector: str) -> PageSnapshot:
     wait_cfg = load_config().tools.browser.waits
     nav_probe_ms = getattr(wait_cfg, "navigation_probe_timeout_ms", 250)
 
+    detect_framenavigated_task: asyncio.Task[Any] | None = None
+    nav_response_task: asyncio.Task[Any] | None = None
+
     try:
         # Use the fast probe approach: start a framenavigated watcher (which
         # real Playwright pages implement) filtered to the main frame. Tests
@@ -229,23 +246,29 @@ async def click(selector: str) -> PageSnapshot:
                 await detect_framenavigated_task  # surface unexpected errors
             except PlaywrightError:
                 logger.debug("framenavigated watcher raised; continuing without navigation context")
+            detect_framenavigated_task = None
             try:
                 # nav_response_task may be a load_state wait returning None
                 response = await nav_response_task
             except PlaywrightTimeoutError:
                 logger.debug("Navigation response wait timed out after %d ms", wait_cfg.navigation_timeout_ms)
+            else:
+                nav_response_task = None
             await _wait_for_page_settle(page, expect_navigation=True, waits=wait_cfg)
         else:
             # Probe timed out; cancel watchers and proceed with non-navigation
             # settle. Cancelling both tasks avoids waiting the full navigation
             # timeout for clicks that don't navigate.
             detect_framenavigated_task.cancel()
+            detect_framenavigated_task.add_done_callback(
+                lambda task, name="framenavigated": _log_task_cleanup(name, task)
+            )
+            detect_framenavigated_task = None
             nav_response_task.cancel()
-            # Suppress cancellation/timeout errors from the background watchers
-            with contextlib.suppress(asyncio.CancelledError):
-                await detect_framenavigated_task
-            with contextlib.suppress(asyncio.CancelledError, PlaywrightTimeoutError):
-                await nav_response_task
+            nav_response_task.add_done_callback(
+                lambda task, name="expect_navigation": _log_task_cleanup(name, task)
+            )
+            nav_response_task = None
             await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
 
         # Build snapshot (response may be None if no navigation)
@@ -256,6 +279,20 @@ async def click(selector: str) -> PageSnapshot:
         logger.exception("Failed to build snapshot after click for selector %s", clean_selector)
         msg = "Failed to complete click operation"
         raise BrowserToolError(msg, tool="click", details=details) from exc
+    finally:
+        for label, task in (
+            ("framenavigated", detect_framenavigated_task),
+            ("expect_navigation", nav_response_task),
+        ):
+            if task is None:
+                continue
+            if task.done():
+                _log_task_cleanup(label, task)
+            else:
+                task.cancel()
+                task.add_done_callback(
+                    lambda t, label=label: _log_task_cleanup(label, t)
+                )
 
 
 async def fill_field(selector: str, value: str | int | float | bool | None) -> PageSnapshot:
