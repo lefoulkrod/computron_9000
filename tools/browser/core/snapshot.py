@@ -876,7 +876,7 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
                             options=options_val,
                         )
                     )
-            except PlaywrightError:  # pragma: no cover - defensive
+            except PlaywrightError:
                 form_fields = []
 
             # NOTE: Radio groups are intentionally NOT aggregated. Each radio input
