@@ -21,6 +21,10 @@ class FakePage:
     async def query_selector_all(self, selector: str) -> list[object]:
         return []
 
+    async def evaluate(self, js: str) -> object:
+        # Return a reasonable fixed scroll state for tests
+        return {"scroll_top": 0, "viewport_height": 600, "document_height": 2000}
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -39,7 +43,11 @@ async def test_scroll_page_delegates(
 
     monkeypatch.setattr("tools.browser.interactions.human_scroll", fake_human_scroll)
 
-    snap: PageSnapshot = await scroll_page("down")
+    result = await scroll_page("down")
+    # Expect a dict with 'snapshot' (PageSnapshot) and 'scroll' telemetry
+    assert isinstance(result, dict)
+    assert "snapshot" in result and "scroll" in result
+    snap: PageSnapshot = result["snapshot"]
     assert isinstance(snap, PageSnapshot)
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
