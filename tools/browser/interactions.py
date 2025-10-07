@@ -189,7 +189,7 @@ async def click(selector: str) -> PageSnapshot:
         # must provide fakes that implement the same minimal API.
         # Start watchers before clicking so they can observe navigation that
         # begins immediately after the click.
-        nav_start_task = asyncio.create_task(
+        detect_framenavigated_task = asyncio.create_task(
             page.wait_for_event(
                 "framenavigated",
                 predicate=lambda frame: frame == page.main_frame,
@@ -215,18 +215,18 @@ async def click(selector: str) -> PageSnapshot:
 
         # Give the quick probe a short time to detect navigation start
         done, _ = await asyncio.wait(
-            {nav_start_task},
+            {detect_framenavigated_task},
             timeout=nav_probe_ms / 1000,
             return_when=asyncio.FIRST_COMPLETED,
         )
 
-        if nav_start_task in done:
+        if detect_framenavigated_task in done:
             # Navigation started within the probe window. Ensure we surface any
             # unexpected errors from the start watcher, then await the full
             # navigation response (which may time out) and run the navigation
             # settle logic.
             try:
-                await nav_start_task  # surface unexpected errors
+                await detect_framenavigated_task  # surface unexpected errors
             except PlaywrightError:
                 logger.debug("framenavigated watcher raised; continuing without navigation context")
             try:
@@ -239,17 +239,14 @@ async def click(selector: str) -> PageSnapshot:
             # Probe timed out; cancel watchers and proceed with non-navigation
             # settle. Cancelling both tasks avoids waiting the full navigation
             # timeout for clicks that don't navigate.
-            nav_start_task.cancel()
+            detect_framenavigated_task.cancel()
             nav_response_task.cancel()
             # Suppress cancellation/timeout errors from the background watchers
             with contextlib.suppress(asyncio.CancelledError):
-                await nav_start_task
+                await detect_framenavigated_task
             with contextlib.suppress(asyncio.CancelledError, PlaywrightTimeoutError):
                 await nav_response_task
             await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-        # Note: do not fall back here; test doubles should implement
-        # wait_for_event and wait_for_load_state if needed. The probe logic
-        # below will cancel/watch the background tasks appropriately.
 
         # Build snapshot (response may be None if no navigation)
         return await _build_page_snapshot(page, response)
@@ -410,8 +407,8 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
 __all__.append("press_keys")
 
 
-async def scroll_page(direction: str = "down", amount: int | None = None) -> PageSnapshot:
-    """Scroll the page in the given direction and return the updated page snapshot.
+async def scroll_page(direction: str = "down", amount: int | None = None) -> dict[str, object]:
+    """Scroll the page in the given direction and return a snapshot plus telemetry.
 
     Args:
         direction: One of {"down", "up", "page_down", "page_up", "top", "bottom"}.
@@ -419,7 +416,9 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> Pag
             is "down" or "up". If omitted, a viewport-sized scroll is performed.
 
     Returns:
-        PageSnapshot: Snapshot of the page state after scrolling.
+        dict[str, object]: A mapping with keys:
+            - "snapshot": PageSnapshot model of the page after scrolling
+            - "scroll": dict with telemetry (scroll_top, viewport_height, document_height)
 
     Raises:
         BrowserToolError: If direction is invalid or the page is not navigated.
@@ -448,7 +447,21 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> Pag
 
     wait_cfg = load_config().tools.browser.waits
     await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-    return await _build_page_snapshot(page, None)
+
+    # Capture basic scroll telemetry after the scroll settles so callers can
+    # compute progress and detect top/bottom without changing the snapshot model.
+    scroll_state = await page.evaluate(
+        "() => ({"
+        "  scroll_top: window.scrollY,"
+        "  viewport_height: window.innerHeight,"
+        "  document_height: document.scrollingElement"
+        "      ? document.scrollingElement.scrollHeight"
+        "      : document.body.scrollHeight"
+        "})"
+    )
+
+    snapshot = await _build_page_snapshot(page, None)
+    return {"snapshot": snapshot, "scroll": scroll_state}
 
 
 __all__.append("scroll_page")
