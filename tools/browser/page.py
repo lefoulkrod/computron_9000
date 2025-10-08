@@ -11,7 +11,13 @@ import logging
 
 import tools.browser.core as browser_core
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.snapshot import Element, PageSnapshot, _build_page_snapshot, _collect_anchors
+from tools.browser.core.snapshot import (
+    Element,
+    PageSnapshot,
+    _build_page_snapshot,
+    _collect_anchors,
+    _collect_clickables,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,42 +80,53 @@ async def current_page() -> PageSnapshot:
         raise BrowserToolError(msg, tool="current_page") from exc
 
 
-async def list_anchors(after: str | None = None, limit: int = 20, contains: str | None = None) -> list[Element]:
-    """List anchor elements on the active page with optional paging and filtering.
+async def list_clickable_elements(
+    after: str | None = None, limit: int = 20, contains: str | None = None
+) -> list[Element]:
+    """List clickable elements (anchors plus heuristic non-semantic clickables).
+
+    The result merges native anchors (<a>) and additional interactive elements
+    discovered by the internal ``_collect_clickables`` helper (e.g. div/span with
+    onclick, role="button", etc.). Ordering preserves document order within each
+    category and mirrors snapshot extraction ordering (anchors appear after any
+    earlier button/clickable categories, but this tool only returns anchors and
+    heuristic clickables).
 
     Args:
-        after: Optional selector string indicating the last-seen element. If
-            provided, results start strictly after the first element whose
-            ``selector`` equals this value. If the selector is not found the
-            function will start from the beginning and return results normally.
-        limit: Maximum number of anchors to return (sliced after filtering/paging).
-        contains: Optional substring to filter anchors by visible text or href
-            (case-insensitive).
+        after: Optional selector string acting as a cursor. If provided, results
+            start strictly after the first element whose ``selector`` equals
+            this value. If not found, iteration starts from the beginning.
+        limit: Maximum number of elements to return after filtering/paging.
+        contains: Optional case-insensitive substring filter applied to the
+            element's visible text OR (for anchors) its href.
 
     Returns:
-        list[Element]: The selected slice of anchor Element models.
+        list[Element]: Sliced list of clickable ``Element`` models.
 
     Raises:
-        BrowserToolError: If there is no active page to inspect or snapshot
-            extraction fails.
+        BrowserToolError: If there is no active page or extraction fails.
     """
     try:
         browser = await browser_core.get_browser()
         page = await browser.current_page()
     except RuntimeError as exc:
-        logger.debug("No current page available for list_anchors: %s", exc)
-        raise BrowserToolError("No open page to list anchors", tool="list_anchors") from exc
+        logger.debug("No current page available for list_clickable_elements: %s", exc)
+        raise BrowserToolError("No open page to list clickable elements", tool="list_clickable_elements") from exc
     except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Failed to access browser for list_anchors")
-        raise BrowserToolError("Unable to access browser pages", tool="list_anchors") from exc
+        logger.exception("Failed to access browser for list_clickable_elements")
+        raise BrowserToolError("Unable to access browser pages", tool="list_clickable_elements") from exc
 
     try:
+        # Collect both sets; anchors first for backward-ish ordering in pagination.
         anchors = await _collect_anchors(page)
-    except Exception as exc:  # pragma: no cover - wrap into tool error
-        logger.exception("Failed to collect anchors for list_anchors")
-        raise BrowserToolError("Failed to collect anchors", tool="list_anchors") from exc
+        clickables = await _collect_clickables(page, limit=None)
+        combined: list[Element] = []
+        combined.extend(anchors)
+        combined.extend(clickables)
+    except Exception as exc:  # pragma: no cover - wrap
+        logger.exception("Failed to collect clickable elements")
+        raise BrowserToolError("Failed to collect clickable elements", tool="list_clickable_elements") from exc
 
-    # Optional case-insensitive substring filtering against text and href
     if contains:
         needle = contains.lower()
 
@@ -118,17 +135,13 @@ async def list_anchors(after: str | None = None, limit: int = 20, contains: str 
             href = (e.href or "").lower()
             return needle in txt or needle in href
 
-        anchors = [a for a in anchors if matches(a)]
+        combined = [e for e in combined if matches(e)]
 
-    # Cursor-based paging using selector equality. If `after` is provided and
-    # matches an element selector, start after that element. If not found we
-    # start from the beginning (documented behavior).
     start_idx = 0
     if after:
-        for idx, el in enumerate(anchors):
+        for idx, el in enumerate(combined):
             if el.selector == after:
                 start_idx = idx + 1
                 break
-
-    sliced = anchors[start_idx : start_idx + max(0, int(limit or 0))]
+    sliced = combined[start_idx : start_idx + max(0, int(limit or 0))]
     return sliced
