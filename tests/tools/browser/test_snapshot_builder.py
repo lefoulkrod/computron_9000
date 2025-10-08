@@ -37,6 +37,9 @@ class _FakeAnchor:
         # Ignore the script contents and return our stored css path.
         return self._css
 
+    async def is_visible(self) -> bool:  # noqa: D401 - all fake anchors visible
+        return True
+
 
 class _FakeField:
     def __init__(
@@ -232,6 +235,9 @@ async def test_buttons_and_iframes_extracted() -> None:
         async def evaluate(self, script: str) -> str:
             return self._css
 
+        async def is_visible(self) -> bool:  # noqa: D401 - buttons visible
+            return True
+
     class _FakeIframe:
         def __init__(self, title: str | None, src: str | None, css: str | None = None):
             self._title = title
@@ -247,6 +253,9 @@ async def test_buttons_and_iframes_extracted() -> None:
 
         async def evaluate(self, script: str) -> str:
             return self._css
+
+        async def is_visible(self) -> bool:  # noqa: D401 - iframes visible
+            return True
 
     page = _FakePage(
         title="T",

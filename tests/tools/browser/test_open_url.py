@@ -20,6 +20,10 @@ class FakeAnchor:
             return self._href
         return None
 
+    async def is_visible(self) -> bool:  # noqa: D401 - simple stub
+        # Tests treat all fake anchors as visible unless explicitly extended.
+        return True
+
 
 class FakeField:
     def __init__(self, tag: str, name: str | None = None, input_type: str | None = None) -> None:

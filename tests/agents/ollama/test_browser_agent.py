@@ -6,7 +6,7 @@ from tools.browser import (
     extract_text,
     fill_field,
     open_url,
-    list_anchors,
+    list_clickable_elements,
     press_keys,
     scroll_page,
     ground_elements_by_text,
@@ -19,12 +19,12 @@ from tools.browser.vision import ask_about_screenshot
 def test_browser_agent_basic_config() -> None:
     """Browser agent should expose all registered browsing tools in order."""
     assert browser_agent.name == "BROWSER_AGENT"
-    # list_anchors was added so the agent now exposes 9 tools
+    # list_clickable_elements keeps the agent exposing 9 tools
     assert browser_agent.tools and len(browser_agent.tools) == 9
     assert browser_agent.tools[0] is open_url
     assert browser_agent.tools[1] is click
     assert browser_agent.tools[2] is extract_text
-    assert browser_agent.tools[3] is list_anchors
+    assert browser_agent.tools[3] is list_clickable_elements
     assert browser_agent.tools[4] is ask_about_screenshot
     assert browser_agent.tools[5] is current_page
     assert browser_agent.tools[6] is fill_field

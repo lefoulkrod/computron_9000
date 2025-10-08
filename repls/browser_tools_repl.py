@@ -41,7 +41,7 @@ from logging_config import setup_logging
 from repls.repl_logging import get_repl_logger
 from tools.browser import (
     ask_about_screenshot,
-    list_anchors,
+    list_clickable_elements,
     click,
     close_browser,
     current_page,
@@ -179,7 +179,11 @@ _TOOLS: list[_ToolSpec] = [
     _ToolSpec("extract_text", extract_text, "Extract visible text for a selector or text."),
     _ToolSpec("ask_about_screenshot", ask_about_screenshot, "Ask vision model about a screenshot."),
     _ToolSpec("ground_elements_by_text", ground_elements_by_text, "Ground UI elements by description."),
-    _ToolSpec("list_anchors", list_anchors, "List anchors with pagination/filtering."),
+    _ToolSpec(
+        "list_clickable_elements",
+        list_clickable_elements,
+        "List clickable elements (anchors + heuristic clickables) with pagination/filtering.",
+    ),
 ]
 
 _EXIT_COMMANDS = {"/exit", "exit", "quit", ":q", ":qa"}
