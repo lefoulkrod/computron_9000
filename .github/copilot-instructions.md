@@ -16,4 +16,4 @@
 - Write python code compatible with the current Python version 3.12.10
 - Never put implementation details in docstrings
 - Add comments to explain non-obvious code
-- NEVER add accomodations to real code to make tests pass, always fix the tests instead
+- NEVER update non-test code to be defensive against fakes missing attributes or methods; tests should use proper fakes/mocks

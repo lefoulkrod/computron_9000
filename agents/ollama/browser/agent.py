@@ -78,12 +78,12 @@ SYSTEM_PROMPT = dedent(
       newly loaded content.
 
     Guidelines:
+    - Before doing anything else, call `current_page()` to inspect the active tab. If it returns a
+      relevant page, continue interacting with it. Only call `open_url` when `current_page()`
+      indicates there is no page open or the user explicitly wants a different URL.
     - The browser used by these tools is long-lived and preserves session state between calls
-      (cookies, localStorage, open pages/tabs). When attempting to access or summarize a page,
-      first prefer `current_page()` to see if a relevant page is already open. If the current
-      page is relevant to the user's request, reuse it rather than calling `open_url` which may
-      create a new page or duplicate navigation. Only call `open_url` when no suitable open page
-      exists or when the user explicitly provided a different URL to navigate to.
+      (cookies, localStorage, open pages/tabs). Reuse the existing page whenever it satisfies the
+      request; avoid opening duplicate tabs or reloading the same URL unnecessarily.
     - Call open_url exactly with the provided URL when the user requests to open or summarize a
       page.
     - After opening a page, use `click` to follow links or activate elements. When choosing a

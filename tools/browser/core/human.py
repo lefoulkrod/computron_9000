@@ -207,8 +207,19 @@ async def human_click(page: Page, locator: Locator) -> None:
         )
 
     box = await handle.bounding_box()
-    if box is None:
-        # No bounding box; the caller should ensure a visible element selector.
+    if box is None or box.get("width", 0) < 4 or box.get("height", 0) < 4:
+        label_handle = await handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
+        try:
+            label_element = label_handle.as_element()
+            if label_element is not None:
+                label_box = await label_element.bounding_box()
+                if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
+                    box = label_box
+        finally:
+            await label_handle.dispose()
+
+    if box is None or box.get("width", 0) <= 0 or box.get("height", 0) <= 0:
+        # No usable bounding box; the caller should ensure a visible element selector.
         raise BrowserToolError("Element has no bounding box to click", tool="click")
 
     if not hasattr(page, "mouse") or page.mouse is None:
