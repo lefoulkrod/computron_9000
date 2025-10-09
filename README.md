@@ -62,6 +62,12 @@ Some integrations require additional credentials. Copy `.env.example` to `.env` 
 
 Restart the backend after updating environment variables so the changes take effect.
 
+## Download Models
+```
+ollama pull gpt-oss:120b
+ollama pull qwen2.5vl:32b
+```
+
 ## Manual Setup
 
 If you prefer to set up manually or don't have Just installed:
@@ -111,12 +117,18 @@ If you prefer to set up manually or don't have Just installed:
    systemctl --user enable --now podman.socket
    ```
 
-7. **Start the application:**
+7. **Download the models:**
+   ```
+   ollama pull gpt-oss:120b
+   ollama pull qwen2.5vl:32b
+   ```
+
+8. **Start the application:**
    ```sh
    uv run main.py
    ```
 
-8. **Open the chat UI:**
+9. **Open the chat UI:**
    - Visit [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Usage
