@@ -17,7 +17,7 @@ Public API:
 from .core import Browser, close_browser, get_browser
 from .core.exceptions import BrowserToolError
 from .core.snapshot import Element, PageSnapshot
-from .interactions import click, fill_field, press_keys, scroll_page
+from .interactions import click, drag, fill_field, press_keys, scroll_page
 from .page import current_page, list_clickable_elements, open_url
 from .search import TextExtractionResult, extract_text
 from .vision import GroundingResult, ask_about_screenshot, ground_elements_by_text
@@ -31,6 +31,7 @@ __all__ = [
     "TextExtractionResult",
     "ask_about_screenshot",
     "click",
+    "drag",
     "close_browser",
     "current_page",
     "extract_text",

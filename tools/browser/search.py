@@ -37,10 +37,10 @@ async def extract_text(selector: str, limit: int = 1000) -> list[TextExtractionR
     """Extract visible text by selector handle or by visible text string.
 
     Args:
-        selector: Either a selector handle (for example ``div.hours p``) or a visible text
-            snippet (``Business Hours``). Leading/trailing whitespace ignored. Prefer the
-            `selector` field returned in page snapshots; fall back to visible text when no
-            selector is available.
+        selector: Visible text on the page or a selector handle returned by page snapshots
+            and other tools. The provided text or selector must uniquely identify the
+            target element(s). Prefer using handles from snapshots and fall back to
+            visible text only when no handle is available.
         limit: Maximum number of characters to keep per element's text (default 1000).
 
     Returns:

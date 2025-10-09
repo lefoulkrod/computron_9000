@@ -19,7 +19,7 @@ from playwright.async_api import Locator, Page
 
 import pytest
 
-from tools.browser.core.human import human_click, human_type, _get_human_config, _HumanConfig
+from tools.browser.core.human import human_click, human_drag, human_type, _get_human_config, _HumanConfig
 from tools.browser.core.exceptions import BrowserToolError
 
 
@@ -144,6 +144,115 @@ async def test_human_click_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch
 
     with pytest.raises(BrowserToolError):
         await human_click(cast(Page, page), cast(Locator, locator2))
+
+
+@pytest.mark.unit
+async def test_human_drag_sequence_to_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder: list[str] = []
+
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    monkeypatch.setattr(random, "randint", lambda a, b: 0)
+
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+    frame = DummyFrame(page=page)
+
+    source_box = {"x": 10.0, "y": 20.0, "width": 80.0, "height": 40.0}
+    target_box = {"x": 200.0, "y": 160.0, "width": 60.0, "height": 60.0}
+    source_locator = DummyLocator(DummyElementHandle(bounding_box=source_box, frame=frame))
+    target_locator = DummyLocator(DummyElementHandle(bounding_box=target_box, frame=frame))
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        move_steps=2,
+        offset_px=0.0,
+        hover_min_ms=0,
+        hover_max_ms=0,
+        click_hold_min_ms=0,
+        click_hold_max_ms=0,
+        delay_min_ms=0,
+        delay_max_ms=0,
+        extra_pause_every_chars=0,
+        extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    await human_drag(
+        cast(Page, page),
+        cast(Locator, source_locator),
+        target_locator=cast(Locator, target_locator),
+    )
+
+    assert recorder.count("down") == 1
+    assert recorder.count("up") == 1
+    down_index = recorder.index("down")
+    up_index = recorder.index("up")
+    assert down_index < up_index
+    assert any(entry.startswith("move:") for entry in recorder[down_index + 1 : up_index])
+
+
+@pytest.mark.unit
+async def test_human_drag_offset_and_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder: list[str] = []
+
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    monkeypatch.setattr(random, "randint", lambda a, b: 0)
+
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+    frame = DummyFrame(page=page)
+
+    source_box = {"x": 0.0, "y": 0.0, "width": 40.0, "height": 40.0}
+    source_locator = DummyLocator(DummyElementHandle(bounding_box=source_box, frame=frame))
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        move_steps=2,
+        offset_px=0.0,
+        hover_min_ms=0,
+        hover_max_ms=0,
+        click_hold_min_ms=0,
+        click_hold_max_ms=0,
+        delay_min_ms=0,
+        delay_max_ms=0,
+        extra_pause_every_chars=0,
+        extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    await human_drag(cast(Page, page), cast(Locator, source_locator), offset=(20, -10))
+
+    expected_x = (source_box["x"] + source_box["width"] / 2) + 20.0
+    expected_y = (source_box["y"] + source_box["height"] / 2) - 10.0
+    move_coords = [
+        tuple(float(part) for part in entry.split(":")[1:3])
+        for entry in recorder
+        if entry.startswith("move:")
+    ]
+    assert any(abs(x - expected_x) < 1e-6 and abs(y - expected_y) < 1e-6 for x, y in move_coords)
+
+    # Missing destination (neither target nor offset) raises an error.
+    with pytest.raises(BrowserToolError):
+        await human_drag(cast(Page, page), cast(Locator, source_locator))
+
+    # Providing both target and offset also raises.
+    target_locator = DummyLocator(DummyElementHandle(bounding_box=source_box, frame=frame))
+    with pytest.raises(BrowserToolError):
+        await human_drag(
+            cast(Page, page),
+            cast(Locator, source_locator),
+            target_locator=cast(Locator, target_locator),
+            offset=(1, 1),
+        )
+
+    # Page without mouse support fails.
+    page_no_mouse = DummyPage(mouse=None)
+    frame_no_mouse = DummyFrame(page=page_no_mouse)
+    locator_no_mouse = DummyLocator(DummyElementHandle(bounding_box=source_box, frame=frame_no_mouse))
+    with pytest.raises(BrowserToolError):
+        await human_drag(
+            cast(Page, page_no_mouse),
+            cast(Locator, locator_no_mouse),
+            offset=(5, 5),
+        )
 
 
 @pytest.mark.unit

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import Any
 
 from playwright.async_api import (
@@ -30,6 +31,7 @@ from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.human import (
     human_click,
+    human_drag,
     human_press_keys,
     human_scroll,
     human_type,
@@ -126,12 +128,11 @@ async def click(selector: str) -> PageSnapshot:
     Click can only be performed on elements that are visible on the page.
 
     Args:
-        selector: Either a visible text string (e.g. ``"Book Now"``) or a selector
-            handle (for example a CSS selector string like ``"button#submit"`` or
-            a selector handle returned in page snapshots). Leading and
-            trailing whitespace is ignored for text matching. Prefer passing the
-            element's `selector` from page snapshots; fall back to visible text only
-            when no selector is available.
+        selector: Visible text on the element or a selector handle returned by page
+            snapshots and other tools. The provided text or selector must uniquely
+            identify a single element on the current page. Prefer using the handle
+            from snapshots and fall back to visible text only when no handle is
+            available.
 
     Returns:
         PageSnapshot: Structured snapshot of the page after performing the click.
@@ -295,12 +296,152 @@ async def click(selector: str) -> PageSnapshot:
                 )
 
 
+async def drag(
+    source: str,
+    *,
+    target: str | None = None,
+    offset: tuple[float | int, float | int] | None = None,
+) -> PageSnapshot:
+    """Drag from a source element to a target element or coordinate offset.
+
+    Args:
+        source: Visible text on the element or a selector handle returned by page
+            snapshots and other tools. The provided text or selector must uniquely
+            identify the drag start element.
+        target: Optional visible text or selector handle identifying the drop destination
+            element. When supplied, the text or selector must uniquely identify a single
+            element on the page.
+        offset: Optional ``(dx, dy)`` tuple specifying a pixel offset relative to the
+            source element's center. Provide either ``target`` or ``offset`` (not both).
+
+    Returns:
+        PageSnapshot: Snapshot of the page after the drag completes.
+
+    Raises:
+        BrowserToolError: If the page is blank, locators cannot be resolved, inputs are
+            invalid, or the drag fails.
+    """
+    clean_source = source.strip()
+    if not clean_source:
+        raise BrowserToolError("source must be a non-empty string", tool="drag")
+
+    has_target = target is not None
+    has_offset = offset is not None
+    if (not has_target and not has_offset) or (has_target and has_offset):
+        raise BrowserToolError("Provide either target selector or offset", tool="drag")
+
+    offset_tuple: tuple[float, float] | None = None
+    if offset is not None:
+        if isinstance(offset, (tuple, list)) and len(offset) == 2:
+            try:
+                offset_tuple = (float(offset[0]), float(offset[1]))
+            except (TypeError, ValueError) as exc:
+                raise BrowserToolError("offset must contain numeric values", tool="drag") from exc
+            if not all(math.isfinite(component) for component in offset_tuple):
+                raise BrowserToolError("offset values must be finite numbers", tool="drag")
+        else:
+            raise BrowserToolError("offset must be a length-2 tuple of numbers", tool="drag")
+
+    clean_target: str | None = None
+    if target is not None:
+        clean_target = target.strip()
+        if not clean_target:
+            raise BrowserToolError("target selector must be a non-empty string", tool="drag")
+
+    try:
+        browser = await get_browser()
+        page = await browser.current_page()
+    except (PlaywrightError, RuntimeError) as exc:  # pragma: no cover - defensive wiring
+        logger.exception("Unable to access browser page for drag")
+        msg = "Unable to access browser page"
+        raise BrowserToolError(msg, tool="drag") from exc
+
+    if page.url in {"", "about:blank"}:
+        raise BrowserToolError("Navigate to a page before attempting to drag.", tool="drag")
+
+    try:
+        source_resolution: _LocatorResolution | None = await _resolve_locator(
+            page,
+            clean_source,
+            allow_substring_text=False,
+            require_single_match=True,
+            tool_name="drag",
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.exception("Locator resolution failed for drag source %s", clean_source)
+        msg = f"Failed to locate element for source '{clean_source}'."
+        raise BrowserToolError(msg, tool="drag") from exc
+
+    if source_resolution is None:
+        msg = f"No element found matching text or selector '{clean_source}'."
+        raise BrowserToolError(msg, tool="drag")
+
+    target_resolution: _LocatorResolution | None = None
+    if clean_target is not None:
+        try:
+            target_resolution = await _resolve_locator(
+                page,
+                clean_target,
+                allow_substring_text=False,
+                require_single_match=True,
+                tool_name="drag",
+            )
+        except BrowserToolError:
+            raise
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.exception("Locator resolution failed for drag target %s", clean_target)
+            msg = f"Failed to locate element for target '{clean_target}'."
+            raise BrowserToolError(msg, tool="drag") from exc
+
+        if target_resolution is None:
+            msg = f"No element found matching text or selector '{clean_target}'."
+            raise BrowserToolError(msg, tool="drag")
+
+    details: dict[str, Any] = {
+        "source": {
+            "strategy": source_resolution.strategy,
+            "selector": source_resolution.resolved_selector,
+            "query": source_resolution.query,
+        }
+    }
+    if target_resolution is not None:
+        details["target"] = {
+            "strategy": target_resolution.strategy,
+            "selector": target_resolution.resolved_selector,
+            "query": target_resolution.query,
+        }
+    if offset_tuple is not None:
+        details["offset"] = offset_tuple
+
+    try:
+        await human_drag(
+            page,
+            source_resolution.locator,
+            target_locator=target_resolution.locator if target_resolution else None,
+            offset=offset_tuple,
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:
+        logger.exception("Playwright error during drag for source %s", clean_source)
+        msg = "Playwright error performing drag"
+        raise BrowserToolError(msg, tool="drag", details=details) from exc
+
+    wait_cfg = load_config().tools.browser.waits
+    await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
+    return await _build_page_snapshot(page, None)
+
+
 async def fill_field(selector: str, value: str | int | float | bool | None) -> PageSnapshot:
     """Type into a text-like input located by visible text or selector handle.
 
     Args:
-        selector: Visible text or selector handle identifying the input element. Prefer
-            the `selector` field from page snapshots and fall back to visible text.
+        selector: Visible text on the element or a selector handle returned by page
+            snapshots and other tools. The provided text or selector must uniquely
+            identify the input element. Prefer using the handle from snapshots and fall
+            back to visible text only when no handle is available.
         value: Textual value (converted to string) to type into the control.
 
     Returns:
@@ -394,7 +535,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
     return await _build_page_snapshot(page, None)
 
 
-__all__ = ["click", "fill_field"]
+__all__ = ["click", "drag", "fill_field"]
 
 
 async def press_keys(keys: list[str]) -> PageSnapshot:

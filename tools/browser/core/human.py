@@ -181,11 +181,11 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
 
 
 async def human_click(page: Page, locator: Locator) -> None:
-    """Perform a human-like click on a locator using an explicit Playwright page.
+    """Perform a human-like click on an element using an explicit Playwright page.
 
     Args:
         page: Playwright Page object whose mouse will be used to perform the click.
-        locator: Playwright Locator identifying the element to click.
+        locator: Locator identifying the element to click.
 
     Raises:
         BrowserToolError: If the locator cannot be resolved or the page lacks a mouse.
@@ -244,6 +244,152 @@ async def human_click(page: Page, locator: Locator) -> None:
     # Ensure overlay is finally positioned on the click point (best-effort).
     with contextlib.suppress(Exception):
         await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
+
+
+async def human_drag(
+    page: Page,
+    source_locator: Locator,
+    *,
+    target_locator: Locator | None = None,
+    offset: tuple[float | int, float | int] | None = None,
+) -> None:
+    """Drag from ``source_locator`` to either ``target_locator`` or a coordinate offset.
+
+    Exactly one of ``target_locator`` or ``offset`` must be provided.
+
+    Args:
+        page: Playwright Page whose mouse will be used for the drag.
+        source_locator: Locator identifying the element where the drag should begin.
+        target_locator: Optional locator identifying the destination element.
+        offset: Optional ``(dx, dy)`` tuple specifying a pixel offset relative to the
+            drag start point.
+
+    Raises:
+        BrowserToolError: On invalid inputs, detached elements, missing mouse APIs,
+            or when bounding boxes cannot be computed.
+    """
+    if (target_locator is None and offset is None) or (target_locator is not None and offset is not None):
+        raise BrowserToolError("Provide exactly one of target_locator or offset", tool="drag")
+
+    cfg = _get_human_config()
+
+    source_handle = await source_locator.element_handle()
+    if source_handle is None:
+        raise BrowserToolError("Unable to resolve source element handle", tool="drag")
+
+    source_frame = await source_handle.owner_frame()
+    if source_frame is None:
+        raise BrowserToolError(
+            "Source element is not attached to a frame/page; cannot perform drag",
+            tool="drag",
+        )
+
+    source_box = await source_handle.bounding_box()
+    if source_box is None or source_box.get("width", 0) < 4 or source_box.get("height", 0) < 4:
+        label_handle = None
+        try:
+            label_handle = await source_handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
+        except Exception:
+            label_handle = None
+        if label_handle is not None:
+            try:
+                label_element = label_handle.as_element()
+                if label_element is not None:
+                    label_box = await label_element.bounding_box()
+                    if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
+                        source_box = label_box
+            finally:
+                with contextlib.suppress(Exception):
+                    await label_handle.dispose()
+
+    if source_box is None or source_box.get("width", 0) <= 0 or source_box.get("height", 0) <= 0:
+        raise BrowserToolError("Source element has no bounding box to drag", tool="drag")
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="drag")
+
+    start_x = source_box["x"] + source_box["width"] / 2
+    start_y = source_box["y"] + source_box["height"] / 2
+
+    if cfg.offset_px > 0:
+        angle = random.random() * 2 * math.pi
+        radius = random.random() * cfg.offset_px
+        start_x += math.cos(angle) * radius
+        start_y += math.sin(angle) * radius
+
+    dest_x: float
+    dest_y: float
+
+    if target_locator is not None:
+        target_handle = await target_locator.element_handle()
+        if target_handle is None:
+            raise BrowserToolError("Unable to resolve target element handle", tool="drag")
+
+        target_frame = await target_handle.owner_frame()
+        if target_frame is None:
+            raise BrowserToolError(
+                "Target element is not attached to a frame/page; cannot perform drag",
+                tool="drag",
+            )
+
+        target_box = await target_handle.bounding_box()
+        if target_box is None or target_box.get("width", 0) < 4 or target_box.get("height", 0) < 4:
+            label_handle = None
+            try:
+                label_handle = await target_handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
+            except Exception:
+                label_handle = None
+            if label_handle is not None:
+                try:
+                    label_element = label_handle.as_element()
+                    if label_element is not None:
+                        label_box = await label_element.bounding_box()
+                        if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
+                            target_box = label_box
+                finally:
+                    with contextlib.suppress(Exception):
+                        await label_handle.dispose()
+
+        if target_box is None or target_box.get("width", 0) <= 0 or target_box.get("height", 0) <= 0:
+            raise BrowserToolError("Target element has no bounding box to drag", tool="drag")
+
+        dest_x = target_box["x"] + target_box["width"] / 2
+        dest_y = target_box["y"] + target_box["height"] / 2
+
+        if cfg.offset_px > 0:
+            angle = random.random() * 2 * math.pi
+            radius = random.random() * cfg.offset_px
+            dest_x += math.cos(angle) * radius
+            dest_y += math.sin(angle) * radius
+    else:
+        if offset is None:
+            raise BrowserToolError("offset must be provided when target_locator is None", tool="drag")
+        try:
+            dx, dy = offset
+        except (TypeError, ValueError) as exc:
+            raise BrowserToolError("offset must be a tuple of two values", tool="drag") from exc
+        try:
+            dest_x = start_x + float(dx)
+            dest_y = start_y + float(dy)
+        except (TypeError, ValueError) as exc:
+            raise BrowserToolError("offset values must be numbers", tool="drag") from exc
+        if not (math.isfinite(dest_x) and math.isfinite(dest_y)):
+            raise BrowserToolError("offset produced non-finite drag coordinates", tool="drag")
+
+    mouse = page.mouse
+
+    # Move to drag start, press, glide to destination, then release.
+    await _mouse_move_with_fake_cursor(page, x=start_x, y=start_y, steps=cfg.move_steps)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.down()
+    await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
+    await _mouse_move_with_fake_cursor(page, x=dest_x, y=dest_y, steps=max(cfg.move_steps, 2))
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.up()
+
+    # Best-effort overlay update at drag destination.
+    with contextlib.suppress(Exception):
+        await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [dest_x, dest_y])
 
 
 async def human_type(page: Page, locator: Locator, text: str, *, clear_existing: bool = True) -> None:
@@ -352,7 +498,7 @@ async def human_press_keys(page: Page, keys: list[str]) -> None:
             raise BrowserToolError(f"Failed to press key '{key}': {exc}", tool="press_keys") from exc
 
 
-__all__ = ["human_click", "human_press_keys", "human_scroll", "human_type"]
+__all__ = ["human_click", "human_drag", "human_press_keys", "human_scroll", "human_type"]
 
 
 async def human_scroll(page: Page, direction: str = "down", amount: int | None = None) -> None:

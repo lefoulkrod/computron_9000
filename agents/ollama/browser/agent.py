@@ -19,7 +19,9 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 from models import get_default_model
 from tools.browser import (
+    click,
     current_page,
+    drag,
     extract_text,
     fill_field,
     list_clickable_elements,
@@ -27,7 +29,6 @@ from tools.browser import (
     press_keys,
     scroll_page,
 )
-from tools.browser.interactions import click
 from tools.browser.vision import ask_about_screenshot
 
 logger = logging.getLogger(__name__)
@@ -43,23 +44,28 @@ SYSTEM_PROMPT = dedent(
     You have tools to interact with web pages:
     - open_url(url): opens a webpage and returns title, snippet (first ~800 visible characters),
       elements (anchors and forms; up to 20 anchors + all forms), and status code.
-    - click(selector): clicks an element on the current page. Prefer passing the element's
-      `selector` handle returned in page snapshots; if no selector is available you may provide
-      the element's visible text as a fallback (for example `click("Sign in")`). Returns an
-      updated page snapshot after the click (including any navigation changes).
-    - extract_text(selector, limit=1000): extract visible text from elements. Prefer a selector
-      handle (for example `div.hours p`) returned in a page snapshot; if none is available, you
-      may provide visible text to locate elements. Returns a list of {selector, text} objects
-      (selector is a best-effort selector handle) truncated to `limit`.
+    - click(selector): clicks an element on the current page. Pass either the element's
+      `selector` handle from page snapshots/other tools or its exact visible text. The value you
+      supply must uniquely identify a single element. Returns an updated page snapshot after the
+      click (including any navigation changes).
+    - drag(source, target=None, offset=None): drags from a source element to a target selector or
+      by a pixel offset (tuple of dx, dy). Provide `source` and, when used, `target` as selector
+      handles or exact visible text that each uniquely identify the relevant element. Supply
+      exactly one destination (selector or offset). Returns an updated page snapshot after the drag
+      completes.
+    - extract_text(selector, limit=1000): extract visible text from elements identified by either
+      a selector handle or exact visible text that uniquely matches the target. Returns a list of
+      {selector, text} objects (selector is a best-effort selector handle) truncated to `limit`.
     - ask_about_screenshot(prompt, *, mode="full_page", selector=None): captures a screenshot of
-      the current page (full page, viewport, or a specific selector handle) and sends it to a vision
-      model to answer the prompt. Use the `selector` parameter to focus screenshots when available.
+      the current page (full page, viewport, or a focused element). When `mode="selector"`, supply
+      either visible text or a selector handle that uniquely identifies the element to capture.
+      The screenshot is then sent to a vision model to answer the prompt.
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
       Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
-    - fill_field(selector, value): types text into an input or textarea located by a selector
-      handle (preferred) or by visible text (fallback) and returns the updated page snapshot.
-      Use this before submitting forms or triggering actions that require typed input.
+    - fill_field(selector, value): types text into an input or textarea using either its selector
+      handle or exact visible text. The argument must uniquely identify the target element. Use
+      this before submitting forms or triggering actions that require typed input.
     - press_keys(keys): send an ordered list of keyboard key names (for example
       `press_keys(["Tab", "Enter"])` or `press_keys(["Control+Shift+P"])`) to the
       currently focused element. This lets the agent submit forms, navigate suggestion
@@ -86,14 +92,16 @@ SYSTEM_PROMPT = dedent(
       request; avoid opening duplicate tabs or reloading the same URL unnecessarily.
     - Call open_url exactly with the provided URL when the user requests to open or summarize a
       page.
-    - After opening a page, use `click` to follow links or activate elements. When choosing a
-      target, prefer the `selector` field provided in the page snapshot's `elements` list as the
-      primary locator. Selectors are opaque handles (they may look like text, `#id`, or a longer
-      string); use them exactly as provided. Do NOT rely on or assume any internal browser APIs —
-      you only have access to the tools listed above (open_url, click, extract_text,
-      ask_about_screenshot, current_page, fill_field, press_keys, scroll_page).
-    - If the provided `selector` fails, fall back to the element's visible text (for example,
-      `click("Sign in")`), but always try the selector first.
+    - After opening a page, use `click` to follow links or activate elements and `drag` when a
+      drag-and-drop interaction is required. When choosing a target, prefer the `selector` field
+      provided in the page snapshot's `elements` list as the primary locator. Selectors are opaque
+      handles (they may look like text, `#id`, or a longer string); use them exactly as provided.
+      Do NOT rely on or assume any internal browser APIs—you only have access to the tools listed
+      above (open_url, click, drag, extract_text, ask_about_screenshot, current_page, fill_field,
+      press_keys, scroll_page).
+    - For any argument named `selector`, `source`, or `target`, pass either a selector handle or
+      exact visible text that uniquely identifies the element. Handles from snapshots are preferred;
+      fall back to visible text only when no handle is available.
     - Use extract_text to pull structured text from specific regions or elements instead of taking
       a screenshot when plain text suffices.
     - Use ask_about_screenshot when you need visual details (e.g., "What does the banner say?"),
@@ -116,6 +124,7 @@ browser_agent = Agent(
     tools=[
         open_url,
         click,
+        drag,
         extract_text,
         list_clickable_elements,
         ask_about_screenshot,
