@@ -18,13 +18,13 @@ produce a ``PageSnapshot`` instance.
 from __future__ import annotations
 
 import logging
-from collections import Counter
 
-from playwright.async_api import ElementHandle, Page, Response
 from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Page, Response
 from pydantic import BaseModel, Field
 
 from tools.browser.core._dom_utils import _element_bool_state
+from tools.browser.core.selectors import SelectorRegistry, build_unique_selector
 
 logger = logging.getLogger(__name__)
 
@@ -38,108 +38,6 @@ _EVAL_DEBUG_LIMIT = 10
 MAX_ELEMENT_TEXT_LEN = 120
 MAX_ARIA_LABEL_LEN = 40
 MAX_TEXT_SELECTOR_LEN = 60
-
-
-async def _fast_element_selector(el: ElementHandle, tag: str | None = None) -> str | None:
-    """Return a quick, valid CSS selector using only cheap attribute reads.
-
-    This helper prefers inexpensive attribute reads and returns a concise
-    selector when possible. Callers should prefer using ``_best_selector``
-    which orchestrates a fast-path attempt via this function and falls back
-    to ``_element_css_selector`` when this returns ``None``.
-
-    Heuristics (in priority order):
-        1. id -> ``#id``
-        2. data-testid/test/qa/cy -> ``[data-testid="val"]`` etc.
-        3. form: id or action
-        4. input/textarea/select: name (+ type for input)
-        5. anchor: href (non-empty, not '#', not javascript:)
-        6. button: id, name, or type=submit
-        7. aria-label + role combination
-    Falls back to ``None`` if no succinct selector available.
-    """
-    try:
-        tag_name = tag or await el.evaluate("(n)=>n.tagName.toLowerCase()")
-    except PlaywrightError:  # pragma: no cover - defensive
-        return None
-
-    # 1. id
-    try:
-        el_id = await el.get_attribute("id")
-    except PlaywrightError:  # pragma: no cover - defensive
-        el_id = None
-    if el_id:
-        return f"#{el_id}"
-
-    # 2. data-* test hooks
-    for attr in ("data-testid", "data-test", "data-qa", "data-cy"):
-        try:
-            val = await el.get_attribute(attr)
-        except PlaywrightError:  # pragma: no cover - defensive
-            val = None
-        if val:
-            return f"[{attr}='{val}']"
-
-    # 3. form specifics
-    if tag_name == "form":
-        try:
-            action = await el.get_attribute("action")
-        except PlaywrightError:
-            action = None
-        if action:
-            return f"form[action='{action}']"
-        # (id already handled)
-
-    # 4. inputs / fields
-    if tag_name in {"input", "textarea", "select"}:
-        try:
-            name_attr = await el.get_attribute("name")
-        except PlaywrightError:
-            name_attr = None
-        if name_attr:
-            if tag_name == "input":
-                try:
-                    input_type = await el.get_attribute("type")
-                except PlaywrightError:  # pragma: no cover - defensive
-                    input_type = None
-                if input_type:
-                    return f"input[type='{input_type}'][name='{name_attr}']"
-            return f"{tag_name}[name='{name_attr}']"
-
-    # 5. anchors by href
-    if tag_name == "a":
-        try:
-            href_val = await el.get_attribute("href")
-        except PlaywrightError:  # pragma: no cover - defensive
-            href_val = None
-        if href_val and href_val not in {"#", "javascript:void(0)", "javascript:;"}:
-            return f"a[href='{href_val}']"
-
-    # 6. button semantics
-    if tag_name == "button":
-        try:
-            name_attr = await el.get_attribute("name")
-        except PlaywrightError:
-            name_attr = None
-        if name_attr:
-            return f"button[name='{name_attr}']"
-        try:
-            type_attr = await el.get_attribute("type")
-        except PlaywrightError:
-            type_attr = None
-        if type_attr == "submit":
-            return "button[type='submit']"
-
-    # 7. aria-label + role (Prefer label alone if short)
-    try:
-        aria_label = await el.get_attribute("aria-label")
-    except PlaywrightError:
-        aria_label = None
-    if aria_label and 0 < len(aria_label) <= MAX_ARIA_LABEL_LEN and "'" not in aria_label:
-        return f"[aria-label='{aria_label}']"
-
-    # role only if combined? (skip to keep selector concise)
-    return None
 
 
 class Element(BaseModel):
@@ -215,130 +113,6 @@ class PageSnapshot(BaseModel):
     status_code: int | None = None
 
 
-async def _element_css_selector(element: ElementHandle) -> str:
-    r"""Return a best-effort full CSS selector path for an element.
-
-    Strategy (executed inside the page so it has direct DOM access):
-    1. Walk ancestors up to but excluding the document root collecting a segment per node.
-    2. For each node prefer:
-       * ``#id`` when present (and stop - an id makes the remainder unique).
-       * Otherwise the tag name plus a stable class token subset (first 2 class names) with
-         Tailwind-style classes escaped (``:`` -> ``\\:``) to remain valid CSS.
-       * When no classes, append an ``:nth-of-type(n)`` pseudo if there is more than one
-         sibling of the same tag before it.
-    3. Join segments with `` > ``. If generation fails return an empty string so callers
-       can degrade gracefully.
-    This produces selectors that are readable yet usually robust enough to re-select the
-    element in subsequent interactions without being overly verbose (we stop early on id).
-    """
-    # Note: Prefer callers to use ``_best_selector`` which will attempt
-    # the fast-path in ``_fast_element_selector`` before invoking this
-    # more-expensive DOM-walking fallback.
-    script = (
-        "function(el){"
-        "try {"
-        "  if (!el || !(el instanceof Element)) return '';"
-        "  var segments = [];"
-        "  var current = el;"
-        "  while (current && current.nodeType === Node.ELEMENT_NODE) {"
-        "    var seg = current.nodeName.toLowerCase();"
-        "    if (current.id) {"
-        "      segments.unshift('#' + current.id);"
-        "      break;"
-        "    } else {"
-        "      var nth = 1; var sib = current;"
-        "      while ((sib = sib.previousElementSibling)) {"
-        "        if (sib.nodeName === current.nodeName) nth++;"
-        "      }"
-        "      if (nth > 1) { seg += ':nth-of-type(' + nth + ')'; }"
-        "    }"
-        "    segments.unshift(seg);"
-        "    current = current.parentElement;"
-        "  }"
-        "  return segments.join(' > ');"
-        "} catch (e) { return ''; }"
-        "}"
-    )
-    try:
-        selector: str = await element.evaluate(script)
-    except (PlaywrightError, AttributeError) as exc:  # pragma: no cover - defensive
-        # Some Playwright environments surface JS SyntaxError as "Unexpected end of input"
-        # when a script is malformed or truncated.
-        msg = str(exc)
-        logger.debug("Element.evaluate failed: %s", msg)
-
-        # Log a short preview of the script so we can see if it looks truncated
-        # or contains suspicious characters. If debug is enabled, emit a small
-        # safe-element dump (rate-limited) underneath to help correlate the
-        # failing element without dumping massive HTML.
-        logger.debug(
-            "Element.evaluate failed; script_len=%d script_preview=%s...%s",
-            len(script),
-            script[:60],
-            script[-60:],
-        )
-
-        global _EVAL_DEBUG_COUNT
-        if _EVAL_DEBUG_ENABLED and _EVAL_DEBUG_COUNT < _EVAL_DEBUG_LIMIT:
-            try:
-                _EVAL_DEBUG_COUNT += 1
-                try:
-                    tag = await element.evaluate("(el)=>el.tagName.toLowerCase()")
-                except (PlaywrightError, AttributeError):
-                    tag = None
-                try:
-                    eid = await element.evaluate("(el)=>el.id || null")
-                except (PlaywrightError, AttributeError):
-                    eid = None
-                try:
-                    classes = await element.evaluate("(el)=>Array.from(el.classList).slice(0,3)")
-                except (PlaywrightError, AttributeError):
-                    classes = None
-                try:
-                    outer = await element.evaluate(
-                        "(el)=>{const s=el.outerHTML||'';return s.length>200?s.slice(0,200)+'...':s}"
-                    )
-                except (PlaywrightError, AttributeError):
-                    outer = None
-
-                logger.debug(
-                    "Eval debug dump (preview) tag=%s id=%s classes=%s outer_snippet=%s",
-                    tag,
-                    eid,
-                    classes,
-                    outer,
-                )
-            except (PlaywrightError, AttributeError):
-                pass
-
-        # If we can't evaluate the main script, give up and return empty selector.
-        return ""
-    return selector
-
-
-async def _best_selector(element: ElementHandle, tag: str | None = None) -> str:
-    """Return the best available selector for an element.
-
-    This coroutine first attempts the cheap, heuristic-based selection via
-    ``_fast_element_selector``. If that returns a non-empty result, it is
-    returned. Otherwise the function falls back to the more expensive DOM
-    traversal implemented by ``_element_css_selector``.
-
-    Always returns a string (empty string only on unexpected failures).
-    """
-    try:
-        fast = await _fast_element_selector(element, tag=tag)
-    except PlaywrightError:
-        fast = None
-    if fast:
-        return fast
-    try:
-        css = await _element_css_selector(element)
-    except PlaywrightError:
-        css = ""
-    return css or ""
-
-
 def _normalize_visible_text(value: str) -> str:
     """Normalize visible text for uniqueness comparisons."""
     if not value:
@@ -346,52 +120,7 @@ def _normalize_visible_text(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
-async def _resolve_element_selector(
-    element: ElementHandle,
-    *,
-    tag: str | None,
-    text: str,
-    text_unique: bool,
-) -> str:
-    """Return the most succinct selector to expose in snapshots.
-
-    Resolution order:
-    1. ``_fast_element_selector`` (ids, data-test ids, form/action, etc.).
-    2. If ``text_unique`` is True and the text is short enough, emit a
-       Playwright ``text="..."`` selector so the agent sees the human label.
-    3. Fall back to ``_best_selector`` which ultimately uses
-       ``_element_css_selector`` to produce a stable CSS path.
-
-    The goal is to surface the easiest-to-reuse selector for the agent, even if
-    that means mixing CSS and Playwright text selectors.
-    """
-    try:
-        fast = await _fast_element_selector(element, tag=tag)
-    except PlaywrightError:
-        fast = None
-    if fast:
-        return fast
-
-    normalized_text = text.strip()
-    if text_unique and normalized_text and len(normalized_text) <= MAX_TEXT_SELECTOR_LEN:
-        escaped = normalized_text.replace('"', '\\"')
-        return f'text="{escaped}"'
-
-    try:
-        css = await _element_css_selector(element)
-    except PlaywrightError:
-        css = ""
-    if css:
-        return css
-
-    if normalized_text:
-        escaped = normalized_text.replace('"', '\\"')
-        return f'text="{escaped}"'
-
-    return ""
-
-
-async def _collect_anchors(page: Page) -> list[Element]:
+async def _collect_anchors(page: Page, registry: SelectorRegistry) -> list[Element]:
     """Collect anchor elements from the page and return a list of Element models.
 
     This helper encapsulates the anchor extraction logic previously in
@@ -399,6 +128,7 @@ async def _collect_anchors(page: Page) -> list[Element]:
 
     Args:
         page: Playwright Page to query anchors from.
+        registry: SelectorRegistry instance used to build unique selectors for anchors.
         limit: Optional maximum number of anchors to consider (apply before
             selector disambiguation). When ``None``, all anchors are processed.
 
@@ -408,7 +138,8 @@ async def _collect_anchors(page: Page) -> list[Element]:
     results: list[Element] = []
     try:
         anchors = await page.query_selector_all("a")
-    except PlaywrightError:  # pragma: no cover - defensive
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.debug("Anchor query failed, defaulting to no anchors: %s", exc)
         anchors = None
     if not anchors:
         return results
@@ -421,7 +152,8 @@ async def _collect_anchors(page: Page) -> list[Element]:
         # avoids dynamic hasattr checks.
         try:
             is_visible = await a.is_visible()
-        except PlaywrightError:  # pragma: no cover - defensive
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("Anchor visibility check failed, treating as not visible: %s", exc)
             is_visible = False
         except AttributeError:  # pragma: no cover - defensive
             # Test double missing attribute: treat as not visible so tests
@@ -448,7 +180,8 @@ async def _collect_anchors(page: Page) -> list[Element]:
             display_text = display_text + " (truncated)"
         try:
             role_val = await a.get_attribute("role")
-        except PlaywrightError:  # pragma: no cover - defensive
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("Failed to read anchor role attribute, defaulting to None: %s", exc)
             role_val = None
 
         anchor_data.append(
@@ -463,32 +196,21 @@ async def _collect_anchors(page: Page) -> list[Element]:
             }
         )
 
-    anchor_counts = Counter(entry["normalized"] for entry in anchor_data if entry["normalized"])
+    # anchor_counts was previously used for de-duplication; registry handles uniqueness now
 
     for entry in anchor_data:
-        text_unique = bool(entry["normalized"]) and anchor_counts[entry["normalized"]] == 1
-        selector_value = await _resolve_element_selector(
-            entry["handle"],
-            tag="a",
-            text=entry["raw"],
-            text_unique=text_unique,
-        )
-        if not selector_value:
-            selector_value = await _best_selector(entry["handle"], tag="a")
-        entry["selector"] = selector_value
+        # Prefer registry-driven unique selector generation. Pass the visible raw text
+        # so the registry can consider text-based strategies when appropriate.
+        try:
+            sel_res = await build_unique_selector(entry["handle"], tag="a", text=entry["raw"], registry=registry)
+            entry["selector"] = sel_res.selector
+        except Exception as exc:
+            logger.exception("SelectorRegistry failed while building anchor selector: %s", exc)
+            # Per new contract: do not fall back to legacy helpers. Emit empty selector.
+            entry["selector"] = ""
 
-    anchor_selector_counts = Counter(entry.get("selector") for entry in anchor_data if entry.get("selector"))
-
-    duplicate_anchor_keys: set[str] = {key for key, count in anchor_selector_counts.items() if key and count > 1}
-    if duplicate_anchor_keys:
-        # initialize per-key usage counters with correct typing
-        anchor_usage: dict[str, int] = dict.fromkeys(duplicate_anchor_keys, 0)
-        for entry in anchor_data:
-            key = entry.get("selector", "")
-            if key in duplicate_anchor_keys:
-                idx = anchor_usage[key]
-                entry["selector"] = f"{key} >> nth={idx}"
-                anchor_usage[key] = idx + 1
+    # Selector uniqueness and any necessary disambiguation is handled by
+    # SelectorRegistry.register. Do not perform local deduplication here.
 
     for entry in anchor_data:
         results.append(
@@ -504,55 +226,12 @@ async def _collect_anchors(page: Page) -> list[Element]:
     return results
 
 
-async def _dedupe_entry_selectors(entries: list[dict], selector_key: str = "selector") -> None:
-    """Local (category-level) selector disambiguation for raw mapping entries.
-
-    Adds ``>> nth=`` suffixes when duplicates appear within the provided entries.
-    This is used by individual collectors prior to constructing ``Element`` models.
-    Global uniqueness (across categories) is enforced later by ``_dedupe_selectors``.
-    """
-    selector_counts = Counter(e.get(selector_key) for e in entries if e.get(selector_key))
-    duplicate_keys: set[str] = {k for k, c in selector_counts.items() if k and c > 1}
-    if not duplicate_keys:
-        return
-    usage: dict[str, int] = dict.fromkeys(duplicate_keys, 0)
-    for e in entries:
-        key = e.get(selector_key, "")
-        if key in duplicate_keys:
-            idx = usage[key]
-            e[selector_key] = f"{key} >> nth={idx}"
-            usage[key] = idx + 1
-
-
-def _dedupe_selectors(elements: list[Element]) -> None:
-    """Ensure global uniqueness of selectors across all element categories.
-
-    Applies a stable pass over the combined ``elements`` list, appending
-    ``>> nth={i}`` to subsequent occurrences of any non-empty selector. This
-    runs after category collection so that relative ordering (buttons vs.
-    anchors vs. forms) is preserved in the final suffixed sequence.
-    Tests covering cross-category collisions: ``test_snapshot_dedup_selectors``.
-    """
-    usage: dict[str, int] = {}
-    for el in elements:
-        sel = el.selector
-        if not sel:
-            continue
-        count = usage.get(sel)
-        if count is None:
-            # first occurrence: record next duplicate index starting at 0
-            usage[sel] = 0
-            continue
-        # duplicate occurrence: use current count value, then increment
-        el.selector = f"{sel} >> nth={count}"
-        usage[sel] = count + 1
-
-
-async def _collect_buttons(page: Page) -> list[Element]:
+async def _collect_buttons(page: Page, registry: SelectorRegistry) -> list[Element]:
     """Collect button-like elements (button tag + role=button)."""
     try:
         handles = await page.query_selector_all("button, [role=button]")
-    except PlaywrightError:  # pragma: no cover - defensive
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.debug("Button query failed, defaulting to no buttons: %s", exc)
         handles = None
     if not handles:
         return []
@@ -561,7 +240,8 @@ async def _collect_buttons(page: Page) -> list[Element]:
         # Call ``is_visible`` directly; test doubles must supply it.
         try:
             is_visible = await h.is_visible()
-        except PlaywrightError:  # pragma: no cover - defensive
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("Button visibility check failed, treating as not visible: %s", exc)
             is_visible = False
         except AttributeError:  # pragma: no cover - defensive
             is_visible = False
@@ -582,7 +262,8 @@ async def _collect_buttons(page: Page) -> list[Element]:
             display = display + " (truncated)"
         try:
             role_val = await h.get_attribute("role")
-        except PlaywrightError:  # pragma: no cover - defensive
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("Failed to read button role attribute, defaulting to None: %s", exc)
             role_val = None
         data.append(
             {
@@ -594,19 +275,14 @@ async def _collect_buttons(page: Page) -> list[Element]:
                 "tag": "button",
             }
         )
-    counts = Counter(d["normalized"] for d in data if d["normalized"])
+    # category-level counts intentionally unused; registry provides uniqueness
     for d in data:
-        text_unique = bool(d["normalized"]) and counts[d["normalized"]] == 1
-        selector_value = await _resolve_element_selector(
-            d["handle"],
-            tag="button",
-            text=d["raw"],
-            text_unique=text_unique,
-        )
-        if not selector_value:
-            selector_value = await _best_selector(d["handle"], tag="button")
-        d["selector"] = selector_value
-    await _dedupe_entry_selectors(data)
+        try:
+            sel_res = await build_unique_selector(d["handle"], tag="button", text=d["raw"], registry=registry)
+            d["selector"] = sel_res.selector
+        except Exception as exc:
+            logger.exception("SelectorRegistry failed while building button selector: %s", exc)
+            d["selector"] = ""
     elements: list[Element] = []
     for d in data:
         elements.append(
@@ -620,11 +296,12 @@ async def _collect_buttons(page: Page) -> list[Element]:
     return elements
 
 
-async def _collect_iframes(page: Page) -> list[Element]:
+async def _collect_iframes(page: Page, registry: SelectorRegistry) -> list[Element]:
     """Collect iframe elements with synthesized readable labels."""
     try:
         iframes = await page.query_selector_all("iframe")
-    except PlaywrightError:  # pragma: no cover - defensive
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.debug("Iframe query failed, defaulting to no iframes: %s", exc)
         iframes = None
     if not iframes:
         return []
@@ -653,7 +330,12 @@ async def _collect_iframes(page: Page) -> list[Element]:
             truncated = True
         if truncated:
             text = text + " (truncated)"
-        css_selector = await _best_selector(iframe, tag="iframe")
+        try:
+            sel_res = await build_unique_selector(iframe, tag="iframe", text=text, registry=registry)
+            css_selector = sel_res.selector
+        except Exception as exc:
+            logger.exception("SelectorRegistry failed while building iframe selector: %s", exc)
+            css_selector = ""
         results.append(
             Element(
                 text=text,
@@ -666,7 +348,7 @@ async def _collect_iframes(page: Page) -> list[Element]:
     return results
 
 
-async def _collect_forms(page: Page) -> list[Element]:
+async def _collect_forms(page: Page, registry: SelectorRegistry) -> list[Element]:
     """Collect form elements and their fields (logic extracted from _extract_elements)."""
     try:
         form_elements = await page.query_selector_all("form")
@@ -674,14 +356,16 @@ async def _collect_forms(page: Page) -> list[Element]:
         form_elements = None
     if not form_elements:
         return []
-    seen_global_selectors: set[str] = set()
+    # SelectorRegistry guarantees uniqueness across the snapshot; local
+    # global selector tracking is no longer required.
     results: list[Element] = []
     for idx, form_el in enumerate(form_elements, start=1):
-        field_selectors_seen: set[str] = set()
+        # per-form selector tracking removed; SelectorRegistry guarantees uniqueness
         try:
             action = await form_el.get_attribute("action")
             form_id = await form_el.get_attribute("id")
-        except PlaywrightError:  # pragma: no cover - defensive
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("Form attribute read failed, defaulting action/id to None: %s", exc)
             action = None
             form_id = None
         if action:
@@ -690,15 +374,14 @@ async def _collect_forms(page: Page) -> list[Element]:
             selector = f"form#{form_id}"
         else:
             selector = f"form:nth-of-type({idx})"
-        locator = await _resolve_element_selector(
-            form_el,
-            tag="form",
-            text="",
-            text_unique=False,
-        )
+        try:
+            res = await build_unique_selector(form_el, tag="form", text="", registry=registry)
+            locator = res.selector
+        except Exception as exc:
+            logger.exception("SelectorRegistry failed while building form selector: %s", exc)
+            locator = ""
         effective_selector = locator or selector
         form_fields: list[FormField] = []
-        radio_selector_counters: dict[str, int] = {}
         try:
             controls = await form_el.query_selector_all("input, textarea, select")
             for control in controls:
@@ -734,52 +417,16 @@ async def _collect_forms(page: Page) -> list[Element]:
                 options_val: list[dict] | None = None
                 current_value: str | None = None
                 selected_flag: bool = False
-                if field_type == "radio" and name_attr:
-                    idx_counter = radio_selector_counters.get(name_attr, 0)
-                    control_selector = f"input[type='radio'][name='{name_attr}'] >> nth={idx_counter}"
-                    radio_selector_counters[name_attr] = idx_counter + 1
-                    try:
-                        raw_val = await control.get_attribute("value")
-                    except PlaywrightError as exc:
-                        logger.debug(
-                            "Radio value attribute read failed for name=%s index=%s: %s",
-                            name_attr,
-                            idx_counter,
-                            exc,
-                        )
-                        raw_val = None
-                    current_value = raw_val or ""
-                    selected_flag = await _element_bool_state(
-                        control,
-                        prop_script="el => el.checked === true",
-                        attr="checked",
-                        default=False,
-                        context="radio",
-                    )
-                else:
-                    control_selector = await _resolve_element_selector(
-                        control,
-                        tag=tag,
-                        text="",
-                        text_unique=False,
-                    )
-                    if (
-                        not control_selector
-                        or control_selector in field_selectors_seen
-                        or control_selector in seen_global_selectors
-                    ):
-                        try:
-                            css_fallback = await _element_css_selector(control)
-                        except PlaywrightError:
-                            css_fallback = ""
-                        control_selector = css_fallback or control_selector
-                    if name_attr and (action or form_id):
-                        try:
-                            scoped_css = await _element_css_selector(control)
-                        except PlaywrightError:
-                            scoped_css = ""
-                        if scoped_css:
-                            control_selector = scoped_css
+                try:
+                    # All controls, including radios, request a selector from
+                    # the centralized SelectorRegistry. If the registry fails
+                    # we emit an empty selector per the contract and continue
+                    # collecting metadata.
+                    cres = await build_unique_selector(control, tag=tag, text="", registry=registry)
+                    control_selector = cres.selector
+                except Exception as exc:
+                    logger.exception("SelectorRegistry failed while building control selector: %s", exc)
+                    control_selector = ""
                 if tag == "select":
                     try:
                         option_handles = await control.query_selector_all("option")
@@ -821,6 +468,24 @@ async def _collect_forms(page: Page) -> list[Element]:
                     options_val = opts or None
                     if current_value is None and opts:
                         current_value = opts[0]["value"]
+                elif field_type == "radio":
+                    try:
+                        raw_val = await control.get_attribute("value")
+                    except PlaywrightError as exc:
+                        logger.debug(
+                            "Radio value attribute read failed for name=%s: %s",
+                            name_attr,
+                            exc,
+                        )
+                        raw_val = None
+                    current_value = raw_val or ""
+                    selected_flag = await _element_bool_state(
+                        control,
+                        prop_script="el => el.checked === true",
+                        attr="checked",
+                        default=False,
+                        context="radio",
+                    )
                 elif field_type not in {"radio", "checkbox"}:
                     raw_val = None
                     try:
@@ -865,17 +530,7 @@ async def _collect_forms(page: Page) -> list[Element]:
                         default=False,
                         context="checkbox",
                     )
-                if control_selector and (
-                    control_selector in field_selectors_seen or control_selector in seen_global_selectors
-                ):
-                    base_selector = control_selector
-                    suffix = 0
-                    while control_selector in field_selectors_seen or control_selector in seen_global_selectors:
-                        control_selector = f"{base_selector} >> nth={suffix}"
-                        suffix += 1
-                if control_selector:
-                    field_selectors_seen.add(control_selector)
-                    seen_global_selectors.add(control_selector)
+                # Per-form selector tracking removed — rely on SelectorRegistry for uniqueness.
                 form_fields.append(
                     FormField(
                         selector=control_selector or "",
@@ -888,7 +543,8 @@ async def _collect_forms(page: Page) -> list[Element]:
                         options=options_val,
                     )
                 )
-        except PlaywrightError:
+        except PlaywrightError as exc:
+            logger.debug("Failed to enumerate form controls, defaulting to empty fields: %s", exc)
             form_fields = []
         css_selector = effective_selector or selector
         results.append(
@@ -904,7 +560,7 @@ async def _collect_forms(page: Page) -> list[Element]:
     return results
 
 
-async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[Element]:
+async def _collect_clickables(page: Page, registry: SelectorRegistry, *, limit: int | None = None) -> list[Element]:
     """Collect non-semantic but interactive elements (heuristic clickables).
 
     Heuristics (conservative):
@@ -919,6 +575,7 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
 
     Args:
         page: Playwright page.
+        registry: SelectorRegistry used to generate unique selectors for handles.
         limit: Optional maximum number of clickables to return.
 
     Returns:
@@ -928,7 +585,6 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
         "div[onclick]",
         "span[onclick]",
         "li[onclick]",
-        "[role='button']",
         "[role='link']",
         "[tabindex]",
         "[data-clickable]",
@@ -937,8 +593,7 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
     query = ", ".join(selectors)
     try:
         handles = await page.query_selector_all(query)
-    except (PlaywrightError, AssertionError) as exc:  # pragma: no cover - defensive
-        # Older test fakes raise AssertionError for unknown selectors; treat as no clickables.
+    except PlaywrightError as exc:
         logger.debug("Clickable query skipped due to error: %s", exc)
         handles = None
     if not handles:
@@ -955,22 +610,24 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
         seen_element_ids.add(obj_id)
         try:
             tag_name = await h.evaluate("el => el.tagName.toLowerCase()")
-        except PlaywrightError:
+        except PlaywrightError as exc:
+            logger.debug("Clickable tag evaluation failed, skipping element: %s", exc)
             continue
         if tag_name in {"a", "button", "input", "select", "textarea", "form", "iframe"}:
             continue
         # Visibility heuristic
         try:
             is_visible = await h.is_visible()
-        except PlaywrightError:
+        except PlaywrightError as exc:
+            logger.debug("Clickable visibility check failed, treating as not visible: %s", exc)
             is_visible = False
         if not is_visible:
             continue
-        # Removed extra hidden heuristic to avoid false negatives; rely solely on Playwright's is_visible().
         # Text / labeling
         try:
             raw_text = await h.inner_text()
-        except PlaywrightError:
+        except PlaywrightError as exc:
+            logger.debug("Clickable inner_text read failed, defaulting to empty string: %s", exc)
             raw_text = ""
         trimmed = (raw_text or "").strip()
         # Fallback label attributes
@@ -999,8 +656,12 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
             display = display + " (truncated)"
         try:
             role_val = await h.get_attribute("role")
-        except PlaywrightError:
+        except PlaywrightError as exc:
+            logger.debug("Failed to read clickable role attribute, defaulting to None: %s", exc)
             role_val = None
+        if role_val and role_val.lower() == "button":
+            # Already captured by button collector; skip to avoid duplicates.
+            continue
         processed.append(
             {
                 "handle": h,
@@ -1016,19 +677,15 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
 
     if not processed:
         return []
-    counts = Counter(d["normalized"] for d in processed if d["normalized"])
+    # category-level counts intentionally unused; registry provides uniqueness
     for d in processed:
-        text_unique = bool(d["normalized"]) and counts[d["normalized"]] == 1
-        selector_value = await _resolve_element_selector(
-            d["handle"],
-            tag=d["tag"],
-            text=d["raw"],
-            text_unique=text_unique,
-        )
-        if not selector_value:
-            selector_value = await _best_selector(d["handle"], tag=d["tag"])
-        d["selector"] = selector_value
-    await _dedupe_entry_selectors(processed)
+        try:
+            sel_res = await build_unique_selector(d["handle"], tag=d["tag"], text=d["raw"], registry=registry)
+            d["selector"] = sel_res.selector
+        except Exception as exc:
+            logger.exception("SelectorRegistry failed while building clickable selector: %s", exc)
+            d["selector"] = ""
+    # Local dedupe is no longer required since registry guarantees uniqueness.
     elements: list[Element] = []
     for d in processed:
         elements.append(
@@ -1042,7 +699,7 @@ async def _collect_clickables(page: Page, *, limit: int | None = None) -> list[E
     return elements
 
 
-async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
+async def _extract_elements(page: Page, registry: SelectorRegistry, link_limit: int = 20) -> list[Element]:
     """Extract interactive elements orchestrating specialized helpers.
 
     Ordering preserved (with clickables inserted after buttons) for backward compatibility:
@@ -1054,13 +711,17 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
 
     Clickables are conservatively selected to avoid flooding snapshots.
     """
+    # Registry must be provided by the caller to ensure a single per-page
+    # registry is used across all collectors. Do not create a registry here.
+    if registry is None:  # defensive runtime check for callers still passing None
+        raise ValueError("SelectorRegistry must be provided to _extract_elements")
     elements: list[Element] = []
     # Collect full sets (no limiting yet, anchor/button/clickable counts small enough)
-    button_elements = await _collect_buttons(page)
-    clickable_elements = await _collect_clickables(page, limit=link_limit)  # still locally limited
-    anchor_elements_full = await _collect_anchors(page)
-    iframe_elements = await _collect_iframes(page)
-    form_elements = await _collect_forms(page)
+    button_elements = await _collect_buttons(page, registry)
+    clickable_elements = await _collect_clickables(page, registry, limit=link_limit)  # still locally limited
+    anchor_elements_full = await _collect_anchors(page, registry)
+    iframe_elements = await _collect_iframes(page, registry)
+    form_elements = await _collect_forms(page, registry)
 
     elements.extend(button_elements)
     elements.extend(clickable_elements)
@@ -1068,8 +729,9 @@ async def _extract_elements(page: Page, link_limit: int = 20) -> list[Element]:
     elements.extend(iframe_elements)
     elements.extend(form_elements)
 
-    # Global dedupe across categories before slicing anchors for link limit.
-    _dedupe_selectors(elements)
+    # Global deduplication is managed by the SelectorRegistry via unique
+    # selector generation. No further cross-category post-processing is
+    # required here.
 
     if link_limit is not None:
         # Apply limit only to anchors while keeping order & deduped selectors.
@@ -1098,6 +760,7 @@ async def _build_page_snapshot(page: Page, response: Response | None) -> PageSna
     try:
         title: str = await page.title()
     except PlaywrightError:  # pragma: no cover - defensive
+        logger.debug("Failed to read page title, defaulting to empty string")
         title = ""
 
     if response is not None:
@@ -1110,10 +773,14 @@ async def _build_page_snapshot(page: Page, response: Response | None) -> PageSna
     try:
         body_text: str = await page.inner_text("body")
     except PlaywrightError:  # pragma: no cover - defensive
+        logger.debug("Failed to read body inner_text, defaulting to empty string")
         body_text = ""
     snippet = (body_text or "").strip()[:500]
 
-    elements = await _extract_elements(page)
+    # Create a selector registry that will persist for the duration of this
+    # snapshot build so selectors are globally unique across collectors.
+    registry = SelectorRegistry(page)
+    elements = await _extract_elements(page, registry)
 
     return PageSnapshot(
         title=title,

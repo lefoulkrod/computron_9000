@@ -19,7 +19,8 @@ from models.model_configs import get_model_by_name
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.snapshot import _best_selector, _build_page_snapshot
+from tools.browser.core.snapshot import _build_page_snapshot
+from tools.browser.core.selectors import SelectorRegistry, build_unique_selector
 
 _BBOX_DEBUG_ENV = "COMPUTRON_VISION_DEBUG"
 _BBOX_OVERLAY_SCRIPT = """
@@ -52,20 +53,47 @@ logger = logging.getLogger(__name__)
 _SCREENSHOT_TOOL_NAME = "ask_about_screenshot"
 _GROUNDING_TOOL_NAME = "ground_elements_by_text"
 _PROMPT_TEMPLATE = """
-You will extract bounding boxes for interactive elements on a webpage screenshot.
-You are given a screenshot of a browser viewport with these dimensions:
-{width}x{height} pixels (origin at top-left corner).
-Return all bounding boxes for elements described by the following text: {text_json}.
-Return JSON only (no prose, no code fences). If nothing matches, return [].
+Task: Extract tight bounding boxes for any regions described in the provided webpage
+ screenshot. Return all bounding boxes that match the description.
 
-For each match emit an object with:
- - "text": visible label inside the clickable region (string or null)
- - "element_type": best-guess HTML role or tag such as "button", "a", "input", "icon", "checkbox" (string or null)
- - "bbox": [x1, y1, x2, y2] in viewport pixels; (x1, y1) is the top-left, (x2, y2) the bottom-right
-     corner. Make the box tight around the clickable surface so the center falls inside the hit area.
+Viewport: {width}x{height} pixels. Origin (0,0) is top-left.
 
-Example:
-[{{"text":"Submit","element_type":"button","bbox":[10,20,110,60]}}]
+Target description (case-insensitive): {text_json}
+
+Output: Return a JSON array only (no prose, no code fences). If nothing matches, return
+[] exactly.
+
+Each array item MUST be an object:
+{{
+    "text": string|null,          // visible label; null if no visible text
+    "element_type": string|null,  // optional best-guess role/tag or null
+    "bbox": [x1, y1, x2, y2]      // integers; 0 <= x1 < x2 <= {width},
+                                                                 // 0 <= y1 < y2 <= {height}
+}}
+
+Notes:
+- The selector used by the agent will be resolved from the bbox CENTER, so make
+    the box tight around the described region and ensure the center falls on the
+    intended target when possible.
+- Coordinates MUST be integers. Clamp to the viewport; drop regions completely
+    off-screen.
+- Minimum size: width >= 4 px and height >= 4 px; otherwise drop the item.
+- Deduplicate: if two boxes overlap with IoU > 0.5, keep the tighter box or the
+    one with clearer label; drop the other.
+- Do not invent text that is not visible. Do not return any non-JSON output.
+
+Validation before output:
+- Every "bbox" has four integers and satisfies x1<x2 and y1<y2.
+- All boxes are within [0,{width}] x [0,{height}].
+- No duplicates remain after IoU deduping.
+- Sort results top-to-bottom, then left-to-right.
+
+Examples:
+- Example matches:
+    [{{"text":"Header","element_type":null,"bbox":[10,8,300,48]}},
+     {{"text":null,"element_type":"image","bbox":[320,12,420,112]}}]
+- Example no match:
+    []
 """
 
 
@@ -328,9 +356,8 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
                     logger.debug("Failed to inject bbox overlay for %s", validated.bbox)
 
             # Call into the page to compute a selector handle for the element at the center.
-            # _best_selector is a helper that lives on the Python side; we call document.elementFromPoint
-            # to obtain an element's unique identifier then pass it into _best_selector via a temporary
-            # element attribute. This keeps selector resolution robust in tests by using the page JS context.
+            # We obtain the element at the bbox center via document.elementFromPoint
+            # and then attempt registry-driven selector resolution for that handle.
             element_handle = None
             try:
                 handle = await page.evaluate_handle(
@@ -344,12 +371,26 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
                     cx,
                     cy,
                 )
-
             if element_handle is not None:
                 try:
-                    selector_candidate = await _best_selector(element_handle)
+                    # Prefer registry-driven unique selector generation for grounding
+                    # runs. Do not fallback to legacy helpers; if the registry fails
+                    # record no selector for the grounded element.
+                    try:
+                        tmp_registry = SelectorRegistry(page)
+                        sel_res = await build_unique_selector(
+                            element_handle, tag=None, text=validated.text or "", registry=tmp_registry
+                        )
+                        selector_candidate = sel_res.selector
+                    except Exception as exc:
+                        logger.exception(
+                            "SelectorRegistry failed during grounding selector resolution: %s",
+                            exc,
+                        )
+                        selector_candidate = None
+
                     logger.debug(
-                        "Best selector for bbox %s center %s,%s -> %s",
+                        "Grounding selector for bbox %s center %s,%s -> %s",
                         (x1, y1, x2, y2),
                         cx,
                         cy,
@@ -358,12 +399,15 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
                     validated.selector = selector_candidate or None
                 except PlaywrightError:
                     logger.exception(
-                        "_best_selector failed for bbox center %s,%s",
+                        "Selector resolution failed for bbox center %s,%s",
                         cx,
                         cy,
                     )
                 finally:
-                    await element_handle.dispose()
+                    try:
+                        await element_handle.dispose()
+                    except PlaywrightError:
+                        logger.debug("Failed to dispose element_handle after grounding resolution")
         except PlaywrightError:
             # Guard selector resolution; don't abort the entire call if one entry fails to resolve
             logger.exception("Failed to resolve selector for grounding entry: %s", entry)

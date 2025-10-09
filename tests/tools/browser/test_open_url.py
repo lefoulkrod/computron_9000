@@ -103,7 +103,8 @@ class FakePage:
             return self._anchors
         if selector == "form":
             return self._forms
-        if selector in {"button, [role=button]", "iframe"}:
+        # Accept the combined clickables selector used by the production code.
+        if selector in {"button, [role=button]", "iframe", "div[onclick], span[onclick], li[onclick], [role='link'], [tabindex], [data-clickable]"}:
             return []
         raise AssertionError(f"Unexpected selector: {selector}")
 
