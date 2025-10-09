@@ -1,35 +1,4 @@
 models:
-  - name: qwen3
-    model: qwen3:30b-a3b-thinking-2507-q8_0
-    think: true
-    options:
-      num_ctx: 73728
-  - name: qwen3-coder
-    model: hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0
-    options:
-      num_ctx: 73728
-      temperature: 0.7
-      top_p: 0.8
-      top_k: 20
-      repetition_penalty: 1.05
-  - name: coder_architect_qwen
-    model: qwen3:30b-a3b-thinking-2507-q8_0
-    think: true
-    options:
-      num_ctx: 73728
-      temperature: 0.7
-      top_p: 0.8
-      top_k: 20
-      repetition_penalty: 1.05
-  - name: coder_developer_qwen
-    model: qwen3:30b-a3b-thinking-2507-q8_0
-    think: true
-    options:
-      num_ctx: 73728
-      temperature: 0.7
-      top_p: 0.8
-      top_k: 20
-      repetition_penalty: 1.05
   - name: gpt
     model: gpt-oss:120b
     think: true
