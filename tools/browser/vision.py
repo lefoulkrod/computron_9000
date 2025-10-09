@@ -125,8 +125,9 @@ async def ask_about_screenshot(
         prompt: Question the model should answer about the screenshot.
         mode: One of ``"full_page"``, ``"viewport"``, or ``"selector"``. Determines
             which area of the page to capture.
-        selector: When ``mode == "selector"``, a selector string (selector handle)
-            targeting the element to capture.
+        selector: When ``mode == "selector"``, visible text on the element or a selector
+            handle returned by page snapshots and other tools. The provided text or
+            selector must uniquely identify the element to capture.
 
     Returns:
         The model's answer as a plain string.

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Drag and Drop Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            background: #f5f5f5;
+        }
+        h1 {
+            margin-top: 0;
+        }
+        .board {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1.5rem;
+        }
+        .bucket {
+            width: 200px;
+            height: 200px;
+            border: 2px dashed #999;
+            border-radius: 12px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        .bucket.hover {
+            border-color: #4a90e2;
+            background: #e8f1ff;
+        }
+        .bucket.done {
+            border-style: solid;
+            border-color: #43a047;
+            background: #e8f5e9;
+        }
+        .draggable {
+            width: 120px;
+            height: 120px;
+            border-radius: 8px;
+            background: #4a90e2;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            user-select: none;
+        }
+        .draggable.dragging {
+            opacity: 0.7;
+            cursor: grabbing;
+        }
+        #status {
+            margin-top: 1.5rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Drag and Drop Playground</h1>
+    <p>Use this page to validate drag-and-drop interactions. Drag the blue square into the drop zone.</p>
+
+    <div class="board">
+        <div id="draggable-source" class="draggable" draggable="true">Drag me</div>
+        <div id="drop-target" class="bucket">Drop here</div>
+    </div>
+
+    <p id="status">Waiting for drag...</p>
+
+    <script>
+        const draggable = document.getElementById('draggable-source');
+        const dropTarget = document.getElementById('drop-target');
+        const status = document.getElementById('status');
+
+        draggable.addEventListener('dragstart', (event) => {
+            event.dataTransfer.setData('text/plain', 'dragged-square');
+            draggable.classList.add('dragging');
+            status.textContent = 'Dragging...';
+        });
+
+        draggable.addEventListener('dragend', () => {
+            draggable.classList.remove('dragging');
+            if (!dropTarget.classList.contains('done')) {
+                status.textContent = 'Drag ended without drop.';
+            }
+        });
+
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            dropTarget.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                dropTarget.classList.add('hover');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach((eventName) => {
+            dropTarget.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                dropTarget.classList.remove('hover');
+            });
+        });
+
+        dropTarget.addEventListener('drop', (event) => {
+            const data = event.dataTransfer.getData('text/plain');
+            if (data === 'dragged-square') {
+                dropTarget.classList.add('done');
+                status.textContent = 'Dropped!';
+            } else {
+                status.textContent = 'Unexpected drop payload.';
+            }
+        });
+    </script>
+</body>
+</html>

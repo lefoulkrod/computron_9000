@@ -1,6 +1,6 @@
 """Interactive REPL for executing individual browser tools.
 
-This REPL exposes each public browser tool (open_url, current_page, click, fill_field,
+This REPL exposes each public browser tool (open_url, current_page, click, drag, fill_field,
 scroll_page, press_keys, extract_text, ask_about_screenshot, ground_elements_by_text,
 close_browser) via a numbered menu. Selecting a tool will prompt for its arguments
 and execute it against the shared persistent Playwright browser. Results are logged
@@ -43,6 +43,7 @@ from tools.browser import (
     ask_about_screenshot,
     list_clickable_elements,
     click,
+    drag,
     close_browser,
     current_page,
     extract_text,
@@ -173,6 +174,7 @@ _TOOLS: list[_ToolSpec] = [
     _ToolSpec("open_url", open_url, "Navigate to a URL and snapshot the page."),
     _ToolSpec("current_page", current_page, "Snapshot the current page."),
     _ToolSpec("click", click, "Click an element by text or selector."),
+    _ToolSpec("drag", drag, "Drag an element to a selector or offset."),
     _ToolSpec("fill_field", fill_field, "Fill an input/textarea field."),
     _ToolSpec("press_keys", press_keys, "Press one or more keys (JSON list)."),
     _ToolSpec("scroll_page", scroll_page, "Scroll the page (direction, optional amount)."),
