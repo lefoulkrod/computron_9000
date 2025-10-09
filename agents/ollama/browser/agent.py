@@ -24,6 +24,7 @@ from tools.browser import (
     drag,
     extract_text,
     fill_field,
+    ground_elements_by_text,
     list_clickable_elements,
     open_url,
     press_keys,
@@ -60,6 +61,9 @@ SYSTEM_PROMPT = dedent(
       the current page (full page, viewport, or a focused element). When `mode="selector"`, supply
       either visible text or a selector handle that uniquely identifies the element to capture.
       The screenshot is then sent to a vision model to answer the prompt.
+    - ground_elements_by_text(description): asks the vision model to locate UI elements matching
+      a natural language description. Returns bounding boxes plus best-effort selector handles for
+      each grounded element.
     - current_page(): returns a snapshot of the currently open page WITHOUT creating a new one.
       Use this to recall state or re-extract elements. If no page is open you must first call
       open_url.
@@ -102,6 +106,8 @@ SYSTEM_PROMPT = dedent(
     - For any argument named `selector`, `source`, or `target`, pass either a selector handle or
       exact visible text that uniquely identifies the element. Handles from snapshots are preferred;
       fall back to visible text only when no handle is available.
+    - Use `ground_elements_by_text` when you need the vision model to locate elements that are
+      difficult to describe by selector or when visual context matters before interacting.
     - Use extract_text to pull structured text from specific regions or elements instead of taking
       a screenshot when plain text suffices.
     - Use ask_about_screenshot when you need visual details (e.g., "What does the banner say?"),
@@ -128,6 +134,7 @@ browser_agent = Agent(
         extract_text,
         list_clickable_elements,
         ask_about_screenshot,
+        ground_elements_by_text,
         current_page,
         fill_field,
         press_keys,
