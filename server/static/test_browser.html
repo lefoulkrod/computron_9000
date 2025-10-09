@@ -7,15 +7,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
-      color-scheme: light;
+      color-scheme: dark;
       font-family: system-ui, sans-serif;
       line-height: 1.5;
+      color: #e5e7ff;
+      background: #0b1120;
     }
 
     body {
       margin: 0;
       padding: 2rem 3rem 4rem;
-      background: #f6f7fb;
+      background: #0b1120;
+      color: #e5e7ff;
     }
 
     header {
@@ -28,36 +31,57 @@
     }
 
     section {
-      background: #fff;
+      background: #111c3a;
       border-radius: 12px;
       padding: 1.5rem;
       margin-bottom: 2rem;
-      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 18px 32px rgba(15, 23, 42, 0.45);
+      border: 1px solid rgba(99, 102, 241, 0.25);
     }
 
-    .cards {
+    .cards,
+    .selector-grid {
       display: grid;
       gap: 1rem;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
     .card {
-      border: 1px solid #d6d9e6;
+      border: 1px solid rgba(129, 140, 248, 0.3);
       border-radius: 10px;
       padding: 1rem;
-      background: linear-gradient(135deg, #ffffff 0%, #f9fbff 100%);
+      background: linear-gradient(145deg, rgba(17, 24, 39, 0.85), rgba(55, 65, 81, 0.75));
       position: relative;
     }
 
-
-    .inline-meta {
-      margin-top: .6rem;
-      display: flex;
-      gap: .5rem;
-      flex-wrap: wrap;
-      align-items: center;
-      font-size: .85rem;
+    .selector-grid {
+      margin-top: 1rem;
     }
+
+    .selector-item {
+      border: 1px dashed rgba(139, 92, 246, 0.4);
+      border-radius: 10px;
+      padding: 1rem;
+      background: rgba(28, 37, 65, 0.85);
+      display: grid;
+      gap: .75rem;
+    }
+
+    .selector-item h3 {
+      margin: 0;
+      font-size: 1rem;
+      color: #c4b5fd;
+    }
+
+    .selector-notes {
+      font-size: .85rem;
+      color: #d6bcfa;
+      background: rgba(104, 117, 245, 0.18);
+      border-radius: 6px;
+      padding: .45rem .6rem;
+      border: 1px solid rgba(129, 140, 248, 0.25);
+    }
+
 
     .icon-button {
       width: 48px;
@@ -67,7 +91,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.1);
+      box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.4);
     }
 
     .plan-buttons {
@@ -79,8 +103,8 @@
     .tier-button,
     .newsletter-submit,
     .support-submit {
-      background: #10b981;
-      color: #fff;
+      background: linear-gradient(135deg, #22d3ee, #2563eb);
+      color: #0b1120;
       border: none;
       border-radius: 999px;
       padding: .55rem 1.3rem;
@@ -103,49 +127,10 @@
       margin-top: 1rem;
       padding: 1rem;
       border-radius: 10px;
-      background: #dcfce7;
-      color: #166534;
-      border: 1px solid #bbf7d0;
+      background: rgba(34, 197, 94, 0.18);
+      color: #bbf7d0;
+      border: 1px solid rgba(34, 197, 94, 0.35);
       font-weight: 600;
-    }
-
-    .selector-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: .25rem;
-      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-      background: #eef2ff;
-      color: #312e81;
-      padding: 0.2rem 0.45rem;
-      border-radius: 6px;
-    }
-
-    .selector-badge::before {
-      content: "selector";
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      font-size: .65rem;
-      color: #6366f1;
-    }
-
-    .bbox-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: .35rem;
-      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-      background: #ecfdf5;
-      color: #047857;
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .bbox-pill::before {
-      content: "bbox";
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      font-size: .65rem;
-      color: #0f766e;
     }
 
     form {
@@ -165,9 +150,11 @@
     select,
     textarea {
       padding: .6rem .75rem;
-      border: 1px solid #cbd5f5;
+      border: 1px solid rgba(148, 163, 184, 0.35);
       border-radius: 8px;
       font-size: 1rem;
+      background: rgba(15, 23, 42, 0.75);
+      color: #f8fafc;
     }
 
     button {
@@ -175,15 +162,17 @@
       border: none;
       border-radius: 999px;
       padding: .75rem 1.75rem;
-      background: #4338ca;
-      color: white;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #0b1120;
       font-size: 1rem;
       font-weight: 600;
-      transition: transform .12s ease;
+      transition: transform .12s ease, box-shadow .12s ease;
+      box-shadow: 0 10px 18px rgba(99, 102, 241, 0.35);
     }
 
     button:hover {
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 16px 24px rgba(129, 140, 248, 0.45);
     }
 
     table {
@@ -191,37 +180,51 @@
       border-collapse: collapse;
       margin-top: 1.2rem;
       font-size: .95rem;
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid rgba(99, 102, 241, 0.2);
     }
 
     th,
     td {
-      border: 1px solid #d0d7f0;
+      border: 1px solid rgba(99, 102, 241, 0.15);
       padding: .55rem .75rem;
       text-align: left;
       vertical-align: top;
     }
 
     th {
-      background: #eef2ff;
+      background: rgba(79, 70, 229, 0.25);
       font-weight: 700;
     }
 
     code {
       font-family: "SFMono-Regular", Menlo, Consolas, monospace;
       font-size: .9rem;
-      background: rgba(67, 56, 202, .12);
+      background: rgba(79, 70, 229, 0.35);
       padding: 0 .35rem;
       border-radius: 4px;
-    }
-
-    .bbox {
-      font-variant-numeric: tabular-nums;
+      color: #e5e7ff;
     }
 
     .note {
       font-size: .9rem;
-      color: #475569;
+      color: #94a3b8;
       margin-top: .6rem;
+    }
+
+    #log-entries {
+      margin-top: 1rem;
+      display: grid;
+      gap: .5rem;
+    }
+
+    .log-entry {
+      background: rgba(79, 70, 229, 0.2);
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      border-radius: 8px;
+      padding: .55rem .75rem;
+      font-size: .9rem;
+      color: #c7d2fe;
     }
   </style>
 </head>
@@ -229,8 +232,8 @@
 <body>
   <header>
     <h1 id="fixture-title">Browser Tools Demo</h1>
-    <p>This fixture is intentionally labeled so your tools can ground, extract, and interact predictably. Every panel
-      below shows the selector you should see in snapshots plus the coordinates detected at runtime.</p>
+    <p>This fixture is intentionally labeled so your tools can ground, extract, and interact predictably. Use the
+      elements below to exercise selector generation and view the interaction log updates.</p>
   </header>
 
   <section id="quick-actions">
@@ -240,19 +243,11 @@
         <strong>Primary CTA</strong>
         <p>Triggers a navigation in the demo agent.</p>
         <button id="primary-cta" data-testid="primary-cta">Continue to Dashboard</button>
-        <div class="inline-meta">
-          <span class="selector-badge">#primary-cta</span>
-          <span class="bbox-pill" data-bbox-for="#primary-cta">[x1, y1, x2, y2]</span>
-        </div>
       </div>
       <div class="card" id="secondary-cta-card">
         <strong>Secondary CTA</strong>
         <p>Use this to test grounding vs. text clicks.</p>
         <button id="secondary-cta">Maybe Later</button>
-        <div class="inline-meta">
-          <span class="selector-badge">#secondary-cta</span>
-          <span class="bbox-pill" data-bbox-for="#secondary-cta">[x1, y1, x2, y2]</span>
-        </div>
       </div>
     </div>
   </section>
@@ -265,10 +260,6 @@
         <strong>ARIA Role Button</strong>
         <p>Pure <code>div</code> with <code>role="button"</code> + <code>aria-label</code>.</p>
         <div class="icon-button" role="button" aria-label="Open navigation" tabindex="0"></div>
-        <div class="inline-meta">
-          <span class="selector-badge">[aria-label='Open navigation']</span>
-          <span class="bbox-pill" data-bbox-for="[role='button'][aria-label='Open navigation']">[x1, y1, x2, y2]</span>
-        </div>
       </div>
 
       <div class="card" id="plan-options">
@@ -278,61 +269,100 @@
           <button class="tier-button">Choose Plan</button>
           <button class="tier-button">Choose Plan</button>
         </div>
-        <div class="inline-meta">
-          <span class="selector-badge">#plan-options .tier-button:nth-of-type(1)</span>
-          <span class="bbox-pill" data-bbox-for="#plan-options .tier-button:nth-of-type(1)">[x1, y1, x2, y2]</span>
-        </div>
-        <div class="inline-meta">
-          <span class="selector-badge">#plan-options .tier-button:nth-of-type(2)</span>
-          <span class="bbox-pill" data-bbox-for="#plan-options .tier-button:nth-of-type(2)">[x1, y1, x2, y2]</span>
-        </div>
       </div>
 
       <div class="card" id="newsletter-card">
         <strong>Form with Action URL</strong>
         <p>Exercises <code>form[action]</code> selectors and a bare submit button.</p>
-        <form action="/newsletter/signup" class="newsletter-form">
+        <form id="newsletter-form" action="/newsletter/signup" class="newsletter-form">
           <label>
             Email
             <input name="signup_email" type="email" placeholder="you@example.com">
           </label>
           <button type="submit" class="newsletter-submit">Join Now</button>
         </form>
-        <div class="inline-meta">
-          <span class="selector-badge">form[action='/newsletter/signup']</span>
-          <span class="bbox-pill" data-bbox-for="form[action='/newsletter/signup']">[x1, y1, x2, y2]</span>
-        </div>
-        <div class="inline-meta">
-          <span class="selector-badge">input[name='signup_email']</span>
-          <span class="bbox-pill" data-bbox-for="form[action='/newsletter/signup'] input[name='signup_email']">[x1, y1, x2, y2]</span>
-        </div>
-        <div class="inline-meta">
-          <span class="selector-badge">form[action='/newsletter/signup'] .newsletter-submit</span>
-          <span class="bbox-pill" data-bbox-for="form[action='/newsletter/signup'] .newsletter-submit">[x1, y1, x2, y2]</span>
-        </div>
       </div>
 
       <div class="card" id="support-card">
         <strong>Duplicate Field Names</strong>
         <p>Two forms share <code>name="signup_email"</code> to force scoped selectors.</p>
-        <form action="/support/contact" class="support-form">
+        <form id="support-form" action="/support/contact" class="support-form">
           <label>
             Email
             <input name="signup_email" type="email" placeholder="contact@example.com">
           </label>
           <button type="submit" class="support-submit">Contact Us</button>
         </form>
-        <div class="inline-meta">
-          <span class="selector-badge">form[action='/support/contact']</span>
-          <span class="bbox-pill" data-bbox-for="form[action='/support/contact']">[x1, y1, x2, y2]</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="selector-dedup-lab">
+    <h2>Selector Deduplication Scenarios</h2>
+    <p class="note">These examples cover the primary selector strategies (id, data attribute, name, aria label, text,
+      positional fallbacks) so automated tests can confirm each branch.</p>
+    <div class="selector-grid">
+      <div class="selector-item" id="unique-id-case">
+        <h3>Unique ID Button</h3>
+        <p class="selector-notes">Exercises <code>SelectorStrategy.ID</code>.</p>
+        <button id="unique-id-target">Launch Workflow</button>
+      </div>
+
+      <div class="selector-item" id="data-attr-case">
+        <h3>Data Attribute Hook</h3>
+        <p class="selector-notes">Covers <code>data-testid</code> based selectors.</p>
+        <button data-testid="dedup-data-target">Trigger Data Flow</button>
+      </div>
+
+      <div class="selector-item" id="data-attr-duplicates">
+        <h3>Duplicate Data Hooks</h3>
+        <p class="selector-notes">Both buttons share <code>data-qa="dup-button"</code> so the registry must fall back to
+          structural selectors.</p>
+        <div class="plan-buttons">
+          <button class="dup-data-button" data-qa="dup-button">Duplicate Choice</button>
+          <button class="dup-data-button" data-qa="dup-button">Duplicate Choice</button>
         </div>
-        <div class="inline-meta">
-          <span class="selector-badge">form[action='/support/contact'] input[name='signup_email']</span>
-          <span class="bbox-pill" data-bbox-for="form[action='/support/contact'] input[name='signup_email']">[x1, y1, x2, y2]</span>
-        </div>
-        <div class="inline-meta">
-          <span class="selector-badge">form[action='/support/contact'] .support-submit</span>
-          <span class="bbox-pill" data-bbox-for="form[action='/support/contact'] .support-submit">[x1, y1, x2, y2]</span>
+      </div>
+
+      <div class="selector-item" id="shared-name-inputs">
+        <h3>Repeated Name Inputs</h3>
+        <p class="selector-notes">Two inputs with the same <code>name</code> force DOM-position disambiguation.</p>
+        <form id="shared-name-form">
+          <label>
+            Primary Email
+            <input type="email" name="account_email" placeholder="primary@example.com">
+          </label>
+          <label>
+            Secondary Email
+            <input type="email" name="account_email" placeholder="secondary@example.com">
+          </label>
+        </form>
+      </div>
+
+      <div class="selector-item" id="aria-label-case">
+        <h3>ARIA Label Button</h3>
+        <p class="selector-notes">Ensures the aria-label + role strategy is surfaced.</p>
+        <div role="button" aria-label="Close quick panel" class="icon-button" tabindex="0"></div>
+      </div>
+
+      <div class="selector-item" id="text-duplicate-case">
+        <h3>Duplicate Visible Text</h3>
+        <p class="selector-notes">Two plain buttons with identical text require text uniqueness checks.</p>
+        <button class="text-dup-button">Repeated Label</button>
+        <button class="text-dup-button">Repeated Label</button>
+      </div>
+
+      <div class="selector-item" id="deep-dom-structure">
+        <h3>Deep DOM Structure</h3>
+        <p class="selector-notes">No attributes or unique text; selector must rely on DOM path traversal.</p>
+        <div class="outer-dom">
+          <div>
+            <div>
+              <p>
+                <button class="layered-button">Layered Action</button>
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -343,98 +373,83 @@
     <ul>
       <li>
         <a id="pricing-link" href="#pricing">View Pricing</a>
-        <div class="inline-meta">
-          <span class="selector-badge">#pricing-link</span>
-          <span class="bbox-pill" data-bbox-for="#pricing-link">[x1, y1, x2, y2]</span>
-        </div>
       </li>
       <li>
         <a id="docs-link" href="#docs">Read Documentation</a>
-        <div class="inline-meta">
-          <span class="selector-badge">#docs-link</span>
-          <span class="bbox-pill" data-bbox-for="#docs-link">[x1, y1, x2, y2]</span>
-        </div>
       </li>
       <li>
         <a id="status-link" href="#status">Check System Status</a>
-        <div class="inline-meta">
-          <span class="selector-badge">#status-link</span>
-          <span class="bbox-pill" data-bbox-for="#status-link">[x1, y1, x2, y2]</span>
-        </div>
       </li>
     </ul>
   </section>
 
+  <section id="interaction-log">
+    <h2>Interaction Log</h2>
+    <p class="note">Each interaction appends a line here so snapshots can confirm state changes.</p>
+    <div id="log-entries" aria-live="polite"></div>
+  </section>
+
   <script>
-    const trackedElements = [
-      { label: 'Primary CTA', selector: '#primary-cta' },
-      { label: 'Secondary CTA', selector: '#secondary-cta' },
-      { label: 'ARIA Button', selector: "[role='button'][aria-label='Open navigation']" },
-      { label: 'Plan Button 1', selector: '#plan-options .tier-button:nth-of-type(1)' },
-      { label: 'Plan Button 2', selector: '#plan-options .tier-button:nth-of-type(2)' },
-      { label: 'Newsletter Form', selector: "form[action='/newsletter/signup']" },
-      { label: 'Newsletter Email Field', selector: "form[action='/newsletter/signup'] input[name='signup_email']" },
-      { label: 'Newsletter Submit', selector: "form[action='/newsletter/signup'] .newsletter-submit" },
-      { label: 'Support Form', selector: "form[action='/support/contact']" },
-      { label: 'Support Email Field', selector: "form[action='/support/contact'] input[name='signup_email']" },
-      { label: 'Support Submit', selector: "form[action='/support/contact'] .support-submit" },
-      { label: 'Pricing Link', selector: '#pricing-link' },
-      { label: 'Documentation Link', selector: '#docs-link' },
-      { label: 'Status Link', selector: '#status-link' }
-    ];
+    const logContainer = document.getElementById("log-entries");
 
-    function updateBoundingBoxes() {
-      trackedElements.forEach(({ selector }) => {
-        const node = document.querySelector(selector);
-        const targets = document.querySelectorAll(`[data-bbox-for="${selector}"]`);
-        if (targets.length === 0) {
-          return;
-        }
-        if (!node) {
-          targets.forEach((target) => {
-            target.textContent = '[not found]';
-          });
-          return;
-        }
+    function appendLog(message) {
+      if (!logContainer) {
+        return;
+      }
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      entry.textContent = `${new Date().toLocaleTimeString()} — ${message}`;
+      logContainer.prepend(entry);
+    }
 
-        const rect = node.getBoundingClientRect();
-        const values = [rect.left, rect.top, rect.right, rect.bottom]
-          .map((v) => Math.round(v));
-        const text = `[${values.join(', ')}]`;
-        targets.forEach((target) => {
-          target.textContent = text;
-        });
+    function wireClick(selector, message, options = {}) {
+      const element = document.querySelector(selector);
+      if (!element) {
+        return;
+      }
+      const { preventDefault = false } = options;
+      element.addEventListener("click", (event) => {
+        if (preventDefault) {
+          event.preventDefault();
+        }
+        appendLog(message);
       });
     }
 
-    window.addEventListener('load', () => {
-      updateBoundingBoxes();
-
-      const form = document.getElementById('demo-form');
-      const banner = document.getElementById('signup-success');
-      if (form && banner) {
-        form.addEventListener('submit', (event) => {
-          event.preventDefault();
-          const data = new FormData(form);
-          const params = new URLSearchParams();
-          for (const [key, value] of data.entries()) {
-            if (value !== null && value !== undefined) {
-              params.append(key, value.toString());
-            }
-          }
-
-          const url = new URL(window.location.href);
-          url.search = params.toString();
-          history.replaceState(null, '', url);
-
-          banner.hidden = false;
-          banner.textContent = `Thanks, ${new Date().toLocaleTimeString()} submission received!`; // timestamp makes it obvious the handler fired
-          banner.focus();
-        });
+    function preventFormSubmission(selector, message) {
+      const form = document.querySelector(selector);
+      if (!form) {
+        return;
       }
-    });
-    window.addEventListener('resize', updateBoundingBoxes);
-    window.addEventListener('scroll', updateBoundingBoxes, { passive: true });
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        appendLog(message);
+      });
+    }
+
+    wireClick("#primary-cta", "Primary CTA pressed");
+    wireClick("#secondary-cta", "Secondary CTA pressed");
+    wireClick("#menu-card .icon-button", "ARIA menu button toggled");
+    wireClick("#plan-options .tier-button:nth-of-type(1)", "Plan option 1 chosen");
+    wireClick("#plan-options .tier-button:nth-of-type(2)", "Plan option 2 chosen");
+    wireClick("#newsletter-form button", "Newsletter button clicked", { preventDefault: true });
+    wireClick("#support-form button", "Support button clicked", { preventDefault: true });
+    wireClick("#data-attr-duplicates .dup-data-button:nth-of-type(1)", "Duplicate data button 1 clicked");
+    wireClick("#data-attr-duplicates .dup-data-button:nth-of-type(2)", "Duplicate data button 2 clicked");
+    wireClick("#aria-label-case .icon-button", "Close quick panel pressed");
+    wireClick("#text-duplicate-case .text-dup-button:nth-of-type(1)", "Repeated label button 1 clicked");
+    wireClick("#text-duplicate-case .text-dup-button:nth-of-type(2)", "Repeated label button 2 clicked");
+    wireClick("#deep-dom-structure .layered-button", "Layered action fired");
+    wireClick("#unique-id-target", "Unique ID target pressed");
+    wireClick("[data-testid='dedup-data-target']", "Data attribute action triggered");
+    wireClick("#shared-name-form > label:nth-of-type(1) > input", "Primary account email focused");
+    wireClick("#shared-name-form > label:nth-of-type(2) > input", "Secondary account email focused");
+    wireClick("#pricing-link", "Pricing link followed", { preventDefault: true });
+    wireClick("#docs-link", "Docs link followed", { preventDefault: true });
+    wireClick("#status-link", "Status link followed", { preventDefault: true });
+
+    preventFormSubmission("#newsletter-form", "Newsletter form submitted");
+    preventFormSubmission("#support-form", "Support form submitted");
   </script>
 </body>
 
