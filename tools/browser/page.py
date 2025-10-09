@@ -11,11 +11,13 @@ import logging
 
 import tools.browser.core as browser_core
 from tools.browser.core.exceptions import BrowserToolError
+from tools.browser.core.selectors import SelectorRegistry
 from tools.browser.core.snapshot import (
     Element,
     PageSnapshot,
     _build_page_snapshot,
     _collect_anchors,
+    _collect_buttons,
     _collect_clickables,
 )
 
@@ -83,14 +85,10 @@ async def current_page() -> PageSnapshot:
 async def list_clickable_elements(
     after: str | None = None, limit: int = 20, contains: str | None = None
 ) -> list[Element]:
-    """List clickable elements (anchors plus heuristic non-semantic clickables).
+    """List clickable elements (buttons, anchors, and heuristic clickables).
 
-    The result merges native anchors (<a>) and additional interactive elements
-    discovered by the internal ``_collect_clickables`` helper (e.g. div/span with
-    onclick, role="button", etc.). Ordering preserves document order within each
-    category and mirrors snapshot extraction ordering (anchors appear after any
-    earlier button/clickable categories, but this tool only returns anchors and
-    heuristic clickables).
+    The result merges native buttons, anchors (<a>), and additional interactive elements
+    (e.g. div/span with onclick, role="link", etc.).
 
     Args:
         after: Optional selector string acting as a cursor. If provided, results
@@ -117,10 +115,15 @@ async def list_clickable_elements(
         raise BrowserToolError("Unable to access browser pages", tool="list_clickable_elements") from exc
 
     try:
-        # Collect both sets; anchors first for backward-ish ordering in pagination.
-        anchors = await _collect_anchors(page)
-        clickables = await _collect_clickables(page, limit=None)
+        # Collect buttons, anchors, then heuristic clickables.
+        # Use a single SelectorRegistry for the entire collection so selectors
+        # remain globally unique across collectors.
+        registry = SelectorRegistry(page)
+        buttons = await _collect_buttons(page, registry)
+        anchors = await _collect_anchors(page, registry)
+        clickables = await _collect_clickables(page, registry, limit=None)
         combined: list[Element] = []
+        combined.extend(buttons)
         combined.extend(anchors)
         combined.extend(clickables)
     except Exception as exc:  # pragma: no cover - wrap

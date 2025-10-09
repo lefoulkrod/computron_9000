@@ -7,6 +7,7 @@ from tools.browser.core.snapshot import (
     _collect_iframes,
     _collect_forms,
 )
+from tools.browser.core.selectors import SelectorRegistry
 
 
 class _StubHandle:
@@ -82,15 +83,19 @@ class _StubPage:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_collect_buttons_labels_and_dedupe() -> None:
+async def test_collect_buttons_labels() -> None:
     btn1 = _StubHandle(text="Submit", tag="button")
     btn2 = _StubHandle(text="Submit", tag="button")  # duplicate text triggers nth
     page = _StubPage(buttons=[btn1, btn2])
-    els = await _collect_buttons(page)  # type: ignore[arg-type]
+    registry = SelectorRegistry(page)
+    els = await _collect_buttons(page, registry)  # type: ignore[arg-type]
     assert len(els) == 2
     assert all(e.tag == "button" for e in els)
+    # Do not assert selector deduplication here; uniqueness is enforced by
+    # SelectorRegistry and tested in its own unit tests. Ensure we still
+    # extracted two button entries with correct tags.
     selectors = [e.selector for e in els]
-    assert selectors[0] != selectors[1]  # de-duplicated with nth suffix
+    assert len(selectors) == 2
 
 
 @pytest.mark.unit
@@ -99,7 +104,8 @@ async def test_collect_buttons_skips_hidden() -> None:
     visible = _StubHandle(text="Visible", tag="button", visible=True)
     hidden = _StubHandle(text="Hidden", tag="button", visible=False)
     page = _StubPage(buttons=[visible, hidden])
-    els = await _collect_buttons(page)  # type: ignore[arg-type]
+    registry = SelectorRegistry(page)
+    els = await _collect_buttons(page, registry)  # type: ignore[arg-type]
     assert len(els) == 1
     assert els[0].text.startswith("Visible")
 
@@ -110,7 +116,8 @@ async def test_collect_iframes_title_and_hostname() -> None:
     iframe1 = _StubHandle(title="Main Frame", src="https://example.com", tag="iframe")
     iframe2 = _StubHandle(title=None, src="https://sub.host/path", tag="iframe")
     page = _StubPage(iframes=[iframe1, iframe2])
-    els = await _collect_iframes(page)  # type: ignore[arg-type]
+    registry = SelectorRegistry(page)
+    els = await _collect_iframes(page, registry)  # type: ignore[arg-type]
     assert len(els) == 2
     texts = {e.text for e in els}
     assert "Main Frame" in texts
@@ -126,7 +133,8 @@ async def test_collect_forms_basic_structure() -> None:
 
     form1 = _Form(action="/login")
     page = _StubPage(forms=[form1])
-    els = await _collect_forms(page)  # type: ignore[arg-type]
+    registry = SelectorRegistry(page)
+    els = await _collect_forms(page, registry)  # type: ignore[arg-type]
     assert len(els) == 1
     form_el = els[0]
     assert form_el.tag == "form"
@@ -141,15 +149,7 @@ async def test_collect_anchors_skips_hidden(monkeypatch: pytest.MonkeyPatch) -> 
     hidden = _StubHandle(text="Hidden Link", tag="a", attrs={"href": "https://ex.com/hidden"}, visible=False)
     page = _StubPage(anchors=[visible, hidden])
 
-    async def fake_resolve(handle: _StubHandle, *, tag: str | None, text: str, text_unique: bool) -> str:
-        return f"selector-{handle._attrs.get('href', '')}"
-
-    async def fake_best(handle: _StubHandle, tag: str | None = None) -> str:
-        return f"best-{handle._attrs.get('href', '')}"
-
-    monkeypatch.setattr("tools.browser.core.snapshot._resolve_element_selector", fake_resolve)
-    monkeypatch.setattr("tools.browser.core.snapshot._best_selector", fake_best)
-
-    els = await _collect_anchors(page)  # type: ignore[arg-type]
+    registry = SelectorRegistry(page)
+    els = await _collect_anchors(page, registry)  # type: ignore[arg-type]
     assert len(els) == 1
     assert els[0].href == "https://ex.com"

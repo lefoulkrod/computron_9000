@@ -11,15 +11,22 @@ from tools.browser import list_clickable_elements, Element
 @pytest.mark.asyncio
 async def test_filter_contains_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
     """Filtering should match anchors and heuristic clickables (by text or href)."""
+    buttons = [
+        Element(text="Foo Button", role="button", selector="b1", tag="button"),
+        Element(text="Other Button", role="button", selector="b2", tag="button"),
+    ]
     anchors = [
         Element(text="Foo Link", role=None, selector="s1", tag="a", href="https://ex.com/foo"),
         Element(text="Other", role=None, selector="s2", tag="a", href="https://ex.com/other"),
         Element(text="bar", role=None, selector="s3", tag="a", href="https://ex.com/FOO"),
     ]
     clickables = [
-        Element(text="Foo Button", role="button", selector="c1", tag="div"),
+        Element(text="Foo Div", role="button", selector="c1", tag="div"),
         Element(text="Baz", role=None, selector="c2", tag="span"),
     ]
+
+    async def fake_collect_buttons(page: Any) -> list[Element]:  # noqa: D401 - simple fake
+        return buttons
 
     async def fake_collect_anchors(page: Any) -> list[Element]:  # noqa: D401 - simple fake
         return anchors
@@ -34,9 +41,11 @@ async def test_filter_contains_case_insensitive(monkeypatch: pytest.MonkeyPatch)
 
         return B()
 
+    monkeypatch.setattr(snapshot_mod, "_collect_buttons", fake_collect_buttons)
     monkeypatch.setattr(snapshot_mod, "_collect_anchors", fake_collect_anchors)
     monkeypatch.setattr(snapshot_mod, "_collect_clickables", fake_collect_clickables)
     # page module imported collectors; patch those too
+    monkeypatch.setattr(page_mod, "_collect_buttons", fake_collect_buttons)
     monkeypatch.setattr(page_mod, "_collect_anchors", fake_collect_anchors)
     monkeypatch.setattr(page_mod, "_collect_clickables", fake_collect_clickables)
     monkeypatch.setattr(browser_core, "get_browser", fake_get_browser)
@@ -45,11 +54,15 @@ async def test_filter_contains_case_insensitive(monkeypatch: pytest.MonkeyPatch)
     assert isinstance(res, list)
     selectors = {e.selector for e in res}
     # Should include anchor s1 (text), anchor s3 (href contains FOO), and clickable c1 (text)
-    assert selectors == {"s1", "s3", "c1"}
+    assert selectors == {"b1", "s1", "s3", "c1"}
 
 
 @pytest.mark.asyncio
 async def test_cursor_paging_and_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    buttons = [
+        Element(text="Primary Button", role="button", selector="b1", tag="button"),
+        Element(text="Secondary Button", role="button", selector="b2", tag="button"),
+    ]
     anchors = [
         Element(text=f"Link {i}", role=None, selector=f"s{i}", tag="a", href=f"/p{i}")
         for i in range(1, 6)
@@ -58,6 +71,9 @@ async def test_cursor_paging_and_limit(monkeypatch: pytest.MonkeyPatch) -> None:
         Element(text="Extra 1", role="button", selector="c1", tag="div"),
         Element(text="Extra 2", role=None, selector="c2", tag="span"),
     ]
+
+    async def fake_collect_buttons(page: Any) -> list[Element]:  # noqa: D401
+        return buttons
 
     async def fake_collect_anchors(page: Any) -> list[Element]:  # noqa: D401
         return anchors
@@ -72,25 +88,32 @@ async def test_cursor_paging_and_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 
         return B()
 
+    monkeypatch.setattr(snapshot_mod, "_collect_buttons", fake_collect_buttons)
     monkeypatch.setattr(snapshot_mod, "_collect_anchors", fake_collect_anchors)
     monkeypatch.setattr(snapshot_mod, "_collect_clickables", fake_collect_clickables)
+    monkeypatch.setattr(page_mod, "_collect_buttons", fake_collect_buttons)
     monkeypatch.setattr(page_mod, "_collect_anchors", fake_collect_anchors)
     monkeypatch.setattr(page_mod, "_collect_clickables", fake_collect_clickables)
     monkeypatch.setattr(browser_core, "get_browser", fake_get_browser)
 
-    # Combined ordering: anchors first then clickables per tool implementation
+    # Combined ordering: buttons, anchors, then clickables per tool implementation
     res = await list_clickable_elements(after="s2", limit=4)
+    # Combined list order: b1, b2, s1, s2, s3, s4, s5, c1, c2
     # After s2 -> start at s3, include s3, s4, s5, then c1 (limit=4)
     assert [e.selector for e in res] == ["s3", "s4", "s5", "c1"]
 
     # Unknown cursor -> from beginning
     res2 = await list_clickable_elements(after="unknown", limit=3)
-    assert [e.selector for e in res2] == ["s1", "s2", "s3"]
+    assert [e.selector for e in res2] == ["b1", "b2", "s1"]
 
 
 @pytest.mark.asyncio
 async def test_delegates_to_collectors(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = {"anchors": False, "clickables": False}
+    called = {"buttons": False, "anchors": False, "clickables": False}
+
+    async def fake_collect_buttons(page: Any) -> list[Element]:  # noqa: D401
+        called["buttons"] = True
+        return []
 
     async def fake_collect_anchors(page: Any) -> list[Element]:  # noqa: D401
         called["anchors"] = True
@@ -107,12 +130,14 @@ async def test_delegates_to_collectors(monkeypatch: pytest.MonkeyPatch) -> None:
 
         return B()
 
+    monkeypatch.setattr(snapshot_mod, "_collect_buttons", fake_collect_buttons)
     monkeypatch.setattr(snapshot_mod, "_collect_anchors", fake_collect_anchors)
     monkeypatch.setattr(snapshot_mod, "_collect_clickables", fake_collect_clickables)
+    monkeypatch.setattr(page_mod, "_collect_buttons", fake_collect_buttons)
     monkeypatch.setattr(page_mod, "_collect_anchors", fake_collect_anchors)
     monkeypatch.setattr(page_mod, "_collect_clickables", fake_collect_clickables)
     monkeypatch.setattr(browser_core, "get_browser", fake_get_browser)
 
     res = await list_clickable_elements()
-    assert called["anchors"] is True and called["clickables"] is True
+    assert called["buttons"] is True and called["anchors"] is True and called["clickables"] is True
     assert res == []

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.snapshot import _element_css_selector  # internal helper for selector paths
+from tools.browser.core.selectors import SelectorRegistry, build_unique_selector
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,14 @@ async def extract_text(selector: str, limit: int = 1000) -> list[TextExtractionR
         if hasattr(locator, "element_handle"):
             element_handle = await locator.element_handle()
             if element_handle is not None:
-                css_selector = await _element_css_selector(element_handle)
+                try:
+                    tmp_registry = SelectorRegistry(page)
+                    sel_res = await build_unique_selector(element_handle, tag=None, text=None, registry=tmp_registry)
+                    css_selector = sel_res.selector or ""
+                except (PlaywrightError, RuntimeError):
+                    # If selector registry resolution raises Playwright/runtime errors,
+                    # leave css_selector empty and fall back to the resolved selector.
+                    css_selector = ""
     except PlaywrightError:  # pragma: no cover - defensive
         css_selector = ""
 
