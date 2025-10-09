@@ -1,12 +1,33 @@
 # COMPUTRON_9000
 
-COMPUTRON_9000 is a modern, extensible AI assistant platform with a responsive chat UI, Python backend, and easy local setup.
+COMPUTRON_9000 is an AI assistant that runs on your own hardware. It currently uses Ollama as its inference provider. I run it on 84GB VRAM across 4 GPUs.
 
 ![COMPUTRON_9000 Logo](image.png)
 
 ## Features
 - Modern, responsive chat UI
 - Multiple agents to attend to your needs
+- Using its various agents COMPUTRON can: 
+ - Using its various agents COMPUTRON can:
+       1. Write and execute Python code
+       2. Search the web (Google, Reddit)
+       3. Perform research and summarize findings
+       4. Execute bash commands inside a container
+       5. Interact with a browser (automation & scraping)
+
+### Agents
+
+The codebase includes several agent packages that provide specialized behaviors:
+
+- `agents/computron` — core orchestration agent that you interact with, can execute sub-agents
+- `agents/browser` — browser automation and web interaction agent
+- `agents/coder` — code-writing / code-assistant agent (must execute through REPL)
+- `agents/deep_researchV2` — long-form research and topic exploration agent
+- `agents/ollama` — Ollama-specific integrations and message handling
+- `agents/tool_test` — utilities and tests for agent tool integrations
+- `agents/web` — web-focused agents and helpers
+
+
 
 ## Virtual Computer
 
