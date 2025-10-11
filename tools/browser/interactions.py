@@ -204,7 +204,6 @@ async def click(selector: str) -> PageSnapshot:
     try:
         # Use the fast probe approach: start a framenavigated watcher (which
         # real Playwright pages implement) filtered to the main frame. Tests
-        # must provide fakes that implement the same minimal API.
         # Start watchers before clicking so they can observe navigation that
         # begins immediately after the click.
         detect_framenavigated_task = asyncio.create_task(
@@ -217,8 +216,7 @@ async def click(selector: str) -> PageSnapshot:
         # Start a background task that waits for the navigation response using
         # Playwright's expect_navigation context manager. This returns a
         # Response-like object (or raises a TimeoutError) and keeps typing
-        # consistent for static checks. Tests should provide a compatible
-        # FakeNavContext via page.expect_navigation.
+        # consistent for static checks.
         async def _await_nav_response() -> Response | None:
             async with page.expect_navigation(
                 wait_until="domcontentloaded",
