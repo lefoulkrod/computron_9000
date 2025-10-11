@@ -367,6 +367,9 @@ class StubLocator:
     async def wait_for(self, timeout: int | None = None) -> None:
         return None
 
+    async def scroll_into_view_if_needed(self) -> None:
+        return None
+
 
 class StubPage:
     """Shared Playwright-style page stub used by browser interaction tests."""

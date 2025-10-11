@@ -235,6 +235,11 @@ async def human_click(page: Page, locator: Locator) -> None:
         BrowserToolError: If the locator cannot be resolved or the page lacks a mouse.
     """
     cfg = _get_human_config()
+    if hasattr(locator, "scroll_into_view_if_needed"):
+        try:
+            await locator.scroll_into_view_if_needed()
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("scroll_into_view_if_needed failed prior to click: %s", exc)
     handle = await locator.element_handle()
     if handle is None:
         raise BrowserToolError("Unable to resolve element handle", tool="click")
