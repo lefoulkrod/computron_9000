@@ -4,26 +4,7 @@ import pytest
 
 from tools.browser import BrowserToolError, PageSnapshot
 from tools.browser.interactions import scroll_page
-
-
-class FakePage:
-    def __init__(self) -> None:
-        self.url = "https://example.test/start"
-        self._title = "Start"
-
-    async def title(self) -> str:
-        return self._title
-
-    async def inner_text(self, selector: str) -> str:
-        assert selector == "body"
-        return "body text"
-
-    async def query_selector_all(self, selector: str) -> list[object]:
-        return []
-
-    async def evaluate(self, js: str) -> object:
-        # Return a reasonable fixed scroll state for tests
-        return {"scroll_top": 0, "viewport_height": 600, "document_height": 2000}
+from tests.tools.browser.support.playwright_stubs import StubPage
 
 
 @pytest.mark.unit
@@ -33,7 +14,12 @@ async def test_scroll_page_delegates(
     patch_interactions_browser,
     settle_tracker,
 ) -> None:
-    page = FakePage()
+    page = StubPage(
+        title="Start",
+        body_text="body text",
+        url="https://example.test/start",
+    )
+    page.set_scroll_state(scroll_top=0, viewport_height=600, document_height=2000)
     patch_interactions_browser(page)
 
     async def fake_human_scroll(page_arg: object, direction: str = "down", amount: int | None = None) -> None:

@@ -25,13 +25,13 @@ async def test_filter_contains_case_insensitive(monkeypatch: pytest.MonkeyPatch)
         Element(text="Baz", role=None, selector="c2", tag="span"),
     ]
 
-    async def fake_collect_buttons(page: Any) -> list[Element]:  # noqa: D401 - simple fake
+    async def fake_collect_buttons(page: Any, registry: Any | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401 - simple fake
         return buttons
 
-    async def fake_collect_anchors(page: Any) -> list[Element]:  # noqa: D401 - simple fake
+    async def fake_collect_anchors(page: Any, registry: Any | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401 - simple fake
         return anchors
 
-    async def fake_collect_clickables(page: Any, limit: int | None = None) -> list[Element]:  # noqa: D401 - simple fake
+    async def fake_collect_clickables(page: Any, registry: Any | None = None, limit: int | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401 - simple fake
         return clickables
 
     async def fake_get_browser() -> Any:  # noqa: D401 - simple fake
@@ -72,13 +72,13 @@ async def test_cursor_paging_and_limit(monkeypatch: pytest.MonkeyPatch) -> None:
         Element(text="Extra 2", role=None, selector="c2", tag="span"),
     ]
 
-    async def fake_collect_buttons(page: Any) -> list[Element]:  # noqa: D401
+    async def fake_collect_buttons(page: Any, registry: Any | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401
         return buttons
 
-    async def fake_collect_anchors(page: Any) -> list[Element]:  # noqa: D401
+    async def fake_collect_anchors(page: Any, registry: Any | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401
         return anchors
 
-    async def fake_collect_clickables(page: Any, limit: int | None = None) -> list[Element]:  # noqa: D401
+    async def fake_collect_clickables(page: Any, registry: Any | None = None, limit: int | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401
         return clickables
 
     async def fake_get_browser() -> Any:  # noqa: D401
@@ -111,15 +111,15 @@ async def test_cursor_paging_and_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_delegates_to_collectors(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"buttons": False, "anchors": False, "clickables": False}
 
-    async def fake_collect_buttons(page: Any) -> list[Element]:  # noqa: D401
+    async def fake_collect_buttons(page: Any, registry: Any | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401
         called["buttons"] = True
         return []
 
-    async def fake_collect_anchors(page: Any) -> list[Element]:  # noqa: D401
+    async def fake_collect_anchors(page: Any, registry: Any | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401
         called["anchors"] = True
         return []
 
-    async def fake_collect_clickables(page: Any, limit: int | None = None) -> list[Element]:  # noqa: D401
+    async def fake_collect_clickables(page: Any, registry: Any | None = None, limit: int | None = None, **kwargs: Any) -> list[Element]:  # noqa: D401
         called["clickables"] = True
         return []
 
