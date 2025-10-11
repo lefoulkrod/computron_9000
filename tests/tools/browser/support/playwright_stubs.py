@@ -404,6 +404,8 @@ class StubPage:
             "document_height": 1200,
         }
         self._evaluate_overrides: dict[str, Any] = {}
+        self._history: list[dict[str, Any]] = [{"url": url, "title": title, "body": body_text}]
+        self._history_index: int = 0
         for idx, anchor in enumerate(self._anchors, start=1):
             if hasattr(anchor, "_set_dom_position"):
                 parent = getattr(anchor, "_dom_parent_selector", "body")
@@ -446,7 +448,7 @@ class StubPage:
 
     async def goto(self, url: str, wait_until: str = "domcontentloaded") -> StubResponse:
         final_url = self._final_url or url
-        self.url = final_url
+        self._apply_navigation(url=final_url)
         return StubResponse(final_url, self._status)
 
     async def evaluate(self, script: str) -> Any:
@@ -636,13 +638,44 @@ class StubPage:
         url: str,
         title: str | None = None,
         body: str | None = None,
+        record_history: bool = True,
     ) -> None:
         self.url = url
         if title is not None:
             self._title = title
         if body is not None:
             self._body_text = body
+        if record_history:
+            self._history = self._history[: self._history_index + 1]
+            self._history.append({"url": self.url, "title": self._title, "body": self._body_text})
+            self._history_index = len(self._history) - 1
+        else:
+            if 0 <= self._history_index < len(self._history):
+                self._history[self._history_index] = {
+                    "url": self.url,
+                    "title": self._title,
+                    "body": self._body_text,
+                }
         self._nav_event.set()
+
+    async def go_back(self, wait_until: str | None = None) -> None:
+        if self._history_index == 0:
+            return
+        self._history_index -= 1
+        entry = self._history[self._history_index]
+        self._apply_navigation(
+            url=entry.get("url", self.url),
+            title=entry.get("title"),
+            body=entry.get("body"),
+            record_history=False,
+        )
+
+    async def go_back(self, wait_until: str | None = None) -> None:
+        if not self._history:
+            return
+        self._history_index = max(0, self._history_index - 1)
+        entry = self._history[self._history_index]
+        self._apply_navigation(url=entry["url"], title=entry.get("title"), body=entry.get("body"))
 
     def expect_navigation(self, *args: Any, **kwargs: Any) -> _NavigationContext:
         return _NavigationContext(self)

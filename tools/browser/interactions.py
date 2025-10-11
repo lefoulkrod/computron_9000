@@ -497,3 +497,52 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> Int
 
 
 __all__.append("scroll_page")
+
+
+async def go_back() -> InteractionResult:
+    """Navigate back in history and return change metadata with an updated snapshot.
+
+    Returns:
+        InteractionResult: Change metadata plus a snapshot when navigation succeeds.
+
+    Raises:
+        BrowserToolError: If the browser page cannot be accessed or back navigation fails.
+    """
+
+    try:
+        browser = await get_browser()
+        page = await browser.current_page()
+    except (PlaywrightError, RuntimeError) as exc:  # pragma: no cover - defensive wiring
+        logger.exception("Unable to access browser page for go_back")
+        msg = "Unable to access browser page"
+        raise BrowserToolError(msg, tool="go_back") from exc
+
+    if page.url in {"", "about:blank"}:
+        msg = "No navigated page available for back navigation."
+        raise BrowserToolError(msg, tool="go_back")
+
+    async def _perform_back() -> None:
+        await page.go_back(wait_until="domcontentloaded")
+
+    try:
+        browser_result = await browser.perform_interaction(page, _perform_back)
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:
+        logger.exception("Playwright error during go_back")
+        msg = "Failed to navigate back"
+        raise BrowserToolError(msg, tool="go_back") from exc
+
+    if not browser_result.page_changed:
+        msg = "No previous page available to navigate back to."
+        raise BrowserToolError(msg, tool="go_back")
+
+    snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+    return InteractionResult(
+        snapshot=snapshot,
+        page_changed=browser_result.page_changed,
+        reason=browser_result.reason,
+    )
+
+
+__all__.append("go_back")
