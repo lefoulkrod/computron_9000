@@ -84,9 +84,7 @@ def _placeholder_for_type(tp: object) -> JSONValue:
             return [model_placeholder_shape(inner)]
         # Lists of scalars -> pattern [placeholder, "..."]
         scalar = (
-            _PRIMITIVE_PLACEHOLDERS[inner]
-            if isinstance(inner, type) and inner in _PRIMITIVE_PLACEHOLDERS
-            else "string"
+            _PRIMITIVE_PLACEHOLDERS[inner] if isinstance(inner, type) and inner in _PRIMITIVE_PLACEHOLDERS else "string"
         )
         return [scalar, "..."]
 
@@ -100,9 +98,7 @@ def _placeholder_for_type(tp: object) -> JSONValue:
     return "string"
 
 
-def _extract_field_docs_from_docstring(
-    model_cls: type[BaseModel], *, allowed_fields: set[str]
-) -> dict[str, str]:
+def _extract_field_docs_from_docstring(model_cls: type[BaseModel], *, allowed_fields: set[str]) -> dict[str, str]:
     """Parse Google-style field docs from a model class docstring.
 
     Supports "Attributes:" (preferred per Google style for class fields) and

@@ -89,10 +89,7 @@ def normalize_submission_id(identifier: str) -> str:
                 # Extra defensive length validation (regex already constrains but keep explicit)
                 if MIN_ID_LEN <= len(extracted) <= MAX_ID_LEN:
                     return extracted
-                msg = (
-                    "Extracted submission id has invalid length: "
-                    f"{extracted!r} (len={len(extracted)})"
-                )
+                msg = f"Extracted submission id has invalid length: {extracted!r} (len={len(extracted)})"
                 raise RedditInputError(msg)
     msg = f"Could not extract submission id from input: {identifier!r}"
     raise RedditInputError(msg)

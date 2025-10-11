@@ -10,9 +10,7 @@ from .models import ApplyPatchResult
 logger = logging.getLogger(__name__)
 
 
-def apply_text_patch(
-    path: str, start_line: int, end_line: int, replacement: str
-) -> ApplyPatchResult:
+def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
     """Apply a single line-based text patch to a file.
 
     Replaces a range of lines with new content. Newlines are not added
@@ -127,9 +125,7 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
                     try:
                         patched = _apply_hunks(original, hunks)
                     except ValueError as exc:  # pragma: no cover - error path
-                        results.append(
-                            ApplyPatchResult(success=False, file_path=rel, error=str(exc))
-                        )
+                        results.append(ApplyPatchResult(success=False, file_path=rel, error=str(exc)))
                     else:
                         diff_text = "".join(
                             difflib.unified_diff(
@@ -175,9 +171,7 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
                 old_start, old_count = parse_range(old_spec[1:])
                 new_start, new_count = parse_range(new_spec[1:])
             except (IndexError, ValueError) as exc:
-                results.append(
-                    ApplyPatchResult(success=False, file_path=current_new or "?", error=str(exc))
-                )
+                results.append(ApplyPatchResult(success=False, file_path=current_new or "?", error=str(exc)))
                 idx += 1
                 continue
             idx += 1
@@ -198,9 +192,7 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
     return results
 
 
-def _apply_hunks(
-    original: list[str], hunks: list[tuple[int, int, int, int, list[str]]]
-) -> list[str]:
+def _apply_hunks(original: list[str], hunks: list[tuple[int, int, int, int, list[str]]]) -> list[str]:
     """Apply parsed hunks to an original list of lines.
 
     Args:

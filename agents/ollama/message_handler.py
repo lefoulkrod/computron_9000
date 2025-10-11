@@ -62,9 +62,7 @@ async def _handle_image_message(
         AssistantResponse: Events from the LLM.
 
     """
-    _message_history.extend(
-        [{"role": "user", "content": "user added a file:<image/base64>"} for d in data]
-    )
+    _message_history.extend([{"role": "user", "content": "user added a file:<image/base64>"} for d in data])
     _message_history.append({"role": "user", "content": message})
     log_after_model_call = make_log_after_model_call()
     log_before_model_call = make_log_before_model_call()
@@ -135,9 +133,7 @@ async def handle_user_message(
         async def _producer() -> None:
             dispatcher: EventDispatcher | None = None
             try:
-                async with event_context(
-                    handler=_queue_handler, context_id="root"
-                ) as ctx_dispatcher:
+                async with event_context(handler=_queue_handler, context_id="root") as ctx_dispatcher:
                     dispatcher = ctx_dispatcher
                     _message_history.append({"role": "user", "content": message})
                     agent = computron

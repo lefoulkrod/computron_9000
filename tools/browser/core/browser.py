@@ -9,19 +9,21 @@ from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 from playwright.async_api import (
     BrowserContext,
     Page,
     Playwright,
+    Response,
     async_playwright,
 )
-from playwright.async_api import (
-    Error as PlaywrightError,
-)
+from playwright.async_api import Error as PlaywrightError
+from pydantic import BaseModel, ConfigDict
 
+import tools.browser.core.waits as browser_waits
 from config import load_config
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
@@ -86,6 +88,59 @@ window.navigator.permissions.query = (parameters) =>
     ? Promise.resolve({ state: Notification.permission })
     : originalQuery(parameters);
 """
+
+PAGE_CHANGE_DETECTION_SCRIPT = r"""
+window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
+
+(function () {
+  window.addEventListener("beforeunload", () => {
+    window.__page_change__.nav = true;
+    window.__page_change__.hard = true;
+  });
+
+  const push = history.pushState;
+  history.pushState = function () {
+    window.__page_change__.nav = true;
+    window.__page_change__.spa = true;
+    return push.apply(this, arguments);
+  };
+
+  const replace = history.replaceState;
+  history.replaceState = function () {
+    window.__page_change__.nav = true;
+    window.__page_change__.spa = true;
+    return replace.apply(this, arguments);
+  };
+
+  window.addEventListener("popstate", () => {
+    window.__page_change__.nav = true;
+    window.__page_change__.spa = true;
+  });
+
+  new MutationObserver(() => {
+    window.__page_change__.dom = true;
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
+  window.__resetPageChange = () => {
+    window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
+  };
+  window.__getPageChange = () => window.__page_change__;
+})();
+"""
+
+
+Reason = Literal["hard-navigation", "spa-navigation", "dom-change", "none"]
+
+
+class BrowserInteractionResult(BaseModel):
+    """Structured metadata describing the outcome of a browser interaction."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    navigation: bool
+    page_changed: bool
+    reason: Reason
+    navigation_response: Response | None = None
 
 
 class Browser:
@@ -200,6 +255,7 @@ class Browser:
 
         # Anti-bot JS shims
         await context.add_init_script(ANTI_BOT_INIT_SCRIPT)
+        await context.add_init_script(PAGE_CHANGE_DETECTION_SCRIPT)
 
         return cls(context=context, extra_headers=headers, pw=pw)
 
@@ -269,6 +325,17 @@ class Browser:
             return
         self._closed = True
         context_exc: Exception | None = None
+        pages_to_close = list(self._context.pages)
+        for page in pages_to_close:
+            if page.is_closed():
+                continue
+            try:
+                logger.debug("Closing page %s before shutdown", getattr(page, "url", "<unknown>"))
+                await page.close()
+            except PlaywrightError as exc:  # pragma: no cover - defensive
+                logger.debug("Suppressed exception while closing page: %s: %s", type(exc).__name__, exc)
+            except Exception as exc:  # noqa: BLE001  pragma: no cover - highly defensive
+                logger.debug("Unexpected exception while closing page: %s: %s", type(exc).__name__, exc)
         try:
             logger.debug("Closing Playwright BrowserContext ...")
             await self._context.close()
@@ -312,6 +379,75 @@ class Browser:
         # If there was an exception closing the context we intentionally swallow it.
         if context_exc:
             logger.debug("Browser.close completed with suppressed context exception")
+
+    async def perform_interaction(
+        self,
+        page: Page,
+        action: Callable[[], Awaitable[Any]],
+    ) -> BrowserInteractionResult:
+        """Perform an interaction while tracking navigation and DOM changes."""
+        wait_cfg = load_config().tools.browser.waits
+        initial_url = getattr(page, "url", "")
+
+        try:
+            await page.evaluate("window.__resetPageChange && window.__resetPageChange()")
+        except PlaywrightError as exc:
+            logger.debug("Failed to reset page change markers on %s: %s", initial_url or "<unknown>", exc)
+        except Exception as exc:  # noqa: BLE001 - best-effort guard
+            logger.debug("Unexpected error resetting page change markers on %s: %s", initial_url or "<unknown>", exc)
+
+        await action()
+
+        change_state: dict[str, object] = {}
+        try:
+            result = await page.evaluate("window.__getPageChange && window.__getPageChange()")
+        except PlaywrightError as exc:
+            logger.debug("Failed to read page change markers on %s: %s", initial_url or "<unknown>", exc)
+        except Exception as exc:  # noqa: BLE001 - best-effort guard
+            logger.debug("Unexpected error reading page change markers on %s: %s", initial_url or "<unknown>", exc)
+        else:
+            if isinstance(result, dict):
+                change_state = result
+
+        hard_nav = bool(change_state.get("hard"))
+        spa_nav = bool(change_state.get("spa"))
+        dom_change = bool(change_state.get("dom"))
+
+        current_url = getattr(page, "url", initial_url)
+        if not (hard_nav or spa_nav) and initial_url and current_url and current_url != initial_url:
+            hard_nav = True
+
+        navigation_detected = hard_nav or spa_nav
+        if navigation_detected:
+            reason_value: Reason = "hard-navigation" if hard_nav else "spa-navigation"
+        elif dom_change:
+            reason_value = "dom-change"
+        else:
+            reason_value = "none"
+
+        page_changed = navigation_detected or dom_change
+
+        try:
+            await browser_waits.wait_for_page_settle(page, expect_navigation=navigation_detected, waits=wait_cfg)
+        except Exception as exc:  # noqa: BLE001 - wait helper already logs Playwright errors
+            logger.debug("Page settle helper raised unexpectedly: %s", exc)
+
+        metadata = BrowserInteractionResult(
+            navigation=navigation_detected,
+            page_changed=page_changed,
+            reason=reason_value,
+            navigation_response=None,
+        )
+
+        logger.debug(
+            "Browser.perform_interaction completed for %s | navigation=%s reason=%s dom_change=%s",
+            current_url or "<unknown>",
+            navigation_detected,
+            reason_value,
+            dom_change,
+        )
+
+        return metadata
 
 
 _browser: Browser | None = None

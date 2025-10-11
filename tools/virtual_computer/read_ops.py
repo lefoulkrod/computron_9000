@@ -62,9 +62,7 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
         # Fast path: no range requested
         if start is None and end is None:
             content = abs_path.read_text(encoding="utf-8", errors="replace")
-            total_lines = content.count("\n") + (
-                0 if (content == "" or content.endswith("\n")) else 1
-            )
+            total_lines = content.count("\n") + (0 if (content == "" or content.endswith("\n")) else 1)
             return ReadTextResult(
                 success=True,
                 file_path=rel,
