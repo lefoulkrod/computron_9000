@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tools.browser import BrowserToolError, PageSnapshot
-from tools.browser.interactions import click
+from tools.browser.interactions import InteractionResult, click
 from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
@@ -34,7 +34,11 @@ async def test_click_by_text(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    snap: PageSnapshot = await click("Continue")
+    result = await click("Continue")
+    assert isinstance(result, InteractionResult)
+    assert result.page_changed is True
+    assert result.reason == "browser-navigation"
+    snap: PageSnapshot = result.snapshot
     assert snap.url == "https://example.test/after"
     assert snap.title == "After Click"
     assert "Arrived" in snap.snippet
@@ -65,7 +69,10 @@ async def test_click_by_css_selector(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    snap = await click(".cta")
+    result = await click(".cta")
+    assert result.page_changed is True
+    assert result.reason == "browser-navigation"
+    snap = result.snapshot
     assert snap.url.endswith("/cta")
     assert snap.title == "After Click"
     assert settle_tracker["count"] == 1

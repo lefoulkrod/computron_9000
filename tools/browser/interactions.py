@@ -1,19 +1,20 @@
 """Browser interaction tools.
 
 This module exposes helpers for interacting with the active browser page. The
-``click`` function clicks an element specified by visible text or a selector
-handle and returns a fresh ``PageSnapshot`` of the active page. The ``fill_field``
-function enters text into an input or textarea located by the shared selector
-resolution helper and also returns an updated ``PageSnapshot``.
+``click`` function clicks an element specified by visible text or a selector and
+returns an ``InteractionResult`` whose ``snapshot`` reflects the updated page. The
+``fill_field`` function enters text into an input or textarea located by the shared
+selector resolution helper and also returns an ``InteractionResult``.
 """
 
 from __future__ import annotations
 
 import logging
 import math
-from typing import Any
+from typing import Any, Literal
 
 from playwright.async_api import Error as PlaywrightError
+from pydantic import BaseModel, Field
 
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
@@ -27,11 +28,22 @@ from tools.browser.core.human import (
 )
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 
+Reason = Literal["browser-navigation", "history-navigation", "dom-mutation", "no-change"]
+
+
+class InteractionResult(BaseModel):
+    """Public result returned by interaction tools."""
+
+    snapshot: PageSnapshot | None
+    page_changed: bool
+    reason: Reason
+    extras: dict[str, Any] = Field(default_factory=dict)
+
 logger = logging.getLogger(__name__)
 
 
-async def click(selector: str) -> PageSnapshot:
-    """Click any visible element by its text or a selector.
+async def click(selector: str) -> InteractionResult:
+    """Click an element and return change metadata with a snapshot when navigation occurs.
 
     Click can only be performed on elements that are visible on the page.
 
@@ -43,7 +55,7 @@ async def click(selector: str) -> PageSnapshot:
             available.
 
     Returns:
-        PageSnapshot: Structured snapshot of the page after performing the click.
+        InteractionResult: Change metadata plus a snapshot when the page changed.
 
     Raises:
         BrowserToolError: If the target is empty, no element is found, the page is
@@ -97,9 +109,15 @@ async def click(selector: str) -> PageSnapshot:
         async def _perform_click() -> None:
             await human_click(page, locator)
 
-        result = await browser.perform_interaction(page, _perform_click)
-        response = result.navigation_response
-        return await _build_page_snapshot(page, response)
+        browser_result = await browser.perform_interaction(page, _perform_click)
+        snapshot = None
+        if browser_result.page_changed:
+            snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+        return InteractionResult(
+            snapshot=snapshot,
+            page_changed=browser_result.page_changed,
+            reason=browser_result.reason,
+        )
     except BrowserToolError:
         raise  # already wrapped
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -113,8 +131,8 @@ async def drag(
     *,
     target: str | None = None,
     offset: tuple[float | int, float | int] | None = None,
-) -> PageSnapshot:
-    """Drag from a source element to a target element or coordinate offset.
+) -> InteractionResult:
+    """Drag from a source element to a target or offset and return change metadata.
 
     Args:
         source: Visible text on the element or a selector handle returned by page
@@ -127,7 +145,7 @@ async def drag(
             source element's center. Provide either ``target`` or ``offset`` (not both).
 
     Returns:
-        PageSnapshot: Snapshot of the page after the drag completes.
+        InteractionResult: Change metadata plus a snapshot when the page changed.
 
     Raises:
         BrowserToolError: If the page is blank, locators cannot be resolved, inputs are
@@ -236,7 +254,7 @@ async def drag(
         )
 
     try:
-        result = await browser.perform_interaction(page, _perform_drag)
+        browser_result = await browser.perform_interaction(page, _perform_drag)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -244,11 +262,18 @@ async def drag(
         msg = "Playwright error performing drag"
         raise BrowserToolError(msg, tool="drag", details=details) from exc
 
-    return await _build_page_snapshot(page, result.navigation_response)
+    snapshot = None
+    if browser_result.page_changed:
+        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+    return InteractionResult(
+        snapshot=snapshot,
+        page_changed=browser_result.page_changed,
+        reason=browser_result.reason,
+    )
 
 
-async def fill_field(selector: str, value: str | int | float | bool | None) -> PageSnapshot:
-    """Type into a text-like input located by visible text or selector handle.
+async def fill_field(selector: str, value: str | int | float | bool | None) -> InteractionResult:
+    """Type into a text-like input and return change metadata with optional snapshot.
 
     Args:
         selector: Visible text on the element or a selector handle returned by page
@@ -258,7 +283,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
         value: Textual value (converted to string) to type into the control.
 
     Returns:
-        PageSnapshot: Snapshot of the page after the fill operation completes.
+        InteractionResult: Change metadata plus a snapshot when the page changed.
 
     Raises:
         BrowserToolError: If the element cannot be located, is unsupported, or
@@ -337,7 +362,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
         await human_type(page, locator, text_value, clear_existing=True)
 
     try:
-        result = await browser.perform_interaction(page, _perform_fill)
+        browser_result = await browser.perform_interaction(page, _perform_fill)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -345,14 +370,21 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
         msg = f"Playwright error filling element: {exc}"
         raise BrowserToolError(msg, tool="fill_field", details=details) from exc
 
-    return await _build_page_snapshot(page, result.navigation_response)
+    snapshot = None
+    if browser_result.page_changed:
+        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+    return InteractionResult(
+        snapshot=snapshot,
+        page_changed=browser_result.page_changed,
+        reason=browser_result.reason,
+    )
 
 
-__all__ = ["click", "drag", "fill_field"]
+__all__ = ["InteractionResult", "click", "drag", "fill_field"]
 
 
-async def press_keys(keys: list[str]) -> PageSnapshot:
-    """Press one or more keyboard keys in order and return an updated page snapshot.
+async def press_keys(keys: list[str]) -> InteractionResult:
+    """Press keyboard keys and return change metadata with optional snapshot.
 
     Args:
         keys: Ordered list of key names (for example: "Enter", "Escape", "ArrowDown",
@@ -360,7 +392,7 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
             currently focused element on the active page.
 
     Returns:
-        PageSnapshot: Snapshot of the page state after the keys are pressed.
+        InteractionResult: Change metadata plus a snapshot when the page changed.
 
     Raises:
         BrowserToolError: If keys are invalid, the page is not navigated, or key presses fail.
@@ -384,7 +416,7 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
         await human_press_keys(page, keys)
 
     try:
-        result = await browser.perform_interaction(page, _perform_press)
+        browser_result = await browser.perform_interaction(page, _perform_press)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -392,14 +424,21 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
         msg = f"Playwright error pressing keys: {exc}"
         raise BrowserToolError(msg, tool="press_keys") from exc
 
-    return await _build_page_snapshot(page, result.navigation_response)
+    snapshot = None
+    if browser_result.page_changed:
+        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+    return InteractionResult(
+        snapshot=snapshot,
+        page_changed=browser_result.page_changed,
+        reason=browser_result.reason,
+    )
 
 
 __all__.append("press_keys")
 
 
-async def scroll_page(direction: str = "down", amount: int | None = None) -> dict[str, object]:
-    """Scroll the page in the given direction and return a snapshot plus telemetry.
+async def scroll_page(direction: str = "down", amount: int | None = None) -> InteractionResult:
+    """Scroll the page and return change metadata, scroll telemetry, and snapshot when changed.
 
     Args:
         direction: One of {"down", "up", "page_down", "page_up", "top", "bottom"}.
@@ -407,9 +446,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> dic
             is "down" or "up". If omitted, a viewport-sized scroll is performed.
 
     Returns:
-        dict[str, object]: A mapping with keys:
-            - "snapshot": PageSnapshot model of the page after scrolling
-            - "scroll": dict with telemetry (scroll_top, viewport_height, document_height)
+        InteractionResult: Change metadata, scroll telemetry, and a snapshot when the page changed.
 
     Raises:
         BrowserToolError: If direction is invalid or the page is not navigated.
@@ -431,7 +468,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> dic
         await human_scroll(page, direction=direction, amount=amount)
 
     try:
-        result = await browser.perform_interaction(page, _perform_scroll)
+        browser_result = await browser.perform_interaction(page, _perform_scroll)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -448,8 +485,15 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> dic
         "})"
     )
 
-    snapshot = await _build_page_snapshot(page, result.navigation_response)
-    return {"snapshot": snapshot, "scroll": scroll_state}
+    snapshot = None
+    if browser_result.page_changed:
+        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+    return InteractionResult(
+        snapshot=snapshot,
+        page_changed=browser_result.page_changed,
+        reason=browser_result.reason,
+        extras={"scroll": scroll_state},
+    )
 
 
 __all__.append("scroll_page")

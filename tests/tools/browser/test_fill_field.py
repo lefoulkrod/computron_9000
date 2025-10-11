@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tools.browser import BrowserToolError
-from tools.browser.interactions import fill_field
+from tools.browser.interactions import InteractionResult, fill_field
 from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
@@ -37,9 +37,12 @@ async def test_fill_field_by_css(
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
-    snapshot = await fill_field(".search-box", "chips")
-    assert "Filled value: chips" in snapshot.snippet
-    assert snapshot.url.endswith("/form")
+    result = await fill_field(".search-box", "chips")
+    assert isinstance(result, InteractionResult)
+    assert result.page_changed is False
+    assert result.reason == "no-change"
+    assert result.snapshot is None
+    assert getattr(page, "_body_text", "").startswith("Filled value: chips")
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
 
@@ -62,8 +65,11 @@ async def test_fill_field_by_visible_text(
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
-    snapshot = await fill_field("Email", "user@example.com")
-    assert "user@example.com" in snapshot.snippet
+    result = await fill_field("Email", "user@example.com")
+    assert result.page_changed is False
+    assert result.reason == "no-change"
+    assert result.snapshot is None
+    assert "user@example.com" in getattr(page, "_body_text", "")
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
 

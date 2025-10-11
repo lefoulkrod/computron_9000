@@ -8,6 +8,7 @@ class DummyContext:
     def __init__(self, fail_once: bool = False) -> None:
         self._closed_calls: int = 0
         self._fail_once = fail_once
+        self.pages: list[object] = []
 
     async def close(self) -> None:  # type: ignore[override]
         self._closed_calls += 1
