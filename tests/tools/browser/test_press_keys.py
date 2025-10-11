@@ -4,8 +4,8 @@ import pytest
 
 from typing import Any, cast
 
-from tools.browser import BrowserToolError, PageSnapshot
-from tools.browser.interactions import press_keys
+from tools.browser import BrowserToolError
+from tools.browser.interactions import InteractionResult, press_keys
 from tests.tools.browser.support.playwright_stubs import StubPage
 
 
@@ -47,8 +47,11 @@ async def test_press_keys_success(
 
     monkeypatch.setattr("tools.browser.interactions.human_press_keys", fake_human_press_keys)
 
-    snap: PageSnapshot = await press_keys(["Enter"])  # should return a snapshot
-    assert isinstance(snap, PageSnapshot)
+    result = await press_keys(["Enter"])  # should return an interaction result
+    assert isinstance(result, InteractionResult)
+    assert result.page_changed is False
+    assert result.reason == "no-change"
+    assert result.snapshot is None
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
 

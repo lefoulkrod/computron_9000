@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from tools.browser import BrowserToolError, PageSnapshot
-from tools.browser.interactions import scroll_page
+from tools.browser import BrowserToolError
+from tools.browser.interactions import InteractionResult, scroll_page
 from tests.tools.browser.support.playwright_stubs import StubPage
 
 
@@ -30,11 +30,13 @@ async def test_scroll_page_delegates(
     monkeypatch.setattr("tools.browser.interactions.human_scroll", fake_human_scroll)
 
     result = await scroll_page("down")
-    # Expect a dict with 'snapshot' (PageSnapshot) and 'scroll' telemetry
-    assert isinstance(result, dict)
-    assert "snapshot" in result and "scroll" in result
-    snap: PageSnapshot = result["snapshot"]
-    assert isinstance(snap, PageSnapshot)
+    assert isinstance(result, InteractionResult)
+    assert result.page_changed is False
+    assert result.reason == "no-change"
+    assert result.snapshot is None
+    scroll = result.extras.get("scroll")
+    assert isinstance(scroll, dict)
+    assert scroll["scroll_top"] == 0
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
 

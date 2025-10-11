@@ -32,7 +32,7 @@ class _SimpleBrowser:
         final_url = getattr(page, "url", "")
         navigation = bool(initial_url and final_url and final_url != initial_url)
         page_changed = navigation
-        reason = "hard-navigation" if navigation else "none"
+        reason = "browser-navigation" if navigation else "no-change"
 
         from tools.browser.core.waits import wait_for_page_settle as settle_helper
         waits = load_config().tools.browser.waits

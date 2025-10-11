@@ -695,7 +695,7 @@ class StubBrowser:
         await action()
         final_url = getattr(page, "url", "")
         navigation = bool(initial_url and final_url and initial_url != final_url)
-        reason = "hard-navigation" if navigation else "none"
+        reason = "browser-navigation" if navigation else "no-change"
 
         from config import load_config
         from tools.browser.core.browser import BrowserInteractionResult

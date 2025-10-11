@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from tools.browser import BrowserToolError, PageSnapshot
-from tools.browser.interactions import drag
+from tools.browser import BrowserToolError
+from tools.browser.interactions import InteractionResult, drag
 from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
@@ -42,8 +42,11 @@ async def test_drag_with_target_selector(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
-    snapshot = await drag("#handle", target=".drop-zone")
-    assert isinstance(snapshot, PageSnapshot)
+    result = await drag("#handle", target=".drop-zone")
+    assert isinstance(result, InteractionResult)
+    assert result.page_changed is False
+    assert result.reason == "no-change"
+    assert result.snapshot is None
     assert page.drag_calls == [
         {"source": source_locator, "target": target_locator, "offset": None}
     ]
@@ -69,8 +72,10 @@ async def test_drag_with_offset(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
-    snapshot = await drag("Drag me", offset=(25, -10))
-    assert isinstance(snapshot, PageSnapshot)
+    result = await drag("Drag me", offset=(25, -10))
+    assert result.page_changed is False
+    assert result.reason == "no-change"
+    assert result.snapshot is None
     assert page.drag_calls == [
         {"source": source_locator, "target": None, "offset": (25.0, -10.0)}
     ]

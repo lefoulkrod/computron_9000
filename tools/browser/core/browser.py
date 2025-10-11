@@ -121,6 +121,23 @@ window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
     window.__page_change__.dom = true;
   }).observe(document.documentElement, { childList: true, subtree: true });
 
+  try {
+    const resizeObserver = new ResizeObserver(() => {
+      window.__page_change__.dom = true;
+    });
+    resizeObserver.observe(document.documentElement);
+  } catch (err) {
+    window.addEventListener("resize", () => {
+      window.__page_change__.dom = true;
+    });
+  }
+
+  const markChange = () => {
+    window.__page_change__.dom = true;
+  };
+  window.addEventListener("input", markChange, true);
+  window.addEventListener("change", markChange, true);
+
   window.__resetPageChange = () => {
     window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
   };
@@ -129,7 +146,7 @@ window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
 """
 
 
-Reason = Literal["hard-navigation", "spa-navigation", "dom-change", "none"]
+Reason = Literal["browser-navigation", "history-navigation", "dom-mutation", "no-change"]
 
 
 class BrowserInteractionResult(BaseModel):
@@ -327,7 +344,10 @@ class Browser:
         context_exc: Exception | None = None
         pages_to_close = list(self._context.pages)
         for page in pages_to_close:
-            if page.is_closed():
+            try:
+                if getattr(page, "is_closed", lambda: False)():
+                    continue
+            except Exception:  # noqa: BLE001 - treat unknown failures as closed
                 continue
             try:
                 logger.debug("Closing page %s before shutdown", getattr(page, "url", "<unknown>"))
@@ -398,6 +418,14 @@ class Browser:
 
         await action()
 
+        def _extract_flags(state: dict[str, object], *, current_url: str, initial_url: str) -> tuple[bool, bool, bool]:
+            hard = bool(state.get("hard"))
+            spa = bool(state.get("spa"))
+            dom = bool(state.get("dom"))
+            if not (hard or spa) and initial_url and current_url and current_url != initial_url:
+                hard = True
+            return hard, spa, dom
+
         change_state: dict[str, object] = {}
         try:
             result = await page.evaluate("window.__getPageChange && window.__getPageChange()")
@@ -409,21 +437,16 @@ class Browser:
             if isinstance(result, dict):
                 change_state = result
 
-        hard_nav = bool(change_state.get("hard"))
-        spa_nav = bool(change_state.get("spa"))
-        dom_change = bool(change_state.get("dom"))
-
         current_url = getattr(page, "url", initial_url)
-        if not (hard_nav or spa_nav) and initial_url and current_url and current_url != initial_url:
-            hard_nav = True
+        hard_nav, spa_nav, dom_change = _extract_flags(change_state, current_url=current_url, initial_url=initial_url)
 
         navigation_detected = hard_nav or spa_nav
         if navigation_detected:
-            reason_value: Reason = "hard-navigation" if hard_nav else "spa-navigation"
+            reason_value: Reason = "browser-navigation" if hard_nav else "history-navigation"
         elif dom_change:
-            reason_value = "dom-change"
+            reason_value = "dom-mutation"
         else:
-            reason_value = "none"
+            reason_value = "no-change"
 
         page_changed = navigation_detected or dom_change
 
@@ -431,6 +454,39 @@ class Browser:
             await browser_waits.wait_for_page_settle(page, expect_navigation=navigation_detected, waits=wait_cfg)
         except Exception as exc:  # noqa: BLE001 - wait helper already logs Playwright errors
             logger.debug("Page settle helper raised unexpectedly: %s", exc)
+        else:
+            # Re-read change markers after settling in case asynchronous updates occurred.
+            try:
+                post_state = await page.evaluate("window.__getPageChange && window.__getPageChange()")
+            except PlaywrightError as exc:
+                logger.debug(
+                    "Failed to read post-settle page change markers on %s: %s",
+                    getattr(page, "url", "<unknown>") or "<unknown>",
+                    exc,
+                )
+            except Exception as exc:  # noqa: BLE001 - best-effort guard
+                logger.debug(
+                    "Unexpected error reading post-settle change markers on %s: %s",
+                    getattr(page, "url", "<unknown>") or "<unknown>",
+                    exc,
+                )
+            else:
+                if isinstance(post_state, dict):
+                    for key in ("hard", "spa", "dom"):
+                        if post_state.get(key):
+                            change_state[key] = True
+
+        final_url = getattr(page, "url", current_url)
+        hard_nav, spa_nav, dom_change = _extract_flags(change_state, current_url=final_url, initial_url=initial_url)
+        navigation_detected = hard_nav or spa_nav
+        if navigation_detected:
+            reason_value = "browser-navigation" if hard_nav else "history-navigation"
+        elif dom_change:
+            reason_value = "dom-mutation"
+        else:
+            reason_value = "no-change"
+
+        page_changed = navigation_detected or dom_change
 
         metadata = BrowserInteractionResult(
             navigation=navigation_detected,
