@@ -685,6 +685,32 @@ class StubBrowser:
     async def new_page(self) -> StubPage:
         return self._page
 
+    async def perform_interaction(
+        self,
+        page: StubPage,
+        action: Callable[[], Awaitable[Any]],
+    ) -> "BrowserInteractionResult":
+        """Match Browser.perform return contract for tests."""
+        initial_url = getattr(page, "url", "")
+        await action()
+        final_url = getattr(page, "url", "")
+        navigation = bool(initial_url and final_url and initial_url != final_url)
+        reason = "hard-navigation" if navigation else "none"
+
+        from config import load_config
+        from tools.browser.core.browser import BrowserInteractionResult
+        from tools.browser.core.waits import wait_for_page_settle as settle_helper
+
+        waits = load_config().tools.browser.waits
+        await settle_helper(page, expect_navigation=navigation, waits=waits)
+
+        return BrowserInteractionResult(
+            navigation=navigation,
+            page_changed=navigation,
+            reason=reason,
+            navigation_response=None,
+        )
+
 
 class StubBrowserWithPages:
     """Browser stub that manages a list of pages and returns the newest open page."""

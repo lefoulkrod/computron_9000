@@ -9,23 +9,12 @@ resolution helper and also returns an updated ``PageSnapshot``.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 from typing import Any
 
-from playwright.async_api import (
-    Error as PlaywrightError,
-)
-from playwright.async_api import (
-    Page,
-    Response,
-)
-from playwright.async_api import (
-    TimeoutError as PlaywrightTimeoutError,
-)
+from playwright.async_api import Error as PlaywrightError
 
-from config import BrowserWaitConfig, load_config
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
@@ -39,87 +28,6 @@ from tools.browser.core.human import (
 from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
 
 logger = logging.getLogger(__name__)
-
-
-def _log_task_cleanup(name: str, task: asyncio.Task[Any]) -> None:
-    """Log the outcome of a watcher task while consuming expected exceptions."""
-    try:
-        task.result()
-    except PlaywrightTimeoutError:
-        logger.debug("%s watcher timed out without navigation", name)
-    except asyncio.CancelledError:
-        logger.debug("%s watcher cancelled before completion", name)
-    except Exception:
-        logger.exception("%s watcher ended with unexpected error", name)
-    else:
-        logger.debug("%s watcher completed successfully", name)
-
-
-async def _wait_for_page_settle(
-    page: Page,
-    *,
-    expect_navigation: bool,
-    waits: BrowserWaitConfig,
-) -> None:
-    """Wait for a page to settle after an interaction.
-
-    This first optionally waits for network idle after navigation, then waits
-    for DOM mutations to quiet down for a short period. Timeouts are bounded
-    by values in ``waits``. Any timeout or Playwright error is logged and the
-    function returns so callers can continue (best-effort settling).
-    """
-    try:
-        if expect_navigation:
-            # Some test fakes may not implement wait_for_load_state; be permissive.
-            if hasattr(page, "wait_for_load_state"):
-                try:
-                    # Wait for network activity to quiet down after navigation
-                    await page.wait_for_load_state(
-                        "networkidle",
-                        timeout=waits.post_navigation_idle_timeout_ms,
-                    )
-                except PlaywrightTimeoutError:
-                    logger.debug(
-                        "post-navigation networkidle wait timed out after %d ms",
-                        waits.post_navigation_idle_timeout_ms,
-                    )
-            else:
-                logger.debug("Page object has no wait_for_load_state; skipping networkidle wait")
-
-        # Wait for DOM mutations to be quiet for the configured window, but bound by dom_mutation_timeout_ms.
-        dom_quiet_ms = max(0, waits.dom_quiet_window_ms)
-        js = f"""() => {{
-            return new Promise((resolve) => {{
-                const quiet = {dom_quiet_ms};
-                let timer = setTimeout(() => {{ resolve(true); }}, quiet);
-                const obs = new MutationObserver(() => {{
-                    clearTimeout(timer);
-                    timer = setTimeout(() => {{ obs.disconnect(); resolve(true); }}, quiet);
-                }});
-                try {{
-                    obs.observe(document, {{ childList: true, subtree: true, attributes: true, characterData: true }});
-                }} catch (e) {{
-                    // If observing fails (e.g., about:blank), resolve immediately
-                    clearTimeout(timer);
-                    resolve(true);
-                }}
-            }});
-        }}"""
-
-        # If the page stub doesn't implement wait_for_function (tests), skip the JS observer
-        if hasattr(page, "wait_for_function"):
-            try:
-                await page.wait_for_function(js, timeout=waits.dom_mutation_timeout_ms)
-            except PlaywrightTimeoutError:
-                logger.debug(
-                    "DOM mutation quiet wait timed out after %d ms",
-                    waits.dom_mutation_timeout_ms,
-                )
-        else:
-            logger.debug("Page object has no wait_for_function; skipping DOM quiet wait")
-    except PlaywrightError as exc:
-        logger.debug("Error while waiting for page settle: %s", exc)
-    return None
 
 
 async def click(selector: str) -> PageSnapshot:
@@ -184,91 +92,13 @@ async def click(selector: str) -> PageSnapshot:
         "selector": resolution.resolved_selector,
     }
 
-    # Attempt click & detect navigation (best-effort) using a short probe so
-    # non-navigation clicks (dropdowns/checkboxes) don't incur a long navigation
-    # timeout. We create two watchers: a framenavigated event watcher filtered to
-    # the main frame which will fire as soon as navigation kicks off, and a
-    # full wait_for_navigation which will yield the Response if navigation
-    # completes. We give the framenavigated watcher only a short probe window
-    # (navigation_probe_timeout_ms) to complete; if it does, treat the click as
-    # navigation and await the navigation response + full settle. Otherwise,
-    # cancel both watchers and follow the non-navigation settle path.
-    response: Response | None = None
-    # Load wait configuration
-    wait_cfg = load_config().tools.browser.waits
-    nav_probe_ms = getattr(wait_cfg, "navigation_probe_timeout_ms", 250)
-
-    detect_framenavigated_task: asyncio.Task[Any] | None = None
-    nav_response_task: asyncio.Task[Any] | None = None
-
     try:
-        # Use the fast probe approach: start a framenavigated watcher (which
-        # real Playwright pages implement) filtered to the main frame. Tests
-        # Start watchers before clicking so they can observe navigation that
-        # begins immediately after the click.
-        detect_framenavigated_task = asyncio.create_task(
-            page.wait_for_event(
-                "framenavigated",
-                predicate=lambda frame: frame == page.main_frame,
-            )
-        )
 
-        # Start a background task that waits for the navigation response using
-        # Playwright's expect_navigation context manager. This returns a
-        # Response-like object (or raises a TimeoutError) and keeps typing
-        # consistent for static checks.
-        async def _await_nav_response() -> Response | None:
-            async with page.expect_navigation(
-                wait_until="domcontentloaded",
-                timeout=wait_cfg.navigation_timeout_ms,
-            ) as nav_ctx:
-                return await nav_ctx.value
+        async def _perform_click() -> None:
+            await human_click(page, locator)
 
-        nav_response_task = asyncio.create_task(_await_nav_response())
-
-        # Perform the click once
-        await human_click(page, locator)
-
-        # Give the quick probe a short time to detect navigation start
-        done, _ = await asyncio.wait(
-            {detect_framenavigated_task},
-            timeout=nav_probe_ms / 1000,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        if detect_framenavigated_task in done:
-            # Navigation started within the probe window. Ensure we surface any
-            # unexpected errors from the start watcher, then await the full
-            # navigation response (which may time out) and run the navigation
-            # settle logic.
-            try:
-                await detect_framenavigated_task  # surface unexpected errors
-            except PlaywrightError:
-                logger.debug("framenavigated watcher raised; continuing without navigation context")
-            detect_framenavigated_task = None
-            try:
-                # nav_response_task may be a load_state wait returning None
-                response = await nav_response_task
-            except PlaywrightTimeoutError:
-                logger.debug("Navigation response wait timed out after %d ms", wait_cfg.navigation_timeout_ms)
-            else:
-                nav_response_task = None
-            await _wait_for_page_settle(page, expect_navigation=True, waits=wait_cfg)
-        else:
-            # Probe timed out; cancel watchers and proceed with non-navigation
-            # settle. Cancelling both tasks avoids waiting the full navigation
-            # timeout for clicks that don't navigate.
-            detect_framenavigated_task.cancel()
-            detect_framenavigated_task.add_done_callback(
-                lambda task, name="framenavigated": _log_task_cleanup(name, task)
-            )
-            detect_framenavigated_task = None
-            nav_response_task.cancel()
-            nav_response_task.add_done_callback(lambda task, name="expect_navigation": _log_task_cleanup(name, task))
-            nav_response_task = None
-            await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-
-        # Build snapshot (response may be None if no navigation)
+        result = await browser.perform_interaction(page, _perform_click)
+        response = result.navigation_response
         return await _build_page_snapshot(page, response)
     except BrowserToolError:
         raise  # already wrapped
@@ -276,18 +106,6 @@ async def click(selector: str) -> PageSnapshot:
         logger.exception("Failed to build snapshot after click for selector %s", clean_selector)
         msg = "Failed to complete click operation"
         raise BrowserToolError(msg, tool="click", details=details) from exc
-    finally:
-        for label, task in (
-            ("framenavigated", detect_framenavigated_task),
-            ("expect_navigation", nav_response_task),
-        ):
-            if task is None:
-                continue
-            if task.done():
-                _log_task_cleanup(label, task)
-            else:
-                task.cancel()
-                task.add_done_callback(lambda t, label=label: _log_task_cleanup(label, t))
 
 
 async def drag(
@@ -409,13 +227,16 @@ async def drag(
     if offset_tuple is not None:
         details["offset"] = offset_tuple
 
-    try:
+    async def _perform_drag() -> None:
         await human_drag(
             page,
             source_resolution.locator,
             target_locator=target_resolution.locator if target_resolution else None,
             offset=offset_tuple,
         )
+
+    try:
+        result = await browser.perform_interaction(page, _perform_drag)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -423,9 +244,7 @@ async def drag(
         msg = "Playwright error performing drag"
         raise BrowserToolError(msg, tool="drag", details=details) from exc
 
-    wait_cfg = load_config().tools.browser.waits
-    await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-    return await _build_page_snapshot(page, None)
+    return await _build_page_snapshot(page, result.navigation_response)
 
 
 async def fill_field(selector: str, value: str | int | float | bool | None) -> PageSnapshot:
@@ -513,20 +332,20 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> P
         msg = f"Input type '{input_type}' is not supported by fill_field."
         raise BrowserToolError(msg, tool="fill_field", details=details)
 
-    try:
+    async def _perform_fill() -> None:
         await human_click(page, locator)
         await human_type(page, locator, text_value, clear_existing=True)
+
+    try:
+        result = await browser.perform_interaction(page, _perform_fill)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
         logger.exception("Playwright error during fill_field for selector %s", clean_selector)
         msg = f"Playwright error filling element: {exc}"
         raise BrowserToolError(msg, tool="fill_field", details=details) from exc
-    # Allow SPA updates to settle before snapshotting
-    wait_cfg = load_config().tools.browser.waits
-    await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
 
-    return await _build_page_snapshot(page, None)
+    return await _build_page_snapshot(page, result.navigation_response)
 
 
 __all__ = ["click", "drag", "fill_field"]
@@ -561,9 +380,11 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
         msg = "Navigate to a page before attempting to press keys."
         raise BrowserToolError(msg, tool="press_keys")
 
-    try:
-        # Delegate to human helper which performs the low-level keyboard operations
+    async def _perform_press() -> None:
         await human_press_keys(page, keys)
+
+    try:
+        result = await browser.perform_interaction(page, _perform_press)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -571,9 +392,7 @@ async def press_keys(keys: list[str]) -> PageSnapshot:
         msg = f"Playwright error pressing keys: {exc}"
         raise BrowserToolError(msg, tool="press_keys") from exc
 
-    wait_cfg = load_config().tools.browser.waits
-    await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-    return await _build_page_snapshot(page, None)
+    return await _build_page_snapshot(page, result.navigation_response)
 
 
 __all__.append("press_keys")
@@ -608,20 +427,17 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> dic
     if page.url in {"", "about:blank"}:
         raise BrowserToolError("Navigate to a page before attempting to scroll.", tool="scroll_page")
 
-    try:
-        # delegate low-level scrolling to human helper
+    async def _perform_scroll() -> None:
         await human_scroll(page, direction=direction, amount=amount)
+
+    try:
+        result = await browser.perform_interaction(page, _perform_scroll)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
         logger.exception("Playwright error during scroll_page for direction %s", direction)
         raise BrowserToolError(f"Playwright error performing scroll: {exc}", tool="scroll_page") from exc
 
-    wait_cfg = load_config().tools.browser.waits
-    await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
-
-    # Capture basic scroll telemetry after the scroll settles so callers can
-    # compute progress and detect top/bottom without changing the snapshot model.
     scroll_state = await page.evaluate(
         "() => ({"
         "  scroll_top: window.scrollY,"
@@ -632,7 +448,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> dic
         "})"
     )
 
-    snapshot = await _build_page_snapshot(page, None)
+    snapshot = await _build_page_snapshot(page, result.navigation_response)
     return {"snapshot": snapshot, "scroll": scroll_state}
 
 

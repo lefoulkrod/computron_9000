@@ -164,9 +164,7 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
         container_user = config.virtual_computer.container_user
         client = PodmanClient().from_env()
         containers = client.containers.list()
-        container: Container | None = next(
-            (c for c in containers if c.name == container_name), None
-        )
+        container: Container | None = next((c for c in containers if c.name == container_name), None)
         if container is None:
             _raise_container_not_found(container_name)
             return BashCmdResult(stdout=None, stderr=None, exit_code=None)
@@ -177,11 +175,7 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
 
         workspace_folder = get_current_workspace_folder()
         container_working_dir = config.virtual_computer.container_working_dir.rstrip("/")
-        workdir = (
-            f"{container_working_dir}/{workspace_folder}"
-            if workspace_folder
-            else container_working_dir
-        )
+        workdir = f"{container_working_dir}/{workspace_folder}" if workspace_folder else container_working_dir
 
         loop = asyncio.get_running_loop()
 
@@ -197,9 +191,7 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
             return container.exec_run(exec_args, **exec_run_kwargs)
 
         try:
-            exec_result = await asyncio.wait_for(
-                loop.run_in_executor(None, _exec_run_sync), timeout=_timeout_for(cmd)
-            )
+            exec_result = await asyncio.wait_for(loop.run_in_executor(None, _exec_run_sync), timeout=_timeout_for(cmd))
         except TimeoutError:
             timeout_used = _timeout_for(cmd)
             logger.exception("Timeout after %s seconds running bash command: %s", timeout_used, cmd)

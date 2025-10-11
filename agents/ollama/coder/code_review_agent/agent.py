@@ -98,8 +98,7 @@ after_model_call_callback = make_log_after_model_call(code_review_agent)
 code_review_agent_tool = make_run_agent_as_tool_function(
     agent=code_review_agent,
     tool_description=(
-        "Given standardized context (CodeReviewInput), decide if the step passes and provide"
-        " required_changes if not."
+        "Given standardized context (CodeReviewInput), decide if the step passes and provide required_changes if not."
     ),
     result_type=CodeReviewResult,
     before_model_callbacks=[before_model_call_callback],
