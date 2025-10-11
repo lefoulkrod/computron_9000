@@ -266,9 +266,7 @@ async def click(selector: str) -> PageSnapshot:
             )
             detect_framenavigated_task = None
             nav_response_task.cancel()
-            nav_response_task.add_done_callback(
-                lambda task, name="expect_navigation": _log_task_cleanup(name, task)
-            )
+            nav_response_task.add_done_callback(lambda task, name="expect_navigation": _log_task_cleanup(name, task))
             nav_response_task = None
             await _wait_for_page_settle(page, expect_navigation=False, waits=wait_cfg)
 
@@ -291,9 +289,7 @@ async def click(selector: str) -> PageSnapshot:
                 _log_task_cleanup(label, task)
             else:
                 task.cancel()
-                task.add_done_callback(
-                    lambda t, label=label: _log_task_cleanup(label, t)
-                )
+                task.add_done_callback(lambda t, label=label: _log_task_cleanup(label, t))
 
 
 async def drag(
@@ -332,7 +328,7 @@ async def drag(
 
     offset_tuple: tuple[float, float] | None = None
     if offset is not None:
-        if isinstance(offset, (tuple, list)) and len(offset) == 2:
+        if isinstance(offset, tuple | list) and len(offset) == 2:
             try:
                 offset_tuple = (float(offset[0]), float(offset[1]))
             except (TypeError, ValueError) as exc:

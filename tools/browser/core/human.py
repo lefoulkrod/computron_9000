@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import math
 import random
 from dataclasses import dataclass
 
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page
 
 from config import load_config
@@ -122,18 +122,29 @@ _CURSOR_OVERLAY_SCRIPT = """
 async def _ensure_cursor_overlay(page: Page) -> None:
     """Try to install the in-page visual cursor overlay.
 
-    This swallows all exceptions so pages that disallow script injection or
-    throw for other reasons won't break normal interaction flows.
+    This swallows exceptions; failures shouldn't break interaction flows.
     """
     # Best-effort only; ignore failures so clicks/typing proceed. Log outcome
-    with contextlib.suppress(Exception):
+    try:
         await page.evaluate(_CURSOR_OVERLAY_SCRIPT)
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to inject fake cursor overlay on page %s; proceeding without overlay. Error: %s",
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
 
-    # Check presence (best-effort) and log whether overlay is available. Use a
-    # suppress so evaluation failures don't raise.
+    # Check presence (best-effort) and log whether overlay is available. If
+    # presence cannot be checked, assume unavailable and continue.
     installed = False
-    with contextlib.suppress(Exception):
+    try:
         installed = await page.evaluate("() => !!window.__llmCursorSet")
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to check cursor overlay presence on page %s; assuming overlay is unavailable. Error: %s",
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
     if installed:
         logger.debug("Injected fake cursor overlay into page %s", getattr(page, "url", "<unknown>"))
     else:
@@ -151,17 +162,36 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
     # Try to read the overlay's last-known position so we can animate from it.
     start_x = x
     start_y = y
-    with contextlib.suppress(Exception):
+    try:
         pos = await page.evaluate("() => window.__llmCursorGet ? window.__llmCursorGet() : null")
         if isinstance(pos, list) and len(pos) == 2:
-            with contextlib.suppress(Exception):
+            try:
                 sx = float(pos[0])
                 sy = float(pos[1])
-                # If the stored position is the sentinel off-screen value, treat as unset.
-                if not (math.isfinite(sx) and math.isfinite(sy)) or (sx == -9999 and sy == -9999):
-                    sx = x
-                    sy = y
-                start_x, start_y = sx, sy
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "Invalid fake cursor position values %s on page %s; using target coordinates as default. Error: %s",
+                    pos,
+                    getattr(page, "url", "<unknown>"),
+                    exc,
+                )
+                sx = x
+                sy = y
+            # If the stored position is the sentinel off-screen value, treat as unset.
+            if not (math.isfinite(sx) and math.isfinite(sy)) or (sx == -9999 and sy == -9999):
+                logger.warning(
+                    "Fake cursor position is unset or non-finite on page %s; using target coordinates as default.",
+                    getattr(page, "url", "<unknown>"),
+                )
+                sx = x
+                sy = y
+            start_x, start_y = sx, sy
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to read fake cursor position on page %s; using target coordinates as default. Error: %s",
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
 
     # Animate the overlay and move the real mouse in small increments so the
     # in-page fake cursor visibly follows the pointer during movement.
@@ -170,8 +200,19 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
         t = step_idx / steps_count
         xi = start_x + (x - start_x) * t
         yi = start_y + (y - start_y) * t
-        with contextlib.suppress(Exception):
+        try:
             await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [xi, yi])
+        except PlaywrightError as exc:
+            logger.warning(
+                (
+                    "Failed to update fake cursor overlay at (%s, %s) on page %s; "
+                    "continuing without overlay update. Error: %s"
+                ),
+                xi,
+                yi,
+                getattr(page, "url", "<unknown>"),
+                exc,
+            )
         # Move the real mouse a small step; using steps=1 keeps movement discrete
         # and lets us control the overlay per-step.
         await page.mouse.move(xi, yi, steps=1)
@@ -242,8 +283,19 @@ async def human_click(page: Page, locator: Locator) -> None:
     await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
     await mouse.up()
     # Ensure overlay is finally positioned on the click point (best-effort).
-    with contextlib.suppress(Exception):
+    try:
         await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
+    except PlaywrightError as exc:
+        logger.warning(
+            (
+                "Failed to finalize fake cursor overlay at click point (%s, %s) on page %s; "
+                "continuing without overlay update. Error: %s"
+            ),
+            target_x,
+            target_y,
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
 
 
 async def human_drag(
@@ -289,7 +341,11 @@ async def human_drag(
         label_handle = None
         try:
             label_handle = await source_handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
-        except Exception:
+        except PlaywrightError as exc:
+            logger.warning(
+                "Failed to evaluate source label handle; using element's own bounding box if available. Error: %s",
+                exc,
+            )
             label_handle = None
         if label_handle is not None:
             try:
@@ -299,8 +355,10 @@ async def human_drag(
                     if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
                         source_box = label_box
             finally:
-                with contextlib.suppress(Exception):
+                try:
                     await label_handle.dispose()
+                except PlaywrightError as exc:
+                    logger.warning("Failed to dispose source label handle; continuing. Error: %s", exc)
 
     if source_box is None or source_box.get("width", 0) <= 0 or source_box.get("height", 0) <= 0:
         raise BrowserToolError("Source element has no bounding box to drag", tool="drag")
@@ -337,7 +395,11 @@ async def human_drag(
             label_handle = None
             try:
                 label_handle = await target_handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
-            except Exception:
+            except PlaywrightError as exc:
+                logger.warning(
+                    "Failed to evaluate target label handle; using element's own bounding box if available. Error: %s",
+                    exc,
+                )
                 label_handle = None
             if label_handle is not None:
                 try:
@@ -347,8 +409,10 @@ async def human_drag(
                         if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
                             target_box = label_box
                 finally:
-                    with contextlib.suppress(Exception):
+                    try:
                         await label_handle.dispose()
+                    except PlaywrightError as exc:
+                        logger.warning("Failed to dispose target label handle; continuing. Error: %s", exc)
 
         if target_box is None or target_box.get("width", 0) <= 0 or target_box.get("height", 0) <= 0:
             raise BrowserToolError("Target element has no bounding box to drag", tool="drag")
@@ -388,8 +452,19 @@ async def human_drag(
     await mouse.up()
 
     # Best-effort overlay update at drag destination.
-    with contextlib.suppress(Exception):
+    try:
         await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [dest_x, dest_y])
+    except PlaywrightError as exc:
+        logger.warning(
+            (
+                "Failed to update fake cursor overlay at drag destination (%s, %s) on page %s; "
+                "continuing without overlay update. Error: %s"
+            ),
+            dest_x,
+            dest_y,
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
 
 
 async def human_type(page: Page, locator: Locator, text: str, *, clear_existing: bool = True) -> None:
