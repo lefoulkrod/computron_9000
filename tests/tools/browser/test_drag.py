@@ -4,72 +4,23 @@ import pytest
 
 from tools.browser import BrowserToolError, PageSnapshot
 from tools.browser.interactions import drag
+from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
 async def _human_drag_probe(
-    page: "FakePage",
-    source_locator: "FakeLocator",
+    page: StubPage,
+    source_locator: StubLocator,
     *,
-    target_locator: "FakeLocator | None" = None,
+    target_locator: StubLocator | None = None,
     offset: tuple[float, float] | None = None,
 ) -> None:
-    page.drag_calls.append(
+    page.drag_calls.append(  # type: ignore[attr-defined]
         {
             "source": source_locator,
             "target": target_locator,
             "offset": offset,
         }
     )
-
-
-class FakeLocator:
-    def __init__(self, page: "FakePage", key: str, present: bool = True) -> None:
-        self._page = page
-        self.key = key
-        self._present = present
-
-    async def count(self) -> int:
-        return 1 if self._present else 0
-
-    @property
-    def first(self) -> "FakeLocator":
-        return self
-
-
-class FakePage:
-    def __init__(self) -> None:
-        self.url = "https://example.test/drag"
-        self._title = "Drag Playground"
-        self._body_text = "Welcome to the drag playground."
-        self._text_locators: dict[str, FakeLocator] = {}
-        self._css_locators: dict[str, FakeLocator] = {}
-        self.drag_calls: list[dict[str, object]] = []
-
-    async def title(self) -> str:
-        return self._title
-
-    async def inner_text(self, selector: str) -> str:
-        assert selector == "body"
-        return self._body_text
-
-    async def query_selector_all(self, selector: str) -> list[object]:
-        return []
-
-    def get_by_text(self, text: str, exact: bool = True) -> FakeLocator:
-        return self._text_locators.get(text, FakeLocator(self, f"text={text}", present=False))
-
-    def locator(self, selector: str) -> FakeLocator:
-        return self._css_locators.get(selector, FakeLocator(self, selector, present=False))
-
-    def add_text(self, text: str) -> FakeLocator:
-        loc = FakeLocator(self, f"text={text}", present=True)
-        self._text_locators[text] = loc
-        return loc
-
-    def add_selector(self, selector: str) -> FakeLocator:
-        loc = FakeLocator(self, selector, present=True)
-        self._css_locators[selector] = loc
-        return loc
 
 
 @pytest.mark.unit
@@ -79,9 +30,14 @@ async def test_drag_with_target_selector(
     patch_interactions_browser,
     settle_tracker,
 ) -> None:
-    page = FakePage()
-    source_locator = page.add_selector("#handle")
-    target_locator = page.add_selector(".drop-zone")
+    page = StubPage(
+        title="Drag Playground",
+        body_text="Welcome to the drag playground.",
+        url="https://example.test/drag",
+    )
+    page.drag_calls = []  # type: ignore[attr-defined]
+    source_locator = page.add_css_locator("#handle")
+    target_locator = page.add_css_locator(".drop-zone")
 
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
@@ -102,8 +58,13 @@ async def test_drag_with_offset(
     patch_interactions_browser,
     settle_tracker,
 ) -> None:
-    page = FakePage()
-    source_locator = page.add_text("Drag me")
+    page = StubPage(
+        title="Drag Playground",
+        body_text="Welcome to the drag playground.",
+        url="https://example.test/drag",
+    )
+    page.drag_calls = []  # type: ignore[attr-defined]
+    source_locator = page.add_text_locator("Drag me")
 
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
@@ -122,8 +83,12 @@ async def test_drag_with_offset(
 async def test_drag_requires_destination(
     patch_interactions_browser,
 ) -> None:
-    page = FakePage()
-    page.add_selector("#handle")
+    page = StubPage(
+        title="Drag Playground",
+        body_text="Welcome to the drag playground.",
+        url="https://example.test/drag",
+    )
+    page.add_css_locator("#handle")
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
@@ -138,8 +103,12 @@ async def test_drag_requires_destination(
 async def test_drag_target_not_found(
     patch_interactions_browser,
 ) -> None:
-    page = FakePage()
-    page.add_selector("#handle")
+    page = StubPage(
+        title="Drag Playground",
+        body_text="Welcome to the drag playground.",
+        url="https://example.test/drag",
+    )
+    page.add_css_locator("#handle")
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
@@ -151,8 +120,12 @@ async def test_drag_target_not_found(
 async def test_drag_invalid_offset_type(
     patch_interactions_browser,
 ) -> None:
-    page = FakePage()
-    page.add_text("Drag me")
+    page = StubPage(
+        title="Drag Playground",
+        body_text="Welcome to the drag playground.",
+        url="https://example.test/drag",
+    )
+    page.add_text_locator("Drag me")
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
