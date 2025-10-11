@@ -96,6 +96,38 @@ class DummyPage:
         self.mouse = mouse
         self.keyboard = keyboard
 
+    async def evaluate(self, script_or_fn, *args, **kwargs):  # type: ignore[no-untyped-def]
+        """Minimal evaluate stub used by human helpers.
+
+        Supports:
+        - Injection script string (no-op)
+        - Presence checks returning False
+        - Cursor get/set helpers used by the overlay logic
+        """
+        # emulate overlay presence flags and position storage on the page instance
+        if not hasattr(self, "_cursor_pos"):
+            # sentinel off-screen default, same convention as production overlay
+            self._cursor_pos = [-9999.0, -9999.0]
+
+        if isinstance(script_or_fn, str):
+            expr: str = script_or_fn
+            if "__llmCursorSet" in expr and "!!" in expr:
+                # presence check: return False (not installed in tests)
+                return False
+            if "window.__llmCursorGet" in expr:
+                return list(self._cursor_pos)
+            # generic string scripts are ignored (injection no-op)
+            return None
+
+        # Function case: we only need to support the updater used in code
+        if callable(script_or_fn):
+            # Playwright would run this in the page; our tests only pass coords setter signature
+            if args and isinstance(args[0], (list, tuple)) and len(args[0]) == 2:
+                x, y = float(args[0][0]), float(args[0][1])
+                self._cursor_pos = [x, y]
+            return None
+        return None
+
 
 @pytest.mark.unit
 async def test_human_click_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

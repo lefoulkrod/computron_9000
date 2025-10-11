@@ -138,9 +138,11 @@ async def extract_text(selector: str, limit: int = 1000) -> list[TextExtractionR
                     tmp_registry = SelectorRegistry(page)
                     sel_res = await build_unique_selector(element_handle, tag=None, text=None, registry=tmp_registry)
                     css_selector = sel_res.selector or ""
-                except (PlaywrightError, RuntimeError):
-                    # If selector registry resolution raises Playwright/runtime errors,
-                    # leave css_selector empty and fall back to the resolved selector.
+                except Exception as exc:
+                    # If SelectorRegistry.register (via build_unique_selector) raises any
+                    # exception, log it and fall back to an empty css selector so callers
+                    # either omit the selector or use the resolved selector value.
+                    logger.exception("SelectorRegistry failed during text extraction: %s", exc)
                     css_selector = ""
     except PlaywrightError:  # pragma: no cover - defensive
         css_selector = ""

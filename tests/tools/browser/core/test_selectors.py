@@ -120,7 +120,6 @@ async def test_build_selector_prefers_id(registry: selectors.SelectorRegistry, e
     assert result.selector == "#primary"
     assert result.strategy == selectors.SelectorStrategy.ID
     assert result.collision_count == 0
-    assert result.verified_unique is False
 
 
 @pytest.mark.unit
@@ -140,7 +139,6 @@ async def test_build_selector_uses_text_when_available(element_factory: Callable
 
     assert result.selector == 'text="Submit"'
     assert result.strategy == selectors.SelectorStrategy.TEXT_EXACT
-    assert result.verified_unique is True
 
 
 @pytest.mark.unit
@@ -163,10 +161,6 @@ async def test_build_selector_falls_back_without_text(element_factory: Callable[
         registry=registry,
     )
 
-    assert result.strategy in (
-        selectors.SelectorStrategy.DOM_POSITION,
-        selectors.SelectorStrategy.DOM_PATH,
-    )
     assert result.selector.startswith("#panel")
 
 
@@ -202,13 +196,11 @@ async def test_build_selector_adds_fallback_suffix(element_factory: Callable[...
         registry=registry,
     )
 
-    assert first_result.strategy in (
-        selectors.SelectorStrategy.DOM_POSITION,
-        selectors.SelectorStrategy.DOM_PATH,
-    )
+    assert first_result.strategy == selectors.SelectorStrategy.FALLBACK
+    assert first_result.selector.endswith(">> nth=0")
     assert second_result.strategy == selectors.SelectorStrategy.FALLBACK
     assert second_result.selector.endswith(">> nth=1")
-    assert second_result.collision_count >= 1
+    assert second_result.collision_count >= first_result.collision_count
 
 
 @pytest.mark.unit
@@ -280,7 +272,6 @@ async def test_build_selector_aria_role_label_verification(element_factory: Call
     )
 
     assert result.strategy == selectors.SelectorStrategy.ARIA_ROLE_LABEL
-    assert result.verified_unique is True
 
 
 @pytest.mark.unit

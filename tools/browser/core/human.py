@@ -170,7 +170,10 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
                 sy = float(pos[1])
             except (TypeError, ValueError) as exc:
                 logger.warning(
-                    "Invalid fake cursor position values %s on page %s; using target coordinates as default. Error: %s",
+                    (
+                        "Invalid fake cursor position values %s on page %s; "
+                        "using target coordinates as default. Error: %s"
+                    ),
                     pos,
                     getattr(page, "url", "<unknown>"),
                     exc,
