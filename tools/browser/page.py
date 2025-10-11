@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import logging
 
+from playwright.async_api import Error as PlaywrightError
+
 import tools.browser.core as browser_core
+from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.selectors import SelectorRegistry
 from tools.browser.core.snapshot import (
@@ -82,8 +85,14 @@ async def current_page() -> PageSnapshot:
         raise BrowserToolError(msg, tool="current_page") from exc
 
 
+_SCOPE_ANCESTOR_MAX_DEPTH = 5
+
+
 async def list_clickable_elements(
-    after: str | None = None, limit: int = 20, contains: str | None = None
+    after: str | None = None,
+    limit: int = 20,
+    contains: str | None = None,
+    scope: str | None = None,
 ) -> list[Element]:
     """List clickable elements (buttons, anchors, and heuristic clickables).
 
@@ -97,6 +106,13 @@ async def list_clickable_elements(
         limit: Maximum number of elements to return after filtering/paging.
         contains: Optional case-insensitive substring filter applied to the
             element's visible text OR (for anchors) its href.
+
+    Args:
+        after: Optional selector string cursor (results begin strictly after this selector).
+        limit: Maximum number of elements to return after filtering/paging.
+        contains: Optional case-insensitive substring filter applied to visible text or href.
+        scope: Optional parent container scoping the search. Accepts either exact visible text
+            or a selector handle.
 
     Returns:
         list[Element]: Sliced list of clickable ``Element`` models.
@@ -115,13 +131,61 @@ async def list_clickable_elements(
         raise BrowserToolError("Unable to access browser pages", tool="list_clickable_elements") from exc
 
     try:
-        # Collect buttons, anchors, then heuristic clickables.
-        # Use a single SelectorRegistry for the entire collection so selectors
-        # remain globally unique across collectors.
+        # Resolve optional scope container
+        root_locator = None
+        if scope is not None:
+            query = scope.strip()
+            if not query:
+                raise BrowserToolError("scope must be a non-empty string", tool="list_clickable_elements")
+
+            # Use shared resolver: exact text, then CSS; no substring; require single.
+            resolution = await _resolve_locator(
+                page,
+                query,
+                allow_substring_text=False,
+                require_single_match=True,
+                tool_name="list_clickable_elements",
+            )
+            if resolution is None:
+                raise BrowserToolError("scope container not found", tool="list_clickable_elements")
+            candidate = resolution.locator
+
+            # Ancestor climb: consider node plus up to N ancestors; choose the first that appears to contain clickables
+            current = candidate
+            chosen = None
+            depth = 0
+            while depth <= _SCOPE_ANCESTOR_MAX_DEPTH:
+                try:
+                    btn_count = await current.locator(":scope button, :scope [role=button]").count()
+                    a_count = await current.locator(":scope a").count()
+                    # Heuristic clickable selectors (same set as _collect_clickables)
+                    heur_scoped = (
+                        ":scope div[onclick], :scope span[onclick], :scope li[onclick], "
+                        ":scope [role='link'], :scope [tabindex], :scope [data-clickable]"
+                    )
+                    heur_count = await current.locator(heur_scoped).count()
+                except PlaywrightError:  # pragma: no cover - defensive
+                    btn_count = a_count = heur_count = 0
+
+                if (btn_count + a_count + heur_count) > 0:
+                    chosen = current
+                    break
+                # Move to parent element if possible
+                parent = current.locator("xpath=..")
+                try:
+                    if await parent.count() == 0:
+                        break
+                except PlaywrightError:  # pragma: no cover - defensive
+                    break
+                current = parent.first
+                depth += 1
+            root_locator = chosen if chosen is not None else candidate
+
+        # Collect buttons, anchors, then heuristic clickables. Use one registry for uniqueness.
         registry = SelectorRegistry(page)
-        buttons = await _collect_buttons(page, registry)
-        anchors = await _collect_anchors(page, registry)
-        clickables = await _collect_clickables(page, registry, limit=None)
+        buttons = await _collect_buttons(page, registry, root=root_locator)
+        anchors = await _collect_anchors(page, registry, root=root_locator)
+        clickables = await _collect_clickables(page, registry, limit=None, root=root_locator)
         combined: list[Element] = []
         combined.extend(buttons)
         combined.extend(anchors)

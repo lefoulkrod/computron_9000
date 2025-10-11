@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Page, Response
+from playwright.async_api import Locator, Page, Response
 from pydantic import BaseModel, Field
 
 from tools.browser.core._dom_utils import _element_bool_state
@@ -120,7 +120,11 @@ def _normalize_visible_text(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
-async def _collect_anchors(page: Page, registry: SelectorRegistry) -> list[Element]:
+async def _collect_anchors(
+    page: Page,
+    registry: SelectorRegistry,
+    root: Locator | None = None,
+) -> list[Element]:
     """Collect anchor elements from the page and return a list of Element models.
 
     This helper encapsulates the anchor extraction logic previously in
@@ -129,15 +133,20 @@ async def _collect_anchors(page: Page, registry: SelectorRegistry) -> list[Eleme
     Args:
         page: Playwright Page to query anchors from.
         registry: SelectorRegistry instance used to build unique selectors for anchors.
-        limit: Optional maximum number of anchors to consider (apply before
-            selector disambiguation). When ``None``, all anchors are processed.
+        root: Optional container locator. When provided, only anchors within
+            this container (``:scope a``) are considered. When ``None``, the
+            entire page is searched.
 
     Returns:
         List of ``Element`` instances for anchors found on the page.
     """
     results: list[Element] = []
     try:
-        anchors = await page.query_selector_all("a")
+        if root is None:
+            anchors = await page.query_selector_all("a")
+        else:
+            # Scope to the provided root container
+            anchors = await root.locator(":scope a").element_handles()
     except PlaywrightError as exc:  # pragma: no cover - defensive
         logger.debug("Anchor query failed, defaulting to no anchors: %s", exc)
         anchors = None
@@ -226,10 +235,17 @@ async def _collect_anchors(page: Page, registry: SelectorRegistry) -> list[Eleme
     return results
 
 
-async def _collect_buttons(page: Page, registry: SelectorRegistry) -> list[Element]:
+async def _collect_buttons(
+    page: Page,
+    registry: SelectorRegistry,
+    root: Locator | None = None,
+) -> list[Element]:
     """Collect button-like elements (button tag + role=button)."""
     try:
-        handles = await page.query_selector_all("button, [role=button]")
+        if root is None:
+            handles = await page.query_selector_all("button, [role=button]")
+        else:
+            handles = await root.locator(":scope button, :scope [role=button]").element_handles()
     except PlaywrightError as exc:  # pragma: no cover - defensive
         logger.debug("Button query failed, defaulting to no buttons: %s", exc)
         handles = None
@@ -560,7 +576,13 @@ async def _collect_forms(page: Page, registry: SelectorRegistry) -> list[Element
     return results
 
 
-async def _collect_clickables(page: Page, registry: SelectorRegistry, *, limit: int | None = None) -> list[Element]:
+async def _collect_clickables(
+    page: Page,
+    registry: SelectorRegistry,
+    *,
+    limit: int | None = None,
+    root: Locator | None = None,
+) -> list[Element]:
     """Collect non-semantic but interactive elements (heuristic clickables).
 
     Heuristics (conservative):
@@ -577,6 +599,9 @@ async def _collect_clickables(page: Page, registry: SelectorRegistry, *, limit: 
         page: Playwright page.
         registry: SelectorRegistry used to generate unique selectors for handles.
         limit: Optional maximum number of clickables to return.
+        root: Optional container locator. When provided, the clickable search is
+            scoped to this container using ``:scope`` selectors; otherwise the
+            entire page is searched.
 
     Returns:
         List of ``Element`` entries describing heuristic clickables.
@@ -592,7 +617,11 @@ async def _collect_clickables(page: Page, registry: SelectorRegistry, *, limit: 
     # Join with commas to issue one DOM query; Playwright returns in document order.
     query = ", ".join(selectors)
     try:
-        handles = await page.query_selector_all(query)
+        if root is None:
+            handles = await page.query_selector_all(query)
+        else:
+            scoped = ", ".join([f":scope {s}" for s in selectors])
+            handles = await root.locator(scoped).element_handles()
     except PlaywrightError as exc:
         logger.debug("Clickable query skipped due to error: %s", exc)
         handles = None
