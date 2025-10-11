@@ -417,11 +417,11 @@ async def _collect_forms(page: Page, registry: SelectorRegistry) -> list[Element
                 options_val: list[dict] | None = None
                 current_value: str | None = None
                 selected_flag: bool = False
+                # All controls, including radios, request a selector from
+                # the centralized SelectorRegistry. If the registry fails
+                # we emit an empty selector per the contract and continue
+                # collecting metadata.
                 try:
-                    # All controls, including radios, request a selector from
-                    # the centralized SelectorRegistry. If the registry fails
-                    # we emit an empty selector per the contract and continue
-                    # collecting metadata.
                     cres = await build_unique_selector(control, tag=tag, text="", registry=registry)
                     control_selector = cres.selector
                 except Exception as exc:

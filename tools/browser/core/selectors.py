@@ -47,7 +47,6 @@ class SelectorCandidate:
     selector: str
     strategy: SelectorStrategy
     cost: int
-    needs_verification: bool = False
     notes: dict[str, Any] | None = None
 
 
@@ -57,7 +56,6 @@ class SelectorResult:
 
     selector: str
     strategy: SelectorStrategy
-    verified_unique: bool
     collision_count: int
     fallbacks_tried: tuple[SelectorStrategy, ...]
 
@@ -69,10 +67,12 @@ class SelectorRegistry:
         """Initialize the registry for ``page``."""
         self._page = page
         self._seen: dict[str, int] = {}
+        self._fallback_counts: dict[str, int] = {}
 
     def reset(self) -> None:
         """Reset internal tracking of issued selectors."""
         self._seen.clear()
+        self._fallback_counts.clear()
 
     def seen(self) -> frozenset[str]:
         """Return a frozen set of selectors issued so far."""
@@ -135,56 +135,61 @@ class SelectorRegistry:
 
             attempts.append(candidate.strategy)
 
-            if candidate.needs_verification:
-                is_unique = await _verify_selector_unique(self._page, candidate.selector)
-                if not is_unique:
-                    collisions += 1
-                    logger.debug(
-                        "Selector %s (%s) failed uniqueness verification",
-                        candidate.selector,
-                        candidate.strategy,
-                    )
-                    continue
-                verified_unique = True
-            else:
-                verified_unique = False
+            is_unique = await _verify_selector_unique(self._page, candidate.selector)
+            if not is_unique:
+                collisions += 1
+                logger.debug(
+                    "Selector %s (%s) failed uniqueness verification",
+                    candidate.selector,
+                    candidate.strategy,
+                )
+                continue
 
-            existing = self._seen.get(candidate.selector)
-            if existing is None:
+            if candidate.selector not in self._seen:
                 self._seen[candidate.selector] = 1
                 return SelectorResult(
                     selector=candidate.selector,
                     strategy=candidate.strategy,
-                    verified_unique=verified_unique,
                     collision_count=collisions,
                     fallbacks_tried=tuple(attempts),
                 )
 
             collisions += 1
-            self._seen[candidate.selector] = existing + 1
             logger.debug(
-                "Selector %s already issued %s time(s); collision recorded",
+                "Selector %s already issued; collision recorded",
                 candidate.selector,
-                existing,
             )
 
         if not path_candidate:
             raise RuntimeError("Unable to generate fallback selector without DOM path")
 
-        base_usage = self._seen.get(path_candidate.selector, 1)
-        fallback_selector = await _augment_with_nth(
-            path_candidate.selector,
-            max(base_usage - 1, 0),
-        )
         attempts.append(SelectorStrategy.FALLBACK)
-        self._seen[fallback_selector] = 1
-        return SelectorResult(
-            selector=fallback_selector,
-            strategy=SelectorStrategy.FALLBACK,
-            verified_unique=False,
-            collision_count=collisions,
-            fallbacks_tried=tuple(attempts),
-        )
+        base_selector = path_candidate.selector
+        suffix = self._fallback_counts.get(base_selector, 0)
+        max_attempts = 50
+        while max_attempts > 0:
+            fallback_selector = await _augment_with_nth(base_selector, suffix)
+            is_unique = await _verify_selector_unique(self._page, fallback_selector)
+            if is_unique and fallback_selector not in self._seen:
+                self._seen[fallback_selector] = 1
+                self._fallback_counts[base_selector] = suffix + 1
+                return SelectorResult(
+                    selector=fallback_selector,
+                    strategy=SelectorStrategy.FALLBACK,
+                    collision_count=collisions,
+                    fallbacks_tried=tuple(attempts),
+                )
+
+            collisions += 1
+            suffix += 1
+            max_attempts -= 1
+            logger.debug(
+                "Fallback selector %s failed uniqueness; retrying with suffix %s",
+                fallback_selector,
+                suffix,
+            )
+
+        raise RuntimeError("Unable to generate unique fallback selector after multiple attempts")
 
 
 async def build_unique_selector(
@@ -216,7 +221,6 @@ async def _candidate_from_id(element: ElementHandle) -> SelectorCandidate | None
         selector=selector,
         strategy=SelectorStrategy.ID,
         cost=10,
-        needs_verification=False,
         notes={"attribute": "id"},
     )
 
@@ -236,7 +240,6 @@ async def _candidate_from_data_attribute(element: ElementHandle) -> SelectorCand
                 selector=selector,
                 strategy=SelectorStrategy.DATA_ATTRIBUTE,
                 cost=20,
-                needs_verification=True,
                 notes={"attribute": attr},
             )
     return None
@@ -278,7 +281,6 @@ async def _candidate_from_name(
         selector=selector,
         strategy=SelectorStrategy.NAME_ATTRIBUTE,
         cost=30,
-        needs_verification=True,
         notes={"attribute": "name"},
     )
 
@@ -306,7 +308,6 @@ async def _candidate_from_role_label(element: ElementHandle) -> SelectorCandidat
         selector=selector,
         strategy=SelectorStrategy.ARIA_ROLE_LABEL,
         cost=40,
-        needs_verification=True,
         notes={"attribute": "aria-label", "role": role},
     )
 
@@ -321,7 +322,6 @@ def _candidate_from_text_exact(text: str) -> SelectorCandidate | None:
         selector=selector,
         strategy=SelectorStrategy.TEXT_EXACT,
         cost=50,
-        needs_verification=True,
         notes={"text": text},
     )
 
@@ -417,7 +417,6 @@ async def _candidate_from_dom_position(
         selector=selector,
         strategy=SelectorStrategy.DOM_POSITION,
         cost=70,
-        needs_verification=True,
         notes={"nth": nth, "parent": parent_selector},
     )
 
@@ -469,7 +468,6 @@ async def _candidate_from_dom_path(element: ElementHandle) -> SelectorCandidate 
         selector=selector,
         strategy=SelectorStrategy.DOM_PATH,
         cost=80,
-        needs_verification=False,
         notes={"source": "dom-path"},
     )
 
