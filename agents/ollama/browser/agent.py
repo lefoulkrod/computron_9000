@@ -24,6 +24,7 @@ from tools.browser import (
     drag,
     extract_text,
     fill_field,
+    go_back,
     ground_elements_by_text,
     list_clickable_elements,
     open_url,
@@ -52,6 +53,7 @@ SYSTEM_PROMPT = dedent(
     - drag(source, target=None, offset=None): drag and drop via selectors or an offset; returns InteractionResult.
     - fill_field(selector, value): click + type into inputs/textarea; InteractionResult.
     - press_keys(keys): send key presses to the focused element; InteractionResult.
+    - go_back(): navigate one step back in history. Returns InteractionResult; raises if no prior entry exists.
     - scroll_page(direction, amount=None): scroll and return InteractionResult with `extras["scroll"]`.
     - extract_text(selector, limit=1000): collect visible text from elements.
     - list_clickable_elements(after=None, limit=20, contains=None): list anchors/buttons/heuristic clickables.
@@ -64,18 +66,12 @@ SYSTEM_PROMPT = dedent(
     - Native `<select>` dropdowns do not change until an option is chosen. Opening the menu alone keeps
       `page_changed=false`; selecting an option will flip it. This is expected behavior.
 
-        Usage guidelines
-        - Start with `current_page()`; only call `open_url` when no relevant page is loaded or when
-            the user asks for a new URL.
-        - Prefer selector handles from snapshots for `selector`, `source`, and `target` arguments;
-            fall back to exact text only when necessary.
-        - After every interaction, rely on `page_changed`/`reason` (and snapshots when provided) to
-            confirm the effect before proceeding.
-        - Use `fill_field` before submitting forms, `press_keys` for keyboard-driven flows, and
-            `scroll_page` to reveal lazy content.
-        - Keep tool usage aligned with the user's request and provide concise summaries based on
-            tool outputs.
-        - Ask for a proper http/https URL if one is missing or malformed.
+    Usage guidelines
+    - Start with `current_page()`; call `open_url` only when no relevant page is loaded or the user requests a different URL.
+    - Prefer selector handles from snapshots for `selector`, `source`, and `target`; fall back to exact text only when necessary.
+    - After every interaction, rely on `page_changed`/`reason` and snapshots (when present) to confirm the effect. Native `<select>` menus only change after an option is chosen; opening them alone keeps `page_changed=false`.
+    - Use `fill_field` before form submissions, `press_keys` for keyboard flows, `scroll_page` to reveal lazy content, and `go_back` to undo unwanted navigation (handling the error if there is no history entry).
+    - Keep tool usage aligned with the user's request, summarize results concisely, and request a valid http/https URL when needed.
     """
 )
 
@@ -99,6 +95,7 @@ browser_agent = Agent(
         fill_field,
         press_keys,
         scroll_page,
+        go_back,
     ],
     think=model.think,
 )

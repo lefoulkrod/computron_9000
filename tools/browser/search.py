@@ -36,6 +36,9 @@ class TextExtractionResult(BaseModel):
 async def extract_text(selector: str, limit: int = 1000) -> list[TextExtractionResult]:
     """Extract visible text by selector handle or by visible text string.
 
+    Extracts all inner text from elements matching the provided selector or
+    visible text. Does not return HTML markup.
+
     Args:
         selector: Visible text on the page or a selector handle returned by page snapshots
             and other tools. The provided text or selector must uniquely identify the
