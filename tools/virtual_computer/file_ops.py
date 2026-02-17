@@ -190,7 +190,7 @@ def append_to_file(path: str, content: str) -> WriteFileResult:
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
         with file_path.open("a", encoding="utf-8") as f:
-                f.write(content)
+            f.write(content)
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to append file at path %s", path)
         err_path = rel_return_path if rel_return_path else path

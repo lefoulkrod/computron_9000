@@ -30,15 +30,48 @@ from tools.browser.core.exceptions import BrowserToolError
 logger = logging.getLogger(__name__)
 
 # Valid ARIA roles accepted in the ``role:name`` selector format.
-_VALID_ROLES = frozenset({
-    "alert", "alertdialog", "button", "cell", "checkbox", "columnheader",
-    "combobox", "dialog", "grid", "gridcell", "heading", "img", "link",
-    "list", "listbox", "listitem", "menu", "menubar", "menuitem",
-    "menuitemcheckbox", "menuitemradio", "navigation", "option",
-    "progressbar", "radio", "row", "rowheader", "searchbox", "slider",
-    "spinbutton", "status", "switch", "tab", "tabpanel", "textbox",
-    "tooltip", "tree", "treeitem",
-})
+_VALID_ROLES = frozenset(
+    {
+        "alert",
+        "alertdialog",
+        "button",
+        "cell",
+        "checkbox",
+        "columnheader",
+        "combobox",
+        "dialog",
+        "grid",
+        "gridcell",
+        "heading",
+        "img",
+        "link",
+        "list",
+        "listbox",
+        "listitem",
+        "menu",
+        "menubar",
+        "menuitem",
+        "menuitemcheckbox",
+        "menuitemradio",
+        "navigation",
+        "option",
+        "progressbar",
+        "radio",
+        "row",
+        "rowheader",
+        "searchbox",
+        "slider",
+        "spinbutton",
+        "status",
+        "switch",
+        "tab",
+        "tabpanel",
+        "textbox",
+        "tooltip",
+        "tree",
+        "treeitem",
+    }
+)
 
 # Pattern to detect optional [N] index suffix: ``button:Add to Cart[1]``
 _INDEX_SUFFIX_RE = re.compile(r"^(.+)\[(\d+)\]$")
@@ -62,7 +95,7 @@ def _parse_role_name(target: str) -> tuple[str, str | None, int | None] | None:
     role = target[:colon_idx].strip().lower()
     if role not in _VALID_ROLES:
         return None
-    raw_name = target[colon_idx + 1:].strip()
+    raw_name = target[colon_idx + 1 :].strip()
     if not raw_name:
         # Trailing colon with no name (e.g. "combobox:") — bare role match.
         return (role, None, None)
@@ -269,8 +302,7 @@ async def _resolve_locator(
 
                     hint = (
                         f"No exact match for '{clean_target}'. "
-                        f"Similar element(s) found — try: "
-                        + ", ".join(f"'{s}'" for s in suggestions)
+                        f"Similar element(s) found — try: " + ", ".join(f"'{s}'" for s in suggestions)
                         if suggestions
                         else f"No exact match for '{clean_target}', "
                         f"but {fuzzy_count} similar element(s) exist. "
@@ -308,7 +340,9 @@ async def _resolve_locator(
                 # Multiple matches — try viewport filtering
                 if require_single_match:
                     viewport_locator, visible_count = await _filter_to_viewport(
-                        role_locator, count, page,
+                        role_locator,
+                        count,
+                        page,
                     )
                     if viewport_locator is not None:
                         return _LocatorResolution(
@@ -322,7 +356,7 @@ async def _resolve_locator(
                     msg = (
                         f"'{clean_target}' matched {count} elements "
                         f"({visible_count} visible in viewport). "
-                        f"Use view_page(scope=\"...\") to narrow, or add an "
+                        f'Use view_page(scope="...") to narrow, or add an '
                         f"index like {hint}."
                     )
                     raise BrowserToolError(msg, tool=tool_name)
