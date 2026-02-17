@@ -55,7 +55,7 @@ def resolve_under_home(path: str) -> tuple[Path, Path, str]:
         cleaned = remainder
     else:
         cleaned = input_path
-    parts = []
+    parts: list[str] = []
     for part in cleaned.parts:
         if part in ("", "."):
             continue

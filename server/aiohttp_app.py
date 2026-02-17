@@ -117,9 +117,9 @@ async def stream_events(
     try:
         async for event in events:
             if not isinstance(event, BaseModel):  # pragma: no cover - defensive
-                msg = f"stream_events expected BaseModel events; received {type(event)!r}"
+                msg = f"stream_events expected BaseModel events; received {type(event)!r}"  # type: ignore[unreachable]
                 raise TypeError(msg)
-            raw = event.model_dump(mode="json", exclude_none=True)  # type: ignore[arg-type]
+            raw = event.model_dump(mode="json", exclude_none=True)
             final_flag = bool(raw.get("final", False))
             # Direct pass-through (no legacy duplication)
             data_out: dict[str, object | None] = {

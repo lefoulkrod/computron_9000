@@ -53,16 +53,8 @@ def write_file(path: str, content: str) -> WriteFileResult:
         file_path, _home, rel_return_path = resolve_under_home(path)
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, str):
-            with file_path.open("w", encoding="utf-8") as f:
-                f.write(content)
-        else:
-            logger.error("Content must be of type str, got %s", type(content))
-            return WriteFileResult(
-                success=False,
-                file_path=rel_return_path,
-                error=str(type(content)),
-            )
+        with file_path.open("w", encoding="utf-8") as f:
+            f.write(content)
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Failed to write file at path %s", path)
         err_path = rel_return_path if rel_return_path else path
@@ -197,16 +189,8 @@ def append_to_file(path: str, content: str) -> WriteFileResult:
         file_path, _home, rel_return_path = resolve_under_home(path)
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, str):
-            with file_path.open("a", encoding="utf-8") as f:
+        with file_path.open("a", encoding="utf-8") as f:
                 f.write(content)
-        else:
-            logger.error("Content must be of type str, got %s", type(content))
-            return WriteFileResult(
-                success=False,
-                file_path=rel_return_path,
-                error=str(type(content)),
-            )
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to append file at path %s", path)
         err_path = rel_return_path if rel_return_path else path
@@ -231,14 +215,6 @@ def prepend_to_file(path: str, content: str) -> WriteFileResult:
         file_path, _home, rel_return_path = resolve_under_home(path)
         if file_path.parent and not file_path.parent.exists():
             file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if not isinstance(content, str):
-            logger.error("Content must be of type str, got %s", type(content))
-            return WriteFileResult(
-                success=False,
-                file_path=rel_return_path,
-                error=str(type(content)),
-            )
 
         existing_text = ""
         if file_path.exists():
@@ -280,10 +256,6 @@ def write_files(files: list[tuple[str, str]]) -> list[WriteFileResult]:
     """
     results: list[WriteFileResult] = []
     for path, content in files:
-        if not isinstance(content, str):
-            logger.error("Content in write_files must be str, got %s", type(content))
-            results.append(WriteFileResult(success=False, file_path=path, error=str(type(content))))
-            continue
         results.append(write_file(path, content))
     return results
 

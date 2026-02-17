@@ -1,6 +1,7 @@
 """Coder development agent implementation."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
 from agents.ollama.coder.context_models import generate_coder_input_schema_summary
@@ -95,7 +96,7 @@ coder_agent = Agent(
 
 before_model_call_callback = make_log_before_model_call(coder_agent)
 after_model_call_callback = make_log_after_model_call(coder_agent)
-coder_agent_tool = make_run_agent_as_tool_function(
+coder_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
     agent=coder_agent,
     tool_description="""
     Implement a single plan step using the provided standardized context (CoderInput),

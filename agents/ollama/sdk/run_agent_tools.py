@@ -83,14 +83,14 @@ def _validate_pydantic_model(
     """
     if hasattr(model_type, "model_validate"):
         try:
-            return model_type.model_validate(data)  # type: ignore[attr-defined]
+            return model_type.model_validate(data)
         except Exception as exc:
             logger.exception("Pydantic model_validate failed %s %s", context, model_type)
             raise AgentToolConversionError(AgentToolConversionError.ERR_PYDANTIC_VALIDATE) from exc
 
     if hasattr(model_type, "parse_obj"):
         try:
-            return model_type.parse_obj(data)  # type: ignore[attr-defined]
+            return model_type.parse_obj(data)
         except Exception as exc:
             logger.exception("Pydantic parse_obj failed %s %s", context, model_type)
             raise AgentToolConversionError(AgentToolConversionError.ERR_PYDANTIC_PARSE) from exc
@@ -268,7 +268,7 @@ def make_run_agent_as_tool_function[T](
     agent: Agent,
     tool_description: str,
     *,
-    result_type: type[T] = str,  # Default behavior returns string
+    result_type: type[T] = str,  # type: ignore  # Default behavior returns string
     before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
 ) -> Callable[[str], Awaitable[T]]:
@@ -311,7 +311,7 @@ Returns:
             ]
 
             # For string results, single pass without retry
-            if result_type is str:  # type: ignore[comparison-overlap]
+            if result_type is str:
                 return await _run_tool_loop_once(
                     messages=messages,
                     agent=agent,
@@ -333,7 +333,7 @@ Returns:
     # distinguish multiple agent tools. We assume agent.name values are unique.
     safe_agent_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in agent.name).strip("_") or "agent"
     func_name = f"run_{safe_agent_name}_as_tool"
-    run_agent_as_tool.__name__ = func_name  # type: ignore[attr-defined]
-    run_agent_as_tool.__qualname__ = func_name  # type: ignore[attr-defined]
+    run_agent_as_tool.__name__ = func_name
+    run_agent_as_tool.__qualname__ = func_name
     run_agent_as_tool.__doc__ = docstring
     return run_agent_as_tool

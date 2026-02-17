@@ -105,9 +105,6 @@ def _extract_error_message(raw: str) -> str:
 
 def _error_message_from_payload(payload: dict[str, Any]) -> str | None:
     """Extract an error message from a successful JSON payload, if present."""
-    if not isinstance(payload, dict):
-        return None
-
     error = payload.get("error")
     if isinstance(error, dict):
         return _extract_message_from_error(error)

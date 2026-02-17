@@ -178,7 +178,7 @@ async def run_tool_call_loop(
                 )
                 if not tool_func:
                     logger.error("Tool '%s' not found in tools.", tool_name)
-                    tool_result = {"error": "Tool not found"}
+                    tool_result: dict[str, Any] = {"error": "Tool not found"}
                 else:
                     try:
                         validated_args = _prepare_tool_arguments(tool_func, arguments)

@@ -11,6 +11,7 @@ No LLM calls are used; the logic is deterministic and uses the tool API directly
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
 from agents.ollama.sdk import (
@@ -102,7 +103,7 @@ tool_test_agent = Agent(
 
 before_model_call_callback = make_log_before_model_call(tool_test_agent)
 after_model_call_callback = make_log_after_model_call(tool_test_agent)
-tool_test_agent_tool = make_run_agent_as_tool_function(
+tool_test_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
     agent=tool_test_agent,
     tool_description=(
         "Run the deterministic tool-test sequence: write a file, patch it, verify result. "
