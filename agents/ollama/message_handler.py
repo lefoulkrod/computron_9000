@@ -164,7 +164,7 @@ async def handle_user_message(
                 if item is None:
                     break
                 if not isinstance(item, DispatchEvent):  # pragma: no cover
-                    logger.warning("Unexpected queue item type: %s", type(item))
+                    logger.warning("Unexpected queue item type: %s", type(item))  # type: ignore[unreachable]
                     continue
                 payload = _sanitize_dispatch_event(item)
                 if payload.final and item.depth > 0:

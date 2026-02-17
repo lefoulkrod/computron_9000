@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
 from agents.ollama.sdk import (
@@ -62,7 +63,7 @@ web_agent: Agent = Agent(
 before_model_call_callback = make_log_before_model_call(web_agent)
 after_model_call_callback = make_log_after_model_call(web_agent)
 
-web_agent_tool = make_run_agent_as_tool_function(
+web_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
     agent=web_agent,
     tool_description=DESCRIPTION,
     before_model_callbacks=[before_model_call_callback],

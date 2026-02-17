@@ -117,10 +117,10 @@ def _write_implementation_file(rel_path: str, content: str | bytes, *, append: b
     try:
         mode = "ab" if isinstance(content, bytes) else ("a" if append else "w")
         if isinstance(content, bytes):
-            with target.open(mode) as f:  # type: ignore[arg-type]
+            with target.open(mode) as f:
                 f.write(content)
         else:
-            with target.open(mode, encoding="utf-8") as f:  # type: ignore[arg-type]
+            with target.open(mode, encoding="utf-8") as f:
                 f.write(content)
     except Exception:
         logger.exception("Failed to write implementation file %s for workspace %s", rel_path, ws)

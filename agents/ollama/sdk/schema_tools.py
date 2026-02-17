@@ -69,14 +69,14 @@ def _placeholder_for_type(tp: object) -> JSONValue:
     origin = get_origin(tp)
 
     # Optional / Union - choose first non-None argument (handle Optional[list[T]])
-    if origin in (Union, types.UnionType):  # type: ignore[arg-type]
+    if origin in (Union, types.UnionType):
         non_none = [a for a in get_args(tp) if a is not type(None)]
         if non_none:
             return _placeholder_for_type(non_none[0])
         return "string"
 
     # List / sequence generics
-    if origin in (list, list[int].__class__):  # type: ignore[attr-defined]
+    if origin in (list, list[int].__class__):
         args = get_args(tp)
         inner = args[0] if args else str
         # Lists of objects -> single example element [{...}]
@@ -186,7 +186,7 @@ def _extract_field_docs_from_docstring(model_cls: type[BaseModel], *, allowed_fi
 def _unwrap_optional(tp: object) -> object:
     """Return the underlying type for Optional/Union[None, T] annotations."""
     origin = get_origin(tp)
-    if origin in (Union, types.UnionType):  # type: ignore[arg-type]
+    if origin in (Union, types.UnionType):
         non_none = [a for a in get_args(tp) if a is not type(None)]
         if non_none:
             return non_none[0]
@@ -195,7 +195,7 @@ def _unwrap_optional(tp: object) -> object:
 
 def _is_list_of(tp: object, item_predicate: Callable[[object], bool]) -> tuple[bool, object | None]:
     origin = get_origin(tp)
-    if origin in (list, list[int].__class__):  # type: ignore[attr-defined]
+    if origin in (list, list[int].__class__):
         args = get_args(tp)
         inner = args[0] if args else str
         return bool(item_predicate(inner)), inner
@@ -210,10 +210,10 @@ def _build_shape_and_docs(
     docs_map: dict[tuple[str, ...], dict[str, str]] = {}
 
     # Field docs at this level
-    field_names = set(model_cls.model_fields.keys())  # type: ignore[attr-defined]
+    field_names = set(model_cls.model_fields.keys())
     field_docs = _extract_field_docs_from_docstring(model_cls, allowed_fields=field_names)
 
-    for name, field in model_cls.model_fields.items():  # type: ignore[attr-defined]
+    for name, field in model_cls.model_fields.items():
         ann = _unwrap_optional(field.annotation)
         # List handling
         is_list, inner = _is_list_of(
@@ -324,10 +324,10 @@ def model_placeholder_shape(model_cls: type[BaseModel]) -> dict[str, JSONValue]:
     - Lists of models -> single example element [{...}]
     """
     shape: dict[str, JSONValue] = {}
-    for name, field in model_cls.model_fields.items():  # type: ignore[attr-defined]
+    for name, field in model_cls.model_fields.items():
         ann = _unwrap_optional(field.annotation)
         origin = get_origin(ann)
-        if origin in (list, list[int].__class__):  # type: ignore[attr-defined]
+        if origin in (list, list[int].__class__):
             args = get_args(ann)
             inner = args[0] if args else str
             if isinstance(inner, type) and issubclass(inner, BaseModel):

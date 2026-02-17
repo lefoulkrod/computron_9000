@@ -188,7 +188,7 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
                 "user": container_user,
                 "workdir": workdir,
             }
-            return container.exec_run(exec_args, **exec_run_kwargs)
+            return container.exec_run(exec_args, **exec_run_kwargs)  # type: ignore
 
         try:
             exec_result = await asyncio.wait_for(loop.run_in_executor(None, _exec_run_sync), timeout=_timeout_for(cmd))

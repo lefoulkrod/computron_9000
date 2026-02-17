@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from playwright.async_api import Page, Response
 
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
@@ -54,8 +57,8 @@ logger = logging.getLogger(__name__)
 
 
 async def _build_snapshot(
-    page: Page,  # noqa: F821 - avoid circular import
-    response: Response | None,  # noqa: F821
+    page: Page,
+    response: Response | None,
 ) -> PageView:
     """Build page view for interaction results."""
     return await build_page_view(page, response)

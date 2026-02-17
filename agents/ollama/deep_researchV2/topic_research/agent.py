@@ -1,6 +1,7 @@
 """The agent for the topic research functionality."""
 
 import logging
+from collections.abc import Awaitable, Callable
 
 from agents.ollama.deep_researchV2.website_reader.agent import website_reader_agent_tool
 from agents.ollama.sdk import (
@@ -34,7 +35,7 @@ topic_research_agent = Agent(
 
 before_model_call_callback = make_log_before_model_call(topic_research_agent)
 after_model_call_callback = make_log_after_model_call(topic_research_agent)
-topic_research_agent_tool = make_run_agent_as_tool_function(
+topic_research_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
     agent=topic_research_agent,
     tool_description="""
     Download and analyze content from specified URLs related to a research topic.

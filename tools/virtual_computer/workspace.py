@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import importlib
 import logging
-from typing import Any
+from typing import Any, cast
 
 import config
 from config import AppConfig
@@ -84,7 +84,7 @@ def save_plan_json(plan: dict[str, Any] | list[Any] | str) -> str:
         str: The absolute path to the saved ``plan.json`` file.
     """
     impl = importlib.import_module("tools.virtual_computer.implementation_artifacts")
-    return impl.save_plan_json(plan)
+    return cast(str, impl.save_plan_json(plan))
 
 
 def get_current_workspace_plan_json() -> str:
@@ -97,7 +97,7 @@ def get_current_workspace_plan_json() -> str:
         str: JSON string content of ``plan.json``.
     """
     impl = importlib.import_module("tools.virtual_computer.implementation_artifacts")
-    return impl.get_current_workspace_plan_json()
+    return cast(str, impl.get_current_workspace_plan_json())
 
 
 # Control star-import exposure; only expose public API and tool function

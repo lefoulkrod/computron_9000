@@ -81,7 +81,6 @@ class EventDispatcher:
         for handler in subscribers:
             try:
                 if iscoroutinefunction(handler):
-                    # type: ignore[arg-type] - mypy can't detect precise Callable type here
                     task = asyncio.create_task(self._run_async_handler(handler, event))
                     self._tasks.add(task)
                     task.add_done_callback(self._tasks.discard)

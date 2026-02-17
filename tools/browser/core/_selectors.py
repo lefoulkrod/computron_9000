@@ -183,11 +183,11 @@ async def _resolve_locator(
                 # still works.
                 exact = not name.endswith("...")
                 search_name = name.rstrip(".") if not exact else name
-                role_locator = page.get_by_role(role, name=search_name, exact=exact)
+                role_locator = page.get_by_role(role, name=search_name, exact=exact)  # type: ignore[arg-type]
             else:
                 # Bare role (e.g. "combobox" or "combobox:") — match any
                 # element with this role regardless of accessible name.
-                role_locator = page.get_by_role(role)
+                role_locator = page.get_by_role(role)  # type: ignore[arg-type]
             count = await role_locator.count()
             # When exact match finds nothing, probe with substring matching
             # to give the agent actionable feedback.  The DOM walker reports
@@ -199,7 +199,7 @@ async def _resolve_locator(
             # risks clicking the wrong element), we surface the full
             # accessible name so the agent can retry with an exact selector.
             if count == 0 and exact and name is not None:
-                fuzzy_locator = page.get_by_role(role, name=search_name, exact=False)
+                fuzzy_locator = page.get_by_role(role, name=search_name, exact=False)  # type: ignore[arg-type]
                 fuzzy_count = await fuzzy_locator.count()
                 if fuzzy_count > 0:
                     # Collect accessible names of the fuzzy matches for the

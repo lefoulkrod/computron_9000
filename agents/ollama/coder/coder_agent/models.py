@@ -1,8 +1,8 @@
 """Coder agent result models."""
 
-from pydantic import BaseModel, Field
+from typing import Any
 
-from agents.ollama.coder.verifier_agent.models import VerificationReport
+from pydantic import BaseModel, Field
 
 __all__ = [
     "StepResult",
@@ -30,6 +30,6 @@ class StepResult(BaseModel):
     finished_at: float
     completed: bool
     artifacts: list[str] = Field(default_factory=list)
-    verification: VerificationReport | None = None
+    verification: dict[str, Any] | None = None
     logs: list[str] = Field(default_factory=list)
     error: str | None = None
