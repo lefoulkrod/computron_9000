@@ -86,7 +86,6 @@ _CURSOR_OVERLAY_SCRIPT = """
             left:-9999px;
             top:-9999px;
             transform:translate(-50%,-50%);
-            transition:left 90ms ease-out, top 90ms ease-out;
         `;
         const dot = document.createElement('div');
         dot.id = '__llm_cursor_dot__';
@@ -182,7 +181,7 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
                 sy = y
             # If the stored position is the sentinel off-screen value, treat as unset.
             if not (math.isfinite(sx) and math.isfinite(sy)) or (sx == -9999 and sy == -9999):
-                logger.warning(
+                logger.debug(
                     "Fake cursor position is unset or non-finite on page %s; using target coordinates as default.",
                     getattr(page, "url", "<unknown>"),
                 )
@@ -199,6 +198,7 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
     # Animate the overlay and move the real mouse in small increments so the
     # in-page fake cursor visibly follows the pointer during movement.
     steps_count = max(1, int(steps))
+
     for step_idx in range(1, steps_count + 1):
         t = step_idx / steps_count
         xi = start_x + (x - start_x) * t
@@ -219,6 +219,14 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
         # Move the real mouse a small step; using steps=1 keeps movement discrete
         # and lets us control the overlay per-step.
         await page.mouse.move(xi, yi, steps=1)
+
+        # Fire non-blocking progressive snapshot (throttled to ~4 fps).
+        # The emitter coalesces rapid requests so the movement loop is never
+        # blocked waiting for screenshot capture.
+        from tools.browser.events import request_progressive_snapshot
+
+        request_progressive_snapshot(page)
+
         # Small pause to let the browser render the overlay movement. Keep this
         # brief to avoid slowing tests too much while still producing visible motion.
         await asyncio.sleep(0.03)
@@ -237,10 +245,10 @@ async def human_click(page: Page, locator: Locator) -> None:
     cfg = _get_human_config()
     if hasattr(locator, "scroll_into_view_if_needed"):
         try:
-            await locator.scroll_into_view_if_needed()
+            await locator.scroll_into_view_if_needed(timeout=5000)
         except PlaywrightError as exc:  # pragma: no cover - defensive
             logger.debug("scroll_into_view_if_needed failed prior to click: %s", exc)
-    handle = await locator.element_handle()
+    handle = await locator.element_handle(timeout=5000)
     if handle is None:
         raise BrowserToolError("Unable to resolve element handle", tool="click")
     # The element must be attached to a frame/page. Using the page's mouse
@@ -293,6 +301,9 @@ async def human_click(page: Page, locator: Locator) -> None:
     # Ensure overlay is finally positioned on the click point (best-effort).
     try:
         await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
+        # Small delay after positioning cursor to allow CSS transition to render
+        # This ensures screenshots captured shortly after will show the cursor
+        await asyncio.sleep(0.05)
     except PlaywrightError as exc:
         logger.warning(
             (
@@ -333,7 +344,7 @@ async def human_drag(
 
     cfg = _get_human_config()
 
-    source_handle = await source_locator.element_handle()
+    source_handle = await source_locator.element_handle(timeout=5000)
     if source_handle is None:
         raise BrowserToolError("Unable to resolve source element handle", tool="drag")
 
@@ -387,7 +398,7 @@ async def human_drag(
     dest_y: float
 
     if target_locator is not None:
-        target_handle = await target_locator.element_handle()
+        target_handle = await target_locator.element_handle(timeout=5000)
         if target_handle is None:
             raise BrowserToolError("Unable to resolve target element handle", tool="drag")
 
@@ -480,7 +491,7 @@ async def human_type(page: Page, locator: Locator, text: str, *, clear_existing:
 
     Args:
         page: Playwright Page object whose keyboard will be used.
-        locator: Locator for the input element.
+        locator: Locator for the input element (should already be focused/clicked).
         text: Text to type.
         clear_existing: Whether to clear existing text before typing.
 
@@ -488,27 +499,11 @@ async def human_type(page: Page, locator: Locator, text: str, *, clear_existing:
         BrowserToolError: If locator cannot be resolved or page lacks a keyboard.
     """
     cfg = _get_human_config()
-    handle = await locator.element_handle()
-    if handle is None:
-        raise BrowserToolError("Unable to resolve element handle", tool="fill_field")
-
-    # The element must be attached to a frame/page to use the page's
-    # keyboard for human-like typing. Previously we fell back to
-    # ``locator.fill()`` for test doubles or detached handles; that
-    # behavior is not present in production code. Callers must ensure
-    # the element is attached to the document of the provided page.
-    frame = await handle.owner_frame()
-    if frame is None:
-        raise BrowserToolError(
-            "Element is not attached to a frame/page; cannot perform keyboard-based fill",
-            tool="fill_field",
-        )
 
     if not hasattr(page, "keyboard") or page.keyboard is None:
         raise BrowserToolError("Provided page has no keyboard available", tool="fill_field")
 
     keyboard = page.keyboard
-    await locator.focus()
 
     if clear_existing:
         try:
@@ -520,7 +515,17 @@ async def human_type(page: Page, locator: Locator, text: str, *, clear_existing:
 
     for idx, ch in enumerate(text):
         delay = random.randint(cfg.delay_min_ms, cfg.delay_max_ms)
-        await keyboard.type(ch, delay=delay)
+        # Type single character (keyboard.type handles single chars fine)
+        await keyboard.type(ch)
+        # Add human-like delay after typing
+        if delay > 0:
+            await _sleep_ms(delay)
+
+        # Fire non-blocking progressive snapshot (throttled to ~4 fps).
+        from tools.browser.events import request_progressive_snapshot
+
+        request_progressive_snapshot(page)
+
         if cfg.extra_pause_every_chars > 0 and (idx + 1) % cfg.extra_pause_every_chars == 0:
             await _sleep_ms(random.randint(cfg.extra_pause_min_ms, cfg.extra_pause_max_ms))
 
@@ -615,7 +620,7 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
                 await page.keyboard.press(key)
             else:
                 # fallback to evaluate
-                await page.evaluate(f"() => window.scrollTo(0, document.{'documentElement'}.{'scrollHeight'} )")
+                await page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
         elif dir_norm in {"page_down", "page_up"}:
             key = "PageDown" if dir_norm == "page_down" else "PageUp"
             if hasattr(page, "keyboard") and page.keyboard is not None:
@@ -629,11 +634,13 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
         else:
             # 'down' or 'up' with optional pixel amount
             if amount is None:
-                # default to viewport scroll using page.viewport_size when available
-                if hasattr(page, "viewport_size") and page.viewport_size:
-                    height = page.viewport_size.get("height", 800)
-                else:
-                    height = 800
+                # Query actual viewport height from the browser
+                try:
+                    height = await page.evaluate("() => window.innerHeight")
+                    if not isinstance(height, int | float) or height <= 0:
+                        height = 800  # fallback
+                except PlaywrightError:
+                    height = 800  # fallback if evaluate fails
                 delta = round(height) if dir_norm == "down" else -round(height)
             else:
                 if not isinstance(amount, int):
@@ -645,11 +652,37 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
             if jitter > 0:
                 delta += random.randint(-jitter, jitter)
 
-            # Use evaluate to perform smooth-ish scroll
-            await page.evaluate(
-                "(dy) => window.scrollBy({ top: dy, left: 0, behavior: 'smooth' })",
-                delta,
-            )
+            # Perform smooth scrolling with multiple wheel events to mimic human scrolling
+            # Humans don't jump-scroll; they use mouse wheel in small increments
+            if not hasattr(page, "mouse") or page.mouse is None:
+                # Fallback to evaluate if mouse API unavailable
+                await page.evaluate(
+                    "(dy) => window.scrollBy({ top: dy, left: 0, behavior: 'smooth' })",
+                    delta,
+                )
+            else:
+                # Split scroll into multiple small wheel events
+                wheel_increment = 50 if delta > 0 else -50
+                remaining = abs(delta)
+                events_count = max(1, remaining // abs(wheel_increment))
+
+                for _i in range(int(events_count)):
+                    await page.mouse.wheel(0, wheel_increment)
+
+                    # Fire non-blocking progressive snapshot (throttled to ~4 fps).
+                    from tools.browser.events import request_progressive_snapshot
+
+                    request_progressive_snapshot(page)
+
+                    # Small delay between wheel events (16ms = ~60fps scrolling)
+                    await asyncio.sleep(0.016)
+
+                # Handle any remainder
+                remainder = remaining % abs(wheel_increment)
+                if remainder > 0:
+                    final_delta = remainder if delta > 0 else -remainder
+                    await page.mouse.wheel(0, final_delta)
+                    await asyncio.sleep(0.016)
 
         # small pause to allow lazy loading
         await _sleep_ms(random.randint(100, 300))

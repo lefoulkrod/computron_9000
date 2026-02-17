@@ -45,8 +45,24 @@ class ToolCallPayload(BaseModel):
     name: str
 
 
+class BrowserSnapshotPayload(BaseModel):
+    """Metadata for browser snapshot events.
+
+    Attributes:
+        type: Discriminator for the event payload; always "browser_snapshot" for this model.
+        url: The current URL of the browser page.
+        title: The page title.
+        screenshot: Base64-encoded PNG screenshot of the viewport.
+    """
+
+    type: Literal["browser_snapshot"]
+    url: str
+    title: str
+    screenshot: str  # base64 encoded PNG
+
+
 # Extend this alias with additional payload models as new event types are introduced.
-AssistantEventPayload = Annotated[ToolCallPayload, Field(discriminator="type")]
+AssistantEventPayload = Annotated[ToolCallPayload | BrowserSnapshotPayload, Field(discriminator="type")]
 
 
 class AssistantResponse(BaseModel):
@@ -85,6 +101,7 @@ __all__ = [
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",
+    "BrowserSnapshotPayload",
     "DispatchEvent",
     "ToolCallPayload",
 ]

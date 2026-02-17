@@ -46,7 +46,7 @@ async def test_drag_with_target_selector(
     assert isinstance(result, InteractionResult)
     assert result.page_changed is False
     assert result.reason == "no-change"
-    assert result.snapshot is None
+    assert result.page_view is None
     assert page.drag_calls == [
         {"source": source_locator, "target": target_locator, "offset": None}
     ]
@@ -75,7 +75,7 @@ async def test_drag_with_offset(
     result = await drag("Drag me", offset=(25, -10))
     assert result.page_changed is False
     assert result.reason == "no-change"
-    assert result.snapshot is None
+    assert result.page_view is None
     assert page.drag_calls == [
         {"source": source_locator, "target": None, "offset": (25.0, -10.0)}
     ]

@@ -301,3 +301,154 @@ def test_registry_seen_and_reset() -> None:
     assert "#a" in registry.seen()
     registry.reset()
     assert len(registry.seen()) == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_id_with_css_special_chars_uses_attribute_selector(
+    registry: selectors.SelectorRegistry,
+    element_factory: Callable[..., _FakeElementHandle],
+) -> None:
+    """IDs containing CSS-special characters should use [id='...'] attribute form."""
+    element = element_factory(attributes={"id": ":r1:"})
+
+    result = await selectors.build_unique_selector(
+        element,  # type: ignore[arg-type]
+        tag="div",
+        text=None,
+        registry=registry,
+    )
+
+    assert result.strategy == selectors.SelectorStrategy.ID
+    assert result.selector == "[id=':r1:']"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_id_with_dot_uses_attribute_selector(
+    registry: selectors.SelectorRegistry,
+    element_factory: Callable[..., _FakeElementHandle],
+) -> None:
+    """IDs containing dots should use [id='...'] attribute form."""
+    element = element_factory(attributes={"id": "foo.bar"})
+
+    result = await selectors.build_unique_selector(
+        element,  # type: ignore[arg-type]
+        tag="div",
+        text=None,
+        registry=registry,
+    )
+
+    assert result.strategy == selectors.SelectorStrategy.ID
+    assert result.selector == "[id='foo.bar']"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_id_without_special_chars_uses_hash_selector(
+    registry: selectors.SelectorRegistry,
+    element_factory: Callable[..., _FakeElementHandle],
+) -> None:
+    """Clean IDs should use the standard #id CSS form."""
+    element = element_factory(attributes={"id": "main-content"})
+
+    result = await selectors.build_unique_selector(
+        element,  # type: ignore[arg-type]
+        tag="div",
+        text=None,
+        registry=registry,
+    )
+
+    assert result.strategy == selectors.SelectorStrategy.ID
+    assert result.selector == "#main-content"
+
+
+@pytest.mark.unit
+async def test_id_starting_with_digit_uses_attribute_selector(
+    registry: selectors.SelectorRegistry,
+    element_factory: Callable[..., _FakeElementHandle],
+) -> None:
+    """IDs starting with digits must use [id='...'] attribute selector form.
+    
+    CSS IDs cannot start with a digit when using the #id syntax.
+    This is a common issue with auto-generated IDs like UUIDs.
+    """
+    element = element_factory(attributes={"id": "564f2011-55f7-410b-b15e-c489da095894"})
+
+    result = await selectors.build_unique_selector(
+        element,  # type: ignore[arg-type]
+        tag="div",
+        text=None,
+        registry=registry,
+    )
+
+    assert result.strategy == selectors.SelectorStrategy.ID
+    assert result.selector == "[id='564f2011-55f7-410b-b15e-c489da095894']"
+
+
+@pytest.mark.unit
+def test_text_escape_backslash() -> None:
+    """Backslashes in text should be escaped for text selectors."""
+    escaped = selectors._escape_text_for_selector("C:\\Users\\test")
+    assert escaped == "C:\\\\Users\\\\test"
+
+
+@pytest.mark.unit
+def test_text_escape_quotes() -> None:
+    """Double quotes in text should be escaped for text selectors."""
+    escaped = selectors._escape_text_for_selector('Price: $50 "sale"')
+    assert escaped == 'Price: $50 \\"sale\\"'
+
+
+@pytest.mark.unit
+def test_text_escape_collapses_whitespace() -> None:
+    """Newlines and tabs should be collapsed to single spaces."""
+    escaped = selectors._escape_text_for_selector("line one\nline two\ttab")
+    assert escaped == "line one line two tab"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_aria_label_with_bracket_is_rejected(
+    registry: selectors.SelectorRegistry,
+    element_factory: Callable[..., _FakeElementHandle],
+) -> None:
+    """Aria-label containing ']' should not produce an ARIA selector."""
+    element = element_factory(
+        attributes={"aria-label": "Close [x]", "role": "button"},
+        dom_path="body > button:nth-of-type(1)",
+        dom_tag="button",
+    )
+
+    result = await selectors.build_unique_selector(
+        element,  # type: ignore[arg-type]
+        tag="button",
+        text=None,
+        registry=registry,
+    )
+
+    # Should fall through to DOM_POSITION or later strategy, not ARIA_ROLE_LABEL
+    assert result.strategy != selectors.SelectorStrategy.ARIA_ROLE_LABEL
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_aria_label_with_backslash_is_rejected(
+    registry: selectors.SelectorRegistry,
+    element_factory: Callable[..., _FakeElementHandle],
+) -> None:
+    """Aria-label containing backslash should not produce an ARIA selector."""
+    element = element_factory(
+        attributes={"aria-label": "path\\to\\file", "role": "link"},
+        dom_path="body > a:nth-of-type(1)",
+        dom_tag="a",
+    )
+
+    result = await selectors.build_unique_selector(
+        element,  # type: ignore[arg-type]
+        tag="a",
+        text=None,
+        registry=registry,
+    )
+
+    assert result.strategy != selectors.SelectorStrategy.ARIA_ROLE_LABEL

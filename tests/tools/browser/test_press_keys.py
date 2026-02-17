@@ -51,7 +51,7 @@ async def test_press_keys_success(
     assert isinstance(result, InteractionResult)
     assert result.page_changed is False
     assert result.reason == "no-change"
-    assert result.snapshot is None
+    assert result.page_view is None
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
 

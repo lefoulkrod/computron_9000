@@ -41,13 +41,13 @@ class DummyKeyboard:
     def __init__(self, recorder: list[str]):
         self.recorder = recorder
 
-    async def press(self, key: str):
-        # record presses synchronously
-        self.recorder.append(f"press:{key}")
+    async def press(self, key: str, delay: int = 0):
+        # record presses synchronously (delay is optional for Control+A etc)
+        self.recorder.append(f"press:{key}:{delay}")
 
-    async def type(self, ch: str, delay: int = 0):
-        # simulate delay but don't actually sleep to keep tests fast
-        self.recorder.append(f"type:{ch}:{delay}")
+    async def type(self, ch: str):
+        # Type without delay parameter (delay is handled separately in code)
+        self.recorder.append(f"type:{ch}")
 
 
 class DummyElementHandle:
@@ -71,10 +71,10 @@ class DummyLocator:
         self._handle = handle
         self._filled = None
 
-    async def element_handle(self):
+    async def element_handle(self, timeout: int | None = None):
         return self._handle
 
-    async def click(self):
+    async def click(self, timeout: int | None = None, force: bool = False):
         # fallback click used when page/frame isn't available
         raise NotImplementedError("direct click not supported in dummy")
 
@@ -314,18 +314,15 @@ async def test_human_type_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch)
         extra_pause_max_ms=0,
     ))
 
-    # Test typing with clear_existing True -> expect Control+A, Backspace, then per-char type
+    # Test typing with clear_existing True -> expect Control+A, Backspace (without delay), then per-char type (delay handled separately)
     await human_type(cast(Page, page), cast(Locator, locator), "ab", clear_existing=True)
-    assert recorder[:2] == ["press:Control+A", "press:Backspace"]
-    assert recorder[2:] == ["type:a:10", "type:b:10"]
+    assert recorder[:2] == ["press:Control+A:0", "press:Backspace:0"]
+    assert recorder[2:] == ["type:a", "type:b"]
 
-    # When no frame/page is present, human_type now raises BrowserToolError
-    handle_no_frame = DummyElementHandle(bounding_box=None, frame=None)
-    locator2 = DummyLocator(handle_no_frame)
-    from tools.browser.core.exceptions import BrowserToolError
-
-    with pytest.raises(BrowserToolError):
-        await human_type(cast(Page, page), cast(Locator, locator2), "xyz", clear_existing=False)
+    # Test typing without clearing
+    recorder.clear()
+    await human_type(cast(Page, page), cast(Locator, locator), "xyz", clear_existing=False)
+    assert recorder == ["type:x", "type:y", "type:z"]
 
 
 @pytest.mark.unit

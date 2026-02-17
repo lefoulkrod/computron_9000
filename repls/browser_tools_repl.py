@@ -1,8 +1,9 @@
 """Interactive REPL for executing individual browser tools.
 
-This REPL exposes each public browser tool (open_url, current_page, click, drag, fill_field,
-scroll_page, press_keys, extract_text, ask_about_screenshot, ground_elements_by_text,
-close_browser) via a numbered menu. Selecting a tool will prompt for its arguments
+This REPL exposes each public browser tool (open_url, view_page, click, drag,
+fill_field, select_option, press_keys, scroll_page, go_back,
+ask_about_screenshot, ground_elements_by_text, close_browser) via a numbered menu.
+Selecting a tool will prompt for its arguments
 and execute it against the shared persistent Playwright browser. Results are logged
 in structured form. On exit (command /exit or EOF/KeyboardInterrupt) the shared
 browser is closed via tools.browser.close_browser.
@@ -11,7 +12,12 @@ The full tool menu is reprinted every loop so the available options are always
 visible without requiring a separate /help command (which still works).
 
 Usage:
+    # Interactive mode
     uv run python -m repls.browser_tools_repl [--log-level DEBUG] [--all-logs]
+    
+    # Non-interactive mode (execute commands)
+    uv run python -m repls.browser_tools_repl --url "http://example.com" --commands "click text=Link"
+    uv run python -m repls.browser_tools_repl --url "file:///path/to/test.html" --commands "fill_field selector=#name value=John" "click text=Submit" --close-after
 
 Design notes:
     * Dynamic tool registry drives prompts & arg parsing.
@@ -23,6 +29,9 @@ Design notes:
     * Optional CLI flags:
         --log-level LEVEL   Set REPL logger verbosity (default INFO)
         --all-logs          Propagate REPL logs so other application loggers emit
+        --url URL           Open URL initially (enables non-interactive mode)
+        --commands CMD...   Execute commands non-interactively
+        --close-after       Close browser after commands
 
 Limitations:
     * Vision tools require configured vision model; failures are surfaced but not fatal.
@@ -35,29 +44,64 @@ import asyncio
 import inspect
 import json
 import logging
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, get_origin, get_args, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
+from types import UnionType
 
 from logging_config import setup_logging
 from repls.repl_logging import get_repl_logger
 from tools.browser import (
     ask_about_screenshot,
-    list_clickable_elements,
     click,
-    drag,
     close_browser,
-    current_page,
-    extract_text,
+    drag,
     fill_field,
+    go_back,
     ground_elements_by_text,
     open_url,
     press_keys,
     scroll_page,
+    select_option,
+    view_page,
 )
 from tools.browser.core.exceptions import BrowserToolError
 
 logger = get_repl_logger("browser_tools")
 
 ToolFn = Callable[..., Coroutine[Any, Any, Any]]
+
+
+def _expects_str_sequence(annotation: Any) -> bool:
+    """Return ``True`` if annotation denotes a sequence of strings."""
+
+    if annotation in (list, List, Sequence):
+        return True
+
+    origin = get_origin(annotation)
+    if origin in (list, List, Sequence):
+        args = get_args(annotation)
+        return not args or args[0] in (str, Any)
+
+    if origin in (Union, UnionType):
+        return any(
+            _expects_str_sequence(arg)
+            for arg in get_args(annotation)
+            if arg is not type(None)  # noqa: E721
+        )
+
+    return False
 
 
 class _ToolSpec:
@@ -101,6 +145,13 @@ class _ToolSpec:
                     # Required param - reprompt
                     print("Value required.")
                     continue
+                # Resolve type annotation to validate/coerce input
+                try:
+                    resolved = get_type_hints(self.func)
+                    ann = resolved.get(p.name, p.annotation)
+                except Exception:
+                    ann = p.annotation
+
                 # Try JSON first for structured or typed values. If JSON parsing
                 # fails we fall back to the raw string. Additionally, coerce
                 # simple string inputs into lists when the parameter annotation
@@ -109,33 +160,25 @@ class _ToolSpec:
                     value = json.loads(raw)
                 except json.JSONDecodeError:
                     value = raw
+
+                logger.debug(
+                    "prompt_for_args: param=%s annotation=%r value=%r",
+                    p.name,
+                    ann,
+                    value,
+                )
+
+                # Validate/coerce for int parameters
+                if ann is int or (hasattr(ann, "__origin__") and ann.__origin__ is type(int)):
+                    try:
+                        value = int(value)
+                    except (TypeError, ValueError):
+                        print(f"Error: {p.name} expects an integer, got {value!r}")
+                        continue
+
                 # Coerce plain string to single-item list when annotation is list[str]
                 try:
-                    # Resolve forward/quoted annotations (PEP 563) where possible so
-                    # we can reliably detect list[str] even when annotations are
-                    # stored as strings. Fall back to the raw parameter
-                    # annotation if resolution fails.
-                    try:
-                        resolved = get_type_hints(self.func)
-                        ann = resolved.get(p.name, p.annotation)
-                    except Exception:
-                        ann = p.annotation
-                    expects_list_of_str = False
-                    origin = get_origin(ann)
-                    args = get_args(ann)
-                    logger.debug(
-                        "prompt_for_args: param=%s annotation=%r origin=%r args=%r value=%r",
-                        p.name,
-                        ann,
-                        origin,
-                        args,
-                        value,
-                    )
-                    # If annotation is list or List[...] and either no inner type
-                    # is provided or the inner type is `str`, treat as list[str].
-                    if origin is list or ann is list:
-                        if not args or args[0] is str:
-                            expects_list_of_str = True
+                    expects_list_of_str = _expects_str_sequence(ann)
                     if expects_list_of_str and isinstance(value, str):
                         # Accept several common user inputs: 'Enter', '[Enter]', 'Enter,Tab'
                         trimmed = value.strip()
@@ -156,6 +199,10 @@ class _ToolSpec:
                             value = parts
                         else:
                             value = [trimmed]
+                    elif expects_list_of_str and isinstance(value, (tuple, set)):
+                        value = [str(item).strip() for item in value if str(item).strip()]
+                    if expects_list_of_str and isinstance(value, list):
+                        value = [str(item).strip() for item in value if str(item).strip()]
                     logger.debug("prompt_for_args: coerced param=%s -> %r (type=%s)", p.name, value, type(value))
                 except Exception:
                     # Be conservative: on any unexpected inspection error, don't modify value
@@ -171,21 +218,17 @@ class _ToolSpec:
 
 # Ordered registry of tools to expose
 _TOOLS: list[_ToolSpec] = [
-    _ToolSpec("open_url", open_url, "Navigate to a URL and snapshot the page."),
-    _ToolSpec("current_page", current_page, "Snapshot the current page."),
-    _ToolSpec("click", click, "Click an element by text or selector."),
+    _ToolSpec("open_url", open_url, "Navigate to a URL and return annotated snapshot."),
+    _ToolSpec("view_page", view_page, "View current page with [role] name markers (no navigation)."),
+    _ToolSpec("click", click, "Click an element by role:name selector."),
     _ToolSpec("drag", drag, "Drag an element to a selector or offset."),
     _ToolSpec("fill_field", fill_field, "Fill an input/textarea field."),
+    _ToolSpec("select_option", select_option, "Select an option from a dropdown."),
     _ToolSpec("press_keys", press_keys, "Press one or more keys (JSON list)."),
     _ToolSpec("scroll_page", scroll_page, "Scroll the page (direction, optional amount)."),
-    _ToolSpec("extract_text", extract_text, "Extract visible text for a selector or text."),
+    _ToolSpec("go_back", go_back, "Navigate back in browser history."),
     _ToolSpec("ask_about_screenshot", ask_about_screenshot, "Ask vision model about a screenshot."),
     _ToolSpec("ground_elements_by_text", ground_elements_by_text, "Ground UI elements by description."),
-    _ToolSpec(
-        "list_clickable_elements",
-        list_clickable_elements,
-        "List clickable elements (anchors + heuristic clickables) with pagination/filtering.",
-    ),
 ]
 
 _EXIT_COMMANDS = {"/exit", "exit", "quit", ":q", ":qa"}
@@ -217,7 +260,7 @@ def _format_result(result: Any) -> str:
                 indent=2,
             )
         # Handle dicts which may contain Pydantic models as values (for example
-        # the updated scroll_page returns {"snapshot": PageSnapshot, "scroll": {...}}).
+        # the updated scroll_page returns {"snapshot": PageView, "scroll": {...}}).
         if isinstance(result, dict):
             serializable = {}
             for k, v in result.items():
@@ -257,6 +300,69 @@ def _find_tool(selection: str) -> _ToolSpec | None:
     return None
 
 
+def _parse_command_args(command: str) -> tuple[str, dict[str, Any]]:
+    """Parse a command string into tool name and arguments.
+    
+    Format: 'tool_name arg1=value1 arg2=value2'
+    Returns: (tool_name, {arg1: value1, arg2: value2})
+    
+    Values are parsed as JSON first, falling back to strings.
+    """
+    parts = command.split(maxsplit=1)
+    tool_name = parts[0]
+    args: dict[str, Any] = {}
+    
+    if len(parts) > 1:
+        # Parse remaining args
+        arg_str = parts[1]
+        # Split on spaces but respect quotes
+        import shlex
+        try:
+            arg_parts = shlex.split(arg_str)
+        except ValueError:
+            # Fall back to simple split
+            arg_parts = arg_str.split()
+        
+        for arg_part in arg_parts:
+            if "=" not in arg_part:
+                logger.warning("Skipping malformed argument (no '='): %s", arg_part)
+                continue
+            key, value_str = arg_part.split("=", 1)
+            # Try to parse as JSON, fallback to string
+            try:
+                value = json.loads(value_str)
+            except json.JSONDecodeError:
+                # Special handling for arrays that may have lost quotes during shell parsing
+                # If value looks like [something] without quotes, try to interpret it
+                if value_str.startswith("[") and value_str.endswith("]"):
+                    # Extract content between brackets and split by comma
+                    inner = value_str[1:-1].strip()
+                    if inner:
+                        # Split by comma and clean up each element
+                        items = [item.strip() for item in inner.split(",") if item.strip()]
+                        value = items
+                    else:
+                        value = []
+                else:
+                    value = value_str
+            args[key] = value
+    
+    return tool_name, args
+
+
+async def _run_tool_with_args(spec: _ToolSpec, args: dict[str, Any]) -> None:
+    """Run a tool with provided arguments (non-interactive)."""
+    try:
+        logger.info("Running tool %s with args: %s", spec.name, args)
+        result = await spec.func(**args)
+        logger.info("Result (%s): %s", spec.name, _format_result(result))
+    except BrowserToolError as exc:
+        logger.error("Tool %s failed: %s", spec.name, exc)
+    except Exception as exc:
+        logger.exception("Unexpected error in tool %s", spec.name)
+        logger.error("Unexpected error: %s", exc)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Interactive browser tools REPL")
     parser.add_argument(
@@ -273,6 +379,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable propagation to root loggers (use isolated REPL logging).",
     )
     parser.set_defaults(all_logs=True)
+    # Non-interactive mode
+    parser.add_argument(
+        "--url",
+        help="Open this URL initially (implies non-interactive mode)",
+    )
+    parser.add_argument(
+        "--commands",
+        nargs="+",
+        help="Execute commands in non-interactive mode. Format: 'tool_name arg1=value1 arg2=value2'. Example: click text=Submit",
+    )
+    parser.add_argument(
+        "--close-after",
+        action="store_true",
+        help="Close browser after executing commands (non-interactive mode only)",
+    )
     return parser
 
 
@@ -287,6 +408,35 @@ async def main() -> None:
         level=getattr(logging, args.log_level.upper(), logging.INFO),
         propagate=args.all_logs,
     )
+    
+    # Non-interactive mode
+    if args.url or args.commands:
+        try:
+            # Open URL if provided
+            if args.url:
+                logger.info("Opening URL: %s", args.url)
+                result = await open_url(args.url)
+                logger.info("Result (open_url): %s", _format_result(result))
+            
+            # Execute commands if provided
+            if args.commands:
+                for command in args.commands:
+                    tool_name, cmd_args = _parse_command_args(command)
+                    spec = _find_tool(tool_name)
+                    if spec is None:
+                        logger.error("Unknown tool: %s", tool_name)
+                        continue
+                    await _run_tool_with_args(spec, cmd_args)
+        finally:
+            # Close browser if requested or at end of commands
+            if args.close_after:
+                try:
+                    await close_browser()
+                except Exception:
+                    logger.debug("Suppressed error closing browser", exc_info=True)
+        return
+    
+    # Interactive mode
     print("Browser Tools REPL. Menu repeats each turn. Type /exit to quit.")
     while True:
         # Always show menu at start of loop to keep tools visible

@@ -2,9 +2,8 @@
 
 This module exposes helpers for interacting with the active browser page. The
 ``click`` function clicks an element specified by visible text or a selector and
-returns an ``InteractionResult`` whose ``snapshot`` reflects the updated page. The
-``fill_field`` function enters text into an input or textarea located by the shared
-selector resolution helper and also returns an ``InteractionResult``.
+Each tool returns an ``InteractionResult`` with a ``page_view``
+showing the updated page content and interactive elements.
 """
 
 from __future__ import annotations
@@ -26,36 +25,58 @@ from tools.browser.core.human import (
     human_scroll,
     human_type,
 )
-from tools.browser.core.snapshot import PageSnapshot, _build_page_snapshot
+from tools.browser.core.page_view import PageView, build_page_view
+from tools.browser.events import emit_browser_snapshot_on_page_change
 
-Reason = Literal["browser-navigation", "history-navigation", "dom-mutation", "no-change"]
+Reason = Literal["browser-navigation", "history-navigation", "dom-mutation", "no-change", "scroll"]
 
 
 class InteractionResult(BaseModel):
-    """Public result returned by interaction tools."""
+    """Public result returned by interaction tools.
 
-    snapshot: PageSnapshot | None
+    Attributes:
+        page_view: Page view with ``[role] name`` markers for interactive
+            elements.  The agent can pull selectors directly from the content
+            (e.g. ``button:Add to Cart``) for use in ``click()``,
+            ``fill_field()``, etc.
+        page_changed: True if navigation or DOM mutation was detected.
+        reason: Classification of the change (browser-navigation, dom-mutation, no-change, etc.).
+        extras: Additional tool-specific metadata (scroll position, etc.).
+    """
+
+    page_view: PageView | None = None
     page_changed: bool
     reason: Reason
     extras: dict[str, Any] = Field(default_factory=dict)
 
+
 logger = logging.getLogger(__name__)
 
 
+async def _build_snapshot(
+    page: Page,  # noqa: F821 - avoid circular import
+    response: Response | None,  # noqa: F821
+) -> PageView:
+    """Build page view for interaction results."""
+    return await build_page_view(page, response)
+
+
+@emit_browser_snapshot_on_page_change
 async def click(selector: str) -> InteractionResult:
-    """Click an element and return change metadata with a snapshot when navigation occurs.
+    """Click an element and return change metadata with an updated page snapshot.
 
     Click can only be performed on elements that are visible on the page.
+    Always returns a snapshot so you can detect AJAX changes (e.g., cart updates)
+    by comparing snippet content before and after the click.
 
     Args:
-        selector: Visible text on the element or a selector handle returned by page
-            snapshots and other tools. The provided text or selector must uniquely
-            identify a single element on the current page. Prefer using the handle
-            from snapshots and fall back to visible text only when no handle is
-            available.
+        selector: Element selector in ``role:name`` format from snapshot output.
+            Example: ``click("button:Add to Cart")`` or ``click("link:Sign In")``.
 
     Returns:
-        InteractionResult: Change metadata plus a snapshot when the page changed.
+        InteractionResult: Contains snapshot (always), page_changed (bool), and reason.
+            For AJAX actions (e.g., add-to-cart on search results), page_changed may be
+            False but snapshot content changes. Compare before/after to detect updates.
 
     Raises:
         BrowserToolError: If the target is empty, no element is found, the page is
@@ -110,11 +131,11 @@ async def click(selector: str) -> InteractionResult:
             await human_click(page, locator)
 
         browser_result = await browser.perform_interaction(page, _perform_click)
-        snapshot = None
-        if browser_result.page_changed:
-            snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+        # Always capture a snapshot so AJAX interactions (e.g., add-to-cart on search
+        # results) provide visible feedback to the agent via changed snippet content
+        annotated = await _build_snapshot(page, browser_result.navigation_response)
         return InteractionResult(
-            snapshot=snapshot,
+            page_view=annotated,
             page_changed=browser_result.page_changed,
             reason=browser_result.reason,
         )
@@ -126,6 +147,7 @@ async def click(selector: str) -> InteractionResult:
         raise BrowserToolError(msg, tool="click", details=details) from exc
 
 
+@emit_browser_snapshot_on_page_change
 async def drag(
     source: str,
     *,
@@ -262,25 +284,29 @@ async def drag(
         msg = "Playwright error performing drag"
         raise BrowserToolError(msg, tool="drag", details=details) from exc
 
-    snapshot = None
+    annotated = None
     if browser_result.page_changed:
-        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+        annotated = await _build_snapshot(page, browser_result.navigation_response)
     return InteractionResult(
-        snapshot=snapshot,
+        page_view=annotated,
         page_changed=browser_result.page_changed,
         reason=browser_result.reason,
     )
 
 
+@emit_browser_snapshot_on_page_change
 async def fill_field(selector: str, value: str | int | float | bool | None) -> InteractionResult:
     """Type into a text-like input and return change metadata with optional snapshot.
 
+    Types the complete text value character-by-character with human-like delays (45-140ms
+    per character, with periodic pauses). Always pass the full string in a single call
+    for natural typing rhythm—do not call multiple times with individual characters.
+
     Args:
-        selector: Visible text on the element or a selector handle returned by page
-            snapshots and other tools. The provided text or selector must uniquely
-            identify the input element. Prefer using the handle from snapshots and fall
-            back to visible text only when no handle is available.
+        selector: Element selector in ``role:name`` format from snapshot output.
+            Example: ``fill_field("textbox:Email", "user@example.com")``.
         value: Textual value (converted to string) to type into the control.
+            Pass complete strings: "laptop computers", not individual characters.
 
     Returns:
         InteractionResult: Change metadata plus a snapshot when the page changed.
@@ -339,7 +365,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> I
     tag_name = ""
     input_type = ""
     try:
-        handle = await locator.element_handle()
+        handle = await locator.element_handle(timeout=5000)
         if handle is not None:
             tag_name = await handle.evaluate("el => el.tagName.toLowerCase()")
             if tag_name == "input":
@@ -358,7 +384,12 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> I
         raise BrowserToolError(msg, tool="fill_field", details=details)
 
     async def _perform_fill() -> None:
-        await human_click(page, locator)
+        # Try human-like click first, fall back to force click if needed
+        try:
+            await human_click(page, locator)
+        except PlaywrightError:
+            # If human_click fails (e.g., element obscured), use force click
+            await locator.click(force=True, timeout=5000)
         await human_type(page, locator, text_value, clear_existing=True)
 
     try:
@@ -370,19 +401,17 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> I
         msg = f"Playwright error filling element: {exc}"
         raise BrowserToolError(msg, tool="fill_field", details=details) from exc
 
-    snapshot = None
+    annotated = None
     if browser_result.page_changed:
-        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+        annotated = await _build_snapshot(page, browser_result.navigation_response)
     return InteractionResult(
-        snapshot=snapshot,
+        page_view=annotated,
         page_changed=browser_result.page_changed,
         reason=browser_result.reason,
     )
 
 
-__all__ = ["InteractionResult", "click", "drag", "fill_field"]
-
-
+@emit_browser_snapshot_on_page_change
 async def press_keys(keys: list[str]) -> InteractionResult:
     """Press keyboard keys and return change metadata with optional snapshot.
 
@@ -424,21 +453,23 @@ async def press_keys(keys: list[str]) -> InteractionResult:
         msg = f"Playwright error pressing keys: {exc}"
         raise BrowserToolError(msg, tool="press_keys") from exc
 
-    snapshot = None
+    annotated = None
     if browser_result.page_changed:
-        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+        annotated = await _build_snapshot(page, browser_result.navigation_response)
     return InteractionResult(
-        snapshot=snapshot,
+        page_view=annotated,
         page_changed=browser_result.page_changed,
         reason=browser_result.reason,
     )
 
 
-__all__.append("press_keys")
-
-
+@emit_browser_snapshot_on_page_change
 async def scroll_page(direction: str = "down", amount: int | None = None) -> InteractionResult:
-    """Scroll the page and return change metadata, scroll telemetry, and snapshot when changed.
+    """Scroll the page and return change metadata, scroll telemetry, and snapshot.
+
+    The returned snapshot contains viewport-visible structured text (up to 2000 chars)
+    that changes based on the current scroll position, allowing the agent to read
+    different parts of the page as it scrolls.
 
     Args:
         direction: One of {"down", "up", "page_down", "page_up", "top", "bottom"}.
@@ -446,7 +477,8 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> Int
             is "down" or "up". If omitted, a viewport-sized scroll is performed.
 
     Returns:
-        InteractionResult: Change metadata, scroll telemetry, and a snapshot when the page changed.
+        InteractionResult: Always returns page_changed=True with a minimal snapshot
+        (title, url, snippet, status_code) and scroll state in extras.
 
     Raises:
         BrowserToolError: If direction is invalid or the page is not navigated.
@@ -468,37 +500,25 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> Int
         await human_scroll(page, direction=direction, amount=amount)
 
     try:
-        browser_result = await browser.perform_interaction(page, _perform_scroll)
+        await browser.perform_interaction(page, _perform_scroll)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
         logger.exception("Playwright error during scroll_page for direction %s", direction)
         raise BrowserToolError(f"Playwright error performing scroll: {exc}", tool="scroll_page") from exc
 
-    scroll_state = await page.evaluate(
-        "() => ({"
-        "  scroll_top: window.scrollY,"
-        "  viewport_height: window.innerHeight,"
-        "  document_height: document.scrollingElement"
-        "      ? document.scrollingElement.scrollHeight"
-        "      : document.body.scrollHeight"
-        "})"
-    )
+    # Build snapshot which includes viewport/scroll info
+    annotated = await _build_snapshot(page, None)  # Scroll never produces navigation
 
-    snapshot = None
-    if browser_result.page_changed:
-        snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
     return InteractionResult(
-        snapshot=snapshot,
-        page_changed=browser_result.page_changed,
-        reason=browser_result.reason,
-        extras={"scroll": scroll_state},
+        page_view=annotated,
+        page_changed=True,
+        reason="scroll",
+        extras={"scroll": annotated.viewport},  # Expose viewport data in extras for convenience
     )
 
 
-__all__.append("scroll_page")
-
-
+@emit_browser_snapshot_on_page_change
 async def go_back() -> InteractionResult:
     """Navigate back in history and return change metadata with an updated snapshot.
 
@@ -508,7 +528,6 @@ async def go_back() -> InteractionResult:
     Raises:
         BrowserToolError: If the browser page cannot be accessed or back navigation fails.
     """
-
     try:
         browser = await get_browser()
         page = await browser.current_page()
@@ -537,12 +556,20 @@ async def go_back() -> InteractionResult:
         msg = "No previous page available to navigate back to."
         raise BrowserToolError(msg, tool="go_back")
 
-    snapshot = await _build_page_snapshot(page, browser_result.navigation_response)
+    annotated = await _build_snapshot(page, browser_result.navigation_response)
     return InteractionResult(
-        snapshot=snapshot,
+        page_view=annotated,
         page_changed=browser_result.page_changed,
         reason=browser_result.reason,
     )
 
 
-__all__.append("go_back")
+__all__ = [
+    "InteractionResult",
+    "click",
+    "drag",
+    "fill_field",
+    "go_back",
+    "press_keys",
+    "scroll_page",
+]

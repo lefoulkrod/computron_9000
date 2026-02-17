@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Iterable, Sequence
+from typing import Any, Awaitable, Callable, Sequence
 
 try:  # pragma: no cover - under CI Playwright should be available
     from playwright.async_api import Error as PlaywrightError
@@ -39,152 +38,6 @@ class _NavigationContext:
         return _get()
 
 
-@dataclass
-class StubField:
-    """Form field stub mirroring the API surface used in tests."""
-
-    tag: str
-    name: str | None = None
-    input_type: str | None = None
-    dom_parent_selector: str = "form"
-    dom_tag: str | None = None
-    dom_nth: int = 1
-    dom_path: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.dom_tag is None:
-            self.dom_tag = self.tag
-        if self.dom_path is None:
-            self.dom_path = f"{self.dom_parent_selector} > {self.dom_tag}:nth-of-type({self.dom_nth})"
-
-    async def evaluate(self, script: str) -> Any:
-        if "siblings.indexOf" in script:
-            return {
-                "tagName": self.dom_tag,
-                "nth": self.dom_nth,
-                "parentSelector": self.dom_parent_selector,
-            }
-        if "segments.join" in script:
-            return self.dom_path
-        if "tagName" in script:
-            return self.tag
-        return None
-
-    async def get_attribute(self, name: str) -> str | None:
-        if name == "name":
-            return self.name
-        if name == "type":
-            return self.input_type
-        return None
-
-
-class StubForm:
-    """Simple form stub returning stored attributes and fields."""
-
-    def __init__(
-        self,
-        *,
-        action: str | None,
-        form_id: str | None,
-        fields: Sequence[StubField],
-        dom_parent_selector: str = "body",
-        dom_tag: str = "form",
-        dom_nth: int = 1,
-        dom_path: str | None = None,
-    ) -> None:
-        self._action = action
-        self._id = form_id
-        self._fields = list(fields)
-        self._dom_parent_selector = dom_parent_selector
-        self._dom_tag = dom_tag
-        self._dom_nth = dom_nth
-        self._dom_path = dom_path or f"{dom_parent_selector} > {dom_tag}:nth-of-type({dom_nth})"
-        self._set_dom_position(self._dom_parent_selector, self._dom_nth, dom_path=self._dom_path)
-
-    async def get_attribute(self, name: str) -> str | None:
-        if name == "action":
-            return self._action
-        if name == "id":
-            return self._id
-        return None
-
-    async def evaluate(self, script: str) -> Any:
-        if "siblings.indexOf" in script:
-            return {
-                "tagName": self._dom_tag,
-                "nth": self._dom_nth,
-                "parentSelector": self._dom_parent_selector,
-            }
-        if "segments.join" in script:
-            return self._dom_path
-        return None
-
-    async def query_selector_all(self, selector: str) -> list[StubField]:
-        if selector == "input, textarea, select":
-            return list(self._fields)
-        raise PlaywrightError(f"Unsupported selector for StubForm: {selector}")
-
-    def _set_dom_position(self, parent_selector: str, nth: int, *, dom_path: str | None = None) -> None:
-        self._dom_parent_selector = parent_selector
-        self._dom_nth = nth
-        self._dom_path = dom_path or f"{parent_selector} > {self._dom_tag}:nth-of-type({nth})"
-        for idx, field in enumerate(self._fields, start=1):
-            field.dom_parent_selector = self._dom_path
-            field.dom_nth = idx
-            field.dom_path = f"{self._dom_path} > {field.dom_tag}:nth-of-type({field.dom_nth})"
-
-
-class StubAnchor:
-    """Lightweight anchor stub supporting the subset of APIs used in tests."""
-
-    def __init__(
-        self,
-        text: str,
-        href: str,
-        *,
-        visible: bool = True,
-        dom_parent_selector: str = "body",
-        dom_tag: str = "a",
-        dom_nth: int = 1,
-        dom_path: str | None = None,
-    ) -> None:
-        self._text = text
-        self._href = href
-        self._visible = visible
-        self._dom_parent_selector = dom_parent_selector
-        self._dom_tag = dom_tag
-        self._dom_nth = dom_nth
-        self._dom_path = dom_path or f"{dom_parent_selector} > {dom_tag}:nth-of-type({dom_nth})"
-        self._set_dom_position(self._dom_parent_selector, self._dom_nth, dom_path=self._dom_path)
-
-    async def inner_text(self) -> str:
-        return self._text
-
-    async def get_attribute(self, name: str) -> str | None:
-        if name == "href":
-            return self._href
-        return None
-
-    async def is_visible(self) -> bool:
-        return self._visible
-
-    async def evaluate(self, script: str) -> Any:
-        if "siblings.indexOf" in script:
-            return {
-                "tagName": self._dom_tag,
-                "nth": self._dom_nth,
-                "parentSelector": self._dom_parent_selector,
-            }
-        if "segments.join" in script:
-            return self._dom_path
-        return None
-
-    def _set_dom_position(self, parent_selector: str, nth: int, *, dom_path: str | None = None) -> None:
-        self._dom_parent_selector = parent_selector
-        self._dom_nth = nth
-        self._dom_path = dom_path or f"{parent_selector} > {self._dom_tag}:nth-of-type({nth})"
-
-
 class StubElement:
     """Element stub that exposes ``inner_text`` returning stored content."""
 
@@ -209,6 +62,9 @@ class StubElementHandle:
         dom_tag: str | None = None,
         dom_nth: int = 1,
         dom_path: str | None = None,
+        text_value: str | None = None,
+        attrs: dict[str, Any] | None = None,
+        visible: bool = True,
     ) -> None:
         self._tag = tag
         self._input_type = input_type or "text"
@@ -218,6 +74,9 @@ class StubElementHandle:
         self._dom_parent_selector = dom_parent_selector
         self._dom_nth = dom_nth
         self._dom_path = dom_path or f"{dom_parent_selector} > {self._dom_tag}:nth-of-type({dom_nth})"
+        self._visible = visible
+        self._text_value = text_value or ""
+        self._attrs = dict(attrs or {})
 
     async def evaluate(self, script: str) -> Any:
         if "siblings.indexOf" in script:
@@ -230,12 +89,22 @@ class StubElementHandle:
             return self._dom_path
         if "tagName" in script:
             return self._dom_tag
+        # Support viewport check from viewport_only filtering
+        if "getBoundingClientRect" in script and "window.innerHeight" in script:
+            # Default to elements being in viewport for tests
+            return True
         raise PlaywrightError(f"Unsupported evaluation script: {script}")
 
     async def get_attribute(self, name: str) -> str | None:
         if name == "type":
             return self._input_type
-        return None
+        return self._attrs.get(name)
+
+    async def is_visible(self) -> bool:
+        return self._visible
+
+    async def inner_text(self) -> str:
+        return self._text_value
 
     async def bounding_box(self) -> dict[str, float] | None:
         return self._bounding_box
@@ -267,6 +136,7 @@ class StubLocator:
         dom_tag: str | None = None,
         dom_nth: int = 1,
         dom_path: str | None = None,
+        role_name: str | None = None,
     ) -> None:
         self._page = page
         self.key = key
@@ -287,6 +157,7 @@ class StubLocator:
         self._dom_tag = dom_tag or tag
         self._dom_nth = dom_nth
         self._dom_path = dom_path or f"{dom_parent_selector} > {self._dom_tag}:nth-of-type({dom_nth})"
+        self._role_name = role_name
 
     async def count(self) -> int:
         if not self._present:
@@ -295,7 +166,7 @@ class StubLocator:
             return len(self._texts)
         return 1
 
-    async def click(self) -> None:
+    async def click(self, timeout: int | None = None, force: bool = False) -> None:
         if not self._present:
             raise PlaywrightError("element does not exist")
         if self._on_click is not None:
@@ -312,7 +183,7 @@ class StubLocator:
     async def focus(self) -> None:
         return None
 
-    async def element_handle(self) -> StubElementHandle | None:
+    async def element_handle(self, timeout: int | None = None) -> StubElementHandle | None:
         if not self._present:
             return None
         return StubElementHandle(
@@ -323,8 +194,12 @@ class StubLocator:
             dom_parent_selector=self._dom_parent_selector,
             dom_tag=self._dom_tag,
             dom_nth=self._dom_nth,
-            dom_path=self._dom_path,
+            dom_path=None,
         )
+
+    async def element_handles(self) -> list[StubElementHandle]:
+        handle = await self.element_handle()
+        return [] if handle is None else [handle]
 
     async def fill(self, text: str) -> None:
         if not self._present:
@@ -342,16 +217,19 @@ class StubLocator:
         self._filled_value = text
         self._page.record_fill(text)
 
-    async def select_option(self, value: str) -> None:
+    async def select_option(self, value: str | None = None, *, label: str | None = None) -> None:
         if not self._present:
             raise PlaywrightError("element does not exist")
         if self._tag != "select":
             raise PlaywrightError("select_option only valid for select elements")
-        self._filled_value = value
-        self._page.record_fill(value)
+        selected = label or value or ""
+        self._filled_value = selected
+        self._page.record_fill(selected)
 
-    def nth(self, idx: int) -> StubElement:
+    def nth(self, idx: int) -> "StubLocator | StubElement":
         if not self._texts:
+            if idx == 0 and self._present:
+                return self
             raise IndexError("locator has no multiple entries")
         return StubElement(self._texts[idx])
 
@@ -364,11 +242,21 @@ class StubLocator:
             return self._texts[0] if self._texts else ""
         return ""
 
+    async def evaluate(self, script: str) -> Any:
+        # Support the accessible-name probe used by _resolve_locator
+        return self._text_value or self._role_name or ""
+
     async def wait_for(self, timeout: int | None = None) -> None:
         return None
 
     async def scroll_into_view_if_needed(self) -> None:
         return None
+
+    async def all_text_contents(self) -> list[str]:
+        return list(self._texts) if self._texts else []
+
+    def locator(self, selector: str) -> "StubLocator":
+        return StubLocator(self._page, key=f"{self.key} >> {selector}", present=False, tag="div")
 
 
 class StubPage:
@@ -380,18 +268,15 @@ class StubPage:
         title: str = "Initial",
         body_text: str = "Default body",
         url: str = "https://example.test/start",
-        anchors: Iterable[StubAnchor] | None = None,
-        forms: Iterable[StubForm] | None = None,
         final_url: str | None = None,
         status: int = 200,
     ) -> None:
         self._title = title
         self._body_text = body_text
         self.url = url
-        self._anchors = list(anchors or [])
-        self._forms = list(forms or [])
         self._text_locators: dict[str, StubLocator] = {}
         self._css_locators: dict[str, StubLocator] = {}
+        self._role_locators: dict[str, list[StubLocator]] = {}
         self._all_locators: set[StubLocator] = set()
         self._nav_event = asyncio.Event()
         self.main_frame = object()
@@ -404,16 +289,9 @@ class StubPage:
             "document_height": 1200,
         }
         self._evaluate_overrides: dict[str, Any] = {}
+        self.viewport_size = {"width": 1280, "height": 800}
         self._history: list[dict[str, Any]] = [{"url": url, "title": title, "body": body_text}]
         self._history_index: int = 0
-        for idx, anchor in enumerate(self._anchors, start=1):
-            if hasattr(anchor, "_set_dom_position"):
-                parent = getattr(anchor, "_dom_parent_selector", "body")
-                anchor._set_dom_position(parent, idx)
-        for idx, form in enumerate(self._forms, start=1):
-            if hasattr(form, "_set_dom_position"):
-                parent = getattr(form, "_dom_parent_selector", "body")
-                form._set_dom_position(parent, idx)
 
     async def title(self) -> str:
         return self._title
@@ -422,19 +300,6 @@ class StubPage:
         if selector == "body":
             return self._body_text
         raise PlaywrightError(f"Unsupported selector for inner_text: {selector}")
-
-    async def query_selector_all(self, selector: str) -> list[Any]:
-        if selector == "a":
-            return list(self._anchors)
-        if selector == "form":
-            return list(self._forms)
-        if selector in {"button, [role=button]", "iframe"}:
-            return []
-        if selector in {
-            "div[onclick], span[onclick], li[onclick], [role='link'], [tabindex], [data-clickable]"
-        }:
-            return []
-        raise PlaywrightError(f"Unsupported selector: {selector}")
 
     async def wait_for_event(self, name: str, *, predicate: Any | None = None) -> Any:
         if name != "framenavigated":
@@ -451,18 +316,44 @@ class StubPage:
         self._apply_navigation(url=final_url)
         return StubResponse(final_url, self._status)
 
-    async def evaluate(self, script: str) -> Any:
+    async def evaluate(self, script: str, arg: Any = None) -> Any:
         if script in self._evaluate_overrides:
             result = self._evaluate_overrides[script]
             return result() if callable(result) else result
-        if isinstance(script, str) and "scroll_top" in script and "window.scrollY" in script:
-            return dict(self._scroll_state)
+        # Handle annotated snapshot JS DOM walker (called with params dict)
+        if isinstance(script, str) and "budget" in script and "scopeQuery" in script and arg is not None:
+            return {"content": self._body_text, "truncated": False}
+        # Handle viewport info query (used in snapshot building)
+        if isinstance(script, str) and "scroll_top" in script and ("scrollY" in script or "scrollHeight" in script):
+            # Return viewport data structure
+            return {
+                "scroll_top": self._scroll_state.get("scroll_top", 0),
+                "viewport_height": self._scroll_state.get("viewport_height", 800),
+                "viewport_width": self._scroll_state.get("viewport_width", 1280),
+                "document_height": self._scroll_state.get("document_height", 2000),
+            }
+        # Handle viewport text extraction (optimized for LLM with structure)
+        if isinstance(script, str) and ("querySelectorAll" in script or "innerText" in script) and "viewportHeight" in script:
+            return self._body_text
         return None
+
+    def get_by_role(self, role: str, *, name: str | None = None, exact: bool = True) -> StubLocator:
+        key = f"role={role}[name={name}]" if name else f"role={role}"
+        for loc in self._role_locators.get(role, []):
+            if name is None:
+                return loc
+            if exact and loc._role_name == name:
+                return loc
+            if not exact and loc._role_name and name in loc._role_name:
+                return loc
+        return StubLocator(self, key=key, present=False)
 
     def get_by_text(self, text: str, *, exact: bool = True) -> StubLocator:
         return self._text_locators.get(text, StubLocator(self, key=f"text={text}", present=False))
 
     def locator(self, selector: str) -> StubLocator:
+        if selector == "html":
+            return StubLocator(self, key="html", present=True, tag="html")
         if ">> nth=" in selector:
             base, nth_part = selector.split(">> nth=", 1)
             base_selector = base.strip()
@@ -507,29 +398,13 @@ class StubPage:
         if selector.startswith("text="):
             raw = selector[len("text=") :]
             text = raw.strip('"')
-            for anchor in self._anchors:
-                if hasattr(anchor, "inner_text"):
-                    anchor_text = getattr(anchor, "_text", None)
-                    if anchor_text == text:
-                        return StubLocator(self, key=selector, present=True, tag="a")
             for key, loc in self._text_locators.items():
                 if key == text:
                     return loc
 
-        for anchor in self._anchors:
-            if getattr(anchor, "_dom_path", None) == selector:
-                return StubLocator(self, key=selector, present=True, tag="a")
-
         for loc in self._text_locators.values():
             if getattr(loc, "_dom_path", None) == selector:
                 return loc
-
-        for form in self._forms:
-            if getattr(form, "_dom_path", None) == selector:
-                return StubLocator(self, key=selector, present=True, tag="form")
-            for field in getattr(form, "_fields", []):
-                if getattr(field, "dom_path", None) == selector:
-                    return StubLocator(self, key=selector, present=True, tag=field.tag)
 
         return StubLocator(self, key=selector, present=False)
 
@@ -613,21 +488,38 @@ class StubPage:
         self._all_locators.add(locator)
         return locator
 
-    def add_anchor(self, text: str, href: str, *, visible: bool = True) -> StubAnchor:
-        nth = sum(1 for existing in self._anchors if isinstance(existing, StubAnchor)) + 1
-        anchor = StubAnchor(text, href, visible=visible, dom_nth=nth)
-        parent = getattr(anchor, "_dom_parent_selector", "body")
-        anchor._set_dom_position(parent, nth)
-        self._anchors.append(anchor)
-        return anchor
-
-    def add_form(self, *, action: str | None, form_id: str | None, fields: Iterable[StubField]) -> StubForm:
-        nth = sum(1 for existing in self._forms if isinstance(existing, StubForm)) + 1
-        form = StubForm(action=action, form_id=form_id, fields=list(fields), dom_nth=nth)
-        parent = getattr(form, "_dom_parent_selector", "body")
-        form._set_dom_position(parent, nth)
-        self._forms.append(form)
-        return form
+    def add_role_locator(
+        self,
+        role: str,
+        *,
+        name: str | None = None,
+        tag: str = "div",
+        input_type: str | None = None,
+        navigates_to: str | None = None,
+        navigation_title: str | None = None,
+        navigation_body: str | None = None,
+        bounding_box: dict[str, float] | None = None,
+        text_value: str | None = None,
+        texts: Sequence[str] | None = None,
+    ) -> StubLocator:
+        key = f"role={role}[name={name}]" if name else f"role={role}"
+        locator = StubLocator(
+            self,
+            key=key,
+            present=True,
+            tag=tag,
+            input_type=input_type,
+            navigates_to=navigates_to,
+            navigation_title=navigation_title,
+            navigation_body=navigation_body,
+            bounding_box=bounding_box,
+            text_value=text_value,
+            texts=texts,
+            role_name=name,
+        )
+        self._role_locators.setdefault(role, []).append(locator)
+        self._all_locators.add(locator)
+        return locator
 
     def record_fill(self, value: str) -> None:
         self._body_text = f"Filled value: {value}"
@@ -745,21 +637,3 @@ class StubBrowser:
         )
 
 
-class StubBrowserWithPages:
-    """Browser stub that manages a list of pages and returns the newest open page."""
-
-    def __init__(self, pages: Sequence[StubPage] | None = None) -> None:
-        self._pages = list(pages or [])
-
-    async def current_page(self) -> StubPage:
-        for page in reversed(self._pages):
-            is_closed = getattr(page, "is_closed", None)
-            if callable(is_closed):
-                if not is_closed():
-                    return page
-            else:
-                return page
-        raise RuntimeError("No open pages available in browser context")
-
-    async def pages(self) -> list[StubPage]:
-        return list(self._pages)

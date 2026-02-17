@@ -1,17 +1,17 @@
 """Vision-enabled browser tools built on top of the shared Ollama model."""
 
-# ruff: noqa: I001
-
 from __future__ import annotations
 
 import base64
 import json
 import logging
 import os
+import re
 from typing import Any, cast
 
 from ollama import AsyncClient, Image
-from playwright.async_api import Error as PlaywrightError, Page
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Page
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from config import load_config
@@ -19,7 +19,6 @@ from models.model_configs import get_model_by_name
 from tools.browser.core import get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.snapshot import _build_page_snapshot
 from tools.browser.core.selectors import SelectorRegistry, build_unique_selector
 
 _BBOX_DEBUG_ENV = "COMPUTRON_VISION_DEBUG"
@@ -53,47 +52,48 @@ logger = logging.getLogger(__name__)
 _SCREENSHOT_TOOL_NAME = "ask_about_screenshot"
 _GROUNDING_TOOL_NAME = "ground_elements_by_text"
 _PROMPT_TEMPLATE = """
-Task: Extract tight bounding boxes for any regions described in the provided webpage
- screenshot. Return all bounding boxes that match the description.
+You are a precise UI element locator. Your task is to ground elements in a 1000x1000 normalized coordinate system.
 
-Viewport: {width}x{height} pixels. Origin (0,0) is top-left.
+TASK: Find ALL elements matching: {text_json}
+SCREENSHOT DIMENSIONS: {width}px x {height}px (for reference only)
 
-Target description (case-insensitive): {text_json}
+COORDINATE SYSTEM:
+- Normalized Scale: 0 to 1000 (0,0 is top-left; 1000,1000 is bottom-right)
+- Format: [y1, x1, y2, x1] where y1=top, x1=left, y2=bottom, x2=right
+- Think of the screen as a 1000x1000 grid regardless of actual pixel dimensions
 
-Output: Return a JSON array only (no prose, no code fences). If nothing matches, return
-[] exactly.
+OUTPUT FORMAT:
+Return ONLY a JSON array of objects. Do not include markdown, code fences, or prose.
+[
+  {{
+    "reasoning": "Brief spatial description (e.g., 'Blue submit button in center-right of footer')",
+    "text": "visible text",
+    "element_type": "button",
+    "bbox": [y1, x1, y2, x2]
+  }}
+]
 
-Each array item MUST be an object:
-{{
-    "text": string|null,          // visible label; null if no visible text
-    "element_type": string|null,  // optional best-guess role/tag or null
-    "bbox": [x1, y1, x2, y2]      // integers; 0 <= x1 < x2 <= {width},
-                                                                 // 0 <= y1 < y2 <= {height}
-}}
+Return [] if nothing matches.
 
-Notes:
-- The selector used by the agent will be resolved from the bbox CENTER, so make
-    the box tight around the described region and ensure the center falls on the
-    intended target when possible.
-- Coordinates MUST be integers. Clamp to the viewport; drop regions completely
-    off-screen.
-- Minimum size: width >= 4 px and height >= 4 px; otherwise drop the item.
-- Deduplicate: if two boxes overlap with IoU > 0.5, keep the tighter box or the
-    one with clearer label; drop the other.
-- Do not invent text that is not visible. Do not return any non-JSON output.
+RULES:
+1. SPATIAL REASONING FIRST: Before providing bbox, describe where the element is in the 1000x1000 grid
+2. BOX TIGHTNESS: Include the entire clickable area (padding, borders, shadows)
+3. CLICKABLE CENTER: The exact middle of your bbox [(y1+y2)/2, (x1+x2)/2] will be the click target
+4. COORDINATE ORDER: Always use [y1, x1, y2, x2] format (height-first)
+5. NO HALLUCINATION: If text is not clearly visible in the image, do not return a box
+6. MATCHING: Case-insensitive text matching; match partial text if clearly the same element
+7. ALL INSTANCES: Return ALL visible occurrences of the matching text
 
-Validation before output:
-- Every "bbox" has four integers and satisfies x1<x2 and y1<y2.
-- All boxes are within [0,{width}] x [0,{height}].
-- No duplicates remain after IoU deduping.
-- Sort results top-to-bottom, then left-to-right.
+ELEMENT TYPES:
+- button: clickable button elements
+- link: anchor/hyperlink elements
+- input: form input fields, textareas
+- card: card/panel containers with content
+- badge: small label/badge elements
+- icon: icon-only elements
+- text: plain text spans
 
-Examples:
-- Example matches:
-    [{{"text":"Header","element_type":null,"bbox":[10,8,300,48]}},
-     {{"text":null,"element_type":"image","bbox":[320,12,420,112]}}]
-- Example no match:
-    []
+Sort results: top-to-bottom.
 """
 
 
@@ -104,11 +104,13 @@ class GroundingResult(BaseModel):
         text: visible text the model matched
         bbox: (x1, y1, x2, y2) viewport pixel coordinates (top-left, bottom-right)
         selector: best-effort selector handle resolved from the page at the bbox center
+        reasoning: optional spatial reasoning from the vision model
     """
 
-    text: str | None = Field(default=None, max_length=200)
+    text: str | None = Field(default=None)
     bbox: tuple[int, int, int, int]
     selector: str | None = None
+    reasoning: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -197,11 +199,36 @@ async def ask_about_screenshot(
 async def ground_elements_by_text(description: str) -> list[GroundingResult]:
     """Get the bounding boxes of all elements matching the given description.
 
+    This tool uses a vision model to locate UI elements on the current page.
+    For best results, provide descriptive prompts with spatial context and
+    visual details.
+
+    Prompting Best Practices:
+        - Include element type: "button", "link", "input", "card", "badge", "table"
+        - Add spatial context: "in the top-right corner", "below the header", "left sidebar"
+        - Mention colors: "blue Book button", "green status badge", "yellow card"
+        - Reference nearby elements: "next to the price", "under the title"
+        - Include visible text when available: "button with text 'Submit'"
+
+    Good Examples:
+        - "blue Book button next to the Beard Trim service price"
+        - "table showing Latency, Throughput, and Uptime metrics in lower left"
+        - "purple Notify Me button below the email input field"
+        - "Status badge in cyan color in the second panel"
+
+    Poor Examples (too vague):
+        - "button" (which button? there may be many)
+        - "the table" (describe location or distinctive content)
+        - "Book" (is it a button, link, or text? where is it?)
+
     Args:
-        description: The descriptive text to locate on the page.
+        description: Descriptive text with spatial/visual details to locate the element(s).
+            The model returns ALL matching elements, so be specific to avoid duplicates.
 
     Returns:
         list[GroundingResult]: Bounding boxes with element metadata from the vision model.
+            Each result includes bbox coordinates, resolved selector, and reasoning.
+            Multiple elements may be returned if the description matches several locations.
 
     Raises:
         BrowserToolError: If the page is inaccessible, the screenshot fails, or the
@@ -216,13 +243,6 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         tool_name=_GROUNDING_TOOL_NAME,
         blank_page_message="Navigate to a page before requesting element grounding.",
     )
-
-    try:
-        await _build_page_snapshot(page, None)
-    except Exception as exc:  # pragma: no cover - wrap into tool error
-        logger.exception("Failed to build snapshot before grounding request")
-        msg = "Failed to snapshot current page."
-        raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
 
     try:
         # Always use viewport screenshots for grounding
@@ -246,10 +266,13 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         # viewport width/height weren't numeric or convertible to int
         logger.debug("Unable to read viewport_size: %s", exc)
         width_px = height_px = 0
+
+    logger.debug("Viewport size: %dx%d CSS pixels", width_px, height_px)
+
     encoded_image = _encode_image(screenshot_bytes)
 
     client, model = _make_vision_client(tool_name=_GROUNDING_TOOL_NAME)
-    prompt = _render_prompt(clean_text, width=width_px, height=height_px)
+    prompt = _render_prompt(clean_text, width_px, height_px)
     logger.debug("Grounding prompt: %s", prompt)
     try:
         response = await client.generate(
@@ -265,7 +288,8 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
 
     raw_response = (response.response or "").strip()
-    logger.debug("Raw grounding response: %s", raw_response)
+    logger.debug("Raw grounding response from model: %s", raw_response)
+    logger.debug("Viewport dimensions: %dx%d", width_px, height_px)
 
     def _extract_json_text(s: str) -> str:
         """Try to extract a JSON payload from the model response.
@@ -304,16 +328,44 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         return text
 
     cleaned = _extract_json_text(raw_response)
+
+    # Handle empty response (model found nothing or failed to respond)
+    if not cleaned or cleaned.strip() == "":
+        logger.warning("Vision model returned empty response for grounding request")
+        return []
+
+    def _repair_json(text: str) -> str:
+        """Attempt to repair common JSON syntax errors from vision models."""
+        # Fix missing closing bracket in bbox arrays: [x,y,w,h"} -> [x,y,w,h]}
+        # Pattern: array with 4 numbers followed by "}] instead of ]}
+        text = re.sub(r'(\[\d+,\d+,\d+,\d+)"\}', r"\1]}", text)
+        return text
+
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        logger.exception("Vision model returned invalid JSON for grounding request")
-        msg = "Vision model returned invalid JSON."
-        raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
+        # Try to repair common JSON errors and parse again
+        repaired = _repair_json(cleaned)
+        if repaired != cleaned:
+            logger.debug("Attempting to repair malformed JSON: %s -> %s", cleaned, repaired)
+            try:
+                parsed = json.loads(repaired)
+                logger.info("Successfully repaired and parsed JSON")
+            except json.JSONDecodeError:
+                logger.exception("Vision model returned invalid JSON for grounding request")
+                msg = "Vision model returned invalid JSON."
+                raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
+        else:
+            logger.exception("Vision model returned invalid JSON for grounding request")
+            msg = "Vision model returned invalid JSON."
+            raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
 
     if not isinstance(parsed, list):
         msg = "Vision model response must be a list of bounding boxes."
         raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME)
+
+    # Create shared selector registry to ensure uniqueness across all grounded elements
+    selector_registry = SelectorRegistry(page)
 
     results: list[GroundingResult] = []
     for entry in parsed:
@@ -325,16 +377,37 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
             if not isinstance(bbox_raw, (list | tuple)) or len(bbox_raw) != 4:
                 raise ValueError("bbox must be a sequence of four numbers")
             try:
-                # round(...) without ndigits returns an int for float inputs
-                x1, y1, x2, y2 = (round(float(v)) for v in bbox_raw)
+                # Model returns [y1, x1, y2, x2] in normalized coordinates (0-1000)
+                # Convert to CSS pixels using viewport dimensions
+                y1_norm, x1_norm, y2_norm, x2_norm = (float(v) for v in bbox_raw)
+
+                # Convert from normalized (0-1000) to CSS pixels
+                # Formula: (normalized / 1000) * dimension
+                x1 = round((x1_norm / 1000) * width_px)
+                y1 = round((y1_norm / 1000) * height_px)
+                x2 = round((x2_norm / 1000) * width_px)
+                y2 = round((y2_norm / 1000) * height_px)
             except (TypeError, ValueError) as exc:
                 raise ValueError("bbox values must be numeric") from exc
+
+            logger.debug(
+                "Parsed bbox from model (normalized): [%.1f, %.1f, %.1f, %.1f] -> CSS px: [%d, %d, %d, %d]",
+                y1_norm,
+                x1_norm,
+                y2_norm,
+                x2_norm,
+                x1,
+                y1,
+                x2,
+                y2,
+            )
 
             validated = GroundingResult.model_validate(
                 {
                     "text": entry.get("text"),
                     "bbox": (x1, y1, x2, y2),
                     "selector": None,
+                    "reasoning": entry.get("reasoning"),
                 },
                 strict=False,
             )
@@ -346,7 +419,7 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         # Resolve selector from bbox center using document.elementFromPoint via page.evaluate
         try:
             x1, y1, x2, y2 = validated.bbox
-            # The center coordinates are computed and rounded to integers.
+            # The center coordinates are in CSS pixels, matching what elementFromPoint expects
             cx = round((x1 + x2) / 2)
             cy = round((y1 + y2) / 2)
 
@@ -378,9 +451,8 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
                     # runs. Do not fallback to legacy helpers; if the registry fails
                     # record no selector for the grounded element.
                     try:
-                        tmp_registry = SelectorRegistry(page)
                         sel_res = await build_unique_selector(
-                            element_handle, tag=None, text=validated.text or "", registry=tmp_registry
+                            element_handle, tag=None, text=validated.text or "", registry=selector_registry
                         )
                         selector_candidate = sel_res.selector
                     except Exception as exc:
@@ -480,8 +552,21 @@ def _encode_image(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
 
-def _render_prompt(visible_text: str, *, width: int, height: int) -> str:
-    """Build the grounding prompt with JSON-compliant quoting."""
+def _scale_to_viewport(normalized_coord: int, viewport_dimension: int) -> int:
+    """Scale a normalized 0-1000 coordinate to viewport pixel dimension.
+
+    Args:
+        normalized_coord: Coordinate value in the 0-1000 normalized range.
+        viewport_dimension: The viewport dimension (width or height) in pixels.
+
+    Returns:
+        The scaled coordinate as an integer pixel value.
+    """
+    return int((normalized_coord / 1000) * viewport_dimension)
+
+
+def _render_prompt(visible_text: str, width: int, height: int) -> str:
+    """Build the grounding prompt with JSON-compliant quoting and viewport dimensions."""
     quoted = json.dumps(visible_text)
     return _PROMPT_TEMPLATE.format(text_json=quoted, width=width, height=height)
 

@@ -1,4 +1,9 @@
 models:
+  - name: glm
+    model: glm-4.7-flash:q8_0
+    think: true
+    options:
+      num_ctx: 60000
   - name: gpt
     model: gpt-oss:120b
     think: true
@@ -22,19 +27,20 @@ models:
       num_ctx: 128000
       reasoning_effort: high
   - name: vision
-    model: qwen2.5vl:32b
+    model: qwen3-vl:30b-a3b-thinking-q8_0
     options:
       num_ctx: 32000
-      temperature: 0.0
-      top_k: 20
-      top_p: 0.2
+      temperature: 0.1
+      top_k: 10
+      top_p: 0.9
+      repeat_penalty: 1.1
     think: false
 settings:
   home_dir: /home/larry/.computron_9000
-  default_model: gpt
+  default_model: glm
 virtual_computer:
   container_name: computron_virtual_computer
-  container_user: computron
+  container_user: computron 
   home_dir: /home/larry/.computron_9000/container_home
   container_working_dir: /home/computron
   

@@ -7,7 +7,9 @@ shutdown while keeping a light surface area.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 import secrets
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -117,9 +119,38 @@ window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
     window.__page_change__.spa = true;
   });
 
-  new MutationObserver(() => {
-    window.__page_change__.dom = true;
-  }).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver((mutations) => {
+    // Filter out mutations that are just form input typing
+    const significantMutation = mutations.some(m => {
+      // Ignore mutations in input/textarea value attributes
+      if (m.type === 'attributes' && m.attributeName === 'value') {
+        const target = m.target;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return false;
+        }
+      }
+      // Ignore characterData changes inside input/textarea
+      if (m.type === 'characterData') {
+        let node = m.target.parentNode;
+        while (node) {
+          if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
+            return false;
+          }
+          node = node.parentNode;
+        }
+      }
+      return true;
+    });
+    
+    if (significantMutation) {
+      window.__page_change__.dom = true;
+    }
+  }).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    characterData: true
+  });
 
   try {
     const resizeObserver = new ResizeObserver(() => {
@@ -418,6 +449,14 @@ class Browser:
 
         await action()
 
+        # Drain any in-flight progressive snapshot so it doesn't race with
+        # the post-action page.evaluate calls below (both share the CDP
+        # connection).  This is the single chokepoint for all interactions,
+        # so individual callers never need to flush manually.
+        from tools.browser.events import flush_progressive_snapshot
+
+        await flush_progressive_snapshot()
+
         def _extract_flags(state: dict[str, object], *, current_url: str, initial_url: str) -> tuple[bool, bool, bool]:
             hard = bool(state.get("hard"))
             spa = bool(state.get("spa"))
@@ -436,6 +475,7 @@ class Browser:
         else:
             if isinstance(result, dict):
                 change_state = result
+                logger.debug("Initial change_state after action: %s", change_state)
 
         current_url = getattr(page, "url", initial_url)
         hard_nav, spa_nav, dom_change = _extract_flags(change_state, current_url=current_url, initial_url=initial_url)
@@ -472,9 +512,11 @@ class Browser:
                 )
             else:
                 if isinstance(post_state, dict):
+                    logger.debug("Post-settle change_state: %s", post_state)
                     for key in ("hard", "spa", "dom"):
                         if post_state.get(key):
                             change_state[key] = True
+                    logger.debug("Merged change_state after post-settle: %s", change_state)
 
         final_url = getattr(page, "url", current_url)
         hard_nav, spa_nav, dom_change = _extract_flags(change_state, current_url=final_url, initial_url=initial_url)
@@ -502,6 +544,12 @@ class Browser:
             reason_value,
             dom_change,
         )
+
+        # Add human-like delay after page changes (looks like user is reading/processing)
+        if page_changed:
+            delay_ms = random.randint(300, 800)
+            logger.debug("Adding %dms post-page-change delay to mimic human reading", delay_ms)
+            await asyncio.sleep(delay_ms / 1000.0)
 
         return metadata
 

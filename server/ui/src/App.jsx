@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
+import BrowserView from './components/BrowserView.jsx';
 import styles from './App.module.css';
 
 function App() {
     const [messages, setMessages] = useState([]);
     const [dark, setDark] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
+    const [browserSnapshot, setBrowserSnapshot] = useState(null);
+    const [attachment, setAttachment] = useState(null);
 
     useEffect(() => {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -20,8 +23,13 @@ function App() {
 
     const toggleTheme = () => setDark((d) => !d);
 
+    const handleAttachScreenshot = (base64Screenshot) => {
+        setAttachment({ base64: base64Screenshot, contentType: 'image/png' });
+    };
+
     const newSession = async () => {
         setMessages([]);
+        setBrowserSnapshot(null); // Clear browser view on new session
         try {
             await fetch('/api/chat/history', { method: 'DELETE' });
         } catch (err) {
@@ -32,6 +40,9 @@ function App() {
     const sendMessage = async (message, fileData) => {
         // Allow sending if there's text or a file
         if (!message && !fileData) return;
+
+        // Clear attachment after it's been used
+        setAttachment(null);
 
         // Build user message with optional image preview
         const userMsg = { id: `u_${Date.now()}_${Math.random().toString(36).slice(2)}`, role: 'user', content: message || '' };
@@ -94,6 +105,16 @@ function App() {
                     if (!line) continue;
                     try {
                         const data = JSON.parse(line);
+
+                        // Handle browser_snapshot event
+                        if (data.event && data.event.type === 'browser_snapshot') {
+                            setBrowserSnapshot({
+                                url: data.event.url,
+                                title: data.event.title,
+                                screenshot: data.event.screenshot,
+                            });
+                        }
+
                         // Only support new 'content' field from event system
                         const contentField = typeof data.content === 'string' ? data.content : '';
                         const hasResponse = typeof contentField === 'string' && contentField.length > 0;
@@ -181,12 +202,17 @@ function App() {
     return (
         <>
             <Header dark={dark} onToggleTheme={toggleTheme} onNewSession={newSession} />
-            <div className={styles.mainLayout}>
+            <div className={`${styles.mainLayout} ${browserSnapshot ? styles.threeColumn : ''}`}>
                 <div className={styles.column}>
                     <div className={styles.stickyInput}>
-                        <ChatInput onSend={sendMessage} disabled={isStreaming} />
+                        <ChatInput onSend={sendMessage} disabled={isStreaming} attachment={attachment} />
                     </div>
                 </div>
+                {browserSnapshot && (
+                    <div className={styles.browserColumn}>
+                        <BrowserView snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} />
+                    </div>
+                )}
                 <div className={styles.column}>
                     <ChatMessages messages={messages} />
                 </div>

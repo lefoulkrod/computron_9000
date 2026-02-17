@@ -9,6 +9,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import styles from './Message.module.css';
 import LightbulbIcon from './icons/LightbulbIcon.jsx';
+import ChevronIcon from './icons/ChevronIcon.jsx';
 import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
 
 
@@ -138,6 +139,7 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
                                 <LightbulbIcon size={18} />
                             </span>
                             <span>{expanded ? 'Hide thoughts' : 'Show thoughts'}</span>
+                            <ChevronIcon size={12} direction={expanded ? 'up' : 'down'} />
                         </div>
                         {expanded && (
                             <div className={styles.collapsibleThinkContent}>

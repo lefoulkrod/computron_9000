@@ -31,9 +31,10 @@ async def test_scroll_page_delegates(
 
     result = await scroll_page("down")
     assert isinstance(result, InteractionResult)
-    assert result.page_changed is False
-    assert result.reason == "no-change"
-    assert result.snapshot is None
+    # Scroll always returns page_changed=True since viewport changes
+    assert result.page_changed is True
+    assert result.reason == "scroll"
+    assert result.page_view is not None  # Always includes snapshot after scroll
     scroll = result.extras.get("scroll")
     assert isinstance(scroll, dict)
     assert scroll["scroll_top"] == 0
