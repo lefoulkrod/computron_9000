@@ -41,7 +41,7 @@ async def test_fill_field_by_css(
     assert isinstance(result, InteractionResult)
     assert result.page_changed is False
     assert result.reason == "no-change"
-    assert result.snapshot is None
+    assert result.page_view is None
     assert getattr(page, "_body_text", "").startswith("Filled value: chips")
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]
@@ -68,7 +68,7 @@ async def test_fill_field_by_visible_text(
     result = await fill_field("Email", "user@example.com")
     assert result.page_changed is False
     assert result.reason == "no-change"
-    assert result.snapshot is None
+    assert result.page_view is None
     assert "user@example.com" in getattr(page, "_body_text", "")
     assert settle_tracker["count"] == 1
     assert settle_tracker["expect_flags"] == [False]

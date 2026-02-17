@@ -6,7 +6,8 @@
 - Use custom exceptions where appropriate
 - Write tests for new features/bugs; descriptive names, Google-style docstrings; place in `tests/` mirroring source structure
 - Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
-- Always run `backend - run unit tests` and `backend - run quality checks` after changes to backend code.
+- Always run `backend - run unit tests` after changes to backend code.
+- Only run and `backend - run quality checks` when asked.
 - Include new deps in pyproject.toml
 - Use Pydantic for data validation; ensure JSON-serializable API responses
 - Private and internal fields, methods, functions, constants, types and modules should all be named with a single leading underscore
@@ -16,4 +17,7 @@
 - Write python code compatible with the current Python version 3.12.10
 - Never put implementation details in docstrings
 - Add comments to explain non-obvious code
-- NEVER update non-test code to be defensive against fakes missing attributes or methods; tests should use proper fakes/mocks
+- NEVER PATCH AROUND TEST FAILURES
+   - Do not introduce logic changes that bypass failing tests.
+   - Do not add "if" guards, mocks, or fallback logic just to quiet tests.
+   - Missing stubs or incomplete fakes are testing bugs, not production logic problems.

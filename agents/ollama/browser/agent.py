@@ -19,19 +19,18 @@ from agents.ollama.sdk import (
 from agents.types import Agent
 from models import get_default_model
 from tools.browser import (
+    ask_about_screenshot,
     click,
-    current_page,
     drag,
-    extract_text,
+    execute_javascript,
     fill_field,
     go_back,
-    ground_elements_by_text,
-    list_clickable_elements,
     open_url,
     press_keys,
     scroll_page,
+    select_option,
+    view_page,
 )
-from tools.browser.vision import ask_about_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -41,37 +40,56 @@ model = get_default_model()
 
 SYSTEM_PROMPT = dedent(
     """
-    You are a lightweight browser agent. Work with the persistent Playwright browser to inspect pages,
-    follow links, fill forms, press keys, and ask vision questions. The browser keeps cookies, storage,
-    and tabs between calls—reuse the current page when it's already on target.
+    Browser automation agent using Playwright. Browser persists state (cookies/storage/tabs)—reuse pages.
 
-    Available tools
-    - open_url(url): navigate the shared page and return a snapshot (title, snippet, elements, status).
-    - current_page(): snapshot the existing page without opening a new one.
-    - click(selector): activate an element; returns an InteractionResult (`page_changed`, `reason`,
-      optional `snapshot`).
-    - drag(source, target=None, offset=None): drag and drop via selectors or an offset; returns InteractionResult.
-    - fill_field(selector, value): click + type into inputs/textarea; InteractionResult.
-    - press_keys(keys): send key presses to the focused element; InteractionResult.
-    - go_back(): navigate one step back in history. Returns InteractionResult; raises if no prior entry exists.
-    - scroll_page(direction, amount=None): scroll and return InteractionResult with `extras["scroll"]`.
-    - extract_text(selector, limit=1000): collect visible text from elements.
-    - list_clickable_elements(after=None, limit=20, contains=None): list anchors/buttons/heuristic clickables.
-    - ask_about_screenshot(...), ground_elements_by_text(...): vision tools for image-based questions / grounding.
+    CORE TOOLS:
+    Navigation: open_url(url), scroll_page(dir, amt), go_back()
+    Reading: view_page(scope?) — see what's on screen with [role] name markers
+    Actions: click(selector), fill_field(selector, value), press_keys(keys), select_option(selector, value)
+    Vision⚠️ SLOW: ask_about_screenshot()
 
-    InteractionResult notes
-    - `page_changed` signals whether the browser detected navigation, DOM/layout change, or relevant input.
-    - `snapshot` is present only when the page changed; reuse the prior snapshot when it is `None`.
-    - `reason` values: `browser-navigation`, `history-navigation`, `dom-mutation`, `no-change`.
-    - Native `<select>` dropdowns do not change until an option is chosen. Opening the menu alone keeps
-      `page_changed=false`; selecting an option will flip it. This is expected behavior.
+    IMPORTANT — open_url vs view_page:
+    - open_url(url) NAVIGATES to a new URL — use only when you need a different page
+    - view_page() reads the CURRENT page without navigating — use to check what's on screen
+    After any action (click, fill, scroll), use view_page() to see the updated page.
 
-    Usage guidelines
-    - Start with `current_page()`; call `open_url` only when no relevant page is loaded or the user requests a different URL.
-    - Prefer selector handles from snapshots for `selector`, `source`, and `target`; fall back to exact text only when necessary.
-    - After every interaction, rely on `page_changed`/`reason` and snapshots (when present) to confirm the effect. Native `<select>` menus only change after an option is chosen; opening them alone keeps `page_changed=false`.
-    - Use `fill_field` before form submissions, `press_keys` for keyboard flows, `scroll_page` to reveal lazy content, and `go_back` to undo unwanted navigation (handling the error if there is no history entry).
-    - Keep tool usage aligned with the user's request, summarize results concisely, and request a valid http/https URL when needed.
+    VIEW_PAGE — YOUR PRIMARY READING TOOL:
+    view_page() returns interleaved content and interactive elements for the current viewport:
+        [link] Amazon Prime
+        [searchbox] Search Amazon
+        [h1] 1-16 of over 50,000 results for "wireless headphones"
+        [h2] Results
+        [link] Sony WH-1000XM5 Wireless Headphones
+        $348.00
+        [button] Add to Cart
+
+    SELECTORS — Copy from view_page output, use as role:name:
+        click("button:Add to Cart")
+        fill_field("searchbox:Search Amazon", "laptop")
+        click("link:Sony WH-1000XM5 Wireless Headphones")
+
+    Scoping: view_page(scope="Results") narrows to a page section (matches headings/landmarks).
+    After scroll: view_page() shows new viewport content.
+    After click/fill: the returned page_view shows the updated page automatically.
+
+    EFFICIENT PATTERNS:
+    - ALWAYS prefer site search/filters over scrolling through results
+    - view_page() shows what's visible — scroll + view_page to see more
+    - Use scope to focus on specific sections without noise
+    - Dismiss overlays early (click close/dismiss buttons)
+
+    WORKFLOW:
+    1. open_url(url) → view_page() to see the page
+    2. Use site search if available: fill_field("searchbox:...", query) → press_keys(["Enter"])
+    3. view_page() or view_page(scope="Results") to read results
+    4. Click elements using role:name from view_page: click("link:Product Name...")
+    5. scroll_page("down") → view_page() to see more content
+    6. If stuck/ambiguous: ASK USER for clarification
+
+    WHEN STUCK:
+    - Can't find element: scroll + view_page, or use view_page(scope="...") to focus
+    - Ambiguous instructions: Ask user to clarify
+    - Multiple similar elements: use index suffix click("button:Add to Cart[0]")
     """
 )
 
@@ -85,17 +103,16 @@ browser_agent = Agent(
     options=model.options,
     tools=[
         open_url,
+        view_page,
         click,
-        drag,
-        extract_text,
-        list_clickable_elements,
-        ask_about_screenshot,
-        ground_elements_by_text,
-        current_page,
         fill_field,
         press_keys,
+        select_option,
         scroll_page,
         go_back,
+        drag,
+        ask_about_screenshot,
+        execute_javascript,
     ],
     think=model.think,
 )

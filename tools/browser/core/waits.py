@@ -47,9 +47,33 @@ async def wait_for_page_settle(
             return new Promise((resolve) => {{
                 const quiet = {dom_quiet_ms};
                 let timer = setTimeout(() => {{ resolve(true); }}, quiet);
-                const obs = new MutationObserver(() => {{
-                    clearTimeout(timer);
-                    timer = setTimeout(() => {{ obs.disconnect(); resolve(true); }}, quiet);
+                const obs = new MutationObserver((mutations) => {{
+                    // Filter out mutations from form input typing
+                    const significantMutation = mutations.some(m => {{
+                        // Ignore value attribute changes on inputs/textareas
+                        if (m.type === 'attributes' && m.attributeName === 'value') {{
+                            const target = m.target;
+                            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {{
+                                return false;
+                            }}
+                        }}
+                        // Ignore characterData changes inside input/textarea
+                        if (m.type === 'characterData') {{
+                            let node = m.target.parentNode;
+                            while (node) {{
+                                if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {{
+                                    return false;
+                                }}
+                                node = node.parentNode;
+                            }}
+                        }}
+                        return true;
+                    }});
+                    
+                    if (significantMutation) {{
+                        clearTimeout(timer);
+                        timer = setTimeout(() => {{ obs.disconnect(); resolve(true); }}, quiet);
+                    }}
                 }});
                 try {{
                     obs.observe(document, {{ childList: true, subtree: true, attributes: true, characterData: true }});

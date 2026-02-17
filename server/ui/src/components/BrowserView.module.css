@@ -1,0 +1,193 @@
+.browserView {
+  background: var(--card-bg, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  animation: slideIn 0.3s ease-out;
+  position: sticky;
+  top: calc(var(--header-height) + 0.75rem);
+  z-index: 5;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--header-bg, #252525);
+  border-bottom: 1px solid var(--border-color, #333);
+  cursor: pointer;
+  user-select: none;
+}
+
+.header:hover {
+  background: var(--header-hover-bg, #2a2a2a);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.browserIcon {
+  color: var(--text-secondary, #999);
+}
+
+.title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.collapseBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.collapseBtn:hover {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.content {
+  padding: 10px;
+}
+
+.urlBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--input-bg, #2a2a2a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.lockIcon {
+  color: var(--text-secondary, #999);
+  flex-shrink: 0;
+}
+
+.url {
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #e0e0e0);
+  margin-bottom: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screenshotContainer {
+  max-height: 700px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  background: #000;
+  position: relative;
+}
+
+.screenshot {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.attachButton {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.attachButton:hover {
+  background: rgba(0, 0, 0, 0.85);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.attachButton:active {
+  transform: scale(0.98);
+}
+
+/* Light theme overrides */
+:global(body:not(.dark-theme)) .browserView {
+  background: #ffffff;
+  border-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .header {
+  background: #f5f5f5;
+  border-bottom-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .header:hover {
+  background: #ececec;
+}
+
+:global(body:not(.dark-theme)) .browserIcon,
+:global(body:not(.dark-theme)) .lockIcon,
+:global(body:not(.dark-theme)) .collapseBtn {
+  color: #666;
+}
+
+:global(body:not(.dark-theme)) .title,
+:global(body:not(.dark-theme)) .pageTitle {
+  color: #222;
+}
+
+:global(body:not(.dark-theme)) .urlBar {
+  background: #f9f9f9;
+  border-color: #ccc;
+}
+
+:global(body:not(.dark-theme)) .url {
+  color: #555;
+}
+
+:global(body:not(.dark-theme)) .screenshotContainer {
+  border-color: #ddd;
+}

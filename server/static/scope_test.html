@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Scope Test Page</title>
+  <style>
+    body {
+      font-family: Arial;
+      padding: 2rem;
+    }
+
+    .section {
+      border: 3px solid #333;
+      padding: 1rem;
+      margin: 1rem 0;
+      border-radius: 8px;
+    }
+
+    #section-a {
+      background: #ffebee;
+    }
+
+    #section-b {
+      background: #e8f5e9;
+    }
+
+    #section-c {
+      background: #e3f2fd;
+    }
+
+    button {
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+    }
+
+    a {
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      display: inline-block;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Scope Filtering Test Page</h1>
+
+  <div class="section" id="section-a">
+    <h2>Section A (Red)</h2>
+    <button id="btn-a1">Button A1</button>
+    <button id="btn-a2">Button A2</button>
+    <button id="btn-a3">Button A3</button>
+    <br>
+    <a href="#" id="link-a1">Link A1</a>
+    <a href="#" id="link-a2">Link A2</a>
+  </div>
+
+  <div class="section" id="section-b">
+    <h2>Section B (Green)</h2>
+    <button id="btn-b1">Button B1</button>
+    <button id="btn-b2">Button B2</button>
+    <br>
+    <a href="#" id="link-b1">Link B1</a>
+    <a href="#" id="link-b2">Link B2</a>
+    <a href="#" id="link-b3">Link B3</a>
+  </div>
+
+  <div class="section" id="section-c">
+    <h2>Section C (Blue)</h2>
+    <button id="btn-c1">Button C1</button>
+    <br>
+    <a href="#" id="link-c1">Link C1</a>
+    <a href="#" id="link-c2">Link C2</a>
+    <a href="#" id="link-c3">Link C3</a>
+    <a href="#" id="link-c4">Link C4</a>
+  </div>
+</body>
+
+</html>

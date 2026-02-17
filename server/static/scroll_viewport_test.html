@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scroll Viewport Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background: #f0f0f0;
+    }
+
+    .section {
+      min-height: 100vh;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      border: 3px solid #333;
+      border-radius: 8px;
+      background: white;
+    }
+
+    .section-1 {
+      background: #ffebee;
+      border-color: #c62828;
+    }
+
+    .section-2 {
+      background: #e8f5e9;
+      border-color: #2e7d32;
+    }
+
+    .section-3 {
+      background: #e3f2fd;
+      border-color: #1565c0;
+    }
+
+    .section-4 {
+      background: #fff3e0;
+      border-color: #ef6c00;
+    }
+
+    .section-5 {
+      background: #f3e5f5;
+      border-color: #6a1b9a;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 3rem;
+    }
+
+    p {
+      font-size: 1.2rem;
+      line-height: 1.6;
+    }
+
+    .marker {
+      font-weight: bold;
+      font-size: 1.5rem;
+      color: #d32f2f;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="section section-1" id="section-top">
+    <h1>TOP SECTION (Should be visible initially)</h1>
+    <p class="marker">⬆️ TOP MARKER - You are at the top of the page ⬆️</p>
+    <p>This is the first section. It should be visible when you first load the page.</p>
+    <p>The viewport should only show content from this section initially.</p>
+    <p>When you scroll down, this content should disappear from the snippet.</p>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore
+      magna aliqua.</p>
+    <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+  </div>
+
+  <div class="section section-2" id="section-middle-1">
+    <h1>MIDDLE SECTION 1 (Requires scroll to see)</h1>
+    <p class="marker">📍 MIDDLE-1 MARKER - You scrolled down once 📍</p>
+    <p>This is the second section. You need to scroll down to see this.</p>
+    <p>When this section is in the viewport, the TOP SECTION should not appear in the snippet.</p>
+    <p>Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+    </p>
+    <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p>
+    <p>Totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt
+      explicabo.</p>
+  </div>
+
+  <div class="section section-3" id="section-middle-2">
+    <h1>MIDDLE SECTION 2 (Requires more scrolling)</h1>
+    <p class="marker">📍 MIDDLE-2 MARKER - You scrolled down twice 📍</p>
+    <p>This is the third section. You need to scroll down more to see this.</p>
+    <p>When this section is in the viewport, the previous sections should not appear in the snippet.</p>
+    <p>Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.</p>
+    <p>Sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.</p>
+    <p>Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.</p>
+  </div>
+
+  <div class="section section-4" id="section-middle-3">
+    <h1>MIDDLE SECTION 3 (Even more scrolling needed)</h1>
+    <p class="marker">📍 MIDDLE-3 MARKER - You scrolled down three times 📍</p>
+    <p>This is the fourth section. Keep scrolling to reach this point.</p>
+    <p>Only this section and nearby content should be in the viewport snippet.</p>
+    <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p>
+    <p>Totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt
+      explicabo.</p>
+    <p>Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.</p>
+  </div>
+
+  <div class="section section-5" id="section-bottom">
+    <h1>BOTTOM SECTION (Scroll all the way down)</h1>
+    <p class="marker">⬇️ BOTTOM MARKER - You reached the bottom ⬇️</p>
+    <p>This is the final section at the bottom of the page.</p>
+    <p>When you're here, the top sections should definitely not be in the snippet.</p>
+    <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+    <p>Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+    </p>
+    <p class="marker">🎯 END OF PAGE 🎯</p>
+  </div>
+</body>
+
+</html>

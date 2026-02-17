@@ -9,16 +9,14 @@ expensive DOM walks.
 """
 
 from __future__ import annotations
-# ruff: noqa: I001  # Import sorting intentionally customized; project permits ignoring I001
 
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 
-from playwright.async_api import ElementHandle
+from playwright.async_api import ElementHandle, Page
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 logger = logging.getLogger(__name__)
@@ -119,6 +117,11 @@ class SelectorRegistry:
             if text_candidate:
                 candidates.append(text_candidate)
 
+            # Try substring selector for longer text
+            substring_candidate = _candidate_from_text_substring(normalized_text)
+            if substring_candidate:
+                candidates.append(substring_candidate)
+
         position_candidate = await _candidate_from_dom_position(element, tag=tag)
         if position_candidate:
             candidates.append(position_candidate)
@@ -135,17 +138,18 @@ class SelectorRegistry:
 
             attempts.append(candidate.strategy)
 
-            is_unique = await _verify_selector_unique(self._page, candidate.selector)
-            if not is_unique:
+            # Check if selector already used in this session
+            if candidate.selector in self._seen:
                 collisions += 1
                 logger.debug(
-                    "Selector %s (%s) failed uniqueness verification",
+                    "Selector %s already issued; collision recorded",
                     candidate.selector,
-                    candidate.strategy,
                 )
                 continue
 
-            if candidate.selector not in self._seen:
+            # Verify uniqueness on page
+            is_unique = await _verify_selector_unique(self._page, candidate.selector)
+            if is_unique:
                 self._seen[candidate.selector] = 1
                 return SelectorResult(
                     selector=candidate.selector,
@@ -154,10 +158,28 @@ class SelectorRegistry:
                     fallbacks_tried=tuple(attempts),
                 )
 
+            # Not unique - for text selectors, try adding >> nth=0
+            if candidate.strategy in (SelectorStrategy.TEXT_EXACT, SelectorStrategy.TEXT_SUBSTRING):
+                nth_selector = f"{candidate.selector} >> nth=0"
+                is_nth_unique = await _verify_selector_unique(self._page, nth_selector)
+                if is_nth_unique and nth_selector not in self._seen:
+                    self._seen[nth_selector] = 1
+                    logger.debug(
+                        "Text selector %s augmented with nth=0 for uniqueness",
+                        candidate.selector,
+                    )
+                    return SelectorResult(
+                        selector=nth_selector,
+                        strategy=candidate.strategy,
+                        collision_count=collisions,
+                        fallbacks_tried=tuple(attempts),
+                    )
+
             collisions += 1
             logger.debug(
-                "Selector %s already issued; collision recorded",
+                "Selector %s (%s) failed uniqueness verification",
                 candidate.selector,
+                candidate.strategy,
             )
 
         if not path_candidate:
@@ -207,6 +229,11 @@ async def build_unique_selector(
     )
 
 
+# Characters in element IDs that break CSS "#id" selector syntax.
+# Using [id='...'] attribute selector avoids escaping issues entirely.
+_CSS_SPECIAL_CHARS = frozenset(":.[]()+~>*^$|/\\")
+
+
 async def _candidate_from_id(element: ElementHandle) -> SelectorCandidate | None:
     """Return selector candidate based on element ``id``."""
     try:
@@ -216,7 +243,15 @@ async def _candidate_from_id(element: ElementHandle) -> SelectorCandidate | None
         return None
     if not value:
         return None
-    selector = f"#{value}"
+    # Use attribute selector form when the ID contains characters that would
+    # be invalid or ambiguous in CSS "#id" syntax (e.g., :r1:, foo.bar, a[0]),
+    # or when the ID starts with a digit (which is invalid in CSS).
+    if any(ch in value for ch in _CSS_SPECIAL_CHARS) or value[0].isdigit():
+        # Escape single quotes inside the value for the attribute selector
+        escaped = value.replace("'", "\\'")
+        selector = f"[id='{escaped}']"
+    else:
+        selector = f"#{value}"
     return SelectorCandidate(
         selector=selector,
         strategy=SelectorStrategy.ID,
@@ -294,12 +329,17 @@ async def _candidate_from_role_label(element: ElementHandle) -> SelectorCandidat
         return None
     if not aria_label:
         return None
-    if "'" in aria_label:
+    # Reject values containing characters that break CSS attribute selectors
+    _unsafe_for_css_attr = frozenset("'\"]\\")
+    if any(ch in aria_label for ch in _unsafe_for_css_attr):
         return None
     try:
         role = await element.get_attribute("role")
     except PlaywrightError as exc:  # pragma: no cover - defensive
         logger.debug("Failed to read role attribute: %s", exc)
+        role = None
+    # Also reject role values with unsafe characters
+    if role and any(ch in role for ch in _unsafe_for_css_attr):
         role = None
 
     selector = f"[role='{role}'][aria-label='{aria_label}']" if role else f"[aria-label='{aria_label}']"
@@ -312,11 +352,21 @@ async def _candidate_from_role_label(element: ElementHandle) -> SelectorCandidat
     )
 
 
+def _escape_text_for_selector(text: str) -> str:
+    """Escape text for use in Playwright text="..." selectors."""
+    # Backslash must be escaped first to avoid double-escaping
+    result = text.replace("\\", "\\\\")
+    result = result.replace('"', '\\"')
+    # Collapse whitespace (newlines, tabs, etc.) to single spaces
+    result = " ".join(result.split())
+    return result
+
+
 def _candidate_from_text_exact(text: str) -> SelectorCandidate | None:
     """Return text selector candidate when ``text`` is short enough."""
     if not text or len(text) > MAX_TEXT_SELECTOR_LEN:
         return None
-    escaped = text.replace('"', '\\"')
+    escaped = _escape_text_for_selector(text)
     selector = f'text="{escaped}"'
     return SelectorCandidate(
         selector=selector,
@@ -324,6 +374,44 @@ def _candidate_from_text_exact(text: str) -> SelectorCandidate | None:
         cost=50,
         notes={"text": text},
     )
+
+
+def _candidate_from_text_substring(text: str) -> SelectorCandidate | None:
+    """Return text substring selector using first line or up to 60 chars.
+
+    For long text, extract a unique identifier (first line or first ~60 chars)
+    and create a substring selector. This is useful for elements with lots of
+    metadata where only the first part is distinctive.
+    """
+    if not text:
+        return None
+
+    # Try first line (up to first newline)
+    first_line = text.split("\n")[0].strip()
+    if first_line and 10 <= len(first_line) <= MAX_TEXT_SELECTOR_LEN:
+        escaped = _escape_text_for_selector(first_line)
+        selector = f'text="{escaped}"'
+        return SelectorCandidate(
+            selector=selector,
+            strategy=SelectorStrategy.TEXT_SUBSTRING,
+            cost=55,
+            notes={"text": first_line, "original_length": len(text)},
+        )
+
+    # If first line too short/long, try first ~60 chars
+    if len(text) > MAX_TEXT_SELECTOR_LEN:
+        substring = text[:60].strip()
+        if len(substring) >= 10:
+            escaped = _escape_text_for_selector(substring)
+            selector = f'text="{escaped}"'
+            return SelectorCandidate(
+                selector=selector,
+                strategy=SelectorStrategy.TEXT_SUBSTRING,
+                cost=55,
+                notes={"text": substring, "original_length": len(text)},
+            )
+
+    return None
 
 
 async def _candidate_from_dom_position(
@@ -434,7 +522,16 @@ async def _candidate_from_dom_path(element: ElementHandle) -> SelectorCandidate 
         "    while (current && current.nodeType === Node.ELEMENT_NODE) {"
         "      let segment = current.nodeName.toLowerCase();"
         "      if (current.id) {"
-        "        segments.unshift('#' + current.id);"
+        # Use attribute selector for IDs that start with digits or contain special chars
+        "        const id = current.id;"
+        "        const startsWithDigit = /^[0-9]/.test(id);"
+        "        const hasSpecialChars = /[:.[\\]()+~>*^$|\\/\\\\]/.test(id);"
+        "        if (startsWithDigit || hasSpecialChars) {"
+        "          const escaped = id.replace(/'/g, \"\\\\'\");"
+        '          segments.unshift("[id=\'" + escaped + "\']");'
+        "        } else {"
+        "          segments.unshift('#' + id);"
+        "        }"
         "        break;"
         "      }"
         "      let nth = 1;"

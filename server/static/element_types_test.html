@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element Types Test Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background: #f5f5f5;
+    }
+
+    section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #333;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 0.5rem;
+    }
+
+    button {
+      margin: 0.5rem 0.5rem 0.5rem 0;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .primary-btn {
+      background: #007bff;
+      color: white;
+    }
+
+    .secondary-btn {
+      background: #6c757d;
+      color: white;
+    }
+
+    .success-btn {
+      background: #28a745;
+      color: white;
+    }
+
+    .danger-btn {
+      background: #dc3545;
+      color: white;
+    }
+
+    a {
+      display: inline-block;
+      margin: 0.5rem 0.5rem 0.5rem 0;
+      padding: 0.5rem 1rem;
+      background: #e3f2fd;
+      color: #0d47a1;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+
+    a:hover {
+      background: #bbdefb;
+    }
+
+    form {
+      background: #f8f9fa;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+
+    label {
+      display: block;
+      margin: 0.75rem 0 0.25rem;
+      font-weight: bold;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    .checkbox-group,
+    .radio-group {
+      margin: 0.5rem 0;
+    }
+
+    .checkbox-group label,
+    .radio-group label {
+      display: inline;
+      font-weight: normal;
+      margin-left: 0.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+    }
+
+    th,
+    td {
+      border: 1px solid #dee2e6;
+      padding: 0.75rem;
+      text-align: left;
+    }
+
+    th {
+      background: #e9ecef;
+    }
+
+    .icon-button {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #ffc107;
+      border: none;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    .custom-interactive {
+      padding: 1rem;
+      background: #fff3cd;
+      border: 2px dashed #ffc107;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 0.5rem 0;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Element Types Test Page</h1>
+  <p>This page contains various types of elements to test element detection tools.</p>
+
+  <section id="buttons-section">
+    <h2>Buttons (Various Types)</h2>
+    <button id="primary-btn" class="primary-btn">Primary Button</button>
+    <button id="secondary-btn" class="secondary-btn">Secondary Button</button>
+    <button class="success-btn" data-testid="success-action">Success Button</button>
+    <button class="danger-btn">Delete Item</button>
+    <button disabled>Disabled Button</button>
+
+    <h3>ARIA Role Buttons</h3>
+    <div role="button" id="div-button" class="custom-interactive" tabindex="0">
+      Clickable Div with role="button"
+    </div>
+    <span role="button" aria-label="Settings" class="icon-button" tabindex="0">⚙️</span>
+    <span role="button" aria-label="Close dialog" class="icon-button" tabindex="0">✖️</span>
+  </section>
+
+  <section id="links-section">
+    <h2>Links (Anchor Tags)</h2>
+    <a id="home-link" href="#home">Home</a>
+    <a id="about-link" href="#about">About Us</a>
+    <a href="/products" data-testid="products-link">Products</a>
+    <a href="/contact">Contact</a>
+    <a href="https://example.com" target="_blank">External Link</a>
+    <a href="#" onclick="return false;">JavaScript Link</a>
+    <a href="mailto:test@example.com">Email Link</a>
+    <a href="tel:+1234567890">Phone Link</a>
+  </section>
+
+  <section id="forms-section">
+    <h2>Forms</h2>
+
+    <h3>Login Form</h3>
+    <form id="login-form" action="/login" method="post">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" placeholder="Enter username" required>
+
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" placeholder="Enter password" required>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="remember" name="remember" value="yes">
+        <label for="remember">Remember me</label>
+      </div>
+
+      <button type="submit">Login</button>
+      <button type="reset">Reset</button>
+    </form>
+
+    <h3>Registration Form</h3>
+    <form id="registration-form" action="/register">
+      <label for="email">Email:</label>
+      <input type="email" id="email" name="email" placeholder="you@example.com" required>
+
+      <label for="age">Age:</label>
+      <input type="number" id="age" name="age" min="18" max="120">
+
+      <label for="country">Country:</label>
+      <select id="country" name="country">
+        <option value="">Select country...</option>
+        <option value="us">United States</option>
+        <option value="uk">United Kingdom</option>
+        <option value="ca">Canada</option>
+        <option value="au">Australia</option>
+      </select>
+
+      <label>Gender:</label>
+      <div class="radio-group">
+        <input type="radio" id="male" name="gender" value="male">
+        <label for="male">Male</label>
+
+        <input type="radio" id="female" name="gender" value="female">
+        <label for="female">Female</label>
+
+        <input type="radio" id="other" name="gender" value="other">
+        <label for="other">Other</label>
+      </div>
+
+      <label for="bio">Bio:</label>
+      <textarea id="bio" name="bio" rows="4" placeholder="Tell us about yourself"></textarea>
+
+      <label for="birthdate">Birth Date:</label>
+      <input type="date" id="birthdate" name="birthdate">
+
+      <label for="favorite-color">Favorite Color:</label>
+      <input type="color" id="favorite-color" name="favorite_color" value="#ff0000">
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="terms" name="terms" required>
+        <label for="terms">I agree to terms and conditions</label>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="newsletter" name="newsletter">
+        <label for="newsletter">Subscribe to newsletter</label>
+      </div>
+
+      <button type="submit">Register</button>
+    </form>
+
+    <h3>Search Form</h3>
+    <form id="search-form" role="search">
+      <label for="search-query">Search:</label>
+      <input type="search" id="search-query" name="q" placeholder="Search...">
+      <button type="submit">Search</button>
+    </form>
+  </section>
+
+  <section id="tables-section">
+    <h2>Tables</h2>
+    <table id="users-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Alice Smith</td>
+          <td>alice@example.com</td>
+          <td>Active</td>
+          <td><button class="primary-btn">Edit</button></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Bob Johnson</td>
+          <td>bob@example.com</td>
+          <td>Inactive</td>
+          <td><button class="primary-btn">Edit</button></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Carol White</td>
+          <td>carol@example.com</td>
+          <td>Active</td>
+          <td><button class="primary-btn">Edit</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="interactive-elements">
+    <h2>Other Interactive Elements</h2>
+
+    <h3>Details/Summary</h3>
+    <details id="details-widget">
+      <summary>Click to expand details</summary>
+      <p>This is hidden content that appears when you click the summary.</p>
+      <button>Action inside details</button>
+    </details>
+
+    <h3>Custom Interactive Elements</h3>
+    <div class="custom-interactive" onclick="alert('Clicked!')" tabindex="0">
+      Clickable div with onclick handler
+    </div>
+
+    <div contenteditable="true" style="border: 1px solid #ccc; padding: 0.5rem; min-height: 100px; background: white;">
+      This is editable content. Click to edit.
+    </div>
+  </section>
+
+  <section id="images-section">
+    <h2>Images</h2>
+    <img
+      src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100'%3E%3Crect fill='%23007bff' width='200' height='100'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='20'%3ETest Image%3C/text%3E%3C/svg%3E"
+      alt="Test placeholder image" id="test-image">
+  </section>
+
+  <script>
+    // Add some interactivity for testing
+    document.querySelectorAll('button:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (btn.type !== 'submit' && btn.type !== 'reset') {
+          e.preventDefault();
+          console.log('Button clicked:', btn.textContent);
+        }
+      });
+    });
+
+    document.querySelectorAll('form').forEach(form => {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        console.log('Form submitted:', form.id);
+      });
+    });
+  </script>
+</body>
+
+</html>

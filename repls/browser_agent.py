@@ -47,7 +47,14 @@ def _insert_system_message(agent: Agent) -> None:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(description="BROWSER_AGENT REPL")
+    parser = argparse.ArgumentParser(description="BROWSER_AGENT REPL")
+    parser.add_argument(
+        "--command",
+        "-c",
+        type=str,
+        help="Run a single command and exit (non-interactive mode)",
+    )
+    return parser
 
 
 async def _run_once(user_text: str) -> None:
@@ -88,9 +95,19 @@ async def main() -> None:
     # Ensure global logging is configured once for the process. REPL logs
     # are governed by the global config ('repls' logger level set in setup).
     setup_logging()
-    _build_arg_parser().parse_args()
+    args = _build_arg_parser().parse_args()
     # Seed the conversation with the agent system message
     _insert_system_message(browser_agent)
+    
+    # Non-interactive mode: run single command and exit
+    if args.command:
+        logger.info("Running command: %s", args.command)
+        await _run_once(args.command)
+        with contextlib.suppress(Exception):
+            await close_browser()
+        return
+    
+    # Interactive mode
     logger.info("Starting BROWSER_AGENT REPL. Type /help for commands.")
     while True:
         try:

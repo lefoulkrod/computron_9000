@@ -27,6 +27,7 @@ from .models import (
     AssistantEventPayload,
     AssistantResponse,
     AssistantResponseData,
+    BrowserSnapshotPayload,
     DispatchEvent,
     ToolCallPayload,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",
+    "BrowserSnapshotPayload",
     "DispatchEvent",
     "EventDispatcher",
     "Handler",
