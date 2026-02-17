@@ -41,5 +41,3 @@ async def open_url(url: str) -> PageView:
     except Exception as exc:  # pragma: no cover - wrap into tool error
         logger.exception("Failed to open URL %s", url)
         raise BrowserToolError(str(exc), tool="open_url") from exc
-
-
