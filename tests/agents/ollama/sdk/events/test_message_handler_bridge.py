@@ -4,27 +4,27 @@ Covers:
 - The handler yields only events published via dispatcher (no duplicates from
   the underlying generator yields)
 - Ordering is preserved
+- Nested agent final events are filtered; non-final nested events pass through
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator
 
 import pytest
 
 from agents.ollama.message_handler import handle_user_message
 from agents.ollama.sdk.events import (
     AssistantResponse,
-    make_child_context_id,
     publish_event,
-    use_context_id,
+    agent_span,
 )
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_message_handler_bridges_events_without_duplicates(monkeypatch):
+async def test_message_handler_bridges_events_without_duplicates(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch the tool loop to both publish events and yield values; ensure only published events are forwarded."""
 
     # Scripted published events
@@ -34,8 +34,8 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch):
         yield ("one", None)
         await asyncio.sleep(0)
 
-        # Nested agent/tool event should surface with blank content
-        with use_context_id(make_child_context_id("nested")):
+        # Nested agent event: non-final, passes through with content intact
+        with agent_span("nested"):
             publish_event(AssistantResponse(content="secret", thinking="hidden"))
         yield ("secret", "hidden")
         await asyncio.sleep(0)
@@ -45,22 +45,18 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch):
         yield ("done", None)
         await asyncio.sleep(0)
 
-    # Patch where it's imported in the message handler module
     import agents.ollama.message_handler as mh
 
     monkeypatch.setattr(mh, "run_tool_call_loop", _fake_tool_loop)
 
-    # Collect events from the handler
     seen: list[AssistantResponse] = []
     async for ev in handle_user_message("hi", data=None):
         seen.append(ev)
-        # Stop after we've seen the two expected events to avoid looping
         if len(seen) >= 3:
             break
 
-    # We should see root event, sanitized child (empty content), and final root event
     assert [(ev.content, ev.thinking, ev.final) for ev in seen] == [
         ("one", None, False),
-        ("", "hidden", False),
+        ("secret", "hidden", False),
         ("done", None, True),
     ]

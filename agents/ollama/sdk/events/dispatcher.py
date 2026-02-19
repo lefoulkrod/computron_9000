@@ -21,12 +21,12 @@ from contextlib import asynccontextmanager, suppress
 from inspect import iscoroutinefunction
 from typing import Any
 
-from .models import DispatchEvent
+from .models import AssistantResponse
 
 logger = logging.getLogger(__name__)
 
 
-Handler = Callable[[DispatchEvent], Any]
+Handler = Callable[[AssistantResponse], Any]
 
 
 class EventDispatcher:
@@ -64,7 +64,7 @@ class EventDispatcher:
         self._subscribers.clear()
 
     # -- publication -------------------------------------------------------------
-    def publish(self, event: DispatchEvent) -> None:
+    def publish(self, event: AssistantResponse) -> None:
         """Publish an event to all current subscribers.
 
         Scheduling rules:
@@ -119,14 +119,14 @@ class EventDispatcher:
                 logger.exception("Unhandled exception while draining task")
 
     async def _run_async_handler(
-        self, handler: Callable[[DispatchEvent], Awaitable[Any]], event: DispatchEvent
+        self, handler: Callable[[AssistantResponse], Awaitable[Any]], event: AssistantResponse
     ) -> None:
         try:
             await handler(event)
         except Exception:  # pragma: no cover - handler errors are logged, not raised
             logger.exception("Unhandled exception in async event handler")
 
-    def _run_sync_handler(self, handler: Handler, event: DispatchEvent) -> None:
+    def _run_sync_handler(self, handler: Handler, event: AssistantResponse) -> None:
         try:
             handler(event)
         except Exception:  # pragma: no cover - handler errors are logged, not raised

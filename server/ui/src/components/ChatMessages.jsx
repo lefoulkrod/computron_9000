@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Message from './Message.jsx';
 import styles from './ChatMessages.module.css';
 
-export default function ChatMessages({ messages }) {
+export default function ChatMessages({ messages, showSubAgents = true }) {
     const containerRef = useRef(null);
     const endRef = useRef(null);
 
@@ -18,10 +18,15 @@ export default function ChatMessages({ messages }) {
         }
     }, [messages]);
 
+    // Filter messages based on showSubAgents toggle
+    const visibleMessages = showSubAgents
+        ? messages
+        : messages.filter((msg) => msg.role === 'user' || (msg.role === 'assistant' && (msg.depth === 0 || msg.depth === undefined)));
+
     return (
         <div className={styles.chatMessages} id="chatMessages" ref={containerRef}>
-            {messages.map((msg, idx) => (
-                <Message key={msg.id || idx} {...msg} />
+            {visibleMessages.map((msg, idx) => (
+                <Message key={msg.id || idx} {...msg} showSubAgents={showSubAgents} />
             ))}
             <div ref={endRef} />
         </div>

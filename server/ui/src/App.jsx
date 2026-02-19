@@ -11,6 +11,7 @@ function App() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [browserSnapshot, setBrowserSnapshot] = useState(null);
     const [attachment, setAttachment] = useState(null);
+    const [showSubAgents, setShowSubAgents] = useState(true);
 
     useEffect(() => {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -22,6 +23,7 @@ function App() {
     }, [dark]);
 
     const toggleTheme = () => setDark((d) => !d);
+    const toggleSubAgents = () => setShowSubAgents((s) => !s);
 
     const handleAttachScreenshot = (base64Screenshot) => {
         setAttachment({ base64: base64Screenshot, contentType: 'image/png' });
@@ -119,6 +121,10 @@ function App() {
                         const contentField = typeof data.content === 'string' ? data.content : '';
                         const hasResponse = typeof contentField === 'string' && contentField.length > 0;
                         const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
+                        const agentName = data.agent_name || null;
+                        const depth = typeof data.depth === 'number' ? data.depth : 0;
+                        const dataField = Array.isArray(data.data) ? data.data : null;
+                        const toolCallEvent = data.event && data.event.type === 'tool_call' ? data.event : null;
 
                         // If thinking arrives AFTER we've already shown a response in this segment,
                         // start a new segment message to collect subsequent thinking.
@@ -138,6 +144,21 @@ function App() {
                             const i = updated.findIndex((m) => m.role === 'assistant' && m.id === currentAssistantId);
                             const cur = i === -1 ? { id: currentAssistantId, role: 'assistant', content: '', thinking: undefined } : updated[i];
                             const next = { ...cur };
+                            // Update agent_name and depth if present in this event
+                            if (agentName) {
+                                next.agent_name = agentName;
+                            }
+                            if (typeof depth === 'number') {
+                                next.depth = depth;
+                            }
+                            if (dataField) {
+                                const existing = Array.isArray(next.data) ? next.data : [];
+                                next.data = [...existing, ...dataField];
+                            }
+                            if (toolCallEvent) {
+                                const existing = Array.isArray(next.data) ? next.data : [];
+                                next.data = [...existing, toolCallEvent];
+                            }
                             if (hasThinking) {
                                 const existing = typeof next.thinking === 'string' ? next.thinking : '';
                                 // Use a visible separation (double newline) between distinct thinking chunks.
@@ -201,7 +222,13 @@ function App() {
 
     return (
         <>
-            <Header dark={dark} onToggleTheme={toggleTheme} onNewSession={newSession} />
+            <Header
+                dark={dark}
+                onToggleTheme={toggleTheme}
+                onNewSession={newSession}
+                showSubAgents={showSubAgents}
+                onToggleSubAgents={toggleSubAgents}
+            />
             <div className={`${styles.mainLayout} ${browserSnapshot ? styles.threeColumn : ''}`}>
                 <div className={styles.column}>
                     <div className={styles.stickyInput}>
@@ -214,7 +241,7 @@ function App() {
                     </div>
                 )}
                 <div className={styles.column}>
-                    <ChatMessages messages={messages} />
+                    <ChatMessages messages={messages} showSubAgents={showSubAgents} />
                 </div>
             </div>
         </>

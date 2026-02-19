@@ -131,6 +131,10 @@ async def stream_events(
                 data_out["data"] = raw["data"]
             if "event" in raw:
                 data_out["event"] = raw["event"]
+            if "agent_name" in raw:
+                data_out["agent_name"] = raw["agent_name"]
+            if "depth" in raw:
+                data_out["depth"] = raw["depth"]
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
             if final_flag:
                 break

@@ -76,6 +76,8 @@ class AssistantResponse(BaseModel):
         data: Optional list of binary or auxiliary payloads associated with this response.
         event: Optional structured event metadata (e.g., tool call notifications).
         timestamp: UTC timestamp when the event instance was created.
+        agent_name: Optional human-readable agent name for attribution (e.g., "Browser Agent").
+        depth: Optional nesting depth (0 = main agent, 1+ = sub-agents).
     """
 
     content: str | None = None
@@ -86,15 +88,9 @@ class AssistantResponse(BaseModel):
     # Final is a boolean flag indicating terminal/complete event. Default to
     # False so consumers can rely on a boolean value instead of None.
     final: bool = False
-
-
-class DispatchEvent(BaseModel):
-    """Envelope emitted by the dispatcher with context metadata."""
-
-    context_id: str
-    parent_context_id: str | None = None
-    depth: int
-    payload: AssistantResponse
+    # Agent attribution metadata for UI rendering
+    agent_name: str | None = None
+    depth: int | None = None
 
 
 __all__ = [
@@ -102,6 +98,5 @@ __all__ = [
     "AssistantResponse",
     "AssistantResponseData",
     "BrowserSnapshotPayload",
-    "DispatchEvent",
     "ToolCallPayload",
 ]

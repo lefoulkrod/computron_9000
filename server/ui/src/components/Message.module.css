@@ -222,6 +222,46 @@
   stroke-width: 1.8;
 }
 
+.messageHeader {
+  margin-bottom: 0.75em;
+  font-size: 0.9em;
+  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
+.agentLabel {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 500;
+}
+
+
+/* Sub-agent styling with indentation */
+.subAgent {
+  margin-left: calc(var(--depth-level) * 1.5rem);
+  position: relative;
+}
+
+.subAgent::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    rgba(147, 51, 234, 0.3),
+    rgba(147, 51, 234, 0.1)
+  );
+  border-radius: 2px;
+}
+
+.subAgent .bubble {
+  background: var(--primary);
+  opacity: 0.95;
+}
+
 .messageImages {
   margin-top: 0.5rem;
   display: flex;
