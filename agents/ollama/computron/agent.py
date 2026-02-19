@@ -13,7 +13,6 @@ from agents.ollama.sdk import (
     make_log_before_model_call,
     make_run_agent_as_tool_function,
 )
-from agents.ollama.web import web_agent_tool
 from agents.types import Agent
 from models import get_default_model
 from tools.code.execute_code import execute_python_program
@@ -40,12 +39,6 @@ SYSTEM_PROMPT = dedent(
             call the tool. After the tool call, summarize the result and your next step.
 
         When to use each tool (decision heuristics):
-        - Web agent (fast search): use for short factual lookups, simple Q&A, current events,
-            quick verification of dates/prices/contact info, and when only retrieval of a small
-            number of pages or snippets is required. Prefer this when you only need facts or
-            citations and don't need to interact with a page.
-            Example: "What's the latest stable release of package X?" or "Find the official docs
-            page for X and return the installation command."
 
         - Browser agent (automated browser): use when tasks require interacting with pages,
             navigating JS-heavy sites, clicking through forms, scraping multi-page workflows,
@@ -56,17 +49,8 @@ SYSTEM_PROMPT = dedent(
             the first 20 rows." or "Fill the product filter, click 'Show more', and gather all
             items from the expanded list."
 
-        - Research tool (comprehensive): use for deep, multi-step investigations that require
-            synthesizing multiple sources, threading reasoning across searches, or long-running
-            structured research tasks. This tool orchestrates repeated searches and browser
-            interactions when necessary.
 
-        Decision flow (quick):
-        1. If it's a single factual question or citation request -> web agent.
-        2. If you must interact with a page (click, form, download, JS-rendered content) -> browser agent.
-        3. If the task is multi-step, investigative, or requires synthesis across many
-             sources -> research tool (or combine web + browser via research tool).
-
+       
         Tool use best practices and safety:
         - Minimize browser usage when a web search will do; browsers are slower and have
             greater privacy/side-effect risk.
@@ -104,7 +88,6 @@ computron_agent: Agent = Agent(
         execute_python_program,
         run_bash_cmd,
         browser_agent_tool,
-        web_agent_tool,
         generate_emoticon,
         execute_research_tool,
     ],

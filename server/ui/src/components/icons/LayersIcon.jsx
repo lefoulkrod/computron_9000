@@ -1,7 +1,6 @@
 import React from 'react';
 
-export default function ChevronIcon({ size = 12, direction = 'down' }) {
-  const rotation = direction === 'down' ? 0 : 180;
+export default function LayersIcon({ size = 20, active = false }) {
   return (
     <svg
       width={size}
@@ -12,9 +11,11 @@ export default function ChevronIcon({ size = 12, direction = 'down' }) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 0.2s ease' }}
+      style={{ opacity: active ? 1 : 0.6 }}
     >
-      <polyline points="6 9 12 15 18 9" />
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
     </svg>
   );
 }

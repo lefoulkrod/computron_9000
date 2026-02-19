@@ -1,7 +1,6 @@
 import React from 'react';
 
-export default function ChevronIcon({ size = 12, direction = 'down' }) {
-  const rotation = direction === 'down' ? 0 : 180;
+export default function WrenchIcon({ size = 20 }) {
   return (
     <svg
       width={size}
@@ -12,9 +11,8 @@ export default function ChevronIcon({ size = 12, direction = 'down' }) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 0.2s ease' }}
     >
-      <polyline points="6 9 12 15 18 9" />
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }

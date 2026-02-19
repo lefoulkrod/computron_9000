@@ -2,8 +2,9 @@ import React from 'react';
 import styles from './Header.module.css';
 import ThemeIcon from './icons/ThemeIcon.jsx';
 import PlusIcon from './icons/PlusIcon.jsx';
+import LayersIcon from './icons/LayersIcon.jsx';
 
-export default function Header({ dark, onToggleTheme, onNewSession }) {
+export default function Header({ dark, onToggleTheme, onNewSession, showSubAgents, onToggleSubAgents }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -18,6 +19,15 @@ export default function Header({ dark, onToggleTheme, onNewSession }) {
           className={`${styles.logo} ${styles.logoDark}`}
         />
         <div className={styles.appTitle}>COMPUTRON_9000</div>
+        <button
+          onClick={onToggleSubAgents}
+          id="subAgentsToggle"
+          className={`${styles.iconButton} ${showSubAgents ? styles.active : ''}`}
+          aria-label={showSubAgents ? 'Hide sub-agents' : 'Show sub-agents'}
+          title={showSubAgents ? 'Hide sub-agents' : 'Show sub-agents'}
+        >
+          <LayersIcon size={20} active={showSubAgents} />
+        </button>
         <button
           onClick={onToggleTheme}
           id="themeToggle"

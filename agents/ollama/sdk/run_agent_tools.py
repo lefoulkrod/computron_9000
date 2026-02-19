@@ -13,7 +13,7 @@ from ollama import ChatResponse
 
 from agents.types import Agent
 
-from .events import make_child_context_id, use_context_id
+from .events import agent_span
 from .tool_loop import run_tool_call_loop
 
 
@@ -303,8 +303,7 @@ Returns:
 
     async def run_agent_as_tool(instructions: str) -> T:
         # DONT PROVIDE A DOCSTRING HERE
-        child_context_id = make_child_context_id(agent.name)
-        with use_context_id(child_context_id):
+        with agent_span(agent.name):
             messages = [
                 {"role": "system", "content": agent.instruction},
                 {"role": "user", "content": instructions},

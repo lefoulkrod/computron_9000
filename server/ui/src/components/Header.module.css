@@ -78,6 +78,11 @@
   outline-offset: 2px;
 }
 
+.iconButton.active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
 .iconButton+.iconButton {
   margin-left: 0.35rem;
 }

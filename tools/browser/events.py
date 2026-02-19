@@ -139,15 +139,6 @@ def request_progressive_snapshot(page: Page) -> None:
     Args:
         page: The Playwright page to capture.
     """
-    try:
-        from agents.ollama.sdk.events import get_current_dispatcher
-
-        # Skip entirely when no dispatcher (unit tests / CLI).
-        if get_current_dispatcher() is None:
-            return
-    except Exception:  # noqa: BLE001
-        return
-
     _emitter.request(page)
 
 
@@ -170,12 +161,8 @@ async def _emit_snapshot(page: Page) -> None:
     from agents.ollama.sdk.events import (
         AssistantResponse,
         BrowserSnapshotPayload,
-        get_current_dispatcher,
         publish_event,
     )
-
-    if get_current_dispatcher() is None:
-        return
 
     if not hasattr(page, "screenshot") or not callable(getattr(page, "screenshot", None)):
         return
@@ -220,18 +207,12 @@ def emit_browser_snapshot_on_page_change[F: Callable[..., Any]](func: F) -> F:
 
         # Try to emit snapshot event if we have the necessary data
         try:
-            # Import at runtime to avoid circular dependency
             from agents.ollama.sdk.events import (
                 AssistantResponse,
                 BrowserSnapshotPayload,
-                get_current_dispatcher,
                 publish_event,
             )
             from tools.browser.core import get_browser
-
-            # Skip event emission if there's no active dispatcher (e.g., in unit tests)
-            if get_current_dispatcher() is None:
-                return result
 
             snapshot = None
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -8,9 +8,10 @@ import { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import styles from './Message.module.css';
-import LightbulbIcon from './icons/LightbulbIcon.jsx';
+import ThinkingIcon from './icons/ThinkingIcon.jsx';
 import ChevronIcon from './icons/ChevronIcon.jsx';
 import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
+import ToolCallsSummary from './ToolCallsSummary';
 
 
 // Extend sanitize schema to allow KaTeX/MathML output and preserve code language classes
@@ -114,12 +115,63 @@ function preprocessContent(md) {
     return normalizeMathDelimiters(normalizeUnicode(md));
 }
 
-function AssistantMessage({ content, thinking, images, placeholder }) {
-    const [expanded, setExpanded] = useState(false);
-    const bubbleRef = useRef(null);
+const markdownComponents = {
+    pre: (props) => <PreCodeBlock {...props} />,
+    code: (props) => <InlineCode {...props} />,
+};
+
+function MarkdownContent({ children }) {
     return (
-        <div className={`${styles.message} ${styles.assistant}`}>
+        <ReactMarkdown
+            urlTransform={_urlTransform}
+            remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
+            rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
+            components={markdownComponents}
+        >
+            {preprocessContent(children || '')}
+        </ReactMarkdown>
+    );
+}
+
+// Format agent name for display
+function formatAgentName(agentName) {
+    if (!agentName) return 'COMPUTRON_9000';
+
+    // Convert snake_case to Title Case
+    return agentName
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+
+
+function AssistantMessage({ content, thinking, images, placeholder, agent_name, depth = 0, data }) {
+    const [thinkingExpanded, setThinkingExpanded] = useState(false);
+    const bubbleRef = useRef(null);
+    const displayName = formatAgentName(agent_name);
+
+    const toolCalls = Array.isArray(data)
+        ? data.filter(item => item && item.type === 'tool_call')
+        : [];
+
+    return (
+        <div
+            className={`${styles.message} ${styles.assistant} ${depth > 0 ? styles.subAgent : ''}`}
+            style={{ '--depth-level': depth }}
+        >
             <div className={styles.bubble} ref={bubbleRef}>
+                {!placeholder && (agent_name || toolCalls.length > 0) && (
+                    <div className={styles.messageHeader}>
+                        {agent_name && (
+                            <span className={styles.agentLabel}>
+                                {depth > 0 && '↳ '}{displayName}
+                            </span>
+                        )}
+                        {agent_name && toolCalls.length > 0 && ' — '}
+                        <ToolCallsSummary toolCalls={toolCalls} />
+                    </div>
+                )}
                 {placeholder && (
                     <div className={styles.loadingIndicator}>
                         Thinking<span className={styles.dot}>.</span>
@@ -129,48 +181,26 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
                 )}
                 {!placeholder && thinking && (
                     <div
-                        className={`${styles.collapsibleThink} ${expanded ? styles.expanded : ''}`}
+                        className={`${styles.collapsibleThink} ${thinkingExpanded ? styles.expanded : ''}`}
                     >
                         <div
                             className={styles.collapsibleThinkHeader}
-                            onClick={() => setExpanded((e) => !e)}
+                            onClick={() => setThinkingExpanded((e) => !e)}
                         >
                             <span className={styles.thinkIcon} aria-hidden="true">
-                                <LightbulbIcon size={18} />
+                                <ThinkingIcon size={18} />
                             </span>
-                            <span>{expanded ? 'Hide thoughts' : 'Show thoughts'}</span>
-                            <ChevronIcon size={12} direction={expanded ? 'up' : 'down'} />
+                            <span>{thinkingExpanded ? 'Hide thoughts' : 'Show thoughts'}</span>
+                            <ChevronIcon size={12} direction={thinkingExpanded ? 'up' : 'down'} />
                         </div>
-                        {expanded && (
+                        {thinkingExpanded && (
                             <div className={styles.collapsibleThinkContent}>
-                                <ReactMarkdown
-                                    urlTransform={_urlTransform}
-                                    remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                                    rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
-                                    components={{
-                                        pre: (props) => <PreCodeBlock {...props} />,
-                                        code: (props) => <InlineCode {...props} />,
-                                    }}
-                                >
-                                    {preprocessContent(thinking || '')}
-                                </ReactMarkdown>
+                                <MarkdownContent>{thinking}</MarkdownContent>
                             </div>
                         )}
                     </div>
                 )}
-                {!placeholder && (
-                    <ReactMarkdown
-                        urlTransform={_urlTransform}
-                        remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                        rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
-                        components={{
-                            pre: (props) => <PreCodeBlock {...props} />,
-                            code: (props) => <InlineCode {...props} />,
-                        }}
-                    >
-                        {preprocessContent(content || '')}
-                    </ReactMarkdown>
-                )}
+                {!placeholder && <MarkdownContent>{content}</MarkdownContent>}
                 {Array.isArray(images) && images.length > 0 && (
                     <div className={styles.messageImages}>
                         {images.map((src, i) => (
@@ -184,21 +214,10 @@ function AssistantMessage({ content, thinking, images, placeholder }) {
 }
 
 function UserMessage({ content, images }) {
-    const bubbleRef = useRef(null);
     return (
         <div className={`${styles.message} ${styles.user}`}>
-            <div className={styles.bubble} ref={bubbleRef}>
-                <ReactMarkdown
-                    urlTransform={_urlTransform}
-                    remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                    rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
-                    components={{
-                        pre: (props) => <PreCodeBlock {...props} />,
-                        code: (props) => <InlineCode {...props} />,
-                    }}
-                >
-                    {preprocessContent(content || '')}
-                </ReactMarkdown>
+            <div className={styles.bubble}>
+                <MarkdownContent>{content}</MarkdownContent>
                 {Array.isArray(images) && images.length > 0 && (
                     <div className={styles.messageImages}>
                         {images.map((src, i) => (

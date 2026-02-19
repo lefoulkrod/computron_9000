@@ -2,90 +2,79 @@
 
 These tests validate that:
 - publish_event is a no-op when no dispatcher is set
-- set/reset correctly bind and restore the current dispatcher
-- publish_event delegates to the active dispatcher's publish method
+- _current_dispatcher can be set/reset via ContextVar directly
+- publish_event delegates to the active dispatcher with the event content
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 import pytest
 
 from agents.ollama.sdk.events import (
     AssistantResponse,
-    DispatchEvent,
-    get_current_dispatcher,
-    make_child_context_id,
+    EventDispatcher,
     publish_event,
-    reset_current_dispatcher,
-    set_current_dispatcher,
-    use_context_id,
+    agent_span,
 )
+from agents.ollama.sdk.events.context import _current_dispatcher
 
 
-class _DummyDispatcher:
+class _TrackingDispatcher(EventDispatcher):
     def __init__(self) -> None:
-        self.published: list[DispatchEvent] = []
+        super().__init__()
+        self.published: list[AssistantResponse] = []
 
-    def publish(self, event: DispatchEvent) -> None:
+    def publish(self, event: AssistantResponse) -> None:
         self.published.append(event)
 
 
 @pytest.mark.unit
 def test_publish_event_noop_without_dispatcher() -> None:
     """Calling publish_event without a dispatcher should not raise or mutate state."""
-    # Ensure no dispatcher is set
-    token = set_current_dispatcher(None)
+    token = _current_dispatcher.set(None)
     try:
         publish_event(AssistantResponse(content="hi"))
     finally:
-        reset_current_dispatcher(token)
+        _current_dispatcher.reset(token)
 
 
 @pytest.mark.unit
 def test_set_and_reset_current_dispatcher() -> None:
-    """set_current_dispatcher returns a token that can restore the previous value."""
-    # Start with a clean slate
-    root_token = set_current_dispatcher(None)
+    """_current_dispatcher ContextVar can be set and reset via token."""
+    root_token = _current_dispatcher.set(None)
     try:
-        assert get_current_dispatcher() is None
-        d = _DummyDispatcher()
-        token = set_current_dispatcher(d)
+        assert _current_dispatcher.get() is None
+        d = _TrackingDispatcher()
+        token = _current_dispatcher.set(d)
         try:
-            assert get_current_dispatcher() is d
+            assert _current_dispatcher.get() is d
         finally:
-            reset_current_dispatcher(token)
-        assert get_current_dispatcher() is None
+            _current_dispatcher.reset(token)
+        assert _current_dispatcher.get() is None
     finally:
-        reset_current_dispatcher(root_token)
+        _current_dispatcher.reset(root_token)
 
 
 @pytest.mark.unit
 def test_publish_event_delegates_to_dispatcher() -> None:
-    """publish_event should invoke publish on the bound dispatcher with the same event."""
-    d = _DummyDispatcher()
-    token = set_current_dispatcher(d)
+    """publish_event should invoke publish on the bound dispatcher with the event content."""
+    d = _TrackingDispatcher()
+    token = _current_dispatcher.set(d)
     try:
-        evt = AssistantResponse(content="hello")
-        publish_event(evt)
+        publish_event(AssistantResponse(content="hello"))
         assert len(d.published) == 1
-        dispatch_evt = d.published[0]
-        assert dispatch_evt.payload is evt
-        assert dispatch_evt.context_id
+        published = d.published[0]
+        assert published.content == "hello"
+        assert published.depth is not None
     finally:
-        reset_current_dispatcher(token)
+        _current_dispatcher.reset(token)
 
 
 @pytest.mark.unit
 def test_child_context_ids_form_hierarchy() -> None:
     """Child context ids should extend their parent ids deterministically."""
-
-    token = set_current_dispatcher(None)
-    with use_context_id("root") as root_id:
-        child_id = make_child_context_id("nested")
-        assert child_id.startswith(root_id)
-        with use_context_id(child_id) as resolved_child:
-            grandchild_id = make_child_context_id("deep")
-            assert grandchild_id.startswith(resolved_child)
-    reset_current_dispatcher(token)
+    with agent_span(context_id="root") as root_id:
+        with agent_span("nested") as child_id:
+            assert child_id.startswith(root_id)
+            with agent_span("deep") as grandchild_id:
+                assert grandchild_id.startswith(child_id)

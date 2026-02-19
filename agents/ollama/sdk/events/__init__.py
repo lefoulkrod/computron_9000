@@ -10,17 +10,9 @@ This package provides:
 """
 
 from .context import (
-    current_context_depth,
-    current_context_id,
-    current_parent_context_id,
+    agent_span,
     event_context,
-    get_current_dispatcher,
-    make_child_context_id,
     publish_event,
-    reset_context_id,
-    reset_current_dispatcher,
-    set_current_dispatcher,
-    use_context_id,
 )
 from .dispatcher import EventDispatcher, Handler
 from .models import (
@@ -28,7 +20,6 @@ from .models import (
     AssistantResponse,
     AssistantResponseData,
     BrowserSnapshotPayload,
-    DispatchEvent,
     ToolCallPayload,
 )
 
@@ -37,19 +28,10 @@ __all__ = [
     "AssistantResponse",
     "AssistantResponseData",
     "BrowserSnapshotPayload",
-    "DispatchEvent",
     "EventDispatcher",
     "Handler",
     "ToolCallPayload",
-    "current_context_depth",
-    "current_context_id",
-    "current_parent_context_id",
+    "agent_span",
     "event_context",
-    "get_current_dispatcher",
-    "make_child_context_id",
     "publish_event",
-    "reset_context_id",
-    "reset_current_dispatcher",
-    "set_current_dispatcher",
-    "use_context_id",
 ]
