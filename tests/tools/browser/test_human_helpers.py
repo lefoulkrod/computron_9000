@@ -19,7 +19,17 @@ from playwright.async_api import Locator, Page
 
 import pytest
 
-from tools.browser.core.human import human_click, human_drag, human_type, _get_human_config, _HumanConfig
+from tools.browser.core.human import (
+    human_click,
+    human_drag,
+    human_press_and_hold,
+    human_type,
+    _get_human_config,
+    _HumanConfig,
+    _bezier_point,
+    _build_trajectory,
+    _ease_in_out,
+)
 from tools.browser.core.exceptions import BrowserToolError
 
 
@@ -370,3 +380,158 @@ async def test_human_press_keys_modifier_chord_and_fallback(monkeypatch: pytest.
 
     with pytest.raises(BrowserToolError):
         await human_press_keys(cast(Page, page_no_keyboard), ["Enter"])  # should raise BrowserToolError via helper
+
+
+# ---------------------------------------------------------------------------
+# human_press_and_hold tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_human_press_and_hold_sequence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Press-and-hold issues move, down, sleep for duration, then up."""
+    recorder: list[str] = []
+
+    monkeypatch.setattr(random, "random", lambda: 0.5)
+    monkeypatch.setattr(random, "randint", lambda a, b: 0)
+
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+    frame = DummyFrame(page=page)
+
+    box = {"x": 50.0, "y": 60.0, "width": 120.0, "height": 50.0}
+    handle = DummyElementHandle(bounding_box=box, frame=frame)
+    locator = DummyLocator(handle)
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        move_steps=2,
+        offset_px=0.0,
+        hover_min_ms=0,
+        hover_max_ms=0,
+        click_hold_min_ms=0,
+        click_hold_max_ms=0,
+        delay_min_ms=0,
+        delay_max_ms=0,
+        extra_pause_every_chars=0,
+        extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    # Use a short hold to keep the test fast
+    await human_press_and_hold(cast(Page, page), cast(Locator, locator), duration_ms=50)
+
+    # Should have move commands, then down, then up (with the hold in between)
+    assert any(r.startswith("move:") for r in recorder)
+    down_idx = recorder.index("down")
+    up_idx = recorder.index("up")
+    assert down_idx < up_idx
+    assert recorder.count("down") == 1
+    assert recorder.count("up") == 1
+
+
+@pytest.mark.unit
+async def test_human_press_and_hold_no_frame_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Press-and-hold raises when element has no frame."""
+    recorder: list[str] = []
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+
+    box = {"x": 10.0, "y": 10.0, "width": 40.0, "height": 40.0}
+    handle = DummyElementHandle(bounding_box=box, frame=None)
+    locator = DummyLocator(handle)
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        move_steps=1, offset_px=0.0, hover_min_ms=0, hover_max_ms=0,
+        click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
+        delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    with pytest.raises(BrowserToolError):
+        await human_press_and_hold(cast(Page, page), cast(Locator, locator), duration_ms=100)
+
+
+@pytest.mark.unit
+async def test_human_press_and_hold_no_mouse_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Press-and-hold raises when page has no mouse."""
+    page = DummyPage(mouse=None)
+    frame = DummyFrame(page=page)
+
+    box = {"x": 10.0, "y": 10.0, "width": 40.0, "height": 40.0}
+    handle = DummyElementHandle(bounding_box=box, frame=frame)
+    locator = DummyLocator(handle)
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        move_steps=1, offset_px=0.0, hover_min_ms=0, hover_max_ms=0,
+        click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
+        delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    with pytest.raises(BrowserToolError):
+        await human_press_and_hold(cast(Page, page), cast(Locator, locator), duration_ms=100)
+
+
+# ---------------------------------------------------------------------------
+# Bezier trajectory helper tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_bezier_point_endpoints() -> None:
+    """Bezier curve starts at p0 and ends at p3."""
+    p0 = (0.0, 0.0)
+    p1 = (10.0, 50.0)
+    p2 = (90.0, 50.0)
+    p3 = (100.0, 0.0)
+
+    x0, y0 = _bezier_point(0.0, p0, p1, p2, p3)
+    assert abs(x0 - p0[0]) < 1e-9
+    assert abs(y0 - p0[1]) < 1e-9
+
+    x1, y1 = _bezier_point(1.0, p0, p1, p2, p3)
+    assert abs(x1 - p3[0]) < 1e-9
+    assert abs(y1 - p3[1]) < 1e-9
+
+
+@pytest.mark.unit
+def test_ease_in_out_boundaries() -> None:
+    """Ease-in-out maps 0->0, 0.5->0.5, 1->1."""
+    assert abs(_ease_in_out(0.0)) < 1e-9
+    assert abs(_ease_in_out(0.5) - 0.5) < 1e-9
+    assert abs(_ease_in_out(1.0) - 1.0) < 1e-9
+
+
+@pytest.mark.unit
+def test_ease_in_out_monotonic() -> None:
+    """Ease-in-out is monotonically increasing over [0, 1]."""
+    prev = 0.0
+    for i in range(1, 101):
+        t = i / 100
+        val = _ease_in_out(t)
+        assert val >= prev
+        prev = val
+
+
+@pytest.mark.unit
+def test_build_trajectory_endpoints() -> None:
+    """Trajectory starts near start and ends exactly at destination."""
+    random.seed(42)
+    points = _build_trajectory(10.0, 20.0, 300.0, 400.0, steps=10)
+
+    assert len(points) >= 10
+    # Final point should land exactly on the target (no jitter on last step)
+    last_x, last_y = points[-1]
+    assert abs(last_x - 300.0) < 1e-6
+    assert abs(last_y - 400.0) < 1e-6
+
+
+@pytest.mark.unit
+def test_build_trajectory_zero_distance() -> None:
+    """Trajectory for same start/end doesn't crash and lands on target."""
+    random.seed(0)
+    points = _build_trajectory(50.0, 50.0, 50.0, 50.0, steps=5)
+    assert len(points) >= 1
+    last_x, last_y = points[-1]
+    assert abs(last_x - 50.0) < 1e-6
+    assert abs(last_y - 50.0) < 1e-6

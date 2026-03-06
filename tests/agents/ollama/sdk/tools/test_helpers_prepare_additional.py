@@ -103,9 +103,7 @@ def test_prepare_tool_arguments_virtual_computer_complex_types():
                 {
                     "file_path": "src/main.py",
                     "line_number": 10,
-                    "line": "def main():",
-                    "start_col": 0,
-                    "end_col": 11
+                    "line": "def main():"
                 }
             ],
             "truncated": False,

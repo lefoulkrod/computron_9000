@@ -1,0 +1,233 @@
+.panel {
+  background: var(--card-bg, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--header-bg, #252525);
+  border-bottom: 1px solid var(--border-color, #333);
+  cursor: pointer;
+  user-select: none;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.collapseBtn,
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.collapseBtn:hover,
+.closeBtn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.content {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.htmlFrame {
+  width: 100%;
+  height: 60vh;
+  border: none;
+  display: block;
+  background: #fff;
+}
+
+.markdownContent {
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.markdownContent h1,
+.markdownContent h2,
+.markdownContent h3,
+.markdownContent h4 {
+  margin: 0.8em 0 0.4em;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.markdownContent p {
+  margin: 0.4em 0;
+}
+
+.markdownContent code {
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--code-bg, rgba(255, 255, 255, 0.08));
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.markdownContent pre {
+  background: var(--code-bg, rgba(255, 255, 255, 0.06));
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.markdownContent pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdownContent a {
+  color: var(--accent, #7b9ef5);
+}
+
+.markdownContent ul,
+.markdownContent ol {
+  padding-left: 1.4em;
+}
+
+.markdownContent table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.markdownContent th,
+.markdownContent td {
+  border: 1px solid var(--border-color, #444);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.markdownContent th {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.plainText {
+  padding: 14px 16px;
+  font-size: 12px;
+  font-family: monospace;
+  line-height: 1.5;
+  color: var(--text-primary, #e0e0e0);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Light theme */
+:global(body:not(.dark-theme)) .panel {
+  background: #ffffff;
+  border-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .header {
+  background: #f5f5f5;
+  border-bottom-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .header:hover {
+  background: #ececec;
+}
+
+:global(body:not(.dark-theme)) .title {
+  color: #222;
+}
+
+:global(body:not(.dark-theme)) .collapseBtn,
+:global(body:not(.dark-theme)) .closeBtn {
+  color: #666;
+}
+
+:global(body:not(.dark-theme)) .collapseBtn:hover,
+:global(body:not(.dark-theme)) .closeBtn:hover {
+  color: #222;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global(body:not(.dark-theme)) .markdownContent {
+  color: #222;
+}
+
+:global(body:not(.dark-theme)) .markdownContent h1,
+:global(body:not(.dark-theme)) .markdownContent h2,
+:global(body:not(.dark-theme)) .markdownContent h3,
+:global(body:not(.dark-theme)) .markdownContent h4 {
+  color: #111;
+}
+
+:global(body:not(.dark-theme)) .markdownContent code {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global(body:not(.dark-theme)) .markdownContent pre {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:global(body:not(.dark-theme)) .markdownContent a {
+  color: #2563eb;
+}
+
+:global(body:not(.dark-theme)) .markdownContent th,
+:global(body:not(.dark-theme)) .markdownContent td {
+  border-color: #ccc;
+}
+
+:global(body:not(.dark-theme)) .markdownContent th {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:global(body:not(.dark-theme)) .plainText {
+  color: #222;
+}

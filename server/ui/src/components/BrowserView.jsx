@@ -5,7 +5,7 @@ import BrowserIcon from './icons/BrowserIcon.jsx';
 import ChevronIcon from './icons/ChevronIcon.jsx';
 import LockIcon from './icons/LockIcon.jsx';
 
-export default function BrowserView({ snapshot, onAttachScreenshot }) {
+export default function BrowserView({ snapshot, onAttachScreenshot, onClose }) {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     if (!snapshot) {
@@ -23,9 +23,20 @@ export default function BrowserView({ snapshot, onAttachScreenshot }) {
                     <BrowserIcon size={16} className={styles.browserIcon} />
                     <span className={styles.title}>Browser</span>
                 </div>
-                <button className={styles.collapseBtn} aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
-                    <ChevronIcon size={12} direction={isCollapsed ? 'down' : 'up'} />
-                </button>
+                <div className={styles.headerRight}>
+                    <button className={styles.collapseBtn} aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
+                        <ChevronIcon size={12} direction={isCollapsed ? 'down' : 'up'} />
+                    </button>
+                    {onClose && (
+                        <button
+                            className={styles.closeBtn}
+                            onClick={(e) => { e.stopPropagation(); onClose(); }}
+                            aria-label="Close browser"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
             </div>
 
             {!isCollapsed && (

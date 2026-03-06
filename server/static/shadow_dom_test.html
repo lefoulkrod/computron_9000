@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shadow DOM Test Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background: #f5f5f5;
+    }
+
+    section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #333;
+      border-bottom: 2px solid #9c27b0;
+      padding-bottom: 0.5rem;
+    }
+
+    p {
+      color: #555;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Shadow DOM Test Page</h1>
+  <p>This page tests the DOM walker's ability to traverse shadow DOM trees and discover interactive elements inside them.</p>
+
+  <!-- 1. Open shadow DOM with a button -->
+  <section id="open-shadow-section">
+    <h2>Open Shadow DOM</h2>
+    <p>A button and text content rendered inside an open shadow root.</p>
+    <div id="open-host"></div>
+  </section>
+
+  <!-- 2. Nested shadow DOM -->
+  <section id="nested-shadow-section">
+    <h2>Nested Shadow DOM</h2>
+    <p>An outer shadow root containing an inner shadow root with a deeply nested button.</p>
+    <div id="nested-host"></div>
+  </section>
+
+  <!-- 3. Shadow DOM with slots -->
+  <section id="slot-shadow-section">
+    <h2>Shadow DOM with Slots</h2>
+    <p>Light DOM content projected through named slots into a shadow tree.</p>
+    <div id="slot-host">
+      <span slot="title">Slotted Title</span>
+      <span slot="subtitle">Slotted Subtitle</span>
+    </div>
+  </section>
+
+  <!-- 4. Shadow DOM with form elements -->
+  <section id="form-shadow-section">
+    <h2>Shadow DOM with Form Elements</h2>
+    <p>Interactive form elements (input, select, checkbox) inside a shadow root.</p>
+    <div id="form-host"></div>
+  </section>
+
+  <!-- 5. Shadow DOM mixed with light DOM -->
+  <section id="mixed-section">
+    <h2>Mixed Light and Shadow DOM</h2>
+    <p>Regular light DOM elements alongside a shadow DOM host.</p>
+    <button id="light-button">Light DOM Button</button>
+    <div id="mixed-host"></div>
+    <a href="#mixed">Light DOM Link</a>
+  </section>
+
+  <!-- 6. Closed shadow DOM (walker can't see without init script) -->
+  <section id="closed-shadow-section">
+    <h2>Closed Shadow DOM</h2>
+    <p>A closed shadow root — the walker cannot see inside without the init script that forces mode: 'open'.</p>
+    <div id="closed-host"></div>
+  </section>
+
+  <!-- 7. Custom element with shadow DOM -->
+  <section id="custom-element-section">
+    <h2>Custom Element</h2>
+    <p>A custom HTML element that uses shadow DOM internally.</p>
+    <fancy-button label="Click Me"></fancy-button>
+  </section>
+
+  <script>
+    // 1. Open shadow DOM
+    (() => {
+      const host = document.getElementById('open-host');
+      const shadow = host.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `
+        <style>
+          button { padding: 12px 24px; background: #9c27b0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+          button:hover { background: #7b1fa2; }
+          p { color: #666; }
+        </style>
+        <button id="shadow-action-btn">PRESS & HOLD</button>
+        <p>This text is inside the shadow DOM</p>
+        <a href="#shadow-link">Shadow Link</a>
+      `;
+    })();
+
+    // 2. Nested shadow DOM
+    (() => {
+      const outer = document.getElementById('nested-host');
+      const outerShadow = outer.attachShadow({ mode: 'open' });
+      outerShadow.innerHTML = `
+        <style>
+          .outer-content { padding: 1rem; background: #f3e5f5; border-radius: 4px; }
+          p { color: #666; }
+        </style>
+        <div class="outer-content">
+          <p>Outer shadow content</p>
+          <div id="inner-host"></div>
+        </div>
+      `;
+      const inner = outerShadow.getElementById('inner-host');
+      const innerShadow = inner.attachShadow({ mode: 'open' });
+      innerShadow.innerHTML = `
+        <style>
+          button { padding: 8px 16px; background: #e91e63; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        </style>
+        <button>Deeply Nested Button</button>
+        <p>Inner shadow text</p>
+      `;
+    })();
+
+    // 3. Shadow DOM with slots
+    (() => {
+      const host = document.getElementById('slot-host');
+      const shadow = host.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `
+        <style>
+          .card { padding: 1rem; background: #e8f5e9; border-radius: 4px; }
+          h3 { margin: 0 0 0.5rem; color: #2e7d32; }
+          .subtitle { color: #666; font-style: italic; }
+        </style>
+        <div class="card">
+          <h3><slot name="title">Default Title</slot></h3>
+          <div class="subtitle"><slot name="subtitle">Default Subtitle</slot></div>
+          <button>Confirm Action</button>
+          <p>Content after slots</p>
+        </div>
+      `;
+    })();
+
+    // 4. Shadow DOM with form elements
+    (() => {
+      const host = document.getElementById('form-host');
+      const shadow = host.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `
+        <style>
+          form { background: #fff8e1; padding: 1rem; border-radius: 4px; }
+          label { display: block; margin: 0.5rem 0 0.25rem; font-weight: bold; }
+          input, select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+          button { margin-top: 1rem; padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; }
+          .check-group { margin: 0.5rem 0; }
+          .check-group label { display: inline; font-weight: normal; margin-left: 0.5rem; }
+        </style>
+        <form>
+          <label for="shadow-name">Name:</label>
+          <input type="text" id="shadow-name" placeholder="Enter your name">
+
+          <label for="shadow-color">Favorite Color:</label>
+          <select id="shadow-color">
+            <option value="">Pick a color...</option>
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+          </select>
+
+          <div class="check-group">
+            <input type="checkbox" id="shadow-agree">
+            <label for="shadow-agree">I agree to shadow terms</label>
+          </div>
+
+          <button type="submit">Submit Shadow Form</button>
+        </form>
+      `;
+    })();
+
+    // 5. Mixed light and shadow DOM
+    (() => {
+      const host = document.getElementById('mixed-host');
+      const shadow = host.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `
+        <style>
+          button { padding: 8px 16px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 0.5rem 0; }
+        </style>
+        <button>Shadow DOM Button</button>
+        <p>Shadow text between light DOM elements</p>
+      `;
+    })();
+
+    // 6. Closed shadow DOM
+    (() => {
+      const host = document.getElementById('closed-host');
+      // mode: 'closed' — el.shadowRoot returns null
+      const shadow = host.attachShadow({ mode: 'closed' });
+      shadow.innerHTML = `
+        <style>
+          button { padding: 12px 24px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+          p { color: #999; }
+        </style>
+        <button>Hidden Secret Button</button>
+        <p>This content is hidden in a closed shadow root</p>
+      `;
+    })();
+
+    // 7. Custom element
+    class FancyButton extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        const label = this.getAttribute('label') || 'Default';
+        shadow.innerHTML = `
+          <style>
+            button {
+              padding: 12px 24px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              border: none;
+              border-radius: 24px;
+              cursor: pointer;
+              font-size: 1rem;
+              box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            }
+            button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
+          </style>
+          <button>${label}</button>
+        `;
+      }
+    }
+    customElements.define('fancy-button', FancyButton);
+  </script>
+</body>
+
+</html>

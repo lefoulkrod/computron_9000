@@ -1,8 +1,9 @@
-"""Unit tests for apply_text_patch utility."""
+"""Unit tests for apply_text_patch (old_text/new_text unique-match)."""
 
 from pathlib import Path
 from unittest import mock
 import tempfile
+
 import pytest
 
 from tools.virtual_computer.patching import apply_text_patch
@@ -19,163 +20,124 @@ class DummyConfig:
 
 
 @pytest.mark.unit
-def test_apply_text_patch_line_replacement_includes_diff_and_path() -> None:
+def test_apply_text_patch_single_match_succeeds() -> None:
+    """Unique match should replace text and succeed."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
             write_file("file.txt", "line1\nline2\nline3\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=2,
-                replacement="LINE_TWO_REPLACED\n",
-            )
+            res = apply_text_patch("file.txt", old_text="line2", new_text="LINE_TWO_REPLACED")
             assert res.success, res.error
             assert res.file_path == "file.txt"
-            assert isinstance(res.diff, str)
-            # With standard lineterm, headers are on separate lines
-            assert res.diff.startswith("--- file.txt (before)\n+++ file.txt (after)\n@@ ")
-            # Ensure expected removal/addition markers are present
-            assert "-line2\n" in res.diff
-            assert "+LINE_TWO_REPLACED\n" in res.diff
 
             new_content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
             assert new_content == "line1\nLINE_TWO_REPLACED\nline3\n"
 
 
 @pytest.mark.unit
-def test_apply_text_patch_invalid_range_sets_error_and_path() -> None:
+def test_apply_text_patch_no_match_returns_error() -> None:
+    """Zero matches should fail with a descriptive error."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
             write_file("file.txt", "only one line\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=2,
-                replacement="oops\n",
-            )
+            res = apply_text_patch("file.txt", old_text="absent text", new_text="oops")
             assert not res.success
             assert res.file_path == "file.txt"
-            assert res.diff is None
-            assert res.error == "Invalid line range"
+            assert "No match found" in (res.error or "")
+
+
+@pytest.mark.unit
+def test_apply_text_patch_multiple_matches_returns_error() -> None:
+    """Multiple matches should fail with count in the error message."""
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            write_file("file.txt", "foo bar foo baz foo\n")
+            res = apply_text_patch("file.txt", old_text="foo", new_text="qux")
+            assert not res.success
+            assert "3 matches" in (res.error or "")
+            # File should be unchanged
+            content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
+            assert content == "foo bar foo baz foo\n"
 
 
 @pytest.mark.unit
 def test_apply_text_patch_no_op_produces_empty_diff() -> None:
-    """When replacement yields identical content, diff should be an empty string."""
+    """When old_text equals new_text, succeed without writing."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
             original = "a\nb\nc\n"
             write_file("file.txt", original)
-            # Replace line 2 with the same value
-            res = apply_text_patch("file.txt", start_line=2, end_line=2, replacement="b\n")
+            res = apply_text_patch("file.txt", old_text="b", new_text="b")
             assert res.success
-            assert res.file_path == "file.txt"
-            assert res.diff == ""
-            # File content should be unchanged
             content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
             assert content == original
 
 
 @pytest.mark.unit
-def test_apply_text_patch_exact_unified_diff_output() -> None:
-    """Assert the full unified diff string for a simple single-line replacement."""
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("file.txt", "line1\nline2\nline3\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=2,
-                replacement="LINE_TWO_REPLACED\n",
-            )
-            assert res.success, res.error
-            expected = (
-                "--- file.txt (before)\n"
-                "+++ file.txt (after)\n"
-                "@@ -1,3 +1,3 @@\n"
-                " line1\n"
-                "-line2\n"
-                "+LINE_TWO_REPLACED\n"
-                " line3\n"
-            )
-            assert res.diff == expected
-
-
-@pytest.mark.unit
-def test_apply_text_patch_multiline_replacement_expands_content_exact_diff() -> None:
-    """Replace two lines with three lines; assert the full unified diff string."""
+def test_apply_text_patch_multiline_block() -> None:
+    """Replace a multi-line block with different content."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
             write_file("file.txt", "a\nb\nc\nd\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=3,
-                replacement="B1\nB2\nB3\n",
-            )
+            res = apply_text_patch("file.txt", old_text="b\nc", new_text="B1\nB2\nB3")
             assert res.success, res.error
-            expected = (
-                "--- file.txt (before)\n"
-                "+++ file.txt (after)\n"
-                "@@ -1,4 +1,5 @@\n"
-                " a\n"
-                "-b\n"
-                "-c\n"
-                "+B1\n"
-                "+B2\n"
-                "+B3\n"
-                " d\n"
-            )
-            assert res.diff == expected
+            content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
+            assert content == "a\nB1\nB2\nB3\nd\n"
 
 
 @pytest.mark.unit
-def test_apply_text_patch_delete_middle_range_exact_diff() -> None:
-    """Delete a middle range by replacing it with an empty string; assert exact diff."""
+def test_apply_text_patch_delete_block() -> None:
+    """Delete a block by replacing with empty string."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
             write_file("file.txt", "1\n2\n3\n4\n5\n")
-            res = apply_text_patch(
-                "file.txt",
-                start_line=2,
-                end_line=4,
-                replacement="",
-            )
+            res = apply_text_patch("file.txt", old_text="2\n3\n4\n", new_text="")
             assert res.success, res.error
-            expected = (
-                "--- file.txt (before)\n"
-                "+++ file.txt (after)\n"
-                "@@ -1,5 +1,2 @@\n"
-                " 1\n"
-                "-2\n"
-                "-3\n"
-                "-4\n"
-                " 5\n"
-            )
-            assert res.diff == expected
+            content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
+            assert content == "1\n5\n"
 
 
 @pytest.mark.unit
-def test_apply_text_patch_replace_last_line_with_multiple_lines_exact_diff() -> None:
-    """Replace the final line with multiple lines; assert the full unified diff output."""
+def test_apply_text_patch_file_not_found() -> None:
+    """Missing file should return error."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("file.txt", "x\ny\nz\n")
-            res = apply_text_patch(
+            res = apply_text_patch("missing.txt", old_text="a", new_text="b")
+            assert not res.success
+            assert "does not exist" in (res.error or "").lower()
+
+
+@pytest.mark.unit
+def test_apply_text_patch_whitespace_sensitive() -> None:
+    """Matching is whitespace-sensitive — tabs vs spaces must be exact."""
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            write_file("file.txt", "    indented\n")
+            # Wrong indentation should fail
+            res = apply_text_patch("file.txt", old_text="\tindented", new_text="fixed")
+            assert not res.success
+            assert "No match found" in (res.error or "")
+            # Correct indentation should succeed
+            res2 = apply_text_patch("file.txt", old_text="    indented", new_text="fixed")
+            assert res2.success
+
+
+@pytest.mark.unit
+def test_apply_text_patch_context_for_uniqueness() -> None:
+    """Including surrounding context makes a non-unique match unique."""
+    with tempfile.TemporaryDirectory() as tmp_home:
+        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
+            write_file("file.txt", "def foo():\n    return 1\ndef bar():\n    return 1\n")
+            # "return 1" alone matches twice
+            res = apply_text_patch("file.txt", old_text="return 1", new_text="return 2")
+            assert not res.success
+            assert "2 matches" in (res.error or "")
+            # Including context makes it unique
+            res2 = apply_text_patch(
                 "file.txt",
-                start_line=3,
-                end_line=3,
-                replacement="Z1\nZ2\n",
+                old_text="def foo():\n    return 1",
+                new_text="def foo():\n    return 2",
             )
-            assert res.success, res.error
-            expected = (
-                "--- file.txt (before)\n"
-                "+++ file.txt (after)\n"
-                "@@ -1,3 +1,4 @@\n"
-                " x\n"
-                " y\n"
-                "-z\n"
-                "+Z1\n"
-                "+Z2\n"
-            )
-            assert res.diff == expected
+            assert res2.success
+            content = Path(tmp_home, "file.txt").read_text(encoding="utf-8")
+            assert "def foo():\n    return 2\n" in content
+            assert "def bar():\n    return 1\n" in content

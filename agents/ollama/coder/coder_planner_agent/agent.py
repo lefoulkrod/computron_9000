@@ -7,28 +7,18 @@ The output is strictly a JSON array of strings (list[str]).
 
 from __future__ import annotations
 
-import logging
-
 from agents.ollama.coder.context_models import (
     generate_coder_planner_input_schema_summary,
 )
-from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
-    make_run_agent_as_tool_function,
-)
-from agents.types import Agent
-from models import get_model_by_name
+from agents.ollama.sdk import make_run_agent_as_tool_function
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import grep, read_file
-
-logger = logging.getLogger(__name__)
-
-# Reuse the same strong reasoning/coding-capable model as architect/planner
-model = get_model_by_name("coder_architect")
 
 _CODER_PLANNER_INPUT_SCHEMA = generate_coder_planner_input_schema_summary()
 
-CODER_PLANNER_PROMPT = f"""
+NAME = "CODER_PLANNER_AGENT"
+DESCRIPTION = "Expands a planner PlanStep into an ordered list of coder sub-steps (list[str])."
+SYSTEM_PROMPT = f"""
 Role: Expert Implementation Sequencer
 
 Goal: Given a standardized input payload containing the current PlanStep and the
@@ -87,32 +77,20 @@ use tools appropriate for the language)
 - "Run uvx ruff check . and uvx black . --check"
 - Never read the full contents of lock files or package directories
 """
-
-coder_planner_agent = Agent(
-    name="CODER_PLANNER_AGENT",
-    description="Expands a planner PlanStep into an ordered list of coder sub-steps (list[str]).",
-    instruction=CODER_PLANNER_PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[read_file, grep],
-    think=model.think,
-)
-
-before_model_call_callback = make_log_before_model_call(coder_planner_agent)
-coder_planner_after_model_call_callback = make_log_after_model_call(coder_planner_agent)
+TOOLS = [read_file, grep, save_to_scratchpad, recall_from_scratchpad]
 
 coder_planner_agent_tool = make_run_agent_as_tool_function(
-    agent=coder_planner_agent,
-    tool_description="""
-        Expand the current PlanStep (with tooling context) into a comprehensive, ordered list
-        of actionable coder sub-steps. Input is CoderPlannerInput JSON; result is JSON list[str].
-        """,
+    name=NAME,
+    description=DESCRIPTION,
+    instruction=SYSTEM_PROMPT,
+    tools=TOOLS,
     result_type=list[str],
-    before_model_callbacks=[before_model_call_callback],
-    after_model_callbacks=[coder_planner_after_model_call_callback],
 )
 
 __all__ = [
-    "coder_planner_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "coder_planner_agent_tool",
 ]

@@ -7,7 +7,10 @@ import json
 import logging
 import os
 import re
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    pass  # formerly imported InteractionResult
 
 from ollama import AsyncClient, Image
 from playwright.async_api import Error as PlaywrightError
@@ -16,10 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from config import load_config
 from models.model_configs import get_model_by_name
-from tools.browser.core import get_browser
+from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.selectors import SelectorRegistry, build_unique_selector
 
 _BBOX_DEBUG_ENV = "COMPUTRON_VISION_DEBUG"
 _BBOX_OVERLAY_SCRIPT = """
@@ -51,50 +53,18 @@ logger = logging.getLogger(__name__)
 
 _SCREENSHOT_TOOL_NAME = "ask_about_screenshot"
 _GROUNDING_TOOL_NAME = "ground_elements_by_text"
-_PROMPT_TEMPLATE = """
-You are a precise UI element locator. Your task is to ground elements in a 1000x1000 normalized coordinate system.
+_PROMPT_TEMPLATE = """You are a precise UI element locator. Find elements in a screenshot using normalized 0-1000 coordinates.
 
 TASK: Find ALL elements matching: {text_json}
-SCREENSHOT DIMENSIONS: {width}px x {height}px (for reference only)
 
 COORDINATE SYSTEM:
-- Normalized Scale: 0 to 1000 (0,0 is top-left; 1000,1000 is bottom-right)
-- Format: [y1, x1, y2, x1] where y1=top, x1=left, y2=bottom, x2=right
-- Think of the screen as a 1000x1000 grid regardless of actual pixel dimensions
+- Scale: 0 to 1000 where (0,0) is top-left, (1000,1000) is bottom-right
+- Format: [x1, y1, x2, y2] where x1=left, y1=top, x2=right, y2=bottom
 
-OUTPUT FORMAT:
-Return ONLY a JSON array of objects. Do not include markdown, code fences, or prose.
-[
-  {{
-    "reasoning": "Brief spatial description (e.g., 'Blue submit button in center-right of footer')",
-    "text": "visible text",
-    "element_type": "button",
-    "bbox": [y1, x1, y2, x2]
-  }}
-]
+Return ONLY a JSON array. No markdown, no code fences, no explanation.
+[{{"text": "visible text", "bbox": [x1, y1, x2, y2]}}]
 
-Return [] if nothing matches.
-
-RULES:
-1. SPATIAL REASONING FIRST: Before providing bbox, describe where the element is in the 1000x1000 grid
-2. BOX TIGHTNESS: Include the entire clickable area (padding, borders, shadows)
-3. CLICKABLE CENTER: The exact middle of your bbox [(y1+y2)/2, (x1+x2)/2] will be the click target
-4. COORDINATE ORDER: Always use [y1, x1, y2, x2] format (height-first)
-5. NO HALLUCINATION: If text is not clearly visible in the image, do not return a box
-6. MATCHING: Case-insensitive text matching; match partial text if clearly the same element
-7. ALL INSTANCES: Return ALL visible occurrences of the matching text
-
-ELEMENT TYPES:
-- button: clickable button elements
-- link: anchor/hyperlink elements
-- input: form input fields, textareas
-- card: card/panel containers with content
-- badge: small label/badge elements
-- icon: icon-only elements
-- text: plain text spans
-
-Sort results: top-to-bottom.
-"""
+Return [] if nothing matches."""
 
 
 class GroundingResult(BaseModel):
@@ -102,14 +72,14 @@ class GroundingResult(BaseModel):
 
     Fields:
         text: visible text the model matched
-        bbox: (x1, y1, x2, y2) viewport pixel coordinates (top-left, bottom-right)
-        selector: best-effort selector handle resolved from the page at the bbox center
+        bbox: (x1, y1, x2, y2) viewport pixel coordinates — pass directly to click_at/press_and_hold_at
+        center: (x, y) center point of the bbox for reference
         reasoning: optional spatial reasoning from the vision model
     """
 
     text: str | None = Field(default=None)
     bbox: tuple[int, int, int, int]
-    selector: str | None = None
+    center: tuple[int, int] = Field(default=(0, 0))
     reasoning: str | None = None
 
     model_config = ConfigDict(extra="forbid")
@@ -121,22 +91,22 @@ async def ask_about_screenshot(
     mode: str = "full_page",
     selector: str | None = None,
 ) -> str:
-    """Capture a screenshot and ask the vision model a question about it.
+    """Capture a screenshot and ask the vision model about it.  SLOW.
+
+    Use sparingly — only when ``browse_page()`` and ``read_page()`` cannot
+    provide the information you need (e.g. visual layout, colors, charts).
 
     Args:
-        prompt: Question the model should answer about the screenshot.
-        mode: One of ``"full_page"``, ``"viewport"``, or ``"selector"``. Determines
-            which area of the page to capture.
-        selector: When ``mode == "selector"``, visible text on the element or a selector
-            handle returned by page snapshots and other tools. The provided text or
-            selector must uniquely identify the element to capture.
+        prompt: Question about the screenshot.
+        mode: ``"full_page"`` (default), ``"viewport"``, or ``"selector"``.
+        selector: Required when ``mode="selector"`` — ``role:name`` of the
+            element to capture.
 
     Returns:
         The model's answer as a plain string.
 
     Raises:
-        BrowserToolError: If the prompt is empty, the page is not navigated, the selector is
-            invalid or missing when required, screenshot capture fails, or model generation fails.
+        BrowserToolError: If capture or model generation fails.
     """
     clean_prompt = prompt.strip()
     if not clean_prompt:
@@ -148,10 +118,9 @@ async def ask_about_screenshot(
         msg = "mode must be one of {'full_page', 'viewport', 'selector'}."
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
 
-    page = await _get_active_page(
-        tool_name=_SCREENSHOT_TOOL_NAME,
-        blank_page_message="Navigate to a page before asking about its screenshot.",
-    )
+    _browser, view = await get_active_view(_SCREENSHOT_TOOL_NAME)
+    # Screenshots require the Page object (not Frame)
+    page = await _browser.current_page()
 
     try:
         if normalized_mode == "selector":
@@ -227,7 +196,8 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
 
     Returns:
         list[GroundingResult]: Bounding boxes with element metadata from the vision model.
-            Each result includes bbox coordinates, resolved selector, and reasoning.
+            Each result includes bbox (pass directly to click_at/press_and_hold_at),
+            center, resolved selector, and reasoning.
             Multiple elements may be returned if the description matches several locations.
 
     Raises:
@@ -239,10 +209,9 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         msg = "visible_text must be a non-empty string."
         raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME)
 
-    page = await _get_active_page(
-        tool_name=_GROUNDING_TOOL_NAME,
-        blank_page_message="Navigate to a page before requesting element grounding.",
-    )
+    _browser, view = await get_active_view(_GROUNDING_TOOL_NAME)
+    # Screenshots require the Page object (not Frame)
+    page = await _browser.current_page()
 
     try:
         # Always use viewport screenshots for grounding
@@ -364,25 +333,22 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         msg = "Vision model response must be a list of bounding boxes."
         raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME)
 
-    # Create shared selector registry to ensure uniqueness across all grounded elements
-    selector_registry = SelectorRegistry(page)
-
     results: list[GroundingResult] = []
     for entry in parsed:
         try:
-            bbox_raw = entry.get("bbox")
+            # Vision models return bounding boxes under varying field names
+            # depending on the model (e.g. "bbox", "bbox_2d", "bounding_box").
+            bbox_raw = entry.get("bbox") or entry.get("bbox_2d") or entry.get("bounding_box")
             if isinstance(bbox_raw, str):
                 parts = [p.strip() for p in bbox_raw.split(",") if p.strip()]
                 bbox_raw = parts
             if not isinstance(bbox_raw, (list | tuple)) or len(bbox_raw) != 4:
                 raise ValueError("bbox must be a sequence of four numbers")
             try:
-                # Model returns [y1, x1, y2, x2] in normalized coordinates (0-1000)
+                # Model returns [x1, y1, x2, y2] in normalized coordinates (0-1000)
                 # Convert to CSS pixels using viewport dimensions
-                y1_norm, x1_norm, y2_norm, x2_norm = (float(v) for v in bbox_raw)
+                x1_norm, y1_norm, x2_norm, y2_norm = (float(v) for v in bbox_raw)
 
-                # Convert from normalized (0-1000) to CSS pixels
-                # Formula: (normalized / 1000) * dimension
                 x1 = round((x1_norm / 1000) * width_px)
                 y1 = round((y1_norm / 1000) * height_px)
                 x2 = round((x2_norm / 1000) * width_px)
@@ -392,21 +358,18 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
 
             logger.debug(
                 "Parsed bbox from model (normalized): [%.1f, %.1f, %.1f, %.1f] -> CSS px: [%d, %d, %d, %d]",
-                y1_norm,
-                x1_norm,
-                y2_norm,
-                x2_norm,
-                x1,
-                y1,
-                x2,
-                y2,
+                x1_norm, y1_norm, x2_norm, y2_norm,
+                x1, y1, x2, y2,
             )
+
+            cx = round((x1 + x2) / 2)
+            cy = round((y1 + y2) / 2)
 
             validated = GroundingResult.model_validate(
                 {
-                    "text": entry.get("text"),
+                    "text": entry.get("text") or entry.get("label"),
                     "bbox": (x1, y1, x2, y2),
-                    "selector": None,
+                    "center": (cx, cy),
                     "reasoning": entry.get("reasoning"),
                 },
                 strict=False,
@@ -416,74 +379,12 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
             msg = "Vision model returned invalid bounding box entries."
             raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME) from exc
 
-        # Resolve selector from bbox center using document.elementFromPoint via page.evaluate
-        try:
-            x1, y1, x2, y2 = validated.bbox
-            # The center coordinates are in CSS pixels, matching what elementFromPoint expects
-            cx = round((x1 + x2) / 2)
-            cy = round((y1 + y2) / 2)
-
-            if os.getenv(_BBOX_DEBUG_ENV):
-                try:
-                    await page.evaluate(_BBOX_OVERLAY_SCRIPT, [x1, y1, x2, y2])
-                except PlaywrightError:
-                    logger.debug("Failed to inject bbox overlay for %s", validated.bbox)
-
-            # Call into the page to compute a selector handle for the element at the center.
-            # We obtain the element at the bbox center via document.elementFromPoint
-            # and then attempt registry-driven selector resolution for that handle.
-            element_handle = None
+        # Optional debug overlay
+        if os.getenv(_BBOX_DEBUG_ENV):
             try:
-                handle = await page.evaluate_handle(
-                    "([x,y]) => document.elementFromPoint(x, y)",
-                    [cx, cy],
-                )
-                element_handle = handle.as_element() if handle else None
+                await view.frame.evaluate(_BBOX_OVERLAY_SCRIPT, list(validated.bbox))
             except PlaywrightError:
-                logger.exception(
-                    "document.elementFromPoint failed for bbox center %s,%s",
-                    cx,
-                    cy,
-                )
-            if element_handle is not None:
-                try:
-                    # Prefer registry-driven unique selector generation for grounding
-                    # runs. Do not fallback to legacy helpers; if the registry fails
-                    # record no selector for the grounded element.
-                    try:
-                        sel_res = await build_unique_selector(
-                            element_handle, tag=None, text=validated.text or "", registry=selector_registry
-                        )
-                        selector_candidate = sel_res.selector
-                    except Exception as exc:
-                        logger.exception(
-                            "SelectorRegistry failed during grounding selector resolution: %s",
-                            exc,
-                        )
-                        selector_candidate = None
-
-                    logger.debug(
-                        "Grounding selector for bbox %s center %s,%s -> %s",
-                        (x1, y1, x2, y2),
-                        cx,
-                        cy,
-                        selector_candidate,
-                    )
-                    validated.selector = selector_candidate or None
-                except PlaywrightError:
-                    logger.exception(
-                        "Selector resolution failed for bbox center %s,%s",
-                        cx,
-                        cy,
-                    )
-                finally:
-                    try:
-                        await element_handle.dispose()
-                    except PlaywrightError:
-                        logger.debug("Failed to dispose element_handle after grounding resolution")
-        except PlaywrightError:
-            # Guard selector resolution; don't abort the entire call if one entry fails to resolve
-            logger.exception("Failed to resolve selector for grounding entry: %s", entry)
+                logger.debug("Failed to inject bbox overlay for %s", validated.bbox)
 
         results.append(validated)
 
@@ -500,8 +401,12 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
         msg = "selector must be a non-empty string when mode='selector'."
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
 
+    # Use active frame for locator resolution (element may be inside an iframe)
+    browser = await get_browser()
+    active_view = await browser.active_view()
+
     resolution = await _resolve_locator(
-        page,
+        active_view.frame,
         clean_selector,
         allow_substring_text=False,
         require_single_match=True,
@@ -512,22 +417,6 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
     locator = resolution.locator
     return await locator.screenshot(type="png")
-
-
-async def _get_active_page(*, tool_name: str, blank_page_message: str) -> Page:
-    """Return the current Playwright page or raise a browser tool error."""
-    try:
-        browser = await get_browser()
-        page = await browser.current_page()
-    except Exception as exc:  # pragma: no cover - defensive wiring guard
-        logger.exception("Unable to access browser page for tool %s", tool_name)
-        msg = "Unable to access browser page."
-        raise BrowserToolError(msg, tool=tool_name) from exc
-
-    if page.url in {"", "about:blank"}:
-        raise BrowserToolError(blank_page_message, tool=tool_name)
-
-    return page
 
 
 def _make_vision_client(*, tool_name: str) -> tuple[AsyncClient, Any]:
@@ -552,27 +441,109 @@ def _encode_image(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
 
-def _scale_to_viewport(normalized_coord: int, viewport_dimension: int) -> int:
-    """Scale a normalized 0-1000 coordinate to viewport pixel dimension.
-
-    Args:
-        normalized_coord: Coordinate value in the 0-1000 normalized range.
-        viewport_dimension: The viewport dimension (width or height) in pixels.
-
-    Returns:
-        The scaled coordinate as an integer pixel value.
-    """
-    return int((normalized_coord / 1000) * viewport_dimension)
-
-
 def _render_prompt(visible_text: str, width: int, height: int) -> str:
     """Build the grounding prompt with JSON-compliant quoting and viewport dimensions."""
     quoted = json.dumps(visible_text)
     return _PROMPT_TEMPLATE.format(text_json=quoted, width=width, height=height)
 
 
+async def click_element(description: str) -> str:
+    """Visually locate a UI element by description and click it.
+
+    Combines grounding (vision model) with a coordinate click in one step.
+    Use this when ``browse_page`` selectors can't find the element (shadow DOM,
+    iframes, dynamically injected content, bot challenges).
+
+    Args:
+        description: Descriptive text with spatial/visual details to locate the
+            element. Follow the same prompting best practices as
+            ``ground_elements_by_text``.
+
+    Returns:
+        InteractionResult with snapshot after the click.
+
+    Raises:
+        BrowserToolError: If no element is found or the click fails.
+    """
+    from tools.browser.core.human import human_click_at
+    from tools.browser.interactions import _interact_and_snapshot
+
+    results = await ground_elements_by_text(description)
+    if not results:
+        raise BrowserToolError(
+            f"No elements found matching: {description!r}",
+            tool="click_element",
+        )
+
+    best = results[0]
+    browser, view = await get_active_view("click_element")
+
+    try:
+        return await _interact_and_snapshot(
+            browser,
+            lambda: human_click_at(view.frame, *best.bbox),
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:  # pragma: no cover
+        logger.exception("click_element failed for %r at bbox %s", description, best.bbox)
+        raise BrowserToolError("click_element failed", tool="click_element") from exc
+
+
+async def press_and_hold_element(
+    description: str,
+    duration_ms: int = 3000,
+) -> str:
+    """Visually locate a UI element by description and press-and-hold it.
+
+    Combines grounding (vision model) with a coordinate press-and-hold in one
+    step. Use this for bot-detection challenges and any hold interactions when
+    selectors can't reach the element.
+
+    Args:
+        description: Descriptive text with spatial/visual details to locate the
+            element.
+        duration_ms: How long to hold the mouse button in milliseconds.
+            Defaults to 3000 (3 seconds). Range: 500-10000.
+
+    Returns:
+        InteractionResult with snapshot after the hold is released.
+
+    Raises:
+        BrowserToolError: If no element is found or the hold fails.
+    """
+    from tools.browser.core.human import human_press_and_hold_at
+    from tools.browser.interactions import _interact_and_snapshot
+
+    results = await ground_elements_by_text(description)
+    if not results:
+        raise BrowserToolError(
+            f"No elements found matching: {description!r}",
+            tool="press_and_hold_element",
+        )
+
+    best = results[0]
+    clamped = max(500, min(10000, duration_ms))
+    browser, view = await get_active_view("press_and_hold_element")
+
+    try:
+        return await _interact_and_snapshot(
+            browser,
+            lambda: human_press_and_hold_at(view.frame, *best.bbox, duration_ms=clamped),
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:  # pragma: no cover
+        logger.exception("press_and_hold_element failed for %r at bbox %s", description, best.bbox)
+        raise BrowserToolError(
+            "press_and_hold_element failed", tool="press_and_hold_element",
+        ) from exc
+
+
 __all__ = [
     "GroundingResult",
     "ask_about_screenshot",
+    "click_element",
     "ground_elements_by_text",
+    "press_and_hold_element",
 ]

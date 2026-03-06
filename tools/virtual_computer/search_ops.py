@@ -100,32 +100,30 @@ def _apply_globs(
 def grep(
     pattern: str,
     *,
+    path: str = ".",
     include_globs: list[str] | None = None,
     exclude_globs: list[str] | None = None,
     regex: bool = True,
     case_sensitive: bool = False,
+    context: int = 2,
     max_results: int | None = 1000,
 ) -> GrepResult:
-    """Search files in the current workspace for a pattern.
+    """Search workspace files for a pattern.
 
     Args:
         pattern: Regex or literal pattern to search for.
-        include_globs: Glob patterns relative to the workspace root that select which files
-            to search. Glob semantics follow Bash "globstar on":
-            - ``*`` and ``?`` do NOT match ``/`` (directory separators).
-            - ``**`` matches zero or more directories recursively.
-            - Patterns are matched against the path relative to the workspace root using
-              POSIX-style slashes. Examples: ``src/*.py`` (top-level only), ``src/**/*.py``
-              (top-level and nested), ``*.py`` (workspace root), ``**/*.py`` (any depth).
-            If omitted, all non-excluded files are searched.
-        exclude_globs: Glob patterns to exclude from search. Same semantics as include_globs.
-            Default excludes are always applied in addition to any provided here.
-        regex: Treat pattern as regex (default). If False, search literally.
-        case_sensitive: If True, matches are case-sensitive; default False (case-insensitive).
-        max_results: Maximum number of matches to return; None for unlimited.
+        path: File or directory to search in. Defaults to workspace root.
+        include_globs: Glob patterns to limit which files are searched
+            (e.g. ``"src/**/*.py"``). ``**`` matches recursively. Omit to search all.
+        exclude_globs: Glob patterns to exclude. Default excludes (.git, node_modules,
+            __pycache__, *.lock) are always applied.
+        regex: Treat pattern as regex (default True). If False, literal match.
+        case_sensitive: Case-sensitive matching. Default False.
+        context: Lines of context before and after each match. Default 2. Set 0 to disable.
+        max_results: Cap on returned matches. Default 1000.
 
     Returns:
-        GrepResult: Structured matches and counters; ``truncated`` is True when max_results hit.
+        GrepResult: Matches with ``file_path``, ``line_number``, ``line``, and context.
     """
     try:
         # Default excludes that are always applied (globstar semantics)
@@ -139,25 +137,33 @@ def grep(
         # Merge default excludes with user-provided excludes
         exclude_globs = default_excludes if exclude_globs is None else exclude_globs + default_excludes
 
-        # Root is the home/workspace directory path of '.'
-        root_abs, _home, root_rel = resolve_under_home(".")
-        if not root_abs.exists() or not root_abs.is_dir():
+        # Resolve the search root (file or directory)
+        root_abs, _home, root_rel = resolve_under_home(path)
+        if not root_abs.exists():
             return GrepResult(
                 success=False,
                 matches=[],
                 truncated=False,
                 searched_files=0,
-                error="workspace not found",
+                error="path not found",
             )
 
         flags = 0
         if not case_sensitive:
             flags |= re.IGNORECASE
         patt = re.compile(pattern if regex else re.escape(pattern), flags)
+        ctx = max(0, context)
 
         matches: list[GrepMatch] = []
         searched = 0
-        for fpath in _apply_globs(_iter_files(root_abs), root_abs, include_globs, exclude_globs):
+
+        # Single file: search it directly, skip glob filtering
+        if root_abs.is_file():
+            file_iter = iter([root_abs])
+        else:
+            file_iter = _apply_globs(_iter_files(root_abs), root_abs, include_globs, exclude_globs)
+
+        for fpath in file_iter:
             try:
                 if is_binary_file(fpath):
                     continue
@@ -166,16 +172,20 @@ def grep(
                 logger.warning("Skipping unreadable file %s", fpath)
                 continue
             searched += 1
-            for i, line in enumerate(text.splitlines(keepends=False), start=1):
-                for m in patt.finditer(line):
-                    rel_path = str(fpath.relative_to(root_abs)) if fpath.is_relative_to(root_abs) else str(fpath)
+            all_lines = text.splitlines(keepends=False)
+            rel_path = str(fpath.relative_to(root_abs)) if fpath.is_relative_to(root_abs) else str(fpath)
+            file_display = f"{root_rel}/{rel_path}" if root_rel else rel_path
+            for i, line in enumerate(all_lines):
+                if patt.search(line):
+                    before = all_lines[max(0, i - ctx) : i] if ctx > 0 else None
+                    after = all_lines[i + 1 : i + 1 + ctx] if ctx > 0 else None
                     matches.append(
                         GrepMatch(
-                            file_path=(f"{root_rel}/{rel_path}" if root_rel else rel_path),
-                            line_number=i,
+                            file_path=file_display,
+                            line_number=i + 1,
                             line=line,
-                            start_col=m.start(),
-                            end_col=m.end(),
+                            context_before=before,
+                            context_after=after,
                         )
                     )
                     if max_results is not None and len(matches) >= max_results:

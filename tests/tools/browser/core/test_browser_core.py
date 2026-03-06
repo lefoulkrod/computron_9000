@@ -12,6 +12,9 @@ class FakePage:
     def is_closed(self) -> bool:
         return self._closed
 
+    def on(self, event: str, callback: Any) -> None:
+        pass
+
     async def set_viewport_size(self, size: dict[str, int]) -> None:  # noqa: D401 - stub
         return None
 

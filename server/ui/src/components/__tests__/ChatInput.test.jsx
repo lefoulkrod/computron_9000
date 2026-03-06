@@ -80,13 +80,13 @@ describe('ChatInput', () => {
         render(<ChatInput onSend={onSend} disabled={true} />);
 
         const textarea = screen.getByPlaceholderText('Type your message...');
-        const sendButton = screen.getByLabelText('Send message');
 
+        // When disabled, the send button is replaced by a stop button
         expect(textarea).toBeDisabled();
-        expect(sendButton).toBeDisabled();
+        expect(screen.queryByLabelText('Send message')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Stop generation')).toBeInTheDocument();
 
         await user.type(textarea, 'Test');
-        await user.click(sendButton);
 
         expect(onSend).not.toHaveBeenCalled();
     });

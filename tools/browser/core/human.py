@@ -9,7 +9,7 @@ import random
 from dataclasses import dataclass
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Locator, Page
+from playwright.async_api import Frame, Locator, Page
 
 from config import load_config
 from tools.browser.core.exceptions import BrowserToolError
@@ -55,6 +55,28 @@ def _get_human_config() -> _HumanConfig:
             extra_pause_max_ms=max(typing.extra_pause_min_ms, typing.extra_pause_max_ms),
         )
     return _config_cache
+
+
+def _page_for(target: Page | Frame) -> Page:
+    """Extract the ``Page`` from a ``Page | Frame`` for mouse/keyboard input.
+
+    Playwright routes mouse and keyboard events through the compositor, so the
+    ``Page`` object is always needed for ``.mouse`` / ``.keyboard`` access.
+    When *target* is already a ``Page``, return it directly; when it's a
+    ``Frame`` (e.g. a dominant iframe), reach up to its parent ``Page``.
+
+    Uses ``isinstance`` for real Playwright types and falls back to duck-typing
+    so that test stubs without Playwright inheritance still work correctly.
+    """
+    if isinstance(target, Page):
+        return target
+    if isinstance(target, Frame):
+        return target.page
+    # Duck-type fallback: if the object has no `.page` attribute it is
+    # likely a Page-like stub used in tests — return it directly.
+    if hasattr(target, "page"):
+        return target.page  # type: ignore[return-value]
+    return target  # type: ignore[return-value]
 
 
 async def _sleep_ms(duration_ms: int) -> None:
@@ -150,11 +172,97 @@ async def _ensure_cursor_overlay(page: Page) -> None:
         logger.debug("Fake cursor overlay not present on page %s", getattr(page, "url", "<unknown>"))
 
 
-async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps: int) -> None:
-    """Move the Playwright mouse while updating the in-page fake cursor overlay.
+def _bezier_point(
+    t: float,
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    p3: tuple[float, float],
+) -> tuple[float, float]:
+    """Evaluate a cubic Bezier curve at parameter t (0..1)."""
+    u = 1 - t
+    x = u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0]
+    y = u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]
+    return x, y
 
-    This is a small wrapper that ensures the overlay exists and is updated
-    (best-effort) before delegating to Playwright's mouse.move.
+
+def _ease_in_out(t: float) -> float:
+    """Sinusoidal ease-in-out: slow start, fast middle, slow end."""
+    return (1 - math.cos(t * math.pi)) / 2
+
+
+def _build_trajectory(
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    steps: int,
+) -> list[tuple[float, float]]:
+    """Build a natural-looking mouse trajectory using a cubic Bezier curve.
+
+    The trajectory uses random control points offset from the straight line,
+    an ease-in-out velocity profile, and per-step micro-jitter to simulate
+    hand tremor. This replaces the previous linear interpolation.
+    """
+    dx = end_x - start_x
+    dy = end_y - start_y
+    dist = math.hypot(dx, dy)
+
+    # Scale step count with distance for longer moves
+    adaptive_steps = max(steps, int(dist / 30))
+
+    # Generate two random control points offset perpendicular to the line.
+    # Offset magnitude scales with distance but caps to avoid wild curves.
+    max_offset = min(dist * 0.3, 80)
+    offset1 = random.uniform(-max_offset, max_offset)
+    offset2 = random.uniform(-max_offset, max_offset)
+
+    # Perpendicular direction (rotate 90 degrees)
+    if dist > 0:
+        perp_x = -dy / dist
+        perp_y = dx / dist
+    else:
+        perp_x, perp_y = 0.0, 1.0
+
+    # Control points at ~1/3 and ~2/3 along the line, offset perpendicular
+    cp1 = (
+        start_x + dx * 0.3 + perp_x * offset1,
+        start_y + dy * 0.3 + perp_y * offset1,
+    )
+    cp2 = (
+        start_x + dx * 0.7 + perp_x * offset2,
+        start_y + dy * 0.7 + perp_y * offset2,
+    )
+
+    p0 = (start_x, start_y)
+    p3 = (end_x, end_y)
+
+    points: list[tuple[float, float]] = []
+    for i in range(1, adaptive_steps + 1):
+        # Ease-in-out: remap linear t to slow-fast-slow progression
+        t_linear = i / adaptive_steps
+        t_eased = _ease_in_out(t_linear)
+
+        bx, by = _bezier_point(t_eased, p0, cp1, cp2, p3)
+
+        # Add micro-jitter (±1.5px) to simulate hand tremor, except on the
+        # final step which must land precisely on the target.
+        if i < adaptive_steps:
+            jitter = 1.5
+            bx += random.uniform(-jitter, jitter)
+            by += random.uniform(-jitter, jitter)
+
+        points.append((bx, by))
+
+    return points
+
+
+async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps: int) -> None:
+    """Move the Playwright mouse along a natural Bezier trajectory.
+
+    Uses a cubic Bezier curve with random control points, an ease-in-out
+    velocity profile, and per-step micro-jitter to produce human-like
+    mouse movement. Also updates the in-page fake cursor overlay.
     """
     await _ensure_cursor_overlay(page)
 
@@ -195,14 +303,10 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
             exc,
         )
 
-    # Animate the overlay and move the real mouse in small increments so the
-    # in-page fake cursor visibly follows the pointer during movement.
-    steps_count = max(1, int(steps))
+    # Build a natural Bezier trajectory with jitter and ease-in-out pacing.
+    trajectory = _build_trajectory(start_x, start_y, x, y, steps)
 
-    for step_idx in range(1, steps_count + 1):
-        t = step_idx / steps_count
-        xi = start_x + (x - start_x) * t
-        yi = start_y + (y - start_y) * t
+    for xi, yi in trajectory:
         try:
             await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [xi, yi])
         except PlaywrightError as exc:
@@ -223,25 +327,26 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
         # Fire non-blocking progressive snapshot (throttled to ~4 fps).
         # The emitter coalesces rapid requests so the movement loop is never
         # blocked waiting for screenshot capture.
-        from tools.browser.events import request_progressive_snapshot
+        from tools.browser.events import request_progressive_screenshot
 
-        request_progressive_snapshot(page)
+        request_progressive_screenshot(page)
 
         # Small pause to let the browser render the overlay movement. Keep this
         # brief to avoid slowing tests too much while still producing visible motion.
         await asyncio.sleep(0.03)
 
 
-async def human_click(page: Page, locator: Locator) -> None:
+async def human_click(target: Page | Frame, locator: Locator) -> None:
     """Perform a human-like click on an element using an explicit Playwright page.
 
     Args:
-        page: Playwright Page object whose mouse will be used to perform the click.
+        target: Playwright Page or Frame whose mouse will be used to perform the click.
         locator: Locator identifying the element to click.
 
     Raises:
         BrowserToolError: If the locator cannot be resolved or the page lacks a mouse.
     """
+    page = _page_for(target)
     cfg = _get_human_config()
     if hasattr(locator, "scroll_into_view_if_needed"):
         try:
@@ -317,8 +422,110 @@ async def human_click(page: Page, locator: Locator) -> None:
         )
 
 
+async def human_press_and_hold(
+    target: Page | Frame,
+    locator: Locator,
+    duration_ms: int = 3000,
+) -> None:
+    """Press and hold an element for a specified duration.
+
+    Performs the same human-like positioning as ``human_click`` but holds the
+    mouse button down for ``duration_ms`` milliseconds before releasing. Fires
+    progressive snapshots during the hold so the caller can observe progress.
+
+    Args:
+        target: Playwright Page or Frame whose mouse will be used.
+        locator: Locator identifying the element to press and hold.
+        duration_ms: How long to hold the mouse button down in milliseconds.
+
+    Raises:
+        BrowserToolError: If the locator cannot be resolved or the page lacks a mouse.
+    """
+    page = _page_for(target)
+    cfg = _get_human_config()
+    if hasattr(locator, "scroll_into_view_if_needed"):
+        try:
+            await locator.scroll_into_view_if_needed(timeout=5000)
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.debug("scroll_into_view_if_needed failed prior to press_and_hold: %s", exc)
+    handle = await locator.element_handle(timeout=5000)
+    if handle is None:
+        raise BrowserToolError("Unable to resolve element handle", tool="press_and_hold")
+
+    frame = await handle.owner_frame()
+    if frame is None:
+        raise BrowserToolError(
+            "Element is not attached to a frame/page; cannot perform press_and_hold",
+            tool="press_and_hold",
+        )
+
+    box = await handle.bounding_box()
+    if box is None or box.get("width", 0) < 4 or box.get("height", 0) < 4:
+        label_handle = await handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
+        try:
+            label_element = label_handle.as_element()
+            if label_element is not None:
+                label_box = await label_element.bounding_box()
+                if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
+                    box = label_box
+        finally:
+            await label_handle.dispose()
+
+    if box is None or box.get("width", 0) <= 0 or box.get("height", 0) <= 0:
+        raise BrowserToolError("Element has no bounding box to press", tool="press_and_hold")
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="press_and_hold")
+
+    target_x = box["x"] + box["width"] / 2
+    target_y = box["y"] + box["height"] / 2
+
+    if cfg.offset_px > 0:
+        angle = random.random() * 2 * math.pi
+        radius = random.random() * cfg.offset_px
+        target_x += math.cos(angle) * radius
+        target_y += math.sin(angle) * radius
+
+    mouse = page.mouse
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.down()
+
+    # Hold for the requested duration, firing progressive snapshots so the
+    # agent (and streaming UI) can observe progress (e.g. a filling progress bar).
+    from tools.browser.events import request_progressive_screenshot
+
+    hold_duration = max(0, duration_ms)
+    snapshot_interval_ms = 250
+    elapsed = 0
+    while elapsed < hold_duration:
+        chunk = min(snapshot_interval_ms, hold_duration - elapsed)
+        await _sleep_ms(chunk)
+        elapsed += chunk
+        request_progressive_screenshot(page)
+
+    await mouse.up()
+
+    # Best-effort overlay update at the hold point.
+    try:
+        await page.evaluate(
+            "(coords) => window.__llmCursorSet?.(coords[0], coords[1])",
+            [target_x, target_y],
+        )
+        await asyncio.sleep(0.05)
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to finalize fake cursor overlay at press_and_hold point (%s, %s) on page %s; "
+            "continuing without overlay update. Error: %s",
+            target_x,
+            target_y,
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
+
+
 async def human_drag(
-    page: Page,
+    target: Page | Frame,
     source_locator: Locator,
     *,
     target_locator: Locator | None = None,
@@ -329,7 +536,7 @@ async def human_drag(
     Exactly one of ``target_locator`` or ``offset`` must be provided.
 
     Args:
-        page: Playwright Page whose mouse will be used for the drag.
+        target: Playwright Page or Frame whose mouse will be used for the drag.
         source_locator: Locator identifying the element where the drag should begin.
         target_locator: Optional locator identifying the destination element.
         offset: Optional ``(dx, dy)`` tuple specifying a pixel offset relative to the
@@ -339,6 +546,7 @@ async def human_drag(
         BrowserToolError: On invalid inputs, detached elements, missing mouse APIs,
             or when bounding boxes cannot be computed.
     """
+    page = _page_for(target)
     if (target_locator is None and offset is None) or (target_locator is not None and offset is not None):
         raise BrowserToolError("Provide exactly one of target_locator or offset", tool="drag")
 
@@ -486,11 +694,11 @@ async def human_drag(
         )
 
 
-async def human_type(page: Page, locator: Locator, text: str, *, clear_existing: bool = True) -> None:
+async def human_type(target: Page | Frame, locator: Locator, text: str, *, clear_existing: bool = True) -> None:
     """Type text into a focused element with human-like delays using an explicit page.
 
     Args:
-        page: Playwright Page object whose keyboard will be used.
+        target: Playwright Page or Frame whose keyboard will be used.
         locator: Locator for the input element (should already be focused/clicked).
         text: Text to type.
         clear_existing: Whether to clear existing text before typing.
@@ -498,6 +706,7 @@ async def human_type(page: Page, locator: Locator, text: str, *, clear_existing:
     Raises:
         BrowserToolError: If locator cannot be resolved or page lacks a keyboard.
     """
+    page = _page_for(target)
     cfg = _get_human_config()
 
     if not hasattr(page, "keyboard") or page.keyboard is None:
@@ -522,19 +731,20 @@ async def human_type(page: Page, locator: Locator, text: str, *, clear_existing:
             await _sleep_ms(delay)
 
         # Fire non-blocking progressive snapshot (throttled to ~4 fps).
-        from tools.browser.events import request_progressive_snapshot
+        from tools.browser.events import request_progressive_screenshot
 
-        request_progressive_snapshot(page)
+        request_progressive_screenshot(page)
 
         if cfg.extra_pause_every_chars > 0 and (idx + 1) % cfg.extra_pause_every_chars == 0:
             await _sleep_ms(random.randint(cfg.extra_pause_min_ms, cfg.extra_pause_max_ms))
 
 
-async def human_press_keys(page: Page, keys: list[str]) -> None:
+async def human_press_keys(target: Page | Frame, keys: list[str]) -> None:
     """Press one or more keyboard keys on the provided Playwright Page.
 
     Behavior and contract:
-    - Expects an explicit Playwright ``Page`` instance as the first argument.
+    - Expects an explicit Playwright ``Page`` or ``Frame`` instance as the
+      first argument. The underlying ``Page`` is extracted for keyboard access.
     - Uses ``page.keyboard`` to perform key presses; if the page has no
       ``keyboard`` attribute (or it is ``None``) a ``BrowserToolError`` is raised.
     - Accepts a list of key strings. Modifier chords are supported using the
@@ -550,6 +760,7 @@ async def human_press_keys(page: Page, keys: list[str]) -> None:
     the active page and passing it in; tests may monkeypatch ``page.keyboard``
     with a dummy object.
     """
+    page = _page_for(target)
     if not isinstance(keys, list) or len(keys) == 0:
         raise BrowserToolError("keys must be a non-empty list of key names", tool="press_keys")
 
@@ -586,14 +797,167 @@ async def human_press_keys(page: Page, keys: list[str]) -> None:
             raise BrowserToolError(f"Failed to press key '{key}': {exc}", tool="press_keys") from exc
 
 
-__all__ = ["human_click", "human_drag", "human_press_keys", "human_scroll", "human_type"]
+def _random_point_in_bbox(
+    x1: float, y1: float, x2: float, y2: float,
+) -> tuple[float, float]:
+    """Pick a random point inside a bounding box, biased toward the center.
+
+    Uses a truncated gaussian (clamped to bbox) so clicks cluster naturally
+    near the center but still vary across the full element area.
+    """
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+    # Sigma = 1/4 of dimension so ~95% of samples fall within the bbox
+    sx = max((x2 - x1) / 4.0, 0.5)
+    sy = max((y2 - y1) / 4.0, 0.5)
+    px = max(x1, min(x2, random.gauss(cx, sx)))
+    py = max(y1, min(y2, random.gauss(cy, sy)))
+    return px, py
 
 
-async def human_scroll(page: Page, direction: str = "down", amount: int | None = None) -> None:
-    """Perform a human-like scroll on the provided Playwright Page.
+async def human_click_at(
+    target: Page | Frame,
+    x1: float, y1: float, x2: float, y2: float,
+) -> None:
+    """Perform a human-like click at a random point inside a bounding box.
+
+    Bypasses locator/bounding-box resolution entirely, allowing clicks on
+    elements that cannot be resolved to a DOM selector (shadow DOM, iframes,
+    dynamically injected content).
 
     Args:
-        page: Playwright Page instance to operate on.
+        target: Playwright Page or Frame whose mouse will be used.
+        x1: Left edge of the bounding box (CSS pixels).
+        y1: Top edge of the bounding box (CSS pixels).
+        x2: Right edge of the bounding box (CSS pixels).
+        y2: Bottom edge of the bounding box (CSS pixels).
+
+    Raises:
+        BrowserToolError: If coordinates are non-finite or the page lacks a mouse.
+    """
+    coords = (x1, y1, x2, y2)
+    if not all(math.isfinite(c) for c in coords):
+        raise BrowserToolError("Coordinates must be finite numbers", tool="click_at")
+
+    page = _page_for(target)
+    cfg = _get_human_config()
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="click_at")
+
+    target_x, target_y = _random_point_in_bbox(x1, y1, x2, y2)
+
+    mouse = page.mouse
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.down()
+    await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
+    await mouse.up()
+
+    # Best-effort overlay update at the click point.
+    try:
+        await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
+        await asyncio.sleep(0.05)
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to finalize fake cursor overlay at click_at point (%s, %s) on page %s; "
+            "continuing without overlay update. Error: %s",
+            target_x,
+            target_y,
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
+
+
+async def human_press_and_hold_at(
+    target: Page | Frame,
+    x1: float, y1: float, x2: float, y2: float,
+    duration_ms: int = 3000,
+) -> None:
+    """Press and hold at a random point inside a bounding box for a duration.
+
+    Bypasses locator/bounding-box resolution entirely. Fires progressive
+    snapshots during the hold so the caller can observe progress.
+
+    Args:
+        target: Playwright Page or Frame whose mouse will be used.
+        x1: Left edge of the bounding box (CSS pixels).
+        y1: Top edge of the bounding box (CSS pixels).
+        x2: Right edge of the bounding box (CSS pixels).
+        y2: Bottom edge of the bounding box (CSS pixels).
+        duration_ms: How long to hold the mouse button down in milliseconds.
+
+    Raises:
+        BrowserToolError: If coordinates are non-finite or the page lacks a mouse.
+    """
+    coords = (x1, y1, x2, y2)
+    if not all(math.isfinite(c) for c in coords):
+        raise BrowserToolError("Coordinates must be finite numbers", tool="press_and_hold_at")
+
+    page = _page_for(target)
+    cfg = _get_human_config()
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="press_and_hold_at")
+
+    target_x, target_y = _random_point_in_bbox(x1, y1, x2, y2)
+
+    mouse = page.mouse
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.down()
+
+    # Hold for the requested duration, firing progressive snapshots.
+    from tools.browser.events import request_progressive_screenshot
+
+    hold_duration = max(0, duration_ms)
+    snapshot_interval_ms = 250
+    elapsed = 0
+    while elapsed < hold_duration:
+        chunk = min(snapshot_interval_ms, hold_duration - elapsed)
+        await _sleep_ms(chunk)
+        elapsed += chunk
+        request_progressive_screenshot(page)
+
+    await mouse.up()
+
+    # Best-effort overlay update at the hold point.
+    try:
+        await page.evaluate(
+            "(coords) => window.__llmCursorSet?.(coords[0], coords[1])",
+            [target_x, target_y],
+        )
+        await asyncio.sleep(0.05)
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to finalize fake cursor overlay at press_and_hold_at point (%s, %s) on page %s; "
+            "continuing without overlay update. Error: %s",
+            target_x,
+            target_y,
+            getattr(page, "url", "<unknown>"),
+            exc,
+        )
+
+
+__all__ = [
+    "human_click",
+    "human_click_at",
+    "human_drag",
+    "human_press_and_hold",
+    "human_press_and_hold_at",
+    "human_press_keys",
+    "human_scroll",
+    "human_type",
+]
+
+
+async def human_scroll(target: Page | Frame, direction: str = "down", amount: int | None = None) -> None:
+    """Perform a human-like scroll on the provided Playwright Page or Frame.
+
+    Args:
+        target: Playwright Page or Frame instance to operate on. When a Frame is
+            provided, scroll-related JS evaluations run inside the frame's window
+            context so iframes scroll correctly.
         direction: One of {"down", "up", "page_down", "page_up", "top", "bottom"}.
         amount: Optional pixel distance for fine-grained scrolling when direction is
             "down" or "up". If omitted, a viewport-sized scroll (page-style) is used.
@@ -601,6 +965,7 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
     Raises:
         BrowserToolError: On invalid input or missing page APIs.
     """
+    page = _page_for(target)
     cfg = _get_human_config()
 
     if not isinstance(direction, str) or not direction:
@@ -619,15 +984,15 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
             if hasattr(page, "keyboard") and page.keyboard is not None:
                 await page.keyboard.press(key)
             else:
-                # fallback to evaluate
-                await page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+                # fallback to evaluate — run in target context so iframes scroll
+                await target.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
         elif dir_norm in {"page_down", "page_up"}:
             key = "PageDown" if dir_norm == "page_down" else "PageUp"
             if hasattr(page, "keyboard") and page.keyboard is not None:
                 await page.keyboard.press(key)
             else:
-                # simulate by scrolling by viewport height
-                await page.evaluate(
+                # simulate by scrolling by viewport height — run in target context
+                await target.evaluate(
                     "() => { window.scrollBy(0, window.innerHeight * (arguments[0])); }",
                     1 if dir_norm == "page_down" else -1,
                 )
@@ -636,7 +1001,7 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
             if amount is None:
                 # Query actual viewport height from the browser
                 try:
-                    height = await page.evaluate("() => window.innerHeight")
+                    height = await target.evaluate("() => window.innerHeight")
                     if not isinstance(height, int | float) or height <= 0:
                         height = 800  # fallback
                 except PlaywrightError:
@@ -655,8 +1020,8 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
             # Perform smooth scrolling with multiple wheel events to mimic human scrolling
             # Humans don't jump-scroll; they use mouse wheel in small increments
             if not hasattr(page, "mouse") or page.mouse is None:
-                # Fallback to evaluate if mouse API unavailable
-                await page.evaluate(
+                # Fallback to evaluate if mouse API unavailable — run in target context
+                await target.evaluate(
                     "(dy) => window.scrollBy({ top: dy, left: 0, behavior: 'smooth' })",
                     delta,
                 )
@@ -670,9 +1035,9 @@ async def human_scroll(page: Page, direction: str = "down", amount: int | None =
                     await page.mouse.wheel(0, wheel_increment)
 
                     # Fire non-blocking progressive snapshot (throttled to ~4 fps).
-                    from tools.browser.events import request_progressive_snapshot
+                    from tools.browser.events import request_progressive_screenshot
 
-                    request_progressive_snapshot(page)
+                    request_progressive_screenshot(page)
 
                     # Small delay between wheel events (16ms = ~60fps scrolling)
                     await asyncio.sleep(0.016)

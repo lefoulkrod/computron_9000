@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Message from './Message.jsx';
 import styles from './ChatMessages.module.css';
 
-export default function ChatMessages({ messages, showSubAgents = true }) {
+export default function ChatMessages({ messages, showSubAgents = true, onPreview }) {
     const containerRef = useRef(null);
     const endRef = useRef(null);
 
@@ -26,7 +26,7 @@ export default function ChatMessages({ messages, showSubAgents = true }) {
     return (
         <div className={styles.chatMessages} id="chatMessages" ref={containerRef}>
             {visibleMessages.map((msg, idx) => (
-                <Message key={msg.id || idx} {...msg} showSubAgents={showSubAgents} />
+                <Message key={msg.id || idx} {...msg} showSubAgents={showSubAgents} onPreview={onPreview} />
             ))}
             <div ref={endRef} />
         </div>

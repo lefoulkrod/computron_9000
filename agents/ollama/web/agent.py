@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
-from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
-    make_run_agent_as_tool_function,
-)
-from agents.types import Agent
-from models import get_default_model
+from agents.ollama.sdk import make_run_agent_as_tool_function
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.reddit import get_reddit_comments, search_reddit
 from tools.web import get_webpage_substring, get_webpage_summary_sections, search_google
-
-model = get_default_model()
 
 NAME = "WEB_AGENT"
 DESCRIPTION = dedent(
@@ -43,36 +35,27 @@ SYSTEM_PROMPT = dedent(
     - Make limitations clear if information cannot be found.
     """
 )
+TOOLS = [
+    get_webpage_summary_sections,
+    get_webpage_substring,
+    search_google,
+    search_reddit,
+    get_reddit_comments,
+    save_to_scratchpad,
+    recall_from_scratchpad,
+]
 
-web_agent: Agent = Agent(
+web_agent_tool = make_run_agent_as_tool_function(
     name=NAME,
     description=DESCRIPTION,
     instruction=SYSTEM_PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[
-        get_webpage_summary_sections,
-        get_webpage_substring,
-        search_google,
-        search_reddit,
-        get_reddit_comments,
-    ],
-    think=model.think,
-)
-
-before_model_call_callback = make_log_before_model_call(web_agent)
-after_model_call_callback = make_log_after_model_call(web_agent)
-
-web_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
-    agent=web_agent,
-    tool_description=DESCRIPTION,
-    before_model_callbacks=[before_model_call_callback],
-    after_model_callbacks=[after_model_call_callback],
+    tools=TOOLS,
 )
 
 __all__ = [
-    "after_model_call_callback",
-    "before_model_call_callback",
-    "web_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "web_agent_tool",
 ]

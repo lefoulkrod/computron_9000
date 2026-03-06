@@ -156,17 +156,15 @@ ReadResult = FileReadResult | DirectoryReadResult
 
 
 class TextPatch(BaseModel):
-    """Represents a line-based text patch operation for file editing.
+    """Represents a text patch operation for file editing.
 
     Attributes:
-        start_line: Starting line number (1-based).
-        end_line: Ending line number (1-based).
-        replacement: New text content to replace the specified line range.
+        old_text: Exact text to find (must match uniquely in the file).
+        new_text: Replacement text.
     """
 
-    start_line: int
-    end_line: int
-    replacement: str
+    old_text: str
+    new_text: str
 
 
 class ApplyPatchResult(BaseModel):
@@ -175,13 +173,11 @@ class ApplyPatchResult(BaseModel):
     Attributes:
         success: Whether the patch was applied successfully.
         file_path: Path to the file that was patched.
-        diff: Text diff showing changes made, None if operation failed.
         error: Error message if the operation failed, None otherwise.
     """
 
     success: bool
     file_path: str
-    diff: str | None = None
     error: str | None = None
 
 
@@ -198,6 +194,7 @@ class ReadTextResult(BaseModel):
         start: Inclusive start line number (1-based) if range was specified.
         end: Inclusive end line number (1-based) if range was specified.
         total_lines: Total number of lines in the file when available.
+        truncated: True when content was capped at the default line limit.
         error: Error message if the operation failed, None otherwise.
     """
 
@@ -207,6 +204,7 @@ class ReadTextResult(BaseModel):
     start: int | None = None
     end: int | None = None
     total_lines: int | None = None
+    truncated: bool = False
     error: str | None = None
 
 
@@ -217,15 +215,15 @@ class GrepMatch(BaseModel):
         file_path: Path to the file containing the match.
         line_number: Line number where the match was found (1-based).
         line: Full text content of the matching line.
-        start_col: Starting column position of the match (0-based).
-        end_col: Ending column position of the match (0-based).
+        context_before: Lines immediately before the match (when context requested).
+        context_after: Lines immediately after the match (when context requested).
     """
 
     file_path: str
     line_number: int
     line: str
-    start_col: int
-    end_col: int
+    context_before: list[str] | None = None
+    context_after: list[str] | None = None
 
 
 class GrepResult(BaseModel):
@@ -253,16 +251,12 @@ class ReplaceInFileResult(BaseModel):
         success: Whether the replace operation was successful.
         file_path: Path to the file where replacements were made.
         replacements: Number of replacements that were performed.
-        preview: Whether this was a preview operation (no actual changes made).
-        diff_sample: Sample of changes made for preview purposes, None if not applicable.
         error: Error message if the operation failed, None otherwise.
     """
 
     success: bool
     file_path: str
     replacements: int
-    preview: bool
-    diff_sample: str | None = None
     error: str | None = None
 
 

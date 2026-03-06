@@ -1,71 +1,69 @@
 """Text patch application utilities (structured + unified diff)."""
 
-import difflib
 import logging
 
-from ._fs_internal import read_text_lines, write_text_lines
+from tools._truncation import truncate_args
+
+from ._fs_internal import is_binary_file, read_text_lines, write_text_lines
 from ._path_utils import resolve_under_home
 from .models import ApplyPatchResult
 
 logger = logging.getLogger(__name__)
 
 
-def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
-    """Apply a single line-based text patch to a file.
+@truncate_args(old_text=200, new_text=200)
+def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
+    """Replace a unique block of text in a file with new content.
 
-    Replaces a range of lines with new content. Newlines are not added
-    automatically—include a trailing newline for each inserted line (including
-    the last) to keep lines separate. Writes only when a change occurs; invalid
-    ranges return an error in the result.
+    The old_text must match exactly one location in the file (character-for-
+    character, including whitespace). If it matches zero or multiple locations
+    the operation fails with a descriptive error.
 
     Args:
-        path: Path to the target text file.
-        start_line: Starting line number (1-based, inclusive).
-        end_line: Ending line number (1-based, inclusive).
-        replacement: New text content to replace the specified line range.
+        path: Target file path.
+        old_text: Exact text to find and replace. Must be unique in the file.
+        new_text: Replacement text.
 
     Returns:
-        ApplyPatchResult: Result indicating success, relative ``file_path``,
-        and a unified ``diff`` string of the changes when applicable. On
-        failure, ``error`` contains a brief message.
-
+        ApplyPatchResult: Success flag, ``file_path``, and unified ``diff``.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
         if not abs_path.exists() or not abs_path.is_file():
             return ApplyPatchResult(success=False, file_path=rel, error="File does not exist")
+        if is_binary_file(abs_path):
+            return ApplyPatchResult(success=False, file_path=rel, error="Binary file not supported")
 
-        before_lines = read_text_lines(abs_path)
-        after_lines = before_lines.copy()
+        content = abs_path.read_text(encoding="utf-8", errors="replace")
+        count = content.count(old_text)
 
-        if start_line < 1 or end_line < start_line or end_line > len(after_lines):
+        if count == 0:
             return ApplyPatchResult(
                 success=False,
                 file_path=rel,
-                error="Invalid line range",
+                error="No match found. Ensure old_text matches the file content exactly, "
+                "including whitespace and indentation.",
             )
-        new_segment = replacement.splitlines(keepends=True)
-        after_lines[start_line - 1 : end_line] = new_segment
-
-        if after_lines == before_lines:
-            return ApplyPatchResult(success=True, file_path=rel, diff="")
-
-        diff_text = "".join(
-            difflib.unified_diff(
-                before_lines,
-                after_lines,
-                fromfile=f"{rel} (before)",
-                tofile=f"{rel} (after)",
-                # Use default lineterm ("\n") for standard human-friendly diffs
+        if count > 1:
+            return ApplyPatchResult(
+                success=False,
+                file_path=rel,
+                error=f"Found {count} matches. Include more surrounding context "
+                "in old_text to make a unique match.",
             )
-        )
-        write_text_lines(abs_path, after_lines)
-        return ApplyPatchResult(success=True, file_path=rel, diff=diff_text)
+
+        if old_text == new_text:
+            return ApplyPatchResult(success=True, file_path=rel)
+
+        new_content = content.replace(old_text, new_text, 1)
+        write_text_lines(abs_path, new_content.splitlines(keepends=True))
+        return ApplyPatchResult(success=True, file_path=rel)
     except (OSError, ValueError) as exc:  # pragma: no cover
         logger.exception("Failed to apply text patch to %s", path)
         return ApplyPatchResult(success=False, file_path=path, error=str(exc))
 
 
+@truncate_args(patch_text=300)
 def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
     """Apply unified diff patches to existing text files.
 
@@ -127,22 +125,12 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
                     except ValueError as exc:  # pragma: no cover - error path
                         results.append(ApplyPatchResult(success=False, file_path=rel, error=str(exc)))
                     else:
-                        diff_text = "".join(
-                            difflib.unified_diff(
-                                original,
-                                patched,
-                                fromfile=f"{rel} (before)",
-                                tofile=f"{rel} (after)",
-                                # Default lineterm ("\n")
-                            )
-                        )
-                        if diff_text:
+                        if original != patched:
                             write_text_lines(abs_path, patched)
                         results.append(
                             ApplyPatchResult(
                                 success=True,
                                 file_path=rel,
-                                diff=diff_text,
                             )
                         )
             except (OSError, ValueError) as exc:  # pragma: no cover

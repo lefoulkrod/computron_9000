@@ -2,82 +2,118 @@ import React, { useRef, useState, useEffect } from 'react';
 import styles from './ChatInput.module.css';
 import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
+import StopIcon from './icons/StopIcon.jsx';
 
-function ChatInput({ onSend, disabled, attachment }) {
+function ChatInput({ onSend, onStop, disabled, attachment }) {
     const [message, setMessage] = useState('');
     const [fileData, setFileData] = useState(null);
     const [filePreview, setFilePreview] = useState(null);
+    const [fileName, setFileName] = useState(null);
     const fileInputRef = useRef(null);
 
     useEffect(() => {
         if (attachment) {
-            const { base64, contentType = 'image/png' } = attachment;
+            const { base64, contentType = 'image/png', filename } = attachment;
             const dataUrl = `data:${contentType};base64,${base64}`;
-            setFileData({ base64, content_type: contentType });
-            setFilePreview(dataUrl);
+            setFileData({ base64, content_type: contentType, filename: filename || null });
+            if (contentType.startsWith('image/')) {
+                setFilePreview(dataUrl);
+            } else {
+                setFilePreview(null);
+            }
+            setFileName(filename || null);
             if (fileInputRef.current) {
                 fileInputRef.current.value = '';
             }
         }
     }, [attachment]);
 
+    const clearAttachment = () => {
+        setFileData(null);
+        setFilePreview(null);
+        setFileName(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (disabled) return;
         onSend(message.trim(), fileData);
         setMessage('');
-        setFileData(null);
-        setFilePreview(null);
-        if (fileInputRef.current) {
-            // Reset the file input so selecting the same file again fires onChange
-            fileInputRef.current.value = '';
-        }
+        clearAttachment();
     };
 
     const handleFile = (e) => {
         const file = e.target.files[0];
         if (!file) {
-            setFileData(null);
-            setFilePreview(null);
+            clearAttachment();
             return;
         }
         const reader = new FileReader();
         reader.onload = (ev) => {
             const base64 = ev.target.result.split(',')[1];
-            setFileData({ base64, content_type: file.type });
+            setFileData({ base64, content_type: file.type, filename: file.name });
             if (file.type.startsWith('image/')) {
                 setFilePreview(ev.target.result);
             } else {
                 setFilePreview(null);
             }
+            setFileName(file.name);
         };
         reader.readAsDataURL(file);
     };
+
+    const handlePaste = (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const base64 = ev.target.result.split(',')[1];
+                    const name = `screenshot_${Date.now()}.png`;
+                    setFileData({ base64, content_type: file.type, filename: name });
+                    setFilePreview(ev.target.result);
+                    setFileName(name);
+                };
+                reader.readAsDataURL(file);
+                return;
+            }
+        }
+    };
+
+    const hasAttachment = filePreview || fileName;
 
     return (
         <div className={styles.inputAreaWrapper}>
             <form className={styles.inputArea} onSubmit={handleSubmit}>
                 <div className={styles.customInputWrapper}>
-                    {filePreview && (
+                    {hasAttachment && (
                         <div className={styles.inlinePreview}>
-                            <img src={filePreview} alt="selected" />
+                            {filePreview ? (
+                                <img src={filePreview} alt="selected" />
+                            ) : (
+                                <div className={styles.fileChip}>
+                                    <span className={styles.fileChipIcon}>📎</span>
+                                    <span className={styles.fileChipName}>{fileName}</span>
+                                </div>
+                            )}
                             <button
                                 type="button"
                                 className={styles.removeAttachment}
-                                aria-label="Remove image"
-                                title="Remove image"
-                                onClick={() => {
-                                    setFileData(null);
-                                    setFilePreview(null);
-                                    if (fileInputRef.current) fileInputRef.current.value = '';
-                                }}
+                                aria-label="Remove attachment"
+                                title="Remove attachment"
+                                onClick={clearAttachment}
                             >
                                 ×
                             </button>
                         </div>
                     )}
                     <textarea
-                        className={`${styles.customInput} ${filePreview ? styles.withPreview : ''}`}
+                        className={`${styles.customInput} ${hasAttachment ? styles.withPreview : ''}`}
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         onKeyDown={(e) => {
@@ -86,6 +122,7 @@ function ChatInput({ onSend, disabled, attachment }) {
                                 handleSubmit(e);
                             }
                         }}
+                        onPaste={handlePaste}
                         placeholder="Type your message..."
                         disabled={disabled}
                     />
@@ -107,22 +144,31 @@ function ChatInput({ onSend, disabled, attachment }) {
                         type="file"
                         id="fileInput"
                         style={{ display: 'none' }}
-                        accept="image/*"
                         onClick={(e) => {
-                            // Clearing here ensures selecting the same file triggers onChange
                             e.target.value = '';
                         }}
                         onChange={handleFile}
                     />
-                    <button
-                        type="submit"
-                        className={styles.iconButton}
-                        title="Send message"
-                        aria-label="Send message"
-                        disabled={disabled}
-                    >
-                        <SendIcon />
-                    </button>
+                    {disabled ? (
+                        <button
+                            type="button"
+                            className={`${styles.iconButton} ${styles.stopButton}`}
+                            title="Stop generation"
+                            aria-label="Stop generation"
+                            onClick={onStop}
+                        >
+                            <StopIcon />
+                        </button>
+                    ) : (
+                        <button
+                            type="submit"
+                            className={styles.iconButton}
+                            title="Send message"
+                            aria-label="Send message"
+                        >
+                            <SendIcon />
+                        </button>
+                    )}
                 </div>
             </form>
         </div>

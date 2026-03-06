@@ -1,4 +1,4 @@
-"""View the current page with annotated content and interactive elements.
+"""Browse the current page with annotated content and interactive elements.
 
 Returns a single view combining page content and interactive elements,
 annotated with ``[role] name`` markers.  The ``role:name`` pair can be
@@ -10,66 +10,67 @@ from __future__ import annotations
 
 import logging
 
-import tools.browser.core as browser_core
+from tools.browser.core import get_active_view
+from tools.browser.core._formatting import format_page_view
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.core.page_view import PageView, build_page_view
-from tools.browser.events import emit_browser_snapshot_on_page_change
+from tools.browser.core.page_view import build_page_view
+from tools.browser.events import emit_screenshot_after
 
 logger = logging.getLogger(__name__)
 
 
-@emit_browser_snapshot_on_page_change
-async def view_page(scope: str | None = None) -> PageView:
-    """View the current page — no navigation, just read what's on screen.
+@emit_screenshot_after
+async def browse_page(scope: str | None = None, full_page: bool = False) -> str:
+    """See interactive elements on the current page with [role] name markers.
 
-    Returns page content interleaved with interactive element annotations.
-    Each interactive element is shown as ``[role] name``, and you can use
-    ``role:name`` as a selector in ``click()``, ``fill_field()``, etc.
+    Use this when you need to INTERACT: find buttons, links, forms, and get
+    selectors for ``click()``, ``fill_field()``, etc.  For reading text
+    content, use ``read_page()`` instead.  After click/fill/scroll, the
+    page_view is returned automatically — only call ``browse_page()`` to
+    re-examine without acting.
 
-    Example output::
+    Output format — each element shown as ``[role] name``::
 
-        [link] Amazon
         [searchbox] Search Amazon
-        [button] Go
-        [h2] Results
-        [link] Sony WH-1000XM5 Wireless Headphones
+        [link] Sony WH-1000XM5
         $348.00
         [button] Add to Cart
 
-    Example usage::
-
-        view_page()                    # full viewport
-        view_page(scope="Results")     # zoom into the Results section
+    Use ``role:name`` as selectors::
 
         click("button:Add to Cart")
         fill_field("searchbox:Search Amazon", "laptop")
 
     Args:
-        scope: Optional section name to zoom into.  Matches headings or
-            landmarks by text.  Example: ``view_page(scope="Results")`` to
-            see only the results section, excluding nav and sidebars.
+        scope: Narrow to a section by heading or landmark text.  Example:
+            ``browse_page(scope="Results")`` to skip nav and sidebars.
+            Respects viewport clipping — combine with ``full_page=True``
+            for off-screen sections.
+        full_page: Show all elements, not just the current viewport.
+            Useful for finding elements without scrolling.  Long pages
+            may be truncated.
 
     Returns:
-        PageView with content, title, url, viewport info.
+        Formatted string with page header, viewport info, and annotated content.
 
     Raises:
         BrowserToolError: If there is no open page.
     """
-    try:
-        browser = await browser_core.get_browser()
-        page = await browser.current_page()
-    except RuntimeError as exc:
-        logger.debug("No current page available for view_page: %s", exc)
-        raise BrowserToolError("No open page to view", tool="view_page") from exc
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Failed to access browser for view_page")
-        raise BrowserToolError("Unable to access browser pages", tool="view_page") from exc
+    _, view = await get_active_view("browse_page")
 
     try:
-        return await build_page_view(page, None, scope=scope)
+        pv = await build_page_view(view, None, scope=scope, full_page=full_page)
+        return format_page_view(
+            title=pv.title,
+            url=pv.url,
+            status_code=pv.status_code,
+            viewport=pv.viewport,
+            content=pv.content,
+            truncated=pv.truncated,
+        )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Failed to build annotated snapshot")
-        raise BrowserToolError("Failed to build page view", tool="view_page") from exc
+        raise BrowserToolError("Failed to build page view", tool="browse_page") from exc
 
 
-__all__ = ["view_page"]
+__all__ = ["browse_page"]

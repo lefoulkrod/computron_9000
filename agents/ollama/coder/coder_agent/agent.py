@@ -1,21 +1,15 @@
 """Coder development agent implementation."""
 
-import logging
-from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
 from agents.ollama.coder.context_models import generate_coder_input_schema_summary
-from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
-    make_run_agent_as_tool_function,
-)
-from agents.types import Agent
-from models import get_model_by_name
+from agents.ollama.sdk import make_run_agent_as_tool_function
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import (
     append_to_file,
     apply_text_patch,
     copy_path,
+    describe_image,
     exists,
     grep,
     insert_text,
@@ -30,12 +24,10 @@ from tools.virtual_computer import (
     write_file,
 )
 
-logger = logging.getLogger(__name__)
-
-model = get_model_by_name("coder_developer")
-
 _CODER_INPUT_SCHEMA = generate_coder_input_schema_summary()
 
+NAME = "CODER_DEV_AGENT"
+DESCRIPTION = "An agent to implement a single plan step."
 SYSTEM_PROMPT = dedent(
     f"""
         There is no `search` tool. Use `grep` instead.
@@ -55,6 +47,8 @@ Common rules:
 - Do not modify DESIGN.json or PLAN.json.
 - Never start servers/watchers; use only short-lived commands.
 - Never read the full contents of lock files or package directories.
+- Prefer grep to locate relevant code, then read_file(start=N, end=M) for targeted
+  sections. Avoid reading entire large files when only a portion is needed.
 
 Step handling:
 - If step_kind == "file" (or file_path present): create/update the file.
@@ -67,46 +61,38 @@ Output:
 - Avoid code blocks in output.
 """
 )
+TOOLS = [
+    run_bash_cmd,
+    make_dirs,
+    remove_path,
+    move_path,
+    copy_path,
+    append_to_file,
+    write_file,
+    exists,
+    read_file,
+    grep,
+    list_dir,
+    replace_in_file,
+    insert_text,
+    apply_text_patch,
+    prepend_to_file,
+    describe_image,
+    save_to_scratchpad,
+    recall_from_scratchpad,
+]
 
-coder_agent = Agent(
-    name="CODER_DEV_AGENT",
-    description="An agent to implement a single plan step.",
+coder_agent_tool = make_run_agent_as_tool_function(
+    name=NAME,
+    description=DESCRIPTION,
     instruction=SYSTEM_PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[
-        run_bash_cmd,
-        make_dirs,
-        remove_path,
-        move_path,
-        copy_path,
-        append_to_file,
-        write_file,
-        exists,
-        read_file,
-        grep,
-        list_dir,
-        replace_in_file,
-        insert_text,
-        apply_text_patch,
-        prepend_to_file,
-    ],
-    think=model.think,
-)
-
-before_model_call_callback = make_log_before_model_call(coder_agent)
-after_model_call_callback = make_log_after_model_call(coder_agent)
-coder_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
-    agent=coder_agent,
-    tool_description="""
-    Implement a single plan step using the provided standardized context (CoderInput),
-    performing code edits and short-lived commands as needed. Returns a plain-text summary.
-    """,
-    before_model_callbacks=[before_model_call_callback],
-    after_model_callbacks=[after_model_call_callback],
+    tools=TOOLS,
 )
 
 __all__ = [
-    "coder_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "coder_agent_tool",
 ]

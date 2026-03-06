@@ -1,9 +1,13 @@
-"""Tests for tool result serialization in run_tool_call_loop.
+"""Tests for tool result serialization and history behaviour in run_tool_call_loop.
 
 These tests mock the chat client to emit tool_calls and verify that tool
 results are serialized into tool messages as JSON with either a "result"
 payload (Pydantic/dicts converted via _normalize_tool_result) or an "error" payload
 when tools raise.
+
+Additional tests verify the ``persist_thinking`` flag on ``Agent`` controls
+whether thinking content is retained in the conversation history while still
+being emitted to the UI via events.
 """
 
 from __future__ import annotations
@@ -14,7 +18,9 @@ from typing import Any
 
 import pytest
 
+from agents.ollama.sdk.context import ConversationHistory
 from agents.ollama.sdk.tool_loop import run_tool_call_loop
+from agents.types import Agent
 from tools.virtual_computer.models import ApplyPatchResult
 
 
@@ -64,9 +70,8 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
         name="apply_text_patch",
         arguments={
             "path": "webos/css/style.css",
-            "start_line": 12,
-            "end_line": 12,
-            "replacement": "  box-shadow: 0 2px 10px rgba(0, 0, 0, 10%);\n",
+            "old_text": "  box-shadow: 0 2px 10px rgba(0,0,0,10%);",
+            "new_text": "  box-shadow: 0 2px 10px rgba(0, 0, 0, 10%);",
         },
     ))
     resp1 = _Resp(_Message(content=None, thinking=None, tool_calls=[tc]))
@@ -80,20 +85,20 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
     monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp1, resp2]))
 
     # Provide tools: a sync function named apply_text_patch that returns a Pydantic model
-    def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
+    def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
         return ApplyPatchResult(
             success=True,
             file_path=path,
-            diff="--- webos/css/style.css (before)\n+++ webos/css/style.css (after)\n@@ -1,1 +1,1 @@\n-old\n+new\n",
-            error=None,
         )
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": "x"}]
+    history = ConversationHistory([{"role": "system", "content": "x"}])
+    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
     # Drain the generator
-    async for _content, _thinking in run_tool_call_loop(messages, tools=[apply_text_patch], model="dummy"):
+    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
         pass
 
     # Verify the last tool message is the tool serialization (final message may be assistant content)
+    messages = history.messages
     tool_msg = next(msg for msg in reversed(messages) if msg.get("role") == "tool")
     assert tool_msg["role"] == "tool"
     assert tool_msg["tool_name"] == "apply_text_patch"
@@ -104,8 +109,6 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
     assert result["success"] is True
     assert result["file_path"] == "webos/css/style.css"
     assert result["error"] is None
-    assert isinstance(result["diff"], str)
-    assert result["diff"].startswith("--- webos/css/style.css (before)\n+++ webos/css/style.css (after)\n")
 
 
 @pytest.mark.unit
@@ -117,9 +120,8 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
         name="apply_text_patch",
         arguments={
             "path": "webos/css/style.css",
-            "start_line": 45,
-            "end_line": 45,
-            "replacement": "  box-shadow: 0 4px 15px rgba(0, 0, 0, 20%);\n}",
+            "old_text": "nonexistent text",
+            "new_text": "  box-shadow: 0 4px 15px rgba(0, 0, 0, 20%);\n}",
         },
     ))
     resp1 = _Resp(_Message(content=None, thinking=None, tool_calls=[tc]))
@@ -129,20 +131,20 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
 
     monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp1, resp2]))
 
-    def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
-        return ApplyPatchResult(success=False, file_path=path, diff=None, error="Invalid line range")
+    def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
+        return ApplyPatchResult(success=False, file_path=path, error="No match found")
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": "x"}]
-    async for _content, _thinking in run_tool_call_loop(messages, tools=[apply_text_patch], model="dummy"):
+    history = ConversationHistory([{"role": "system", "content": "x"}])
+    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
+    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
         pass
 
-    tool_msg = next(msg for msg in reversed(messages) if msg.get("role") == "tool")
+    tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     payload = json.loads(tool_msg["content"])
     assert "result" in payload
     result = payload["result"]
     assert result["success"] is False
-    assert result["error"] == "Invalid line range"
-    assert result["diff"] is None
+    assert result["error"] == "No match found"
 
 
 @pytest.mark.unit
@@ -161,11 +163,12 @@ async def test_tool_serialization_tool_exception_as_error(monkeypatch):
     def explode(x: int) -> str:
         raise RuntimeError("boom")
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": "x"}]
-    async for _content, _thinking in run_tool_call_loop(messages, tools=[explode], model="dummy"):
+    history = ConversationHistory([{"role": "system", "content": "x"}])
+    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[explode])
+    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
         pass
 
-    tool_msg = next(msg for msg in reversed(messages) if msg.get("role") == "tool")
+    tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     payload = json.loads(tool_msg["content"])
     assert "error" in payload and "result" not in payload
     assert "boom" in payload["error"]
@@ -187,11 +190,80 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
     async def run_bash_cmd(cmd: str) -> dict[str, Any]:
         return {"stdout": "hi\n", "stderr": None, "exit_code": 0}
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": "x"}]
-    async for _content, _thinking in run_tool_call_loop(messages, tools=[run_bash_cmd], model="dummy"):
+    history = ConversationHistory([{"role": "system", "content": "x"}])
+    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[run_bash_cmd])
+    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
         pass
 
-    tool_msg = next(msg for msg in reversed(messages) if msg.get("role") == "tool")
+    tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     payload = json.loads(tool_msg["content"])
     assert "result" in payload
     assert payload["result"] == {"stdout": "hi\n", "stderr": None, "exit_code": 0}
+
+
+# ── persist_thinking tests ──────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_thinking_true_stores_thinking_in_history(monkeypatch):
+    """When persist_thinking=True, thinking is stored in the assistant message."""
+    resp = _Resp(_Message(content="hello", thinking="deep thought", tool_calls=[]))
+
+    import agents.ollama.sdk.tool_loop as mod
+
+    monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp]))
+
+    history = ConversationHistory([{"role": "system", "content": "x"}])
+    agent = Agent(
+        name="Test", description="d", instruction="x",
+        model="dummy", options={}, tools=[],
+        persist_thinking=True,
+    )
+    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
+        pass
+
+    assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
+    assert assistant_msg["thinking"] == "deep thought"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_thinking_false_excludes_thinking_from_history(monkeypatch):
+    """When persist_thinking=False, thinking is None in history but still emitted."""
+    resp = _Resp(_Message(content="hello", thinking="deep thought", tool_calls=[]))
+
+    import agents.ollama.sdk.tool_loop as mod
+
+    monkeypatch.setattr(mod, "AsyncClient", lambda *_, **__: _ClientScript([resp]))
+
+    # Capture events to verify thinking is still emitted
+    emitted_events = []
+    original_publish = mod.publish_event
+
+    def _capture_publish(event):
+        emitted_events.append(event)
+        return original_publish(event)
+
+    monkeypatch.setattr(mod, "publish_event", _capture_publish)
+
+    history = ConversationHistory([{"role": "system", "content": "x"}])
+    agent = Agent(
+        name="Test", description="d", instruction="x",
+        model="dummy", options={}, tools=[],
+        persist_thinking=False,
+    )
+    yielded_thinking = []
+    async for _content, thinking in run_tool_call_loop(history, agent=agent):
+        yielded_thinking.append(thinking)
+
+    # History should NOT contain thinking
+    assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
+    assert assistant_msg["thinking"] is None
+
+    # But thinking should still be yielded to the caller
+    assert "deep thought" in yielded_thinking
+
+    # And the AssistantResponse event should contain thinking
+    content_events = [e for e in emitted_events if hasattr(e, "thinking") and e.thinking]
+    assert any(e.thinking == "deep thought" for e in content_events)

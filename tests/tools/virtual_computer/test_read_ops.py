@@ -28,12 +28,20 @@ class DummyConfig:
 def test_read_file_full_and_range() -> None:
 	with tempfile.TemporaryDirectory() as tmp_home:
 		with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-			content = "one\n two\nthree\n"
-			write_file("a.txt", content)
+			write_file("a.txt", "one\n two\nthree\n")
 			full = read_file("a.txt")
-			assert full.success and full.content == content
+			# Content now includes cat-n style line numbers
+			assert full.success
+			assert full.content is not None
+			assert "one\n" in full.content
+			assert "two\n" in full.content
+			assert "three\n" in full.content
+			assert full.content.startswith("     1\t")
 			r = read_file("a.txt", start=2, end=2)
-			assert r.success and r.content == " two\n"
+			assert r.success
+			assert r.content is not None
+			assert "two\n" in r.content
+			assert r.content.startswith("     2\t")
 
 
 @pytest.mark.unit
@@ -43,8 +51,15 @@ def test_head_and_tail_defaults() -> None:
 			lines = "".join(f"L{i}\n" for i in range(1, 11))
 			write_file("b.txt", lines)
 			h = head("b.txt", n=3)
-			assert h.success and h.content == "L1\nL2\nL3\n"
+			assert h.success
+			assert h.content is not None
+			assert "L1\n" in h.content
+			assert "L3\n" in h.content
+			assert "L4" not in h.content
 			t = tail("b.txt", n=2)
-			# Standard tail semantics: last two lines when trailing newline present
-			assert t.success and t.content == "L9\nL10\n"
+			assert t.success
+			assert t.content is not None
+			assert "L9\n" in t.content
+			assert "L10\n" in t.content
+			assert "L8" not in t.content
 

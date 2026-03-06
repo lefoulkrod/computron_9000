@@ -3,8 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tools.browser import BrowserToolError
-from tools.browser.core.page_view import PageView
-from tools.browser.interactions import InteractionResult, click
+from tools.browser.interactions import click
 from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
@@ -36,15 +35,13 @@ async def test_click_by_text(
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     result = await click("Continue")
-    assert isinstance(result, InteractionResult)
-    assert result.page_changed is True
-    assert result.reason == "browser-navigation"
-    snap: PageView = result.page_view
-    assert snap.url == "https://example.test/after"
-    assert snap.title == "After Click"
-    assert "Arrived" in snap.content
+    assert isinstance(result, str)
+    assert "page_changed: yes" in result
+    assert "browser-navigation" in result
+    assert "https://example.test/after" in result
+    assert "After Click" in result
+    assert "Arrived" in result
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [True]
 
 
 @pytest.mark.unit
@@ -71,13 +68,11 @@ async def test_click_by_css_selector(
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     result = await click(".cta")
-    assert result.page_changed is True
-    assert result.reason == "browser-navigation"
-    snap = result.page_view
-    assert snap.url.endswith("/cta")
-    assert snap.title == "After Click"
+    assert "page_changed: yes" in result
+    assert "browser-navigation" in result
+    assert "/cta" in result
+    assert "After Click" in result
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [True]
 
 
 @pytest.mark.unit
@@ -86,14 +81,7 @@ async def test_click_role_name_suggests_full_name_on_partial_match(
     monkeypatch: pytest.MonkeyPatch,
     patch_interactions_browser,
 ) -> None:
-    """Surfaces the full accessible name when visible text is only a prefix.
-
-    Amazon's checkout button has visible text "Proceed to checkout" but the
-    Playwright accessible name is "Proceed to checkout Check out Amazon Cart"
-    (from hidden text in the aria-labelledby target).  The exact match fails,
-    so _resolve_locator raises an error suggesting the full name instead of
-    silently clicking a fuzzy match (which could target the wrong element).
-    """
+    """Surfaces the full accessible name when visible text is only a prefix."""
     page = StubPage(
         title="Cart",
         body_text="Shopping Cart",
@@ -109,7 +97,6 @@ async def test_click_role_name_suggests_full_name_on_partial_match(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    # Agent uses the visible text — should get a helpful error, not a silent click
     with pytest.raises(BrowserToolError, match="No exact match"):
         await click("button:Proceed to checkout")
 
@@ -139,11 +126,10 @@ async def test_click_role_name_works_with_full_accessible_name(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    # Agent retries with the full name from the error suggestion
     result = await click("button:Proceed to checkout Check out Amazon Cart")
-    assert isinstance(result, InteractionResult)
-    assert result.page_changed is True
-    assert result.page_view.url == "https://example.test/checkout"
+    assert isinstance(result, str)
+    assert "page_changed: yes" in result
+    assert "https://example.test/checkout" in result
 
 
 @pytest.mark.unit

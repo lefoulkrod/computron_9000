@@ -7,7 +7,14 @@ from agents.ollama.sdk.run_agent_tools import (
     AgentToolConversionError,
     make_run_agent_as_tool_function,
 )
-from agents.types import Agent
+
+
+_AGENT_KWARGS = {
+    "name": "Test Agent",
+    "description": "desc",
+    "instruction": "do it",
+    "tools": [],
+}
 
 
 @pytest.mark.unit
@@ -37,16 +44,7 @@ async def test_json_parse_retries_then_succeeds(monkeypatch):
 
     monkeypatch.setattr(mod.json, "loads", flaky_loads)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-
-    tool_fn = make_run_agent_as_tool_function(agent, "Retries", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     res = await tool_fn("x")
     assert res == payload
     # ensure we actually retried
@@ -73,16 +71,7 @@ async def test_json_parse_retry_exhaustion_raises(monkeypatch):
 
     monkeypatch.setattr(mod.json, "loads", always_fail)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-
-    tool_fn = make_run_agent_as_tool_function(agent, "Retries", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(AgentToolConversionError):
         await tool_fn("x")
 
@@ -120,16 +109,7 @@ async def test_tool_loop_is_rerun_each_retry(monkeypatch):
 
     monkeypatch.setattr(mod.json, "loads", flaky_loads)
 
-    agent = Agent(
-        name="Retry Counter Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-
-    tool_fn = make_run_agent_as_tool_function(agent, "Retries", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     res = await tool_fn("instructions")
 
     assert res == payload

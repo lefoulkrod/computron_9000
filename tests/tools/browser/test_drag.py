@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tools.browser import BrowserToolError
-from tools.browser.interactions import InteractionResult, drag
+from tools.browser.interactions import drag
 from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
@@ -43,15 +43,13 @@ async def test_drag_with_target_selector(
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
     result = await drag("#handle", target=".drop-zone")
-    assert isinstance(result, InteractionResult)
-    assert result.page_changed is False
-    assert result.reason == "no-change"
-    assert result.page_view is None
+    assert isinstance(result, str)
+    assert "page_changed: no" in result
+    assert "no-change" in result
     assert page.drag_calls == [
         {"source": source_locator, "target": target_locator, "offset": None}
     ]
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit
@@ -73,14 +71,12 @@ async def test_drag_with_offset(
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
     result = await drag("Drag me", offset=(25, -10))
-    assert result.page_changed is False
-    assert result.reason == "no-change"
-    assert result.page_view is None
+    assert "page_changed: no" in result
+    assert "no-change" in result
     assert page.drag_calls == [
         {"source": source_locator, "target": None, "offset": (25.0, -10.0)}
     ]
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit

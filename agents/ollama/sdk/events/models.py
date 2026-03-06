@@ -45,24 +45,155 @@ class ToolCallPayload(BaseModel):
     name: str
 
 
-class BrowserSnapshotPayload(BaseModel):
-    """Metadata for browser snapshot events.
+class BrowserScreenshotPayload(BaseModel):
+    """Metadata for browser screenshot events.
 
     Attributes:
-        type: Discriminator for the event payload; always "browser_snapshot" for this model.
+        type: Discriminator for the event payload; always "browser_screenshot" for this model.
         url: The current URL of the browser page.
         title: The page title.
         screenshot: Base64-encoded PNG screenshot of the viewport.
     """
 
-    type: Literal["browser_snapshot"]
+    type: Literal["browser_screenshot"]
     url: str
     title: str
     screenshot: str  # base64 encoded PNG
 
 
+class FileOutputPayload(BaseModel):
+    """Metadata for file output events.
+
+    Attributes:
+        type: Discriminator for the event payload; always "file_output" for this model.
+        filename: The name of the file (basename for display/download).
+        content_type: The MIME type of the file (e.g., "text/csv", "image/png").
+        content: Base64-encoded file content (legacy, prefer ``path``).
+        path: Absolute container path served by the file route.
+    """
+
+    type: Literal["file_output"]
+    filename: str
+    content_type: str
+    content: str | None = None
+    path: str | None = None
+
+
+class ToolCreatedPayload(BaseModel):
+    """Emitted when a new custom tool is successfully created.
+
+    Attributes:
+        type: Discriminator; always "tool_created".
+        name: The name of the newly created tool.
+    """
+
+    type: Literal["tool_created"]
+    name: str
+
+
+class AudioPlaybackPayload(BaseModel):
+    """Emitted when the agent wants to play audio directly in the browser.
+
+    Attributes:
+        type: Discriminator; always "audio_playback".
+        content_type: MIME type of the audio (e.g. "audio/mpeg").
+        content: Base64-encoded audio content.
+    """
+
+    type: Literal["audio_playback"]
+    content_type: str
+    content: str  # base64 encoded
+
+
+class TerminalOutputPayload(BaseModel):
+    """Emitted when a bash command starts or completes in the virtual computer.
+
+    Two events are published per command: one with ``status="running"`` before
+    execution begins (carrying only the command text), and one with
+    ``status="completed"`` after execution finishes (carrying output and exit
+    code).  Both share the same ``cmd_id`` so the frontend can correlate them.
+
+    Attributes:
+        type: Discriminator; always "terminal_output".
+        cmd_id: Unique identifier linking the running/completed pair.
+        cmd: The command that was executed.
+        status: Either "running" or "completed".
+        stdout: Standard output text, if any.
+        stderr: Standard error text, if any.
+        exit_code: Exit code of the command, if available.
+    """
+
+    type: Literal["terminal_output"]
+    cmd_id: str
+    cmd: str
+    status: Literal["running", "streaming", "completed"] = "completed"
+    stdout: str | None = None
+    stderr: str | None = None
+    exit_code: int | None = None
+
+
+class ContextUsagePayload(BaseModel):
+    """Emitted after each LLM call with current context window usage.
+
+    Attributes:
+        type: Discriminator; always "context_usage".
+        context_used: Prompt + completion tokens consumed on the last call.
+        context_limit: The model's context window size.
+        fill_ratio: Fraction of the context window consumed (0.0–1.0+).
+    """
+
+    type: Literal["context_usage"]
+    context_used: int
+    context_limit: int
+    fill_ratio: float
+
+
+class GenerationPreviewPayload(BaseModel):
+    """Emitted during image/video generation to stream progress and previews.
+
+    Multiple events share the same ``gen_id`` to track a single generation.
+    For images, ``preview`` contains a TAESD-decoded JPEG at each step.
+    For video, ``preview`` is sent periodically (first frame only).
+    On completion, ``output`` contains the base64-encoded final file.
+
+    Attributes:
+        type: Discriminator; always "generation_preview".
+        gen_id: Unique identifier correlating progress events.
+        media_type: Either "image" or "video".
+        status: Current generation phase.
+        step: Current inference step number.
+        total_steps: Total inference steps.
+        preview: Base64-encoded JPEG preview image.
+        message: Human-readable status text.
+        output: Base64-encoded final file on completion.
+        output_content_type: MIME type of the final output.
+    """
+
+    type: Literal["generation_preview"]
+    gen_id: str
+    media_type: str
+    status: Literal["loading", "generating", "complete", "failed"]
+    step: int | None = None
+    total_steps: int | None = None
+    preview: str | None = None
+    message: str | None = None
+    output: str | None = None
+    output_content_type: str | None = None
+    output_path: str | None = None
+
+
 # Extend this alias with additional payload models as new event types are introduced.
-AssistantEventPayload = Annotated[ToolCallPayload | BrowserSnapshotPayload, Field(discriminator="type")]
+AssistantEventPayload = Annotated[
+    ToolCallPayload
+    | BrowserScreenshotPayload
+    | FileOutputPayload
+    | ToolCreatedPayload
+    | AudioPlaybackPayload
+    | TerminalOutputPayload
+    | GenerationPreviewPayload
+    | ContextUsagePayload,
+    Field(discriminator="type"),
+]
 
 
 class AssistantResponse(BaseModel):
@@ -97,6 +228,12 @@ __all__ = [
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",
-    "BrowserSnapshotPayload",
+    "AudioPlaybackPayload",
+    "BrowserScreenshotPayload",
+    "ContextUsagePayload",
+    "FileOutputPayload",
+    "GenerationPreviewPayload",
+    "TerminalOutputPayload",
     "ToolCallPayload",
+    "ToolCreatedPayload",
 ]

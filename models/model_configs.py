@@ -27,6 +27,22 @@ def get_default_model() -> ModelConfig:
     return get_model_by_name(default_model)
 
 
+def get_think_for_model_str(model_str: str) -> bool | None:
+    """Return the think flag for the first config entry whose model string matches.
+
+    Args:
+        model_str (str): The model identifier string (e.g. ``glm-4.7-flash:q8_0``).
+
+    Returns:
+        bool | None: The think value, or None if no matching config is found.
+    """
+    config = load_config()
+    for model_cfg in config.models:
+        if model_cfg.model == model_str:
+            return model_cfg.think
+    return None
+
+
 def get_model_by_name(name: str) -> ModelConfig:
     """Return a model configuration by name.
 

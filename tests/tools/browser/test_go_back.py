@@ -3,8 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tools.browser import BrowserToolError
-from tools.browser.core.page_view import PageView
-from tools.browser.interactions import InteractionResult, go_back
+from tools.browser.interactions import go_back
 from tests.tools.browser.support.playwright_stubs import StubPage
 
 
@@ -27,15 +26,12 @@ async def test_go_back_navigates_backward(
     patch_interactions_browser(page)
 
     result = await go_back()
-    assert isinstance(result, InteractionResult)
-    assert result.page_changed is True
-    assert result.reason == "browser-navigation"
-    snapshot = result.page_view
-    assert isinstance(snapshot, PageView)
-    assert snapshot.url == "https://example.test/start"
-    assert "Start body" in snapshot.content
+    assert isinstance(result, str)
+    assert "page_changed: yes" in result
+    assert "browser-navigation" in result
+    assert "https://example.test/start" in result
+    assert "Start body" in result
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [True]
 
 
 @pytest.mark.unit

@@ -7,63 +7,117 @@ import random
 
 from playwright.async_api import Error as PlaywrightError
 
+from .core import get_active_view
+from .core._formatting import format_interaction_result, format_page_view
 from .core._selectors import _resolve_locator
-from .core.browser import get_browser
 from .core.exceptions import BrowserToolError
 from .core.human import human_click, human_press_keys
-from .interactions import InteractionResult, _build_snapshot
+from .interactions import _build_snapshot
 
 logger = logging.getLogger(__name__)
 
+# Maximum options to navigate via keyboard before falling back to JS.
+# Keeps the interaction time reasonable for long option lists.
+_MAX_KEYBOARD_NAV_STEPS = 30
 
-async def select_option(selector: str, value: str, wait_after_select_ms: int | None = None) -> InteractionResult:
-    """Select an option from a <select> dropdown by visible text.
 
-    Automatically handles HTML <select> elements with human-like interaction:
-    clicks to open, navigates with arrow keys, presses Enter to select.
+async def _keyboard_select(
+    page: object,
+    select_handle: object,
+    target_index: int,
+) -> bool:
+    """Try to select an option using keyboard navigation (trusted events).
 
-    Supports bare role selectors for dropdowns without an accessible name::
+    Presses Home to reset to first option, then ArrowDown × target_index,
+    then Enter.  All key presses generate ``isTrusted: true`` events.
 
-        select_option("combobox", "Newest")          # bare role
-        select_option("combobox:", "Newest")          # trailing colon also works
-        select_option("combobox:Sort by", "Newest")   # role:name when labelled
+    Returns ``True`` if the native ``<select>`` element's ``selectedIndex``
+    matches ``target_index`` after navigation, ``False`` otherwise.
+    """
+    if target_index > _MAX_KEYBOARD_NAV_STEPS:
+        logger.debug(
+            "Target index %d exceeds keyboard nav limit %d; skipping keyboard approach",
+            target_index,
+            _MAX_KEYBOARD_NAV_STEPS,
+        )
+        return False
+
+    try:
+        # Home resets to the first option in a native <select>.
+        await human_press_keys(page, ["Home"])  # type: ignore[arg-type]
+        await page.wait_for_timeout(random.randint(30, 80))  # type: ignore[union-attr]
+
+        # Navigate down to the target option
+        for _ in range(target_index):
+            await human_press_keys(page, ["ArrowDown"])  # type: ignore[arg-type]
+            await page.wait_for_timeout(random.randint(20, 60))  # type: ignore[union-attr]
+
+        # Confirm selection
+        await human_press_keys(page, ["Enter"])  # type: ignore[arg-type]
+        await page.wait_for_timeout(random.randint(50, 150))  # type: ignore[union-attr]
+
+        # Verify the native <select> actually changed
+        actual_index = await select_handle.evaluate("el => el.selectedIndex")  # type: ignore[union-attr]
+        if actual_index == target_index:
+            logger.debug("Keyboard navigation succeeded: selectedIndex=%d", actual_index)
+            return True
+
+        logger.debug(
+            "Keyboard navigation landed on index %d instead of %d; will fall back to JS",
+            actual_index,
+            target_index,
+        )
+        return False
+    except (PlaywrightError, Exception) as exc:
+        logger.debug("Keyboard navigation failed: %s", exc)
+        return False
+
+
+async def _js_select(select_handle: object, target_index: int) -> None:
+    """Fall back to setting selectedIndex via JS with synthetic events.
+
+    Event dispatch is wrapped in try/catch because some pages' handlers
+    assume internal state from a real native interaction and can throw.
+    """
+    await select_handle.evaluate(  # type: ignore[union-attr]
+        """(el, idx) => {
+            el.selectedIndex = idx;
+            try {
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch (_) {
+                // Page-side handler errors should not prevent selection.
+            }
+        }""",
+        target_index,
+    )
+
+
+async def select_option(selector: str, value: str, wait_after_select_ms: int | None = None) -> str:
+    """Select an option from a ``<select>`` dropdown by visible text.
 
     Args:
-        selector: Element selector in ``role:name`` format from snapshot output,
-            bare role (e.g. ``"combobox"``), or CSS selector.
-        value: Exact visible text of the option to select (case-sensitive).
-            Example: "Newest" or "Price: Low to High".
-        wait_after_select_ms: Optional milliseconds to wait after selecting (for page updates).
+        selector: ``role:name`` selector for the dropdown.  Examples:
+            ``"combobox:Sort by"``, ``"combobox"`` (bare role for unlabelled).
+        value: Exact visible text of the option (case-sensitive).
+            Example: ``"Price: Low to High"``.
+        wait_after_select_ms: Optional ms to wait after selecting.
 
     Returns:
-        InteractionResult: Change metadata plus snapshot if page changed.
+        Formatted string with action header and page snapshot.
 
     Raises:
-        BrowserToolError: If dropdown not found, option text doesn't match, or selection fails.
-
-    Example:
-        # From snapshot: [combobox] Sort by = Newest
-        result = select_option("combobox:Sort by", "Price: Low to High")
+        BrowserToolError: If dropdown not found or option text doesn't match.
     """
     logger.info("Selecting option '%s' from dropdown '%s'", value, selector)
 
-    try:
-        browser = await get_browser()
-        page = await browser.current_page()
-    except (PlaywrightError, RuntimeError) as exc:
-        logger.exception("Unable to access browser page for select_option")
-        msg = "Unable to access browser page"
-        raise BrowserToolError(msg, tool="select_option") from exc
-
-    if page.url in {"", "about:blank"}:
-        msg = "Navigate to a page before attempting to select options."
-        raise BrowserToolError(msg, tool="select_option")
+    browser, view = await get_active_view("select_option")
 
     try:
         # Resolve selector using shared resolution (supports role:name and
         # bare role formats like "combobox" for unlabelled dropdowns).
         resolution = await _resolve_locator(
-            page,
+            view.frame,
             selector.strip(),
             allow_substring_text=False,
             require_single_match=True,
@@ -75,67 +129,80 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
 
         select_locator = resolution.locator
 
-        # First, get all options to find the index of the desired value
-        options = await select_locator.locator("option").all_text_contents()
+        # Get all options to find the index of the desired value
+        options = [o.strip() for o in await select_locator.locator("option").all_text_contents()]
         try:
             target_index = options.index(value)
         except ValueError as exc:
             msg = f"Option '{value}' not found in dropdown. Available options: {options}"
             raise BrowserToolError(msg, tool="select_option") from exc
 
-        # Get currently selected index
-        current_value = await select_locator.input_value()
-        option_values = await select_locator.locator("option").evaluate_all("options => options.map(o => o.value)")
-        try:
-            current_index = option_values.index(current_value) if current_value else 0
-        except ValueError:
-            current_index = 0
+        # Pin an ElementHandle so DOM changes (e.g. custom overlay opening)
+        # don't invalidate our reference — positional locators like .nth(1)
+        # break when the page adds/removes elements.
+        select_handle = await select_locator.element_handle(timeout=5000)
 
-        # Define the selection action with human-like behavior
+        # Get the page for wait_for_timeout calls
+        page = await browser.current_page()
+
         async def _perform_select() -> None:
-            # Step 1: Click the select element to open it (human-like with mouse movement)
-            await human_click(page, select_locator)
-
-            # Step 2: Brief pause (human reading options) - 100-300ms
+            # Click the dropdown to open it (human-like mouse movement).
+            await human_click(view.frame, select_locator)
             await page.wait_for_timeout(random.randint(100, 300))
 
-            # Step 3: Navigate to the option using arrow keys
-            # Calculate how many arrow key presses needed
-            steps = target_index - current_index
+            # Try keyboard navigation first — generates isTrusted:true events
+            # that avoid bot detection.  Falls back to JS if the keyboard
+            # approach doesn't land on the right option (custom overlays can
+            # intercept keys and shift the cursor unpredictably).
+            # _keyboard_select needs a Page (not Frame) for wait_for_timeout
+            kb_ok = await _keyboard_select(page, select_handle, target_index)
 
-            if steps > 0:
-                # Press ArrowDown to move forward
-                keys = ["ArrowDown"] * steps
-            elif steps < 0:
-                # Press ArrowUp to move backward
-                keys = ["ArrowUp"] * abs(steps)
-            else:
-                # Already on the right option, just press Enter
-                keys = []
+            if not kb_ok:
+                logger.debug("Falling back to JS selectedIndex for '%s'", value)
+                await _js_select(select_handle, target_index)
+                # Close any open overlay
+                await human_press_keys(view.frame, ["Escape"])
+            # else: keyboard Enter already closed the dropdown
 
-            if keys:
-                await human_press_keys(page, keys)
-                # Brief pause after navigation - 50-150ms
-                await page.wait_for_timeout(random.randint(50, 150))
-
-            # Step 4: Press Enter to select
-            await human_press_keys(page, ["Enter"])
-
-            # Step 5: Optional additional wait
             if wait_after_select_ms:
                 await page.wait_for_timeout(wait_after_select_ms)
 
         # Perform interaction and check for page changes
-        browser_result = await browser.perform_interaction(page, _perform_select)
-        annotated = None
+        browser_result = await browser.perform_interaction(_perform_select)
+
+        if browser_result.download is not None:
+            pv_str = format_page_view(
+                title="File Download",
+                url="",
+                status_code=200,
+                content="",
+                viewport={"scroll_top": 0, "viewport_height": 0, "viewport_width": 0, "document_height": 0},
+                truncated=False,
+                downloaded_file=browser_result.download,
+            )
+            return format_interaction_result(
+                reason=browser_result.reason,
+                page_changed=browser_result.page_changed,
+                page_view_str=pv_str,
+            )
+
+        pv_str = None
         if browser_result.page_changed:
-            annotated = await _build_snapshot(page, browser_result.navigation_response)
+            annotated = await _build_snapshot(browser_result.navigation_response)
+            pv_str = format_page_view(
+                title=annotated.title,
+                url=annotated.url,
+                status_code=annotated.status_code,
+                viewport=annotated.viewport,
+                content=annotated.content,
+                truncated=annotated.truncated,
+            )
 
         logger.info("Select option result: %s", browser_result.reason)
-        return InteractionResult(
-            page_view=annotated,
-            page_changed=browser_result.page_changed,
+        return format_interaction_result(
             reason=browser_result.reason,
+            page_changed=browser_result.page_changed,
+            page_view_str=pv_str,
         )
     except BrowserToolError:
         raise

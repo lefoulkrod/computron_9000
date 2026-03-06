@@ -19,12 +19,15 @@ import asyncio
 import logging
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Page, Response
+from playwright.async_api import Response
 from pydantic import BaseModel
+
+from tools.browser.core._file_detection import DownloadInfo
+from tools.browser.core.browser import ActiveView
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BUDGET = 4000
+DEFAULT_BUDGET = 8000
 MAX_NAME_LEN = 150  # Increased from 80 to reduce truncation of long button names (e.g., Amazon Delete buttons)
 
 
@@ -46,18 +49,20 @@ class PageView(BaseModel):
     content: str = ""
     viewport: dict[str, int] = {}
     truncated: bool = False
+    downloaded_file: DownloadInfo | None = None
 
 
 # ---------------------------------------------------------------------------
 # JavaScript DOM walker
 # ---------------------------------------------------------------------------
 # Executed via a single page.evaluate() call.  Accepts a params object:
-#   { budget: number, scopeQuery: string | null, nameLimit: number }
+#   { budget: number, scopeQuery: string | null, nameLimit: number,
+#     fullPage: boolean }
 # Returns: { content: string, truncated: boolean }
 
 _ANNOTATED_SNAPSHOT_JS = """
 (params) => {
-  const { budget, scopeQuery, nameLimit } = params;
+  const { budget, scopeQuery, nameLimit, fullPage } = params;
   const vh = window.innerHeight;
   const vw = window.innerWidth;
 
@@ -108,13 +113,27 @@ _ANNOTATED_SNAPSHOT_JS = """
       const ref = document.getElementById(lb);
       if (ref) return (ref.innerText || ref.textContent || '').trim();
     }
-    // inputs: label[for] first (matches Playwright's accessible name), then placeholder, then value
+    // inputs: label first (matches Playwright's accessible name), then placeholder, then value
     const tag = el.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      // Explicit label[for=id]
       const id = el.getAttribute('id');
       if (id) {
         const lbl = document.querySelector('label[for="' + id + '"]');
         if (lbl) return lbl.textContent.trim();
+      }
+      // Implicit wrapping label: <label>Text <input></label>
+      const wrappingLabel = el.closest('label');
+      if (wrappingLabel) {
+        // Get only the label's own text, excluding the input's value/placeholder
+        let labelText = '';
+        for (const node of wrappingLabel.childNodes) {
+          if (node.nodeType === 3) labelText += node.textContent;
+          else if (node !== el && node.nodeType === 1 && !['INPUT','TEXTAREA','SELECT'].includes(node.tagName))
+            labelText += (node.innerText || node.textContent || '');
+        }
+        labelText = labelText.trim();
+        if (labelText) return labelText;
       }
       const ph = el.getAttribute('placeholder');
       if (ph) return ph.trim();
@@ -124,6 +143,10 @@ _ANNOTATED_SNAPSHOT_JS = """
         if (val) return val.trim();
       }
     }
+    // For <select> without a label, don't fall through to innerText —
+    // innerText gives option text which doesn't match Playwright's
+    // accessible name (ARIA spec only uses label/aria-label/aria-labelledby).
+    if (tag === 'SELECT') return '';
     // img alt
     if (tag === 'IMG') return (el.getAttribute('alt') || '').trim();
     // innerText (for buttons, links, etc.)
@@ -136,6 +159,61 @@ _ANNOTATED_SNAPSHOT_JS = """
     return n.substring(0, nameLimit) + '...';
   }
 
+  // ---- Inline text containers ----
+  // Detects containers whose children are all inline/phrasing elements
+  // with no interactive elements.  These should be emitted as a single
+  // text chunk rather than recursed into — prevents fragmented output
+  // when search engines wrap query terms in <b>/<strong> tags.
+  const INLINE_TAGS = new Set([
+    'B','STRONG','EM','I','U','S','SMALL','MARK','ABBR','CITE',
+    'CODE','DFN','KBD','SAMP','VAR','SUB','SUP','SPAN','BDI','BDO',
+    'DATA','TIME','Q','WBR','BR','DEL','INS','RUBY','RP','RT','FONT'
+  ]);
+  function isTextContainer(el) {
+    if (el.shadowRoot) return false;  // Shadow DOM may contain interactive elements
+    if (el.children.length === 0) return false;
+    // Never collapse containers with interactive descendants — their
+    // annotations would be lost.
+    if (el.querySelector('a[href], button, input, select, textarea, [role]')) return false;
+    for (const child of el.children) {
+      if (!INLINE_TAGS.has(child.tagName)) return false;
+    }
+    return true;
+  }
+
+  // ---- Implicit interactivity ----
+  // Detects elements that are clickable but lack proper ARIA roles.
+  // Common in SPA widgets: <a> without href, <div> with cursor:pointer, etc.
+  function isImplicitlyInteractive(el) {
+    const tag = el.tagName;
+    if (tag === 'BODY' || tag === 'HTML') return false;
+    // Skip elements that contain proper interactive descendants — the
+    // walker will annotate those children with their real roles instead.
+    if (el.querySelector('a[href], button, input, select, textarea')) return false;
+    if (el.shadowRoot && el.shadowRoot.querySelector('a[href], button, input, select, textarea')) return false;
+    // tabindex makes an element explicitly focusable/clickable
+    const ti = el.getAttribute('tabindex');
+    if (ti !== null && ti !== '-1') return true;
+    // cursor:pointer is the most common signal for custom interactive elements
+    const s = window.getComputedStyle(el);
+    if (s.cursor === 'pointer') {
+      // Skip if cursor:pointer is inherited from parent — only detect
+      // the element where cursor:pointer originates, not every child
+      // that inherits it (prevents hundreds of false positives on sites
+      // like Amazon where link/button children inherit cursor:pointer).
+      const parent = el.parentElement;
+      if (parent) {
+        const ps = window.getComputedStyle(parent);
+        if (ps.cursor === 'pointer') return false;
+      }
+      const text = (el.innerText || '').trim();
+      if (text.length > 0 && text.length < 80) return true;
+      // Accept image-only clickable elements (e.g. game cards, icon buttons)
+      if (el.querySelector('img, svg, canvas')) return true;
+    }
+    return false;
+  }
+
   // ---- Visibility / viewport ----
   const scrolled = window.scrollY > 50;
 
@@ -146,7 +224,17 @@ _ANNOTATED_SNAPSHOT_JS = """
     if (s.visibility === 'hidden' || parseFloat(s.opacity) === 0) return 'skip-self';
     // When the page is scrolled, skip sticky/fixed containers — they are
     // navigation chrome that repeats on every viewport and wastes budget.
-    if (scrolled && (s.position === 'sticky' || s.position === 'fixed')) return 'skip-tree';
+    // Exempt modals/dialogs: role="dialog"|"alertdialog" (WAI-ARIA spec),
+    // or large fixed overlays covering >50% of the viewport in both axes.
+    if (scrolled && (s.position === 'sticky' || s.position === 'fixed')) {
+      if (s.position === 'fixed') {
+        const role = el.getAttribute('role');
+        if (role === 'dialog' || role === 'alertdialog') return null;
+        const r = el.getBoundingClientRect();
+        if (r.width > vw * 0.5 && r.height > vh * 0.5) return null;
+      }
+      return 'skip-tree';
+    }
     return null;
   }
 
@@ -157,6 +245,8 @@ _ANNOTATED_SNAPSHOT_JS = """
   //             Children may still be visible so the walker should recurse.
   //   hidden  — element is entirely outside the viewport or zero-size
   function checkVisibility(el) {
+    // In full-page mode, skip viewport clipping — walk all content
+    if (fullPage) return 'visible';
     const r = el.getBoundingClientRect();
     // Zero-size elements with children should still recurse — the element
     // itself may be a CSS layout container (e.g. <main> on MDN) whose
@@ -271,6 +361,53 @@ _ANNOTATED_SNAPSHOT_JS = """
     return chars < budget;
   }
 
+  // Walk the child nodes of a container (element or shadow root).
+  // Handles mixed content (text + element nodes) and <slot> elements
+  // by walking their assignedNodes() to match rendered order.
+  function walkChildren(container) {
+    const hasMixed = container.childNodes.length > container.children.length;
+    if (hasMixed) {
+      for (const child of container.childNodes) {
+        if (chars >= budget) break;
+        if (child.nodeType === 3) {
+          const text = child.textContent.trim();
+          if (text.length > 1) emit(text);
+        } else if (child.nodeType === 1) {
+          walkSlotOrElement(child);
+        }
+      }
+    } else {
+      for (const child of container.children) {
+        if (chars >= budget) break;
+        walkSlotOrElement(child);
+      }
+    }
+  }
+
+  function walkSlotOrElement(el) {
+    if (el.tagName === 'SLOT') {
+      try {
+        const assigned = el.assignedNodes();
+        if (assigned.length > 0) {
+          for (const node of assigned) {
+            if (chars >= budget) break;
+            if (node.nodeType === 3) {
+              const text = node.textContent.trim();
+              if (text.length > 1) emit(text);
+            } else if (node.nodeType === 1) {
+              walk(node, false);
+            }
+          }
+        } else {
+          // No assigned nodes — walk slot's default/fallback content
+          walkChildren(el);
+        }
+      } catch (_e) { /* slot traversal failed — skip */ }
+    } else {
+      walk(el, false);
+    }
+  }
+
   function walk(el, isRoot) {
     if (chars >= budget) return;
 
@@ -307,20 +444,50 @@ _ANNOTATED_SNAPSHOT_JS = """
     // Interactive elements: emit annotation, don't walk children
     if (role && INTERACTIVE.has(role)) {
       let name = getName(el);
-      if (!name) return;
-      name = truncName(name);
+      // Nameless comboboxes should still render (common on sites like
+      // Amazon where <select> has no label/aria-label).
+      if (!name && role !== 'combobox' && el.tagName !== 'SELECT') return;
+      name = name ? truncName(name) : '';
 
       if (role === 'combobox' || el.tagName === 'SELECT') {
         const sel = el.querySelector('option:checked,option[selected]');
         const sv = sel ? sel.textContent.trim() : '';
-        emit('[' + role + '] ' + name + (sv ? ' = ' + sv : ''));
-      } else if (role === 'checkbox' || role === 'radio') {
+        emit('[' + role + ']' + (name ? ' ' + name : '') + (sv ? ' = ' + sv : ''));
+      } else if (role === 'checkbox' || role === 'radio' || role === 'switch') {
         const checked = el.checked || el.getAttribute('aria-checked') === 'true';
         emit('[' + role + '] ' + name + (checked ? ' (checked)' : ''));
+      } else if (role === 'textbox' || role === 'searchbox' || role === 'spinbutton' || role === 'slider') {
+        // Show current input value so the agent can verify fills worked
+        const val = (el.value != null && el.value !== '') ? el.value : '';
+        const display = val ? truncName(val) : '';
+        emit('[' + role + '] ' + name + (display ? ' = ' + display : ''));
       } else {
         emit('[' + role + '] ' + name);
       }
       return;
+    }
+
+    // Detect clickable non-semantic elements (custom widgets, date pickers, etc.)
+    // Also catches elements with non-interactive ARIA roles (e.g. gridcell,
+    // cell, row, group) that are clickable via cursor:pointer — the
+    // INTERACTIVE check above already returned for true widget roles.
+    if (isImplicitlyInteractive(el)) {
+      let name = (el.innerText || '').trim();
+      // Fall back to child image alt text for image-only clickable elements
+      if (!name || name.length >= 80) {
+        const img = el.querySelector('img[alt]');
+        if (img) name = (img.getAttribute('alt') || '').trim();
+      }
+      // Last resort: use data attributes or aria-label for identification
+      if (!name) name = el.getAttribute('aria-label') || el.dataset.image || el.dataset.name || '';
+      if (name && name.length < 80) {
+        // Tag the element with ARIA attributes so Playwright's
+        // get_by_role can locate it for click/interaction tools.
+        el.setAttribute('role', 'button');
+        el.setAttribute('aria-label', name);
+        emit('[button] ' + truncName(name));
+        return;
+      }
     }
 
     // Headings
@@ -338,8 +505,8 @@ _ANNOTATED_SNAPSHOT_JS = """
       return;
     }
 
-    // Leaf text node (no element children)
-    if (el.children.length === 0) {
+    // Leaf text node (no element children and no shadow root)
+    if (el.children.length === 0 && !el.shadowRoot) {
       const text = (el.innerText || '').trim();
       if (text && text.length > 1) {
         // Truncate long text blocks to keep output manageable
@@ -360,10 +527,27 @@ _ANNOTATED_SNAPSHOT_JS = """
       return;
     }
 
-    // Recurse into children
-    for (const child of el.children) {
-      if (chars >= budget) break;
-      walk(child, false);
+    // Inline-only containers (e.g. <span> or <div> wrapping <b>/<em>/text):
+    // collapse to a single text line.  Prevents fragmented output when
+    // search engines highlight query terms with inline formatting tags.
+    if (isTextContainer(el)) {
+      const text = (el.innerText || '').trim();
+      if (text && text.length > 1) {
+        emit(text.length > 200 ? text.substring(0, 200) + '...' : text);
+      }
+      return;
+    }
+
+    // Recurse into children.
+    // For shadow DOM hosts, walk the shadow tree (the rendered structure)
+    // instead of light DOM children.  When a <slot> is encountered, walk
+    // its assignedNodes() — these are the light DOM children projected
+    // into that slot, rendered in the correct visual position.
+    if (el.shadowRoot) {
+      try { walkChildren(el.shadowRoot); }
+      catch (_e) { /* Shadow DOM walk failed — fall back to light DOM */ walkChildren(el); }
+    } else {
+      walkChildren(el);
     }
   }
 
@@ -394,16 +578,17 @@ _ANNOTATED_SNAPSHOT_JS = """
 
 
 async def build_page_view(
-    page: Page,
+    view: ActiveView,
     response: Response | None,
     *,
     scope: str | None = None,
     budget: int = DEFAULT_BUDGET,
+    full_page: bool = False,
 ) -> PageView:
     """Build an annotated snapshot combining content and interactive elements.
 
     Args:
-        page: A Playwright ``Page`` instance.
+        view: An ``ActiveView`` from ``Browser.active_view()``.
         response: Navigation response (may be ``None``).
         scope: Optional section name to scope to (matches headings/landmarks).
         budget: Character budget for the content field.
@@ -411,27 +596,17 @@ async def build_page_view(
     Returns:
         ``PageView`` with annotated content, title, url, viewport info.
     """
-    try:
-        title: str = await page.title()
-    except PlaywrightError:  # pragma: no cover - defensive
-        logger.warning("Failed to read page title, defaulting to empty string")
-        title = ""
+    status_code = response.status if response is not None else None
+    final_url = response.url if response is not None else view.url
 
-    if response is not None:
-        final_url = response.url
-        status_code = response.status
-    else:
-        final_url = page.url
-        status_code = None
-
-    # Run JS DOM walk and viewport query in parallel
+    # Run JS DOM walk and viewport query in parallel on the active frame
     try:
-        walk_task = page.evaluate(
+        walk_task = view.frame.evaluate(
             _ANNOTATED_SNAPSHOT_JS,
-            {"budget": budget, "scopeQuery": scope, "nameLimit": MAX_NAME_LEN},
+            {"budget": budget, "scopeQuery": scope, "nameLimit": MAX_NAME_LEN, "fullPage": full_page},
         )
 
-        viewport_task = page.evaluate(
+        viewport_task = view.frame.evaluate(
             """() => ({
                 scroll_top: Math.floor(window.scrollY),
                 viewport_height: Math.floor(window.innerHeight),
@@ -443,8 +618,8 @@ async def build_page_view(
         )
 
         walk_result, viewport_data = await asyncio.gather(walk_task, viewport_task)
-    except PlaywrightError:  # pragma: no cover - defensive
-        logger.warning("Failed to build annotated snapshot, using empty defaults")
+    except PlaywrightError as exc:  # pragma: no cover - defensive
+        logger.warning("Failed to build annotated snapshot: %s", exc)
         walk_result = {"content": "", "truncated": False}
         viewport_data = {
             "scroll_top": 0,
@@ -454,7 +629,7 @@ async def build_page_view(
         }
 
     return PageView(
-        title=title,
+        title=view.title,
         url=final_url,
         status_code=status_code,
         content=walk_result.get("content", ""),

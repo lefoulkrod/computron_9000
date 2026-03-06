@@ -18,6 +18,7 @@ from playwright.async_api import (
     Error as PlaywrightError,
 )
 from playwright.async_api import (
+    Frame,
     Locator,
     Page,
 )
@@ -87,10 +88,17 @@ def _parse_role_name(target: str) -> tuple[str, str | None, int | None] | None:
     """
     colon_idx = target.find(":")
     if colon_idx <= 0:
-        # No colon — check if the entire string is a valid bare role.
-        role = target.strip().lower()
+        # No colon — check if the entire string is a valid bare role,
+        # optionally with an [N] index suffix (e.g. "combobox[0]").
+        raw = target.strip()
+        index: int | None = None
+        m = _INDEX_SUFFIX_RE.match(raw)
+        if m:
+            raw = m.group(1).strip()
+            index = int(m.group(2))
+        role = raw.lower()
         if role in _VALID_ROLES:
-            return (role, None, None)
+            return (role, None, index)
         return None
     role = target[:colon_idx].strip().lower()
     if role not in _VALID_ROLES:
@@ -110,18 +118,18 @@ def _parse_role_name(target: str) -> tuple[str, str | None, int | None] | None:
     return (role, raw_name, index)
 
 
-async def _filter_to_viewport(
+async def _get_visible_indices(
     locator: Locator,
     count: int,
-    page: Page,
-) -> tuple[Locator | None, int]:
-    """Filter a multi-match locator to elements visible in the viewport.
+    page: Page | Frame,
+) -> list[int]:
+    """Return DOM indices of elements that are visible in the viewport.
 
-    Returns ``(locator, visible_count)``.  If exactly one element is visible
-    in the viewport, returns a locator pointing to that specific element.
-    If none or multiple are visible, returns ``(None, visible_count)``.
+    Visibility checks include bounding-box presence, Playwright
+    ``is_visible()``, and a zero-opacity filter (sites like Amazon hide
+    native ``<select>`` elements behind custom widgets at ``opacity: 0``).
     """
-    viewport_size = page.viewport_size or {"width": 1280, "height": 800}
+    viewport_size = getattr(page, "viewport_size", None) or {"width": 1280, "height": 800}
     vh = viewport_size["height"]
 
     visible_indices: list[int] = []
@@ -135,10 +143,33 @@ async def _filter_to_viewport(
             continue
         if box and box["width"] > 0 and box["height"] > 0 and box["y"] < vh and box["y"] + box["height"] > 0:
             try:
-                if await nth.is_visible():
-                    visible_indices.append(i)
+                if not await nth.is_visible():
+                    continue
+                # Skip zero-opacity elements that sites hide behind custom
+                # widgets.  Playwright considers them "visible" but the
+                # page-view walker skips opacity===0.  Match that threshold.
+                opacity = await nth.evaluate("el => parseFloat(getComputedStyle(el).opacity)")
+                if opacity == 0:
+                    continue
+                visible_indices.append(i)
             except (PlaywrightError, PlaywrightTimeoutError):
                 continue
+
+    return visible_indices
+
+
+async def _filter_to_viewport(
+    locator: Locator,
+    count: int,
+    page: Page | Frame,
+) -> tuple[Locator | None, int]:
+    """Filter a multi-match locator to elements visible in the viewport.
+
+    Returns ``(locator, visible_count)``.  If exactly one element is visible
+    in the viewport, returns a locator pointing to that specific element.
+    If none or multiple are visible, returns ``(None, visible_count)``.
+    """
+    visible_indices = await _get_visible_indices(locator, count, page)
 
     if len(visible_indices) == 1:
         return locator.nth(visible_indices[0]), 1
@@ -165,7 +196,7 @@ class _LocatorResolution:
 
 
 async def _resolve_locator(
-    page: Page,
+    page: Page | Frame,
     target: str,
     *,
     allow_substring_text: bool,
@@ -209,6 +240,7 @@ async def _resolve_locator(
     if parsed is not None:
         role, name, index = parsed
         # Build the role locator — with or without name filter.
+        exact = False
         try:
             if name is not None:
                 # If the name was truncated in the snapshot (ends with ...),
@@ -231,7 +263,7 @@ async def _resolve_locator(
             # Cart").  Rather than silently using the fuzzy match (which
             # risks clicking the wrong element), we surface the full
             # accessible name so the agent can retry with an exact selector.
-            if count == 0 and exact and name is not None:
+            if count == 0 and name is not None and exact:
                 fuzzy_locator = page.get_by_role(role, name=search_name, exact=False)  # type: ignore[arg-type]
                 fuzzy_count = await fuzzy_locator.count()
                 if fuzzy_count > 0:
@@ -306,21 +338,35 @@ async def _resolve_locator(
                         if suggestions
                         else f"No exact match for '{clean_target}', "
                         f"but {fuzzy_count} similar element(s) exist. "
-                        f"Use view_page() to find the correct name."
+                        f"Use browse_page() to find the correct name."
                     )
                     raise BrowserToolError(hint, tool=tool_name)
         except PlaywrightError as exc:
             logger.debug("role:name lookup failed for %s: %s", clean_target, exc)
         else:
             selector_label = f"role={role}[name={name}]" if name else f"role={role}"
-            if count > 0:
+            if count == 0 and name is not None:
+                # Role-based lookup found nothing (and no fuzzy matches raised
+                # above).  Strip the role prefix so CSS/text strategies below
+                # can try with just the name.  Handles cursor:pointer elements
+                # annotated as [button] by the DOM walker but lacking ARIA roles
+                # (e.g. <a> without href in SPA booking widgets).
+                clean_target = name
+            elif count > 0:
                 # Explicit index: button:Add to Cart[1]
                 if index is not None:
-                    if index >= count:
-                        msg = f"Index [{index}] out of range for '{role}:{name}' ({count} matches)."
+                    # Map the index to the visible set so [0] means "first
+                    # visible" — matching what browse_page shows the agent.
+                    visible = await _get_visible_indices(role_locator, count, page)
+                    if index >= len(visible):
+                        msg = (
+                            f"Index [{index}] out of range for '{clean_target}' "
+                            f"({len(visible)} visible of {count} total)."
+                        )
                         raise BrowserToolError(msg, tool=tool_name)
+                    dom_index = visible[index]
                     return _LocatorResolution(
-                        locator=role_locator.nth(index),
+                        locator=role_locator.nth(dom_index),
                         strategy="role_name",
                         query=clean_target,
                         match_count=count,
@@ -356,7 +402,7 @@ async def _resolve_locator(
                     msg = (
                         f"'{clean_target}' matched {count} elements "
                         f"({visible_count} visible in viewport). "
-                        f'Use view_page(scope="...") to narrow, or add an '
+                        f'Use browse_page(scope="...") to narrow, or add an '
                         f"index like {hint}."
                     )
                     raise BrowserToolError(msg, tool=tool_name)
@@ -426,6 +472,45 @@ async def _resolve_locator(
                 match_count=count,
                 resolved_selector=f"text={clean_target}",
             )
+
+    # 2.5) Image alt text — handles implicit interactive elements the DOM
+    # walker annotated as [button] using a child img's alt text.  Clicking
+    # the img bubbles the event to the parent's click handler.
+    try:
+        alt_locator = page.get_by_alt_text(clean_target, exact=True)
+        alt_count = await alt_locator.count()
+    except PlaywrightError as exc:
+        logger.debug("Alt text lookup failed for %s: %s", clean_target, exc)
+    else:
+        if alt_count > 0:
+            if alt_count == 1:
+                return _LocatorResolution(
+                    locator=alt_locator.first,
+                    strategy="css",
+                    query=clean_target,
+                    match_count=1,
+                    resolved_selector=f"alt={clean_target}",
+                )
+            if alt_count > 1 and require_single_match:
+                viewport_loc, visible_count = await _filter_to_viewport(
+                    alt_locator, alt_count, page,
+                )
+                if viewport_loc is not None:
+                    return _LocatorResolution(
+                        locator=viewport_loc,
+                        strategy="css",
+                        query=clean_target,
+                        match_count=1,
+                        resolved_selector=f"alt={clean_target}",
+                    )
+            elif alt_count > 1:
+                return _LocatorResolution(
+                    locator=alt_locator.first,
+                    strategy="css",
+                    query=clean_target,
+                    match_count=alt_count,
+                    resolved_selector=f"alt={clean_target}",
+                )
 
     if not allow_substring_text:
         return None

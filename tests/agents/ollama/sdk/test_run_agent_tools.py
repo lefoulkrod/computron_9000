@@ -1,4 +1,3 @@
-import asyncio
 import json
 from typing import Any
 
@@ -9,7 +8,14 @@ from agents.ollama.sdk.run_agent_tools import (
     AgentToolConversionError,
     make_run_agent_as_tool_function,
 )
-from agents.types import Agent
+
+
+_AGENT_KWARGS = {
+    "name": "Test Agent",
+    "description": "desc",
+    "instruction": "do it",
+    "tools": [],
+}
 
 
 @pytest.mark.unit
@@ -26,15 +32,7 @@ async def test_run_agent_as_tool_returns_string_by_default(monkeypatch):
 
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "Echo")
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS)
     result = await tool_fn("say something")
     assert result == "world"
 
@@ -53,15 +51,7 @@ async def test_run_agent_as_tool_dict_conversion(monkeypatch):
 
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "To dict", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     result = await tool_fn("return dict")
     assert result == payload
 
@@ -80,15 +70,7 @@ async def test_run_agent_as_tool_list_conversion(monkeypatch):
 
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "To list", result_type=list)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=list)
     result = await tool_fn("return list")
     assert result == payload
 
@@ -111,15 +93,7 @@ async def test_run_agent_as_tool_pydantic_model_conversion(monkeypatch):
 
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "To model", result_type=InlineModel)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=InlineModel)
     result = await tool_fn("return model")
     assert isinstance(result, InlineModel)
     assert result.base64_encoded == payload["base64_encoded"]
@@ -138,15 +112,7 @@ async def test_run_agent_as_tool_invalid_json_raises(monkeypatch):
 
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "To dict", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(AgentToolConversionError):
         await tool_fn("return dict")
 
@@ -167,28 +133,19 @@ async def test_scalar_conversions_int_float_bool(monkeypatch):
 
     import agents.ollama.sdk.run_agent_tools as mod
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-
     # int
     mod.run_tool_call_loop = fake_loop_int  # type: ignore[assignment]
-    tool_fn = make_run_agent_as_tool_function(agent, "To int", result_type=int)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=int)
     assert await tool_fn("return int") == 123
 
     # float
     mod.run_tool_call_loop = fake_loop_float  # type: ignore[assignment]
-    tool_fn = make_run_agent_as_tool_function(agent, "To float", result_type=float)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=float)
     assert await tool_fn("return float") == 3.14
 
     # bool
     mod.run_tool_call_loop = fake_loop_bool_true  # type: ignore[assignment]
-    tool_fn = make_run_agent_as_tool_function(agent, "To bool", result_type=bool)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=bool)
     assert await tool_fn("return bool") is True
 
 
@@ -203,62 +160,34 @@ async def test_empty_or_whitespace_with_non_str_type_raises(monkeypatch):
     import agents.ollama.sdk.run_agent_tools as mod
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "To dict", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(AgentToolConversionError):
         await tool_fn("return dict")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_callbacks_wiring(monkeypatch):
-    """Ensure before/after callbacks are passed to the loop and invoked."""
+async def test_callbacks_are_created_and_passed(monkeypatch):
+    """Ensure before/after callbacks are created internally and passed to the loop."""
 
-    seen = {"before": 0, "after": 0}
-
-    def before_cb(msgs):  # noqa: ANN001 - tests flexible signature
-        seen["before"] += 1
-
-    def after_cb(resp):  # noqa: ANN001 - tests flexible signature
-        seen["after"] += 1
+    received_kwargs = {}
 
     async def fake_loop(**kwargs: Any):
-        # Simulate callback invocation by calling provided callbacks
-        for cb in kwargs.get("before_model_callbacks", []) or []:
-            cb([{"role": "user", "content": "x"}])
-        for cb in kwargs.get("after_model_callbacks", []) or []:
-            cb(object())
+        received_kwargs.update(kwargs)
         yield json.dumps({"ok": True}), None
 
     import agents.ollama.sdk.run_agent_tools as mod
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(
-        agent,
-        "Callbacks",
-        result_type=dict,
-        before_model_callbacks=[before_cb],
-        after_model_callbacks=[after_cb],
-    )
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     res = await tool_fn("x")
     assert res == {"ok": True}
-    assert seen["before"] == 1
-    assert seen["after"] == 1
+    # Callbacks should be created internally and passed to the loop
+    assert "before_model_callbacks" in received_kwargs
+    assert "after_model_callbacks" in received_kwargs
+    assert len(received_kwargs["before_model_callbacks"]) == 1
+    # 2 after-model callbacks: logging + context manager
+    assert len(received_kwargs["after_model_callbacks"]) == 2
 
 
 @pytest.mark.unit
@@ -279,15 +208,7 @@ async def test_exception_propagation(monkeypatch):
     import agents.ollama.sdk.run_agent_tools as mod
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-    tool_fn = make_run_agent_as_tool_function(agent, "Err", result_type=dict)
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(Boom):
         await tool_fn("x")
 
@@ -312,16 +233,7 @@ async def test_run_agent_as_tool_list_of_pydantic_models(monkeypatch):
     import agents.ollama.sdk.run_agent_tools as mod
     monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
 
-    agent = Agent(
-        name="Test Agent",
-        description="desc",
-        instruction="do it",
-        model="dummy",
-        options={},
-        tools=[],
-    )
-
-    tool_fn = make_run_agent_as_tool_function(agent, "To list of models", result_type=list[Item])
+    tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=list[Item])
     result = await tool_fn("return list of models")
     assert isinstance(result, list)
     assert all(isinstance(x, Item) for x in result)

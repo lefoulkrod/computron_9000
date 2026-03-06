@@ -1,17 +1,101 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+
 import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
 import BrowserView from './components/BrowserView.jsx';
+import FilePreviewPanel from './components/FilePreviewPanel.jsx';
+import CustomToolsPanel from './components/CustomToolsPanel.jsx';
+import MemoryPanel from './components/MemoryPanel.jsx';
+import ModelSettingsPanel from './components/ModelSettingsPanel.jsx';
+import TerminalPanel from './components/TerminalOutput.jsx';
+import GenerationPreview from './components/GenerationPreview.jsx';
+import useModelSettings from './hooks/useModelSettings.js';
+import useStreamingChat from './hooks/useStreamingChat.js';
 import styles from './App.module.css';
 
 function App() {
-    const [messages, setMessages] = useState([]);
     const [dark, setDark] = useState(false);
-    const [isStreaming, setIsStreaming] = useState(false);
     const [browserSnapshot, setBrowserSnapshot] = useState(null);
+    const [filePreview, setFilePreview] = useState(null);
     const [attachment, setAttachment] = useState(null);
     const [showSubAgents, setShowSubAgents] = useState(true);
+    const [toolsPanelKey, setToolsPanelKey] = useState(0);
+    const [memoryRefreshSignal, setMemoryRefreshSignal] = useState(0);
+    const [toolsRefreshSignal, setToolsRefreshSignal] = useState(0);
+    const [pendingAudio, setPendingAudio] = useState(null);
+    const [muted, setMuted] = useState(false);
+    const [terminalLines, setTerminalLines] = useState([]);
+    const [generationPreview, setGenerationPreview] = useState(null);
+    // Tracks panels the user has explicitly closed; new events reopen them.
+    const [closedPanels, setClosedPanels] = useState(new Set());
+
+    const modelSettings = useModelSettings();
+
+    // Stable callbacks ref for streaming chat side effects.
+    // The ref is reassigned every render so it always has fresh setters,
+    // but the delegating object identity never changes.
+    const _streamCallbacksRef = useRef(null);
+    _streamCallbacksRef.current = {
+        onBrowserSnapshot: (snapshot) => {
+            setBrowserSnapshot(snapshot);
+            setClosedPanels((prev) => prev.has('browser') ? (() => { const next = new Set(prev); next.delete('browser'); return next; })() : prev);
+        },
+        onTerminalOutput: (event) => {
+            setTerminalLines((prev) => {
+                const idx = prev.findIndex((e) => e.cmd_id === event.cmd_id);
+                if (idx !== -1) {
+                    const updated = [...prev];
+                    if (event.status === 'streaming') {
+                        const existing = updated[idx];
+                        updated[idx] = {
+                            ...existing,
+                            status: 'streaming',
+                            stdout: (existing.stdout || '') + (event.stdout || '') || null,
+                            stderr: (existing.stderr || '') + (event.stderr || '') || null,
+                        };
+                    } else {
+                        updated[idx] = event;
+                    }
+                    return updated;
+                }
+                return [...prev, event];
+            });
+            setClosedPanels((prev) => prev.has('terminal') ? (() => { const next = new Set(prev); next.delete('terminal'); return next; })() : prev);
+        },
+        onToolCreated: () => setToolsRefreshSignal((s) => s + 1),
+        onMemoryChanged: () => setMemoryRefreshSignal((s) => s + 1),
+        onAudioPlayback: (audio) => setPendingAudio(audio),
+        onGenerationPreview: (event) => {
+            setGenerationPreview((prev) => {
+                if (!prev || prev.gen_id !== event.gen_id) return event;
+                return { ...prev, ...event };
+            });
+            setClosedPanels((prev) => {
+                if (!prev.has('generation') && prev.has('file')) return prev;
+                const next = new Set(prev);
+                next.delete('generation');
+                next.add('file');
+                return next;
+            });
+        },
+    };
+    const _stableCallbacks = useRef({
+        onBrowserSnapshot: (...args) => _streamCallbacksRef.current.onBrowserSnapshot(...args),
+        onTerminalOutput: (...args) => _streamCallbacksRef.current.onTerminalOutput(...args),
+        onToolCreated: (...args) => _streamCallbacksRef.current.onToolCreated(...args),
+        onMemoryChanged: (...args) => _streamCallbacksRef.current.onMemoryChanged(...args),
+        onAudioPlayback: (...args) => _streamCallbacksRef.current.onAudioPlayback(...args),
+        onGenerationPreview: (...args) => _streamCallbacksRef.current.onGenerationPreview(...args),
+    }).current;
+
+    const {
+        messages,
+        isStreaming,
+        sendMessage,
+        stopGeneration,
+        newSession: chatNewSession,
+    } = useStreamingChat(_stableCallbacks);
 
     useEffect(() => {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -29,196 +113,44 @@ function App() {
         setAttachment({ base64: base64Screenshot, contentType: 'image/png' });
     };
 
-    const newSession = async () => {
-        setMessages([]);
-        setBrowserSnapshot(null); // Clear browser view on new session
-        try {
-            await fetch('/api/chat/history', { method: 'DELETE' });
-        } catch (err) {
-            // ignore
-        }
-    };
-
-    const sendMessage = async (message, fileData) => {
-        // Allow sending if there's text or a file
-        if (!message && !fileData) return;
-
-        // Clear attachment after it's been used
+    // Wrap sendMessage to pass model settings and clear attachment
+    const handleSend = useCallback((message, fileData) => {
         setAttachment(null);
+        sendMessage(message, fileData, {
+            selectedModel: modelSettings.selectedModel,
+            contextKb: modelSettings.contextKb,
+            think: modelSettings.think,
+            persistThinking: modelSettings.persistThinking,
+            temperature: modelSettings.temperature,
+            topK: modelSettings.topK,
+            topP: modelSettings.topP,
+            repeatPenalty: modelSettings.repeatPenalty,
+            numPredict: modelSettings.numPredict,
+            unlimitedTurns: modelSettings.unlimitedTurns,
+            agentTurns: modelSettings.agentTurns,
+        });
+    }, [sendMessage, modelSettings.selectedModel, modelSettings.contextKb,
+        modelSettings.think, modelSettings.persistThinking, modelSettings.temperature, modelSettings.topK,
+        modelSettings.topP, modelSettings.repeatPenalty, modelSettings.numPredict,
+        modelSettings.unlimitedTurns, modelSettings.agentTurns]);
 
-        // Build user message with optional image preview
-        const userMsg = { id: `u_${Date.now()}_${Math.random().toString(36).slice(2)}`, role: 'user', content: message || '' };
-        if (fileData && fileData.content_type && fileData.content_type.startsWith('image/')) {
-            userMsg.images = [`data:${fileData.content_type};base64,${fileData.base64}`];
-        }
-        const placeholderId = Math.random().toString(36).slice(2);
-        setMessages((prev) => [
-            ...prev,
-            userMsg,
-            { id: placeholderId, role: 'assistant', placeholder: true, tempId: placeholderId },
-        ]);
+    // New session: reset chat + panel state
+    const newSession = useCallback(async () => {
+        await chatNewSession();
+        setBrowserSnapshot(null);
+        setFilePreview(null);
+        setTerminalLines([]);
+        setGenerationPreview(null);
+        setClosedPanels(new Set());
+        setToolsPanelKey((k) => k + 1);
+    }, [chatNewSession]);
 
-        const body = { message: message || '(uploaded file)' };
-        if (fileData) {
-            body.data = [fileData];
-        }
-        try {
-            setIsStreaming(true);
-            const resp = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (!resp.body) return;
-            const reader = resp.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            // Track segmentation of assistant output for this single user turn.
-            // We gather all thinking until we receive a response; if more thinking comes AFTER a response,
-            // we start a NEW assistant message (section) and repeat.
-            let segmentIndex = 0;
-            let currentAssistantId = placeholderId; // id for current segment message
-            let currentHasResponse = false; // whether current segment has emitted any response text yet
-            // Helper to ensure a segment message exists and optionally initialize
-            const ensureAssistantMessage = (init = {}) => {
-                setMessages((prev) => {
-                    const updated = [...prev];
-                    let idx = updated.findIndex(
-                        (m) => m.role === 'assistant' && (m.id === currentAssistantId || m.tempId === currentAssistantId)
-                    );
-                    if (idx === -1) {
-                        // Create a fresh assistant segment entry
-                        updated.push({ id: currentAssistantId, role: 'assistant', content: '', thinking: undefined, placeholder: false, streaming: true, ...init });
-                    } else {
-                        // Make sure placeholder is cleared on first real data
-                        updated[idx] = { ...updated[idx], placeholder: false, tempId: undefined, streaming: true, ...init };
-                    }
-                    return updated;
-                });
-            };
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                let idx;
-                while ((idx = buffer.indexOf('\n')) !== -1) {
-                    const line = buffer.slice(0, idx).trim();
-                    buffer = buffer.slice(idx + 1);
-                    if (!line) continue;
-                    try {
-                        const data = JSON.parse(line);
-
-                        // Handle browser_snapshot event
-                        if (data.event && data.event.type === 'browser_snapshot') {
-                            setBrowserSnapshot({
-                                url: data.event.url,
-                                title: data.event.title,
-                                screenshot: data.event.screenshot,
-                            });
-                        }
-
-                        // Only support new 'content' field from event system
-                        const contentField = typeof data.content === 'string' ? data.content : '';
-                        const hasResponse = typeof contentField === 'string' && contentField.length > 0;
-                        const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
-                        const agentName = data.agent_name || null;
-                        const depth = typeof data.depth === 'number' ? data.depth : 0;
-                        const dataField = Array.isArray(data.data) ? data.data : null;
-                        const toolCallEvent = data.event && data.event.type === 'tool_call' ? data.event : null;
-
-                        // If thinking arrives AFTER we've already shown a response in this segment,
-                        // start a new segment message to collect subsequent thinking.
-                        if (hasThinking && currentHasResponse) {
-                            segmentIndex += 1;
-                            currentAssistantId = `${placeholderId}_s${segmentIndex}`;
-                            currentHasResponse = false;
-                            ensureAssistantMessage();
-                        } else {
-                            // Ensure the current segment message exists (clears placeholder)
-                            ensureAssistantMessage();
-                        }
-
-                        // Now update the current segment with incoming data
-                        setMessages((prev) => {
-                            const updated = [...prev];
-                            const i = updated.findIndex((m) => m.role === 'assistant' && m.id === currentAssistantId);
-                            const cur = i === -1 ? { id: currentAssistantId, role: 'assistant', content: '', thinking: undefined } : updated[i];
-                            const next = { ...cur };
-                            // Update agent_name and depth if present in this event
-                            if (agentName) {
-                                next.agent_name = agentName;
-                            }
-                            if (typeof depth === 'number') {
-                                next.depth = depth;
-                            }
-                            if (dataField) {
-                                const existing = Array.isArray(next.data) ? next.data : [];
-                                next.data = [...existing, ...dataField];
-                            }
-                            if (toolCallEvent) {
-                                const existing = Array.isArray(next.data) ? next.data : [];
-                                next.data = [...existing, toolCallEvent];
-                            }
-                            if (hasThinking) {
-                                const existing = typeof next.thinking === 'string' ? next.thinking : '';
-                                // Use a visible separation (double newline) between distinct thinking chunks.
-                                // Avoid adding extra newlines if existing already ends with blank line.
-                                if (existing) {
-                                    const endsWithBlank = /\n\s*$/.test(existing);
-                                    next.thinking = endsWithBlank
-                                        ? `${existing}${data.thinking}`
-                                        : `${existing}\n\n${data.thinking}`;
-                                } else {
-                                    next.thinking = data.thinking;
-                                }
-                            }
-                            if (hasResponse) {
-                                const existingContent = next.content || '';
-                                // If there is existing content and the new chunk does not start with a whitespace/newline
-                                // and existing content does not already end with a newline, insert a newline separator.
-                                // This addresses cases where the backend sends multiple discrete "response" chunks
-                                // that should appear on separate lines (e.g., when two JSON objects / paragraphs arrive).
-                                let toAppend = contentField;
-                                if (existingContent) {
-                                    const endsWithNewline = /\n\s*$/.test(existingContent);
-                                    const startsWithBlock = /^\s*(?:```|\n)/.test(toAppend);
-                                    if (!endsWithNewline && !startsWithBlock) {
-                                        toAppend = '\n' + toAppend; // ensure visual separation
-                                    }
-                                }
-                                next.content = existingContent + toAppend;
-                                currentHasResponse = true;
-                            }
-                            // Only switch off streaming on final chunk; otherwise keep it on
-                            if (data.final === true) {
-                                next.streaming = false;
-                            } else {
-                                next.streaming = true;
-                            }
-                            updated[i === -1 ? updated.length : i] = next;
-                            return updated;
-                        });
-                    } catch (e) {
-                        // ignore parse errors for partial/incomplete lines
-                    }
-                }
-            }
-        } catch (err) {
-            // Replace placeholder with error, if present
-            setMessages((prev) => {
-                const updated = [...prev];
-                const pIndex = updated.findIndex((m) => m.role === 'assistant' && (m.id === placeholderId || m.tempId === placeholderId || m.placeholder));
-                const errorMsg = { id: placeholderId, role: 'assistant', content: `[Error: ${err.message}]`, placeholder: false, streaming: false };
-                if (pIndex !== -1) {
-                    updated[pIndex] = errorMsg;
-                    return updated;
-                }
-                return [...prev, errorMsg];
-            });
-        } finally {
-            setIsStreaming(false);
-        }
-    };
+    // Each panel shows if it has data and the user hasn't closed it
+    const showGeneration = generationPreview && !closedPanels.has('generation');
+    const showFile = filePreview && !closedPanels.has('file');
+    const showBrowser = browserSnapshot && !closedPanels.has('browser');
+    const showTerminal = terminalLines.length > 0 && !closedPanels.has('terminal');
+    const hasAnyPanel = showGeneration || showFile || showBrowser || showTerminal;
 
     return (
         <>
@@ -228,20 +160,76 @@ function App() {
                 onNewSession={newSession}
                 showSubAgents={showSubAgents}
                 onToggleSubAgents={toggleSubAgents}
+                audio={pendingAudio}
+                muted={muted}
+                onToggleMute={() => setMuted((m) => !m)}
+                onAudioEnded={() => setPendingAudio(null)}
             />
-            <div className={`${styles.mainLayout} ${browserSnapshot ? styles.threeColumn : ''}`}>
+            <div className={`${styles.mainLayout} ${hasAnyPanel ? styles.threeColumn : ''}`}>
                 <div className={styles.column}>
                     <div className={styles.stickyInput}>
-                        <ChatInput onSend={sendMessage} disabled={isStreaming} attachment={attachment} />
+                        <ChatInput
+                            onSend={handleSend}
+                            onStop={stopGeneration}
+                            disabled={isStreaming}
+                            attachment={attachment}
+                        />
                     </div>
+                    <ModelSettingsPanel
+                        models={modelSettings.availableModels}
+                        selectedModel={modelSettings.selectedModel}
+                        onModelChange={modelSettings.setSelectedModel}
+                        contextKb={modelSettings.contextKb}
+                        onContextKbChange={modelSettings.setContextKb}
+                        think={modelSettings.think}
+                        onThinkChange={modelSettings.setThink}
+                        persistThinking={modelSettings.persistThinking}
+                        onPersistThinkingChange={modelSettings.setPersistThinking}
+                        temperature={modelSettings.temperature}
+                        onTemperatureChange={modelSettings.setTemperature}
+                        topK={modelSettings.topK}
+                        onTopKChange={modelSettings.setTopK}
+                        topP={modelSettings.topP}
+                        onTopPChange={modelSettings.setTopP}
+                        repeatPenalty={modelSettings.repeatPenalty}
+                        onRepeatPenaltyChange={modelSettings.setRepeatPenalty}
+                        numPredict={modelSettings.numPredict}
+                        onNumPredictChange={modelSettings.setNumPredict}
+                        unlimitedTurns={modelSettings.unlimitedTurns}
+                        onUnlimitedTurnsChange={modelSettings.setUnlimitedTurns}
+                        agentTurns={modelSettings.agentTurns}
+                        onAgentTurnsChange={modelSettings.setAgentTurns}
+                        disabled={isStreaming}
+                    />
+                    <MemoryPanel refreshSignal={memoryRefreshSignal} />
+                    <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />
                 </div>
-                {browserSnapshot && (
+                {hasAnyPanel && (
                     <div className={styles.browserColumn}>
-                        <BrowserView snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} />
+                        {/* Precedence: previews first, then browser, terminal always last */}
+                        {showGeneration && (
+                            <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels((prev) => new Set(prev).add('generation'))} />
+                        )}
+                        {showFile && (
+                            <FilePreviewPanel item={filePreview} onClose={() => setClosedPanels((prev) => new Set(prev).add('file'))} />
+                        )}
+                        {showBrowser && (
+                            <BrowserView snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels((prev) => new Set(prev).add('browser'))} />
+                        )}
+                        {showTerminal && (
+                            <TerminalPanel lines={terminalLines} onClose={() => setClosedPanels((prev) => new Set(prev).add('terminal'))} />
+                        )}
                     </div>
                 )}
                 <div className={styles.column}>
-                    <ChatMessages messages={messages} showSubAgents={showSubAgents} />
+                    <ChatMessages
+                        messages={messages}
+                        showSubAgents={showSubAgents}
+                        onPreview={(item) => {
+                            setFilePreview(item);
+                            setClosedPanels((prev) => { const next = new Set(prev); next.delete('file'); next.add('generation'); return next; });
+                        }}
+                    />
                 </div>
             </div>
         </>

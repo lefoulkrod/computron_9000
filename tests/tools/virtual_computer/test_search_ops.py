@@ -131,11 +131,6 @@ def test_grep_result_fields_success_case() -> None:
             assert match1.line_number >= 1
             assert isinstance(match1.line, str)
             assert "import" in match1.line
-            assert isinstance(match1.start_col, int)
-            assert isinstance(match1.end_col, int)
-            assert match1.start_col >= 0
-            assert match1.end_col > match1.start_col
-            assert match1.line[match1.start_col:match1.end_col] == "import"
 
 
 @pytest.mark.unit
@@ -157,11 +152,9 @@ def test_grep_result_fields_truncated_case() -> None:
             assert result.searched_files == 1
             assert len(result.matches) == 5  # Limited by max_results
             
-            # Verify all matches have correct column positions
+            # Verify all matches contain the target text
             for match in result.matches:
-                assert match.start_col >= 0
-                assert match.end_col == match.start_col + len("target")
-                assert match.line[match.start_col:match.end_col] == "target"
+                assert "target" in match.line
 
 
 @pytest.mark.unit
@@ -195,56 +188,25 @@ def test_grep_result_fields_error_case() -> None:
                 # Verify error case fields
                 assert result.success is False
                 assert result.error is not None
-                assert "workspace not found" in result.error
+                assert "path not found" in result.error
                 assert result.truncated is False
                 assert result.searched_files == 0
                 assert len(result.matches) == 0
 
 
 @pytest.mark.unit
-def test_grep_match_column_positions_regex() -> None:
-    """Test that GrepMatch column positions are accurate for regex searches."""
-    with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("regex_test.txt", "  function myFunc() {\n    return value;\n  }\n")
-            
-            # Search for word boundaries
-            result = grep(r"\bfunction\b", regex=True)
-            
-            assert result.success
-            assert len(result.matches) == 1
-            
-            match = result.matches[0]
-            assert match.line_number == 1
-            assert match.start_col == 2  # "function" starts at column 2
-            assert match.end_col == 10   # "function" ends at column 10
-            assert match.line[match.start_col:match.end_col] == "function"
-
-
-@pytest.mark.unit
-def test_grep_match_column_positions_case_insensitive() -> None:
-    """Test GrepMatch column positions with case-insensitive search."""
+def test_grep_case_insensitive_matching() -> None:
+    """Case-insensitive search finds all case variants on a line."""
     with tempfile.TemporaryDirectory() as tmp_home:
         with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
             write_file("case_test.txt", "Hello WORLD hello\n")
-            
-            # Case-insensitive search (default)
+
             result = grep("hello", regex=False, case_sensitive=False)
-            
+
             assert result.success
-            assert len(result.matches) == 2
-            
-            # First match should be "Hello" at start
-            match1 = result.matches[0]
-            assert match1.start_col == 0
-            assert match1.end_col == 5
-            assert match1.line[match1.start_col:match1.end_col] == "Hello"
-            
-            # Second match should be "hello" at end
-            match2 = result.matches[1]
-            assert match2.start_col == 12
-            assert match2.end_col == 17
-            assert match2.line[match2.start_col:match2.end_col] == "hello"
+            # One match per line (not per occurrence)
+            assert len(result.matches) == 1
+            assert "Hello" in result.matches[0].line
 
 
 @pytest.mark.unit
@@ -292,19 +254,13 @@ if __name__ == "__main__":
             match1 = result.matches[0]
             assert match1.line == "    def function_name(arg1, arg2):"
             assert match1.line_number == 1
-            assert match1.start_col == 8  # "function" starts at column 8
-            assert match1.end_col == 16   # "function" ends at column 16
-            assert match1.line[match1.start_col:match1.end_col] == "function"
-            
+
             # Second match should be in the comment line
             match2 = result.matches[1]
             assert match2.line == "    # This is a comment with function inside"
             assert match2.line_number == 3
-            assert match2.start_col == 29  # "function" starts at column 29 in comment
-            assert match2.end_col == 37    # "function" ends at column 37
-            assert match2.line[match2.start_col:match2.end_col] == "function"
-            
-            # Verify that the full line context is preserved, not just the match
+
+            # Full line context is preserved, not just the match
             assert "def " in match1.line and "(arg1, arg2):" in match1.line
             assert "# This is a comment" in match2.line and " inside" in match2.line
 
