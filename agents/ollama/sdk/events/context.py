@@ -14,6 +14,7 @@ Guidelines:
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import logging
 from contextlib import asynccontextmanager, contextmanager
@@ -23,10 +24,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
     from collections.abc import AsyncIterator, Generator
 
+from agents.types import LLMOptions
+
 from .dispatcher import EventDispatcher, Handler
 from .models import AssistantResponse
 
 logger = logging.getLogger(__name__)
+
+
+class StopRequestedError(Exception):
+    """Raised at safe checkpoints when the user requests a stop."""
 
 
 # Active dispatcher for the current coroutine context.
@@ -34,10 +41,50 @@ _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
     "assistant_events_current_dispatcher", default=None
 )
 
+# Stop event bound to the currently active conversation turn, accessible
+# without passing it through every call frame.
+_stop_event: ContextVar[asyncio.Event | None] = ContextVar("assistant_events_stop_event", default=None)
+
+# Module-level reference so the stop HTTP endpoint (a separate asyncio task)
+# can signal the running turn. Single-session app assumption.
+_active_stop_event: asyncio.Event | None = None
+
+
+def request_stop() -> None:
+    """Signal the active conversation turn to stop at the next safe checkpoint."""
+    global _active_stop_event
+    if _active_stop_event is not None:
+        _active_stop_event.set()
+
+
+def check_stop() -> None:
+    """Raise StopRequestedError if a stop has been requested for this turn.
+
+    Call this at safe checkpoints (e.g. top of tool loop, before each tool
+    execution) to allow clean interruption without cancelling tasks mid-await.
+    """
+    event = _stop_event.get()
+    if event is not None and event.is_set():
+        raise StopRequestedError()
+
 # Stack of (context_id, agent_name) frames for nested agent/tool executions.
 _context_stack: ContextVar[tuple[tuple[str, str | None], ...]] = ContextVar(
     "assistant_events_context_stack", default=()
 )
+
+# LLM options propagated from the user's UI selection for the current turn.
+_model_options: ContextVar[LLMOptions | None] = ContextVar("assistant_events_model_options", default=None)
+
+
+def get_model_options() -> LLMOptions | None:
+    """Return the LLM options set for the current request context, or None."""
+    return _model_options.get()
+
+
+def set_model_options(options: LLMOptions | None) -> None:
+    """Set the LLM options for the current request context."""
+    _model_options.set(options)
+
 
 _subcontext_counter = itertools.count(1)
 _ROOT_CONTEXT_ID = "root"
@@ -101,10 +148,14 @@ def publish_event(event: AssistantResponse) -> None:
 
     stack = _context_stack.get()
     try:
-        dispatcher.publish(event.model_copy(update={
-            "agent_name": stack[-1][1] if stack else None,
-            "depth": len(stack) - 1 if stack else 0,
-        }))
+        dispatcher.publish(
+            event.model_copy(
+                update={
+                    "agent_name": stack[-1][1] if stack else None,
+                    "depth": len(stack) - 1 if stack else 0,
+                }
+            )
+        )
     except Exception:  # pragma: no cover - defensive logging path
         logger.exception("Failed to publish AssistantResponse event")
 
@@ -118,6 +169,8 @@ async def event_context(
     This helper ensures:
     - A fresh EventDispatcher is created per context
     - The dispatcher is bound to the context var so ``publish_event`` works
+    - A fresh stop event is created and bound so ``check_stop`` works from any
+      depth without parameter passing
     - If a handler is provided, it is subscribed for the duration of the context
     - In-flight async handler tasks are drained before teardown
     - Teardown always occurs, even if the body raises
@@ -130,8 +183,12 @@ async def event_context(
     Yields:
         None
     """
+    global _active_stop_event
     dispatcher = EventDispatcher()
-    token = _current_dispatcher.set(dispatcher)
+    stop_event = asyncio.Event()
+    _active_stop_event = stop_event
+    dispatcher_token = _current_dispatcher.set(dispatcher)
+    stop_token = _stop_event.set(stop_event)
     try:
         if handler is not None:
             async with dispatcher.subscription(handler):
@@ -140,4 +197,6 @@ async def event_context(
             yield None
     finally:
         await dispatcher.drain()
-        _current_dispatcher.reset(token)
+        _current_dispatcher.reset(dispatcher_token)
+        _stop_event.reset(stop_token)
+        _active_stop_event = None

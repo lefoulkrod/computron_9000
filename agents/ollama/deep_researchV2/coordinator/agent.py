@@ -1,18 +1,15 @@
 """Coordinator agent for orchestrating research tasks."""
 
-# Standard library imports
 import json
 import logging
 
-# Third-party imports
 from pydantic import BaseModel, Field, ValidationError
 
-# Local imports
 from agents.ollama.deep_researchV2.topic_research import topic_research_agent_tool
 from agents.ollama.deep_researchV2.web_search import web_search_agent_tool
-from agents.types import Agent
 from config import load_config
-from models import get_default_model
+
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 
 from .prompt import PROMPT
 
@@ -65,7 +62,10 @@ class ExecuteResearchInput(BaseModel):
 
 config = load_config()
 logger = logging.getLogger(__name__)
-model = get_default_model()
+
+NAME = "COORDINATOR_AGENT"
+DESCRIPTION = "Orchestrates deep research tasks by coordinating multiple agents."
+SYSTEM_PROMPT = PROMPT
 
 
 async def execute_research_tool(research_topic: str) -> str:
@@ -76,9 +76,6 @@ async def execute_research_tool(research_topic: str) -> str:
 
     Returns:
         str: Research results summary.
-
-    Raises:
-        None
     """
     logger.debug("Executing research for topic: %s", research_topic)
     topic_overview = await web_search_agent_tool(f"""
@@ -136,18 +133,10 @@ async def execute_research_tool(research_topic: str) -> str:
                     "title": subtopic.title,
                     "summary": subtopic.summary,
                     "links": subtopic.links,
-                    "details": "Error researching subtopic",  # Placeholder for error handling
+                    "details": "Error researching subtopic",
                 }
             )
     return json.dumps(detailed_subtopics)
 
 
-coordinator = Agent(
-    name="COORDINATOR_AGENT",
-    description="Orchestrates deep research tasks by coordinating multiple agents.",
-    instruction=PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[execute_research_tool],
-    think=model.think,
-)
+TOOLS = [execute_research_tool, save_to_scratchpad, recall_from_scratchpad]

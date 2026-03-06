@@ -13,7 +13,9 @@ from ollama import ChatResponse
 
 from agents.types import Agent
 
-from .events import agent_span
+from .context import ContextManager, ConversationHistory
+from .events import agent_span, get_model_options
+from .logging_callbacks import make_log_after_model_call, make_log_before_model_call
 from .tool_loop import run_tool_call_loop
 
 
@@ -164,7 +166,7 @@ def _convert_result_to_type[T](raw_text: str, result_type: type[T]) -> T:
 
 async def _run_tool_loop_once(
     *,
-    messages: list[dict[str, str]],
+    history: ConversationHistory,
     agent: Agent,
     before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None,
@@ -172,7 +174,7 @@ async def _run_tool_loop_once(
     """Run the tool-call loop once and return the final assistant text.
 
     Args:
-        messages: Conversation messages to seed the model/tool loop.
+        history: Conversation history to seed the model/tool loop.
         agent: Agent providing tools, model, options, and think flag.
         before_model_callbacks: Optional pre-call callbacks.
         after_model_callbacks: Optional post-call callbacks.
@@ -186,11 +188,8 @@ async def _run_tool_loop_once(
     result_text = ""
     try:
         gen: AsyncGenerator[tuple[str | None, str | None], None] = run_tool_call_loop(
-            messages=messages,
-            tools=agent.tools,
-            model=agent.model,
-            model_options=agent.options,
-            think=agent.think,
+            history=history,
+            agent=agent,
             before_model_callbacks=before_model_callbacks,
             after_model_callbacks=after_model_callbacks,
         )
@@ -209,7 +208,7 @@ async def _run_tool_loop_once(
 
 async def _run_with_json_retry[T](
     *,
-    messages: list[dict[str, str]],
+    history: ConversationHistory,
     agent: Agent,
     result_type: type[T],
     before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None,
@@ -222,7 +221,7 @@ async def _run_with_json_retry[T](
     conversion fails specifically due to non-JSON output (ERR_NOT_JSON).
 
     Args:
-        messages: Conversation messages.
+        history: Conversation history.
         agent: Agent to execute.
         result_type: The target non-string type to convert the output into.
         before_model_callbacks: Optional pre-call callbacks.
@@ -238,7 +237,7 @@ async def _run_with_json_retry[T](
     """
     for attempt in range(max_attempts):
         final_text = await _run_tool_loop_once(
-            messages=messages,
+            history=history,
             agent=agent,
             before_model_callbacks=before_model_callbacks,
             after_model_callbacks=after_model_callbacks,
@@ -265,26 +264,27 @@ async def _run_with_json_retry[T](
 
 
 def make_run_agent_as_tool_function[T](
-    agent: Agent,
-    tool_description: str,
     *,
+    name: str,
+    description: str,
+    instruction: str,
+    tools: list[Callable[..., Any]],
     result_type: type[T] = str,  # type: ignore  # Default behavior returns string
-    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None = None,
-    after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
+    max_iterations: int = 0,
 ) -> Callable[[str], Awaitable[T]]:
-    """Return an async function that runs the given agent as a tool and returns type ``T``.
+    """Return an async function that runs a freshly constructed agent as a tool.
 
-    The provided description becomes the tool function's docstring.
-
+    The agent is constructed at call time using the static config provided here
+    combined with the current request's model options from ``get_model_options()``.
 
     Args:
-        agent (Agent): The agent to be run as a tool.
-        tool_description (str): The docstring to assign to the returned function.
-        result_type (type[T]): The desired return type of the tool function. Defaults to ``str``.
-        before_model_callbacks (list[Callable[[list[dict[str, str]]], None]] | None):
-            List of callbacks before model call.
-        after_model_callbacks (list[Callable[[ChatResponse], None]] | None):
-            List of callbacks after model call.
+        name: Agent name (used for event attribution and function naming).
+        description: Becomes the tool's docstring — this is what the calling agent
+            sees when deciding whether to use this tool.
+        instruction: System prompt for the agent.
+        tools: Tool functions available to the agent.
+        result_type (type[T]): The desired return type. Defaults to ``str``.
+        max_iterations: Maximum tool-call loop iterations for this agent.
 
     Returns:
         Callable[[str], Awaitable[T]]: An async function that takes a string
@@ -292,7 +292,7 @@ def make_run_agent_as_tool_function[T](
 
     """
     docstring = f"""
-{tool_description}
+{description}
 
 Args:
     instructions (str): The detailed instructions for the agent to follow. Including step by step plans if necessary.
@@ -303,16 +303,36 @@ Returns:
 
     async def run_agent_as_tool(instructions: str) -> T:
         # DONT PROVIDE A DOCSTRING HERE
+        model_options = get_model_options()
+        effective_max_iterations = max_iterations
+        if model_options and model_options.max_iterations is not None:
+            effective_max_iterations = model_options.max_iterations
+        agent = Agent(
+            name=name,
+            description=description,
+            instruction=instruction,
+            tools=tools,
+            model=model_options.model if model_options and model_options.model else "",
+            think=model_options.think if model_options and model_options.think is not None else False,
+            persist_thinking=model_options.persist_thinking if model_options and model_options.persist_thinking is not None else True,
+            options=model_options.to_ollama_options() if model_options else {},
+            max_iterations=effective_max_iterations,
+        )
+        before_model_callbacks = [make_log_before_model_call(agent)]
+        after_model_callbacks = [make_log_after_model_call(agent)]
         with agent_span(agent.name):
-            messages = [
+            history = ConversationHistory([
                 {"role": "system", "content": agent.instruction},
                 {"role": "user", "content": instructions},
-            ]
+            ])
+            num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
+            ctx_manager = ContextManager(history=history, context_limit=num_ctx)
+            after_model_callbacks.append(ctx_manager.make_after_model_callback())
 
             # For string results, single pass without retry
             if result_type is str:
                 return await _run_tool_loop_once(
-                    messages=messages,
+                    history=history,
                     agent=agent,
                     before_model_callbacks=before_model_callbacks,
                     after_model_callbacks=after_model_callbacks,
@@ -320,7 +340,7 @@ Returns:
 
             # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
             return await _run_with_json_retry(
-                messages=messages,
+                history=history,
                 agent=agent,
                 result_type=result_type,
                 before_model_callbacks=before_model_callbacks,
@@ -329,8 +349,8 @@ Returns:
             )
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
-    # distinguish multiple agent tools. We assume agent.name values are unique.
-    safe_agent_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in agent.name).strip("_") or "agent"
+    # distinguish multiple agent tools. We assume name values are unique.
+    safe_agent_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_") or "agent"
     func_name = f"run_{safe_agent_name}_as_tool"
     run_agent_as_tool.__name__ = func_name
     run_agent_as_tool.__qualname__ = func_name

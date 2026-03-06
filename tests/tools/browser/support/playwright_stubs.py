@@ -351,6 +351,9 @@ class StubPage:
     def get_by_text(self, text: str, *, exact: bool = True) -> StubLocator:
         return self._text_locators.get(text, StubLocator(self, key=f"text={text}", present=False))
 
+    def get_by_alt_text(self, text: str, *, exact: bool = True) -> StubLocator:
+        return StubLocator(self, key=f"alt={text}", present=False)
+
     def locator(self, selector: str) -> StubLocator:
         if selector == "html":
             return StubLocator(self, key="html", present=True, tag="html")
@@ -598,27 +601,146 @@ class StubPage:
         self._evaluate_overrides[script] = result
 
 
+class StubFrame:
+    """Minimal Frame stub for testing iframe-aware tools.
+
+    Mirrors the subset of Frame API used by tools: evaluate, locator,
+    get_by_role, get_by_text, title, url, content, is_detached.
+    Does NOT have mouse, keyboard, screenshot, or viewport_size.
+    """
+
+    def __init__(
+        self,
+        *,
+        url: str = "https://iframe.test/widget",
+        title: str = "Iframe Widget",
+        body_text: str = "Iframe content",
+        detached: bool = False,
+        child_count: int = 5,
+        bounding_box: dict[str, float] | None = None,
+    ) -> None:
+        self.url = url
+        self._title = title
+        self._body_text = body_text
+        self._detached = detached
+        self._child_count = child_count
+        self._bounding_box = bounding_box or {"x": 0, "y": 0, "width": 1200, "height": 700}
+        self._frame_element = _StubFrameElement(self._bounding_box)
+
+    def is_detached(self) -> bool:
+        return self._detached
+
+    async def frame_element(self) -> "_StubFrameElement":
+        return self._frame_element
+
+    async def evaluate(self, script: str, arg: Any = None) -> Any:
+        # Support the child_count check used by _detect_dominant_frame
+        if "document.body" in script and "children.length" in script:
+            return self._child_count
+        # Handle annotated snapshot JS DOM walker
+        if isinstance(script, str) and "budget" in script and "scopeQuery" in script and arg is not None:
+            return {"content": self._body_text, "truncated": False}
+        # Handle viewport info query
+        if isinstance(script, str) and "scroll_top" in script:
+            return {
+                "scroll_top": 0,
+                "viewport_height": 700,
+                "viewport_width": 1200,
+                "document_height": 1500,
+            }
+        return None
+
+    async def evaluate_handle(self, script: str, arg: Any = None) -> Any:
+        return None
+
+    async def title(self) -> str:
+        return self._title
+
+    async def content(self) -> str:
+        return f"<html><body>{self._body_text}</body></html>"
+
+    def get_by_role(self, role: str, *, name: str | None = None, exact: bool = True) -> StubLocator:
+        key = f"role={role}[name={name}]" if name else f"role={role}"
+        return StubLocator(StubPage(), key=key, present=False)
+
+    def get_by_text(self, text: str, *, exact: bool = True) -> StubLocator:
+        return StubLocator(StubPage(), key=f"text={text}", present=False)
+
+    def get_by_alt_text(self, text: str, *, exact: bool = True) -> StubLocator:
+        return StubLocator(StubPage(), key=f"alt={text}", present=False)
+
+    def locator(self, selector: str) -> StubLocator:
+        return StubLocator(StubPage(), key=selector, present=False)
+
+
+class _StubFrameElement:
+    """Stub for the element handle returned by frame.frame_element()."""
+
+    def __init__(self, box: dict[str, float]) -> None:
+        self._box = box
+
+    async def bounding_box(self) -> dict[str, float]:
+        return self._box
+
+
 class StubBrowser:
     """Minimal browser stub exposing ``current_page`` for interaction tests."""
 
     def __init__(self, page: StubPage) -> None:
         self._page = page
+        self._active_frame: StubFrame | None = None
 
     async def current_page(self) -> StubPage:
         return self._page
 
+    async def active_frame(self) -> StubPage | StubFrame:
+        if self._active_frame is not None and not self._active_frame.is_detached():
+            return self._active_frame
+        return self._page
+
+    async def active_view(self) -> Any:
+        from tools.browser.core.browser import ActiveView
+        frame = await self.active_frame()
+        try:
+            title = await self._page.title()
+        except Exception:
+            title = "Test Page"
+        return ActiveView(frame=frame, title=title, url=self._page.url)
+
+    def clear_active_frame(self) -> None:
+        self._active_frame = None
+
     async def new_page(self) -> StubPage:
         return self._page
 
+    async def navigate(self, url: str) -> Any:
+        from tools.browser.core.browser import BrowserInteractionResult
+        self.clear_active_frame()
+        await self._page.goto(url)
+        return BrowserInteractionResult(
+            navigation=True,
+            page_changed=True,
+            reason="browser-navigation",
+            navigation_response=None,
+            download=None,
+        )
+
+    async def navigate_back(self) -> "BrowserInteractionResult":
+        from tools.browser.core.browser import BrowserInteractionResult
+
+        async def _back() -> None:
+            await self._page.go_back(wait_until="domcontentloaded")
+
+        return await self.perform_interaction(_back)
+
     async def perform_interaction(
         self,
-        page: StubPage,
         action: Callable[[], Awaitable[Any]],
     ) -> "BrowserInteractionResult":
         """Match Browser.perform return contract for tests."""
-        initial_url = getattr(page, "url", "")
+        initial_url = getattr(self._page, "url", "")
         await action()
-        final_url = getattr(page, "url", "")
+        final_url = getattr(self._page, "url", "")
         navigation = bool(initial_url and final_url and initial_url != final_url)
         reason = "browser-navigation" if navigation else "no-change"
 
@@ -627,7 +749,7 @@ class StubBrowser:
         from tools.browser.core.waits import wait_for_page_settle as settle_helper
 
         waits = load_config().tools.browser.waits
-        await settle_helper(page, expect_navigation=navigation, waits=waits)
+        await settle_helper(self._page, waits=waits)
 
         return BrowserInteractionResult(
             navigation=navigation,

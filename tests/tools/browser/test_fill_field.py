@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tools.browser import BrowserToolError
-from tools.browser.interactions import InteractionResult, fill_field
+from tools.browser.interactions import fill_field
 from tests.tools.browser.support.playwright_stubs import StubLocator, StubPage
 
 
@@ -38,13 +38,10 @@ async def test_fill_field_by_css(
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     result = await fill_field(".search-box", "chips")
-    assert isinstance(result, InteractionResult)
-    assert result.page_changed is False
-    assert result.reason == "no-change"
-    assert result.page_view is None
-    assert getattr(page, "_body_text", "").startswith("Filled value: chips")
+    assert isinstance(result, str)
+    assert "page_changed: no" in result
+    assert "[Page:" in result
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit
@@ -66,12 +63,9 @@ async def test_fill_field_by_visible_text(
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     result = await fill_field("Email", "user@example.com")
-    assert result.page_changed is False
-    assert result.reason == "no-change"
-    assert result.page_view is None
-    assert "user@example.com" in getattr(page, "_body_text", "")
+    assert "page_changed: no" in result
+    assert "[Page:" in result
     assert settle_tracker["count"] == 1
-    assert settle_tracker["expect_flags"] == [False]
 
 
 @pytest.mark.unit

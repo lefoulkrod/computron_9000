@@ -10,16 +10,23 @@ This package provides:
 """
 
 from .context import (
+    StopRequestedError,
     agent_span,
+    check_stop,
     event_context,
+    get_model_options,
     publish_event,
+    request_stop,
+    set_model_options,
 )
 from .dispatcher import EventDispatcher, Handler
 from .models import (
     AssistantEventPayload,
     AssistantResponse,
     AssistantResponseData,
-    BrowserSnapshotPayload,
+    BrowserScreenshotPayload,
+    GenerationPreviewPayload,
+    TerminalOutputPayload,
     ToolCallPayload,
 )
 
@@ -27,11 +34,18 @@ __all__ = [
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",
-    "BrowserSnapshotPayload",
+    "BrowserScreenshotPayload",
     "EventDispatcher",
+    "GenerationPreviewPayload",
     "Handler",
+    "StopRequestedError",
+    "TerminalOutputPayload",
     "ToolCallPayload",
     "agent_span",
+    "check_stop",
     "event_context",
+    "get_model_options",
     "publish_event",
+    "request_stop",
+    "set_model_options",
 ]

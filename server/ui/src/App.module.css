@@ -38,13 +38,19 @@
   height: max-content;
 }
 
-/* In 3-column: middle column for browser */
+/* In 3-column: middle column for panels */
 .browserColumn {
   flex: 0 0 35%;
   max-width: 35%;
   min-width: 20rem;
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+  align-self: flex-start;
+  position: sticky;
+  top: calc(var(--header-height) + 0.75rem);
+  max-height: calc(100vh - var(--header-height) - 2rem);
+  overflow-y: auto;
 }
 
 /* Messages column - adjusts based on layout */

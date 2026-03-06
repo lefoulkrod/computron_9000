@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from tools._truncation import truncate_args
+
 from ._fs_internal import is_binary_file
 from ._path_utils import resolve_under_home
 from .models import (
@@ -28,24 +30,16 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+@truncate_args(content=0)
 def write_file(path: str, content: str) -> WriteFileResult:
-    """Write a UTF-8 text file within the virtual computer home directory.
-
-    Overwrites the file if it already exists and creates parent directories as
-    needed. Accepts text only and writes using UTF-8. For binary data, encode
-    to text (e.g., base64) before writing. This function does not raise on I/O
-    errors; failures are reported in the returned ``WriteFileResult``.
+    """Write UTF-8 text to a file, creating parent directories as needed.
 
     Args:
-        path: Relative or absolute path under the configured home directory.
-            The returned path in the result is normalized to be relative to the
-            home directory.
-        content: UTF-8 text to write. Only ``str`` is accepted.
+        path: File path (relative or absolute under home).
+        content: Text to write.
 
     Returns:
-        WriteFileResult: Result object indicating success or failure. On
-        success, ``file_path`` contains the relative path written. On failure,
-        ``error`` contains a message.
+        WriteFileResult: Success flag and relative ``file_path``.
     """
     file_path: Path | None = None
     rel_return_path: str = ""
@@ -64,15 +58,13 @@ def write_file(path: str, content: str) -> WriteFileResult:
 
 
 def make_dirs(path: str) -> MakeDirsResult:
-    """Create a directory (and any missing parents) under the home directory.
+    """Create a directory and any missing parents.
 
     Args:
-        path: Relative or absolute directory path under the configured home
-            directory to create.
+        path: Directory path (relative or absolute under home).
 
     Returns:
-        MakeDirsResult: Result object with ``success`` and the created
-        directory path (relative to home). ``error`` is set on failure.
+        MakeDirsResult: Success flag and relative ``dir_path``.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
@@ -85,15 +77,13 @@ def make_dirs(path: str) -> MakeDirsResult:
 
 
 def remove_path(path: str) -> RemovePathResult:
-    """Remove a file or directory recursively if present.
+    """Remove a file or directory (recursive). No-op if path doesn't exist.
 
     Args:
-        path: Relative or absolute path (under the home directory) to remove.
+        path: Path to remove (relative or absolute under home).
 
     Returns:
-        RemovePathResult: Result object indicating success or failure. On
-        success, ``path`` is the relative path removed (or that did not exist).
-        On failure, ``error`` contains a message.
+        RemovePathResult: Success flag and relative ``path``.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
@@ -116,12 +106,11 @@ def move_path(src: str, dst: str) -> MoveCopyResult:
     """Move a file or directory, creating destination parents as needed.
 
     Args:
-        src: Source path (relative or absolute under the home directory).
-        dst: Destination path (relative or absolute under the home directory).
+        src: Source path (relative or absolute under home).
+        dst: Destination path (relative or absolute under home).
 
     Returns:
-        MoveCopyResult: Result object indicating success or failure. Paths in
-        the result are normalized to be relative to the home directory.
+        MoveCopyResult: Success flag with relative ``src`` and ``dst``.
     """
     try:
         src_abs, _home, src_rel = resolve_under_home(src)
@@ -137,18 +126,14 @@ def move_path(src: str, dst: str) -> MoveCopyResult:
 
 
 def copy_path(src: str, dst: str) -> MoveCopyResult:
-    """Copy a file or directory.
-
-    If copying a directory, existing destination contents are merged (similar
-    to ``cp -r`` with existing dirs allowed).
+    """Copy a file or directory (recursive, merges into existing dirs).
 
     Args:
-        src: Source path (relative or absolute under the home directory).
-        dst: Destination path (relative or absolute under the home directory).
+        src: Source path (relative or absolute under home).
+        dst: Destination path (relative or absolute under home).
 
     Returns:
-        MoveCopyResult: Result object indicating success or failure. Paths in
-        the result are normalized to be relative to the home directory.
+        MoveCopyResult: Success flag with relative ``src`` and ``dst``.
     """
     try:
         src_abs, _home, src_rel = resolve_under_home(src)
@@ -166,22 +151,16 @@ def copy_path(src: str, dst: str) -> MoveCopyResult:
         return MoveCopyResult(success=True, src=src_rel, dst=dst_rel)
 
 
+@truncate_args(content=0)
 def append_to_file(path: str, content: str) -> WriteFileResult:
     """Append UTF-8 text to a file, creating the file and parents if needed.
 
-    Appends text using UTF-8 encoding and returns a ``WriteFileResult``. This function
-    does not raise on I/O errors; failures are reported in the returned result object
-    with an ``error`` message. Only ``str`` content is accepted; for binary data,
-    encode to text (e.g., base64) before calling.
-
     Args:
-        path: Relative or absolute path under the home directory.
-        content: Text to append (UTF-8). Only ``str`` is accepted.
+        path: File path (relative or absolute under home).
+        content: Text to append.
 
     Returns:
-        WriteFileResult: Result object indicating success or failure. On success,
-        ``file_path`` contains the relative path written. On failure, ``error``
-        contains a message.
+        WriteFileResult: Success flag and relative ``file_path``.
     """
     file_path: Path | None = None
     rel_return_path: str = ""
@@ -199,6 +178,7 @@ def append_to_file(path: str, content: str) -> WriteFileResult:
     return WriteFileResult(success=True, file_path=rel_return_path)
 
 
+@truncate_args(content=0)
 def prepend_to_file(path: str, content: str) -> WriteFileResult:
     """Prepend UTF-8 text to a file, creating the file if needed.
 
@@ -261,14 +241,13 @@ def write_files(files: list[tuple[str, str]]) -> list[WriteFileResult]:
 
 
 def path_exists(path: str) -> PathExistsResult:
-    """Check whether a path exists and whether it is a file or directory.
+    """Check whether a path exists and its type (file or directory).
 
     Args:
-        path: Relative or absolute path (under the home directory) to check.
+        path: Path to check (relative or absolute under home).
 
     Returns:
-        PathExistsResult: Result object containing ``exists``, ``is_file``,
-        ``is_dir``, and the normalized relative ``path``.
+        PathExistsResult: ``exists``, ``is_file``, ``is_dir``, and ``path``.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
@@ -332,21 +311,14 @@ def _read_file_directory(path: str) -> ReadResult:
 
 
 def list_dir(path: str, *, include_hidden: bool = False) -> DirectoryReadResult:
-    """List directory contents with optional hidden file filtering.
-
-    Returns a directory listing with entries for files and subdirectories.
-    By default, hidden files and directories (those starting with '.') are
-    excluded from the results.
+    """List directory contents.
 
     Args:
-        path: Relative or absolute path (under the home directory) to list.
-        include_hidden: If False, exclude entries starting with '.'.
+        path: Directory path (relative or absolute under home).
+        include_hidden: If False (default), exclude dotfiles/dotdirs.
 
     Returns:
-        DirectoryReadResult: Directory listing with filtered entries.
-
-    Raises:
-        ReadFileError: If the path does not exist, is not a directory, or is not readable.
+        DirectoryReadResult: Entries with ``name``, ``is_file``, ``is_dir``.
     """
     result = _read_file_directory(path)
 

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Download Test Page</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+    h1 { color: #333; }
+    .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+    a { display: inline-block; margin: 8px 0; padding: 8px 16px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px; }
+    a:hover { background: #0052a3; }
+    button { margin: 8px 0; padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Download Test Page</h1>
+  <p>This page tests various file download scenarios for browser tool regression testing.</p>
+
+  <div class="section">
+    <h2>1. Direct File Links (inline navigation)</h2>
+    <p>Clicking these opens the file in the browser (inline preview):</p>
+    <a href="/static/computron_logo.png">View PNG Image</a><br>
+    <a href="/static/test_sample.pdf">View PDF Document</a>
+  </div>
+
+  <div class="section">
+    <h2>2. Download Attribute Links (Content-Disposition: attachment)</h2>
+    <p>Clicking these triggers a download event:</p>
+    <a href="/static/computron_logo.png" download="logo_download.png">Download PNG Image</a><br>
+    <a href="/static/test_sample.txt" download>Download Text File</a>
+  </div>
+
+  <div class="section">
+    <h2>3. Generated File Download (Blob URL)</h2>
+    <button onclick="downloadGeneratedCSV()">Download Generated CSV</button>
+  </div>
+
+  <div class="section">
+    <h2>4. Navigation Links (normal HTML)</h2>
+    <p>These should work normally (no download detection):</p>
+    <a href="/static/grounding_test.html">Navigate to Grounding Test</a><br>
+    <a href="https://example.com">Navigate to Example.com</a>
+  </div>
+
+  <script>
+    function downloadGeneratedCSV() {
+      const csv = "Name,Age,City\nAlice,30,NYC\nBob,25,LA\nCharlie,35,Chicago";
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'generated_data.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

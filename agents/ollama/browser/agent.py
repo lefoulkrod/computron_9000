@@ -1,133 +1,117 @@
-"""Simple browser agent implementation with URL summary and screenshot Q&A tools.
+"""Simple browser agent definition constants.
 
 This agent is intentionally minimal: it can open a URL, summarize textual content, and
-ask the vision model questions about a captured screenshot. It mirrors the structure
-of the Coder agent for consistency across agents.
+ask the vision model questions about a captured screenshot.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from textwrap import dedent
 
-from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
-    make_run_agent_as_tool_function,
-)
-from agents.types import Agent
-from models import get_default_model
+from agents.ollama.sdk import make_run_agent_as_tool_function
 from tools.browser import (
     ask_about_screenshot,
+    browse_page,
     click,
+    click_element,
     drag,
     execute_javascript,
     fill_field,
     go_back,
     open_url,
+    press_and_hold,
+    press_and_hold_element,
     press_keys,
+    read_page,
+    save_page_content,
     scroll_page,
     select_option,
-    view_page,
 )
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
+from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
 
-
-# Use default model unless a specialized one is needed; mirrors other agents
-model = get_default_model()
-
+NAME = "BROWSER_AGENT"
+DESCRIPTION = "Browse and interact with web pages: navigate, read content, click, fill forms, scroll, and execute JavaScript."
 SYSTEM_PROMPT = dedent(
     """
-    Browser automation agent using Playwright. Browser persists state (cookies/storage/tabs)—reuse pages.
+    Browser automation agent.  Browser persists state (cookies/tabs) between calls.
 
-    CORE TOOLS:
-    Navigation: open_url(url), scroll_page(dir, amt), go_back()
-    Reading: view_page(scope?) — see what's on screen with [role] name markers
-    Actions: click(selector), fill_field(selector, value), press_keys(keys), select_option(selector, value)
-    Vision⚠️ SLOW: ask_about_screenshot()
-
-    IMPORTANT — open_url vs view_page:
-    - open_url(url) NAVIGATES to a new URL — use only when you need a different page
-    - view_page() reads the CURRENT page without navigating — use to check what's on screen
-    After any action (click, fill, scroll), use view_page() to see the updated page.
-
-    VIEW_PAGE — YOUR PRIMARY READING TOOL:
-    view_page() returns interleaved content and interactive elements for the current viewport:
-        [link] Amazon Prime
-        [searchbox] Search Amazon
-        [h1] 1-16 of over 50,000 results for "wireless headphones"
-        [h2] Results
-        [link] Sony WH-1000XM5 Wireless Headphones
-        $348.00
-        [button] Add to Cart
-
-    SELECTORS — Copy from view_page output, use as role:name:
+    SELECTORS: Use role:name format from browse_page() output.
         click("button:Add to Cart")
-        fill_field("searchbox:Search Amazon", "laptop")
-        click("link:Sony WH-1000XM5 Wireless Headphones")
+        fill_field("searchbox:Search", "query")
+        Multiple matches: click("link:Product[0]")
 
-    Scoping: view_page(scope="Results") narrows to a page section (matches headings/landmarks).
-    After scroll: view_page() shows new viewport content.
-    After click/fill: the returned page_view shows the updated page automatically.
+    EFFICIENCY:
+    - Stop when you have enough data — do NOT scroll for completeness.
+    - Prefer site search/filters over scrolling through results.
+    - Dismiss overlays early (click close/dismiss buttons).
 
-    EFFICIENT PATTERNS:
-    - ALWAYS prefer site search/filters over scrolling through results
-    - view_page() shows what's visible — scroll + view_page to see more
-    - Use scope to focus on specific sections without noise
-    - Dismiss overlays early (click close/dismiss buttons)
+    LOCAL FILES: ALL files under /home/computron/ are already served at
+    http://localhost:8080/home/computron/... by the app server. To view any
+    container file, just prepend http://localhost:8080 to its path:
+        /home/computron/workspace/index.html
+        → open_url("http://localhost:8080/home/computron/workspace/index.html")
+    Do NOT start your own HTTP server (python -m http.server, etc.) — it is
+    never needed.
 
-    WORKFLOW:
-    1. open_url(url) → view_page() to see the page
-    2. Use site search if available: fill_field("searchbox:...", query) → press_keys(["Enter"])
-    3. view_page() or view_page(scope="Results") to read results
-    4. Click elements using role:name from view_page: click("link:Product Name...")
-    5. scroll_page("down") → view_page() to see more content
-    6. If stuck/ambiguous: ASK USER for clarification
+    RULES:
+    - NEVER use curl/wget/scripts for web fetching — use the browser.
+    - Use run_bash_cmd ONLY for processing saved files (grep, cat, ls).
+    - Downloads auto-save to /home/computron/.
+    - When you save/download a file, mention the path in your response.
+
+    VISION TOOLS (use only as a last resort):
+    click_element, press_and_hold_element, and ask_about_screenshot use
+    vision (screenshot analysis) which is slow and expensive.  Always try
+    selector-based tools first (click, fill_field, press_keys, etc.).
+    Only fall back to vision tools when selectors repeatedly fail:
+        click_element("blue Submit button next to the price")
+        press_and_hold_element("press and hold captcha button", duration_ms=8000)
 
     WHEN STUCK:
-    - Can't find element: scroll + view_page, or use view_page(scope="...") to focus
-    - Ambiguous instructions: Ask user to clarify
-    - Multiple similar elements: use index suffix click("button:Add to Cart[0]")
+    - Can't find element → scroll + browse_page, or browse_page(scope="...")
+    - Selector still fails after scrolling → click_element("describe it visually")
+    - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
+    - Multiple similar elements → use index suffix: click("button:Submit[0]")
+    - Ambiguous → ask user for clarification
     """
 )
+TOOLS = [
+    open_url,
+    browse_page,
+    read_page,
+    click,
+    click_element,
+    press_and_hold,
+    press_and_hold_element,
+    fill_field,
+    press_keys,
+    select_option,
+    scroll_page,
+    go_back,
+    drag,
+    ask_about_screenshot,
+    execute_javascript,
+    save_page_content,
+    run_bash_cmd,
+    save_to_scratchpad,
+    recall_from_scratchpad,
+]
 
-browser_agent = Agent(
-    name="BROWSER_AGENT",
-    description=(
-        "An agent that opens a URL, summarizes the page, and can ask visual questions about a captured screenshot."
-    ),
+browser_agent_tool = make_run_agent_as_tool_function(
+    name=NAME,
+    description=DESCRIPTION,
     instruction=SYSTEM_PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[
-        open_url,
-        view_page,
-        click,
-        fill_field,
-        press_keys,
-        select_option,
-        scroll_page,
-        go_back,
-        drag,
-        ask_about_screenshot,
-        execute_javascript,
-    ],
-    think=model.think,
-)
-
-before_model_call_callback = make_log_before_model_call(browser_agent)
-after_model_call_callback = make_log_after_model_call(browser_agent)
-
-browser_agent_tool: Callable[[str], Awaitable[str]] = make_run_agent_as_tool_function(
-    agent=browser_agent,
-    tool_description="An agent that can use a browser to interact with web pages.",
-    before_model_callbacks=[before_model_call_callback],
-    after_model_callbacks=[after_model_call_callback],
+    tools=TOOLS,
 )
 
 __all__ = [
-    "browser_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "browser_agent_tool",
 ]

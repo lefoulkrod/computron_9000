@@ -97,19 +97,30 @@ class BrowserToolsConfig(BaseModel):
 
     human: BrowserHumanConfig = Field(default_factory=BrowserHumanConfig)
     waits: "BrowserWaitConfig" = Field(default_factory=lambda: BrowserWaitConfig())
+    scroll_warn_threshold: int = 5
+    scroll_hard_limit: int = 10
 
 
 class BrowserWaitConfig(BaseModel):
     """Configuration controlling browser wait/settle timeouts."""
 
-    # Maximum time to wait for a navigation to begin/complete (ms)
-    navigation_timeout_ms: int = 8000
-    # When a navigation is detected, wait up to this many ms for network idle
-    post_navigation_idle_timeout_ms: int = 6000
-    # Cap for DOM mutation observer before giving up (ms)
+    # Wait up to this many ms for network idle after any interaction.
+    # Pages with persistent HTTP connections (SSE, long-polling) will
+    # hit this timeout and move on.  If the network is already idle
+    # the check resolves instantly.
+    network_idle_timeout_ms: int = 3000
+    # Cap for waiting on web font loading after network settles.
+    # Fonts are already downloaded by networkidle; this covers the
+    # parsing/layout time.  Resolves instantly when no fonts are loading.
+    font_timeout_ms: int = 1000
+    # Cap for DOM mutation observer before giving up (ms).
+    # Also observes open shadow roots so web component updates are caught.
     dom_mutation_timeout_ms: int = 1500
     # Window of quiet DOM mutations required before settling (ms)
-    dom_quiet_window_ms: int = 200
+    dom_quiet_window_ms: int = 150
+    # Cap for waiting on short CSS animations (modal slide-ins, fades)
+    # after DOM settles.  Only animations ≤ 1s are waited on.
+    animation_timeout_ms: int = 1000
 
 
 # Note: BrowserWaitConfig is referenced as a forward-ref above to avoid

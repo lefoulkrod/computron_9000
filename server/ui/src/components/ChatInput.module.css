@@ -73,12 +73,12 @@
 
 .inputAreaButtons {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: center;
   justify-content: flex-end;
-  margin: 0.25rem 0 0.25rem 0;
-  padding-top: 0.5rem;
+  margin-top: 0.25rem;
 }
+
 
 .iconButton {
   width: 40px;
@@ -102,6 +102,13 @@
 .iconButton:active:not(:disabled) { transform: translateY(1px); }
 .iconButton:disabled { opacity: 0.6; }
 .iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+
+.stopButton {
+  background: #c0392b;
+  color: #fff;
+  border-color: rgba(0,0,0,0.3);
+}
+.stopButton:hover { filter: brightness(1.12); }
 
 /* Inline preview that sits inside the textarea area (top-left) */
 .inlinePreview {
@@ -160,3 +167,31 @@
   outline: 2px solid #7aa2ff;
   outline-offset: 2px;
 }
+
+/* Generic file chip for non-image attachments */
+.fileChip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.5rem;
+  box-sizing: border-box;
+  background: var(--secondary);
+  border-radius: 8px;
+}
+
+.fileChipIcon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.fileChipName {
+  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 0.78em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

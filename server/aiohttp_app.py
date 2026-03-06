@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aiohttp import web
+from ollama import AsyncClient
 from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -24,7 +25,12 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from aiohttp.web_response import Response, StreamResponse
 
 from agents import handle_user_message, reset_message_history
-from agents.types import Data
+from agents.ollama.sdk.events import request_stop
+from agents.types import Data, LLMOptions
+from config import load_config
+from tools.custom_tools.registry import delete_tool, list_tools
+from tools.memory import forget as forget_memory
+from tools.memory import load_memory, set_key_hidden
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,7 @@ class Attachment(BaseModel):
 
     base64: str
     content_type: str
+    filename: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -48,6 +55,7 @@ class ChatRequest(BaseModel):
 
     message: str
     data: list[Attachment] | None = None
+    options: LLMOptions | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -116,27 +124,9 @@ async def stream_events(
 
     try:
         async for event in events:
-            if not isinstance(event, BaseModel):  # pragma: no cover - defensive
-                msg = f"stream_events expected BaseModel events; received {type(event)!r}"  # type: ignore[unreachable]
-                raise TypeError(msg)
-            raw = event.model_dump(mode="json", exclude_none=True)
-            final_flag = bool(raw.get("final", False))
-            # Direct pass-through (no legacy duplication)
-            data_out: dict[str, object | None] = {
-                "final": final_flag,
-                "thinking": raw.get("thinking"),
-                "content": raw.get("content"),
-            }
-            if "data" in raw:
-                data_out["data"] = raw["data"]
-            if "event" in raw:
-                data_out["event"] = raw["event"]
-            if "agent_name" in raw:
-                data_out["agent_name"] = raw["agent_name"]
-            if "depth" in raw:
-                data_out["depth"] = raw["depth"]
+            data_out = event.model_dump(mode="json", exclude_none=True)
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
-            if final_flag:
+            if data_out.get("final"):
                 break
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Error while streaming events")
@@ -165,8 +155,29 @@ async def chat_handler(request: Request) -> StreamResponse:
         return web.json_response({"error": "Message field is required."}, status=400)
     data_objs: list[Data] | None = None
     if payload.data:
-        data_objs = [Data(base64_encoded=a.base64, content_type=a.content_type) for a in payload.data]
-    return await stream_events(request, handle_user_message(user_query, data_objs))
+        data_objs = [
+            Data(base64_encoded=a.base64, content_type=a.content_type, filename=a.filename)
+            for a in payload.data
+        ]
+    return await stream_events(
+        request,
+        handle_user_message(user_query, data_objs, options=payload.options),
+    )
+
+
+async def container_file_handler(request: Request) -> StreamResponse:
+    """Serve files from the container's home directory via the host volume mount."""
+    path = request.match_info.get("path", "")
+    cfg = load_config()
+    host_home = Path(cfg.virtual_computer.home_dir).resolve()
+    host_path = (host_home / path).resolve()
+
+    if not host_path.is_relative_to(host_home):
+        return web.Response(status=403, text="Forbidden")
+    if not host_path.is_file():
+        return web.Response(status=404, text="Not found")
+
+    return web.FileResponse(host_path)
 
 
 async def index_handler(_request: Request) -> StreamResponse:
@@ -178,9 +189,86 @@ async def index_handler(_request: Request) -> StreamResponse:
     return web.FileResponse(index_path)
 
 
+async def stop_handler(_request: Request) -> Response:
+    """Interrupt the active agent conversation turn."""
+    request_stop()
+    return web.json_response({"ok": True})
+
+
 async def delete_history_handler(_request: Request) -> Response:
     """Clear chat history."""
     reset_message_history()
+    return web.Response(status=204)
+
+
+async def list_custom_tools_handler(_request: Request) -> Response:
+    """Return all custom tool definitions as JSON."""
+    tools = list_tools()
+    data = [
+        {
+            "id": t.id,
+            "name": t.name,
+            "description": t.description,
+            "type": t.type,
+            "language": t.language,
+            "tags": t.tags,
+            "created_at": t.created_at,
+        }
+        for t in tools
+    ]
+    return web.json_response(data)
+
+
+async def delete_custom_tool_handler(request: Request) -> Response:
+    """Delete a custom tool by name."""
+    name = request.match_info["name"]
+    found = delete_tool(name)
+    if not found:
+        return web.json_response({"error": f"Tool '{name}' not found"}, status=404)
+    return web.Response(status=204)
+
+
+async def list_models_handler(_request: Request) -> Response:
+    """Return available Ollama models and the configured default."""
+    cfg = load_config()
+    host = cfg.llm.host or None
+    client = AsyncClient(host=host) if host else AsyncClient()
+    response = await client.list()
+    models = [m.model for m in response.models if m.model is not None]
+    return web.json_response({
+        "models": models,
+        "default": cfg.settings.default_model,
+    })
+
+
+async def list_memory_handler(_request: Request) -> Response:
+    """Return all stored memories and the set of hidden keys."""
+    entries = load_memory()
+    return web.json_response({
+        "entries": {k: e.value for k, e in entries.items()},
+        "hidden": sorted(k for k, e in entries.items() if e.hidden),
+    })
+
+
+async def delete_memory_handler(request: Request) -> Response:
+    """Delete a memory entry by key."""
+    key = request.match_info["key"]
+    result = await forget_memory(key)
+    if result.get("status") == "not_found":
+        return web.json_response({"error": f"Memory key '{key}' not found"}, status=404)
+    return web.Response(status=204)
+
+
+async def set_memory_hidden_handler(request: Request) -> Response:
+    """Set the hidden flag for a memory entry."""
+    key = request.match_info["key"]
+    if key not in load_memory():
+        return web.json_response({"error": f"Memory key '{key}' not found"}, status=404)
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+    set_key_hidden(key, bool(body.get("hidden", False)))
     return web.Response(status=204)
 
 
@@ -202,7 +290,20 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
 
     # API routes
     app.router.add_route("POST", "/api/chat", chat_handler)
+    app.router.add_route("POST", "/api/chat/stop", stop_handler)
     app.router.add_route("DELETE", "/api/chat/history", delete_history_handler)
+    app.router.add_route("GET", "/api/models", list_models_handler)
+    app.router.add_route("GET", "/api/custom-tools", list_custom_tools_handler)
+    app.router.add_route("DELETE", "/api/custom-tools/{name}", delete_custom_tool_handler)
+    app.router.add_route("GET", "/api/memory", list_memory_handler)
+    app.router.add_route("DELETE", "/api/memory/{key}", delete_memory_handler)
+    app.router.add_route("POST", "/api/memory/{key}/hidden", set_memory_hidden_handler)
+
+    # Container file serving — lets the frontend (and agent-authored HTML) reference
+    # container files by their real path instead of base64-encoding them.
+    cfg = load_config()
+    container_prefix = cfg.virtual_computer.container_working_dir
+    app.router.add_route("GET", f"{container_prefix}/{{path:.*}}", container_file_handler)
 
     # UI routes
     app.router.add_route("GET", "/", index_handler)

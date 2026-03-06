@@ -1,8 +1,11 @@
-"""Coordinator agent package.
+"""Coordinator agent package."""
 
-This package provides the CoordinatorAgent for orchestrating deep research tasks.
-"""
+from .agent import DESCRIPTION, NAME, SYSTEM_PROMPT, TOOLS, execute_research_tool
 
-from .agent import coordinator
-
-__all__ = ["coordinator"]
+__all__ = [
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
+    "execute_research_tool",
+]

@@ -3,8 +3,9 @@ import styles from './Header.module.css';
 import ThemeIcon from './icons/ThemeIcon.jsx';
 import PlusIcon from './icons/PlusIcon.jsx';
 import LayersIcon from './icons/LayersIcon.jsx';
+import AudioIndicator from './AudioIndicator.jsx';
 
-export default function Header({ dark, onToggleTheme, onNewSession, showSubAgents, onToggleSubAgents }) {
+export default function Header({ dark, onToggleTheme, onNewSession, showSubAgents, onToggleSubAgents, audio, muted, onToggleMute, onAudioEnded }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -19,6 +20,12 @@ export default function Header({ dark, onToggleTheme, onNewSession, showSubAgent
           className={`${styles.logo} ${styles.logoDark}`}
         />
         <div className={styles.appTitle}>COMPUTRON_9000</div>
+        <AudioIndicator
+          audio={audio}
+          muted={muted}
+          onToggleMute={onToggleMute}
+          onEnded={onAudioEnded}
+        />
         <button
           onClick={onToggleSubAgents}
           id="subAgentsToggle"

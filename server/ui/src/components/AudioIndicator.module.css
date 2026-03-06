@@ -1,0 +1,64 @@
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 36px;
+    height: 36px;
+    margin-right: 0.35rem;
+    padding: 0 !important;
+    border-radius: 999px;
+    background: var(--button);
+    color: var(--text);
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    box-shadow: none;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 120ms ease, filter 160ms ease;
+}
+
+.button:hover {
+    filter: brightness(1.08);
+}
+
+.button:active {
+    transform: translateY(1px);
+}
+
+.button:focus-visible {
+    outline: 2px solid #7aa2ff;
+    outline-offset: 2px;
+}
+
+.muted {
+    opacity: 0.5;
+}
+
+.bar {
+    display: inline-block;
+    width: 3px;
+    border-radius: 2px;
+    background: currentColor;
+    animation: wave 0.8s ease-in-out infinite;
+}
+
+.bar:nth-child(1) { animation-delay: 0s;   height: 8px; }
+.bar:nth-child(2) { animation-delay: 0.15s; height: 14px; }
+.bar:nth-child(3) { animation-delay: 0.3s;  height: 10px; }
+.bar:nth-child(4) { animation-delay: 0.45s; height: 6px; }
+
+.muted .bar {
+    animation-play-state: paused;
+}
+
+@keyframes wave {
+    0%, 100% { transform: scaleY(0.5); }
+    50%      { transform: scaleY(1.2); }
+}
+
+@media (max-width: 700px) {
+    .button {
+        width: 32px;
+        height: 32px;
+    }
+}

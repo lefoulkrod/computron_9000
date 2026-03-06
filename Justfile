@@ -1,5 +1,7 @@
 # Justfile for computron_9000 project
 
+set dotenv-load
+
 # =============================================
 # Meta & Help
 # =============================================
@@ -19,7 +21,7 @@ UI_DIR := "server/ui"
 # Setup & Run
 # =============================================
 # One-command setup for new developers
-setup:
+setup home_dir=`echo "$HOME/.computron_9000"`:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "🤖 Setting up COMPUTRON_9000 development environment..."
@@ -107,6 +109,11 @@ setup:
         echo "✅ Ollama is running!"
     fi
     
+    # Create app home directory structure
+    echo "🔧 Creating home directories..."
+    mkdir -p "{{home_dir}}/custom_tools/scripts"
+    echo "✅ Directories ready at {{home_dir}}"
+
     # Run a quick test
     echo "🧪 Running quick health check..."
     uv run python -c "import agents, tools, utils; print('✅ All imports successful!')"
@@ -514,7 +521,7 @@ container-build:
     fi
     
     echo "🏗️  Building container image..."
-    podman build --format docker -f computron_os_dockerfile -t computron_9000:latest .
+    podman build --format docker -f container/Dockerfile -t computron_9000:latest .
     echo "✅ Container image built successfully!"
 
 # Start 'computron_virtual_computer' container (create volumes)
@@ -550,18 +557,27 @@ container-start:
     
     echo "🚀 Starting container..."
     home_dir=$(awk '/^virtual_computer:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
-    if [ ! -d "$home_dir" ]; then 
+    if [ ! -d "$home_dir" ]; then
         echo "📁 Creating home directory: $home_dir"
         mkdir -p "$home_dir"
     fi
-    
+
+    # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
+    hf_token_args=""
+    if [ -n "${HF_TOKEN:-}" ]; then
+        hf_token_args="-e HF_TOKEN=$HF_TOKEN"
+        echo "🔑 HF_TOKEN detected, passing to container"
+    fi
+
     podman run -d --rm \
       --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
+      --device nvidia.com/gpu=all \
+      $hf_token_args \
       -v "$home_dir:/home/computron:rw,z" \
       computron_9000:latest sleep infinity
-      
+
     echo "✅ Container 'computron_virtual_computer' started successfully!"
 
 # Stop 'computron_virtual_computer' container

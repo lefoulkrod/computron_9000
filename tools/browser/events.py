@@ -1,13 +1,18 @@
 """Browser tool event emission helpers.
 
-This module provides utilities to emit browser snapshot events after tool invocations,
-allowing the UI to display live browser state during agent interactions.
+This module provides a single ``_emit_screenshot`` function that captures a
+JPEG screenshot from a Playwright page and publishes it as a
+``BrowserScreenshotPayload`` event for the UI.
 
-Progressive snapshots (during mouse movement, typing, scrolling) are captured by a
-background ``asyncio.Task`` on a throttled timer so that interaction loops are never
-blocked by screenshot capture.  A single module-level ``_SnapshotEmitter`` manages
-the lifecycle; callers simply invoke ``request_progressive_snapshot`` which returns
-immediately.
+All screenshot emission flows funnel through ``_emit_screenshot``:
+
+- **Progressive** — ``request_progressive_screenshot`` queues a throttled,
+  non-blocking capture via ``_ScreenshotEmitter`` during interactions (mouse
+  movement, typing, scrolling).
+- **Post-tool** — ``emit_screenshot_after`` decorator calls
+  ``_emit_screenshot`` once after a tool returns a result with a page view.
+- **Ad-hoc** — ``javascript.py`` calls ``emit_screenshot`` directly after
+  JS evaluation.
 """
 
 from __future__ import annotations
@@ -24,23 +29,71 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
+from tools.browser.core import get_browser
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Throttled background snapshot emitter
+# Core screenshot capture + publish
+# ---------------------------------------------------------------------------
+
+
+async def _emit_screenshot(page: Page) -> None:
+    """Capture a JPEG screenshot from *page* and publish it as a browser event.
+
+    This is the single code path for all screenshot emission.  Uses JPEG at
+    reduced quality for fast encoding and small payloads.
+    """
+    from agents.ollama.sdk.events import (
+        AssistantResponse,
+        BrowserScreenshotPayload,
+        publish_event,
+    )
+
+    screenshot_bytes = await page.screenshot(type="jpeg", quality=55)
+    screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+
+    url = getattr(page, "url", "")
+    try:
+        title = await page.title()
+    except Exception:  # noqa: BLE001
+        title = ""
+
+    publish_event(AssistantResponse(event=BrowserScreenshotPayload(
+        type="browser_screenshot",
+        url=url,
+        title=title,
+        screenshot=screenshot_base64,
+    )))
+    logger.debug("Emitted screenshot for URL: %s", url)
+
+
+async def emit_screenshot(page: Page) -> None:
+    """Public wrapper around ``_emit_screenshot`` for use by other modules.
+
+    Swallows all exceptions so callers never fail due to screenshot capture.
+    """
+    try:
+        await _emit_screenshot(page)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to emit screenshot", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Throttled background screenshot emitter
 # ---------------------------------------------------------------------------
 
 # Minimum interval between progressive screenshots (seconds).
-# ~4 fps keeps the UI feeling live without saturating bandwidth.
-_MIN_SNAPSHOT_INTERVAL_S: float = 0.25
+# ~10 fps keeps the UI feeling live without saturating bandwidth.
+_MIN_SCREENSHOT_INTERVAL_S: float = 0.1
 
 
-class _SnapshotEmitter:
+class _ScreenshotEmitter:
     """Fire-and-forget, throttled screenshot emitter.
 
     Interaction helpers call ``request`` to signal that a screenshot would be
     useful.  The emitter coalesces rapid requests and captures at most once per
-    ``_MIN_SNAPSHOT_INTERVAL_S`` seconds, running the capture in a background
+    ``_MIN_SCREENSHOT_INTERVAL_S`` seconds, running the capture in a background
     ``asyncio.Task`` so the caller never blocks.
 
     The background task uses a *latest-value-only* drain loop: after each
@@ -57,13 +110,12 @@ class _SnapshotEmitter:
         # always captures the most recently requested page.
         self._pending_page: Page | None = None
         # Monotonically increasing generation counter.  ``request()``
-        # increments it; ``_run()`` records which generation it last captured
-        # so it knows whether new requests arrived during a slow capture.
+        # increments it; ``_run()`` compares against the value recorded
+        # before capture to detect new requests that arrived mid-capture.
         self._generation: int = 0
-        self._captured_generation: int = 0
 
     def request(self, page: Page) -> None:
-        """Request a progressive snapshot.  Returns immediately.
+        """Request a progressive screenshot.  Returns immediately.
 
         If a capture is already in-flight or was emitted recently, the request
         is coalesced so at most one capture runs per throttle window.
@@ -90,30 +142,29 @@ class _SnapshotEmitter:
         """
         try:
             while True:
-                # Respect throttle - if we emitted very recently, wait out the
+                # Respect throttle — if we emitted very recently, wait out the
                 # remainder of the interval so we don't flood the UI.
                 since = time.monotonic() - self._last_emit
-                if since < _MIN_SNAPSHOT_INTERVAL_S:
-                    await asyncio.sleep(_MIN_SNAPSHOT_INTERVAL_S - since)
+                if since < _MIN_SCREENSHOT_INTERVAL_S:
+                    await asyncio.sleep(_MIN_SCREENSHOT_INTERVAL_S - since)
 
                 page = self._pending_page
                 if page is None:
                     return
 
-                # Snapshot the current generation *before* capturing so we can
+                # Record the current generation *before* capturing so we can
                 # tell afterwards whether new requests came in.
                 gen_before = self._generation
 
-                await _emit_snapshot(page)
+                await _emit_screenshot(page)
                 self._last_emit = time.monotonic()
-                self._captured_generation = gen_before
 
                 # If no new requests arrived during the capture we're done.
                 if self._generation == gen_before:
                     return
                 # Otherwise loop to pick up the latest page reference.
         except Exception as exc:  # noqa: BLE001 - best-effort, never crash interactions
-            logger.debug("Background snapshot emitter failed: %s", exc)
+            logger.debug("Background screenshot emitter failed: %s", exc)
 
     async def wait(self) -> None:
         """Await the in-flight capture task, if any.
@@ -126,15 +177,14 @@ class _SnapshotEmitter:
                 await self._task
 
 
-_emitter = _SnapshotEmitter()
+_emitter = _ScreenshotEmitter()
 
 
-def request_progressive_snapshot(page: Page) -> None:
-    """Request a throttled, non-blocking progressive snapshot.
+def request_progressive_screenshot(page: Page) -> None:
+    """Request a throttled, non-blocking progressive screenshot.
 
     This is the single entry-point that all interaction helpers (mouse movement,
-    typing, scrolling) should call instead of the old blocking
-    ``emit_snapshot_during_interaction``.
+    typing, scrolling) should call.
 
     Args:
         page: The Playwright page to capture.
@@ -142,8 +192,8 @@ def request_progressive_snapshot(page: Page) -> None:
     _emitter.request(page)
 
 
-async def flush_progressive_snapshot() -> None:
-    """Ensure the in-flight progressive snapshot completes.
+async def flush_progressive_screenshot() -> None:
+    """Ensure the in-flight progressive screenshot completes.
 
     Interaction functions should ``await`` this once at the very end (after
     the action finishes but before returning) so the final visual state is
@@ -152,113 +202,36 @@ async def flush_progressive_snapshot() -> None:
     await _emitter.wait()
 
 
-async def _emit_snapshot(page: Page) -> None:
-    """Capture a screenshot from *page* and publish it as a browser event.
-
-    Uses JPEG at reduced quality for progressive frames (much smaller and
-    faster to decode than PNG).
-    """
-    from agents.ollama.sdk.events import (
-        AssistantResponse,
-        BrowserSnapshotPayload,
-        publish_event,
-    )
-
-    if not hasattr(page, "screenshot") or not callable(getattr(page, "screenshot", None)):
-        return
-
-    screenshot_bytes = await page.screenshot(type="jpeg", quality=55)
-    screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
-
-    url = getattr(page, "url", "")
-    try:
-        title = await page.title()
-    except Exception:  # noqa: BLE001
-        title = ""
-
-    event_payload = BrowserSnapshotPayload(
-        type="browser_snapshot",
-        url=url,
-        title=title,
-        screenshot=screenshot_base64,
-    )
-    publish_event(AssistantResponse(event=event_payload))
-    logger.debug("Emitted progressive snapshot for URL: %s", url)
+# ---------------------------------------------------------------------------
+# Post-tool screenshot decorator
+# ---------------------------------------------------------------------------
 
 
-def emit_browser_snapshot_on_page_change[F: Callable[..., Any]](func: F) -> F:
-    """Decorator to emit browser snapshot events after page-changing interactions.
+def emit_screenshot_after[F: Callable[..., Any]](func: F) -> F:
+    """Decorator that emits a browser screenshot after the wrapped tool runs.
 
-    Wraps browser tool functions that return InteractionResult or PageView.
-    Captures a screenshot directly from the browser page and emits a browser_snapshot
-    event for UI streaming. The screenshot is NOT included in the tool's return value
-    to avoid wasting context tokens.
+    Wraps browser tool functions that return ``InteractionResult`` or
+    ``PageView``.  After the tool completes, captures a screenshot via
+    ``_emit_screenshot`` and publishes it to the UI.  The screenshot is NOT
+    included in the tool's return value to avoid wasting context tokens.
 
-    Args:
-        func: The browser tool function to wrap
-
-    Returns:
-        Wrapped function that emits events after execution
+    All settling (network idle, DOM quiet, CSS animations) is handled by
+    ``wait_for_page_settle`` inside ``perform_interaction`` — this
+    decorator only captures the screenshot.
     """
 
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         result = await func(*args, **kwargs)
 
-        # Try to emit snapshot event if we have the necessary data
+        # All decorated browser tools want a post-tool screenshot.
+        # With string returns, just always emit.
         try:
-            from agents.ollama.sdk.events import (
-                AssistantResponse,
-                BrowserSnapshotPayload,
-                publish_event,
-            )
-            from tools.browser.core import get_browser
-
-            snapshot = None
-
-            # Check if result has a page_view (InteractionResult)
-            if hasattr(result, "page_view") and result.page_view is not None:
-                snapshot = result.page_view
-            # Check if result is a PageView directly
-            elif hasattr(result, "url") and hasattr(result, "title"):
-                snapshot = result
-
-            # Emit event if we have snapshot data
-            if snapshot:
-                # Capture screenshot directly from the browser
-                screenshot_base64 = None
-                try:
-                    browser = await get_browser()
-                    page = await browser.current_page()
-
-                    # Check if page has screenshot method (real browser, not test stub)
-                    if not hasattr(page, "screenshot") or not callable(getattr(page, "screenshot", None)):
-                        logger.debug("Page object doesn't have screenshot method, skipping snapshot event")
-                        return result
-
-                    # Shorter delay since we're already capturing during interactions
-                    # Just need to ensure final page state is rendered
-                    await page.wait_for_timeout(50)
-
-                    screenshot_bytes = await page.screenshot(type="png")
-                    screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
-                except Exception as screenshot_exc:  # noqa: BLE001 - best-effort screenshot
-                    logger.debug("Failed to capture screenshot: %s", screenshot_exc)
-                    return result  # Return early, don't emit event without screenshot
-
-                # Only emit if we successfully captured a screenshot
-                if screenshot_base64:
-                    event_payload = BrowserSnapshotPayload(
-                        type="browser_snapshot",
-                        url=snapshot.url,
-                        title=snapshot.title,
-                        screenshot=screenshot_base64,
-                    )
-                    publish_event(AssistantResponse(event=event_payload))
-                    logger.debug("Emitted browser snapshot event for URL: %s", snapshot.url)
+            browser = await get_browser()
+            page = await browser.current_page()
+            await _emit_screenshot(page)
         except Exception as exc:  # noqa: BLE001 - never fail the tool call
-            # Don't fail the tool call if event emission fails
-            logger.debug("Failed to emit browser snapshot event: %s", exc)
+            logger.debug("Failed to emit post-tool screenshot: %s", exc)
 
         return result
 
@@ -266,7 +239,8 @@ def emit_browser_snapshot_on_page_change[F: Callable[..., Any]](func: F) -> F:
 
 
 __all__ = [
-    "emit_browser_snapshot_on_page_change",
-    "flush_progressive_snapshot",
-    "request_progressive_snapshot",
+    "emit_screenshot",
+    "emit_screenshot_after",
+    "flush_progressive_screenshot",
+    "request_progressive_screenshot",
 ]

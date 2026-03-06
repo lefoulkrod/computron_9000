@@ -5,14 +5,20 @@ short-lived, test-oriented commands execute in the headless execution environmen
 """
 
 import asyncio
+import json
 import logging
 import re
+import uuid
 from typing import TYPE_CHECKING
 
 from podman import PodmanClient
+from podman.api import stream_frames
 from podman.domain.containers import Container
 from pydantic import BaseModel
 
+from agents.ollama.sdk.events import AssistantResponse, publish_event
+from agents.ollama.sdk.events.models import TerminalOutputPayload
+from tools._truncation import truncate_args
 from config import load_config
 from tools.virtual_computer.workspace import get_current_workspace_folder
 
@@ -52,97 +58,26 @@ class BashCmdResult(BaseModel):
     exit_code: int | None
 
 
-BASH_CMD_TIMEOUT: float = 60.0
+BASH_CMD_TIMEOUT: float = 600.0
 
-# Allowed top-level commands or command prefixes (conservative default)
-_ALLOWED_PREFIXES: tuple[str, ...] = (
-    "python",
-    "python3",
-    "pip",
-    "pytest",
-    "ruff",
-    "mypy",
-    "node",
-    "npm",
-    "git",
-    "echo",
-    "ls",
-    "cat",
-    "pwd",
-)
-
-# Deny substrings indicating long-running servers/watchers
-_DENY_PATTERNS: tuple[re.Pattern[str], ...] = (
-    # Contextual blocks for starting dev/serve processes (avoid false positives)
-    # Popular package managers invoking dev/start
-    re.compile(r"(?<!\S)(npm|pnpm|yarn|bun)\s+(run\s+)?dev\b", re.IGNORECASE),
-    re.compile(r"(?<!\S)(npm|pnpm|yarn|bun)\s+(run\s+)?start\b", re.IGNORECASE),
-    # Framework CLIs invoking dev/start/serve
-    re.compile(r"(?<!\S)(vite|astro|nuxt|next|svelte(?:-kit)?|turbo)\s+dev\b", re.IGNORECASE),
-    re.compile(r"(?<!\S)(next|nuxt|astro)\s+start\b", re.IGNORECASE),
-    re.compile(r"(?<!\S)(vue-cli-service|ng)\s+serve\b", re.IGNORECASE),
-    # 'watch' the Linux command (long-running)
-    re.compile(r"(?<!\S)watch\b", re.IGNORECASE),
-    # Watch flags: block plain flag or explicit enabling; allow explicit false/0
-    re.compile(r"--watch(All)?(?:\s|$)", re.IGNORECASE),
-    re.compile(r"--watch(All)?\s*=\s*(?!false\b|0\b)\S+", re.IGNORECASE),
-    re.compile(r"tail\s+-f"),
-    re.compile(r"sleep\s+inf(inity)?", re.IGNORECASE),
-    re.compile(r"python\s+-m\s+http\.server"),
-    re.compile(r"playwright\b.*\bheaded\b", re.IGNORECASE),
-)
+# Re-export for internal use within this module.
+from tools.virtual_computer._policy import is_allowed_command as _is_allowed_command
 
 
-def _is_allowed_command(cmd: str) -> bool:
-    """Check if a command is permitted by execution policy.
+@truncate_args(cmd=500)
+async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdResult:
+    """Execute a bash command in the virtual computer container.
 
-    Conservative rule: block only when a deny pattern matches; otherwise allow.
-    This avoids breaking legitimate multi-line or compound shell commands used
-    in tests.
-
-    Args:
-        cmd: The command string to evaluate.
-
-    Returns:
-        bool: True if allowed; False if a deny pattern matches or empty input.
-    """
-    lowered = cmd.strip()
-    if not lowered:
-        return False
-    return all(not pat.search(lowered) for pat in _DENY_PATTERNS)
-
-
-def _timeout_for(cmd: str) -> float:
-    """Compute a timeout based on the command content.
-
-    Args:
-        cmd: The command string to evaluate.
-
-    Returns:
-        float: Timeout in seconds. Uses command-specific overrides for common
-        long-running operations; otherwise defaults to ``BASH_CMD_TIMEOUT``.
-    """
-    text = cmd.strip()
-    if "pip install" in text or "-m venv" in text:
-        return 180.0
-    if text.startswith("pytest"):
-        return 120.0
-    return BASH_CMD_TIMEOUT
-
-
-async def run_bash_cmd(cmd: str) -> BashCmdResult:
-    """Execute a bash command in the virtual computer.
-
-    Enforces deny patterns, strict bash flags, and per-command timeouts.
+    Runs one-shot commands under ``set -euo pipefail``. Package installs
+    (pip, npm, apt) are auto-promoted to root. Dev servers, watch mode, and
+    other long-running/blocking processes are blocked (exit code 126).
 
     Args:
         cmd: The bash command to execute.
+        timeout: Max seconds to wait. Default 600.
 
     Returns:
-        BashCmdResult: Object containing ``stdout``, ``stderr``, and ``exit_code``.
-
-    Raises:
-        RunBashCmdError: If execution fails or a timeout occurs.
+        BashCmdResult: ``stdout``, ``stderr``, and ``exit_code``.
     """
 
     def _raise_container_not_found(container_name: str) -> None:
@@ -179,46 +114,123 @@ async def run_bash_cmd(cmd: str) -> BashCmdResult:
 
         loop = asyncio.get_running_loop()
 
-        def _exec_run_sync() -> tuple[int | None, object]:
-            exec_run_kwargs = {
-                "stdout": True,
-                "stderr": True,
-                "demux": True,
-                "tty": False,
-                "user": container_user,
-                "workdir": workdir,
-            }
-            return container.exec_run(exec_args, **exec_run_kwargs)  # type: ignore
+        # Package installs need root to write to system site-packages.
+        # Promote pip/pip3/npm/apt-get/apt install commands to root automatically.
+        _is_pkg_install = re.search(
+            r"\bpip3?\s+install\b|\bnpm\s+install\b|\bapt(?:-get)?\s+install\b",
+            cmd,
+        )
+        exec_user = "root" if _is_pkg_install else container_user
+
+        # Publish a "running" event so the UI shows the command immediately.
+        cmd_id = uuid.uuid4().hex
+        publish_event(AssistantResponse(event=TerminalOutputPayload(
+            type="terminal_output",
+            cmd_id=cmd_id,
+            cmd=cmd,
+            status="running",
+        )))
+
+        # Use the lower-level Podman API to stream output in real time.
+        # 1. Create exec instance  2. Start with stream=True
+        # 3. Read frames and publish chunks  4. Inspect exec for exit code
+        api_client = client.api
+
+        exec_data = {
+            "AttachStderr": True,
+            "AttachStdout": True,
+            "AttachStdin": False,
+            "Cmd": exec_args,
+            "Tty": False,
+            "User": exec_user,
+            "WorkingDir": workdir,
+        }
+
+        create_resp = api_client.post(
+            f"/containers/{container.name}/exec",
+            data=json.dumps(exec_data),
+        )
+        create_resp.raise_for_status()
+        exec_id = create_resp.json()["Id"]
+
+        # Bridge sync streaming iterator -> async via queue in a thread
+        queue: asyncio.Queue[tuple[bytes | None, bytes | None] | None] = asyncio.Queue()
+
+        def _stream_sync() -> None:
+            """Run in a thread: start exec, read frames, push to queue."""
+            start_resp = api_client.post(
+                f"/exec/{exec_id}/start",
+                data=json.dumps({"Detach": False, "Tty": False}),
+                stream=True,
+            )
+            start_resp.raise_for_status()
+            # APIResponse proxies attribute access to the underlying
+            # requests.Response, so stream_frames works at runtime.
+            for frame in stream_frames(start_resp, demux=True):  # type: ignore[arg-type]
+                loop.call_soon_threadsafe(queue.put_nowait, frame)  # type: ignore[arg-type]
+            # Sentinel to signal stream ended
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
 
         try:
-            exec_result = await asyncio.wait_for(loop.run_in_executor(None, _exec_run_sync), timeout=_timeout_for(cmd))
+            stream_task = loop.run_in_executor(None, _stream_sync)
+
+            async def _consume_stream() -> None:
+                while True:
+                    frame = await queue.get()
+                    if frame is None:
+                        break
+                    stdout_chunk, stderr_chunk = frame
+                    chunk_out = None
+                    chunk_err = None
+                    if stdout_chunk:
+                        chunk_out = stdout_chunk.decode("utf-8", errors="replace")
+                        stdout_parts.append(chunk_out)
+                    if stderr_chunk:
+                        chunk_err = stderr_chunk.decode("utf-8", errors="replace")
+                        stderr_parts.append(chunk_err)
+                    if chunk_out or chunk_err:
+                        publish_event(AssistantResponse(event=TerminalOutputPayload(
+                            type="terminal_output",
+                            cmd_id=cmd_id,
+                            cmd=cmd,
+                            status="streaming",
+                            stdout=chunk_out,
+                            stderr=chunk_err,
+                        )))
+
+            await asyncio.wait_for(
+                asyncio.gather(stream_task, _consume_stream()),
+                timeout=timeout,
+            )
         except TimeoutError:
-            timeout_used = _timeout_for(cmd)
-            logger.exception("Timeout after %s seconds running bash command: %s", timeout_used, cmd)
-            msg = f"Timeout after {timeout_used} seconds running bash command: {cmd}"
+            logger.exception("Timeout after %s seconds running bash command: %s", timeout, cmd)
+            msg = f"Timeout after {timeout} seconds running bash command: {cmd}"
             raise RunBashCmdError(msg) from None
 
-        logger.debug("exec_result: %r", exec_result)
+        # Retrieve exit code from the completed exec instance
+        inspect_resp = api_client.get(f"/exec/{exec_id}/json")
+        inspect_resp.raise_for_status()
+        exit_code = inspect_resp.json().get("ExitCode")
 
-        # Parse the tuple return value
-        exit_code, output = exec_result
-        logger.debug("exit_code: %r", exit_code)
-
-        stdout = None
-        stderr = None
-        output_tuple_len: int = 2
-        if isinstance(output, tuple) and len(output) == output_tuple_len:
-            stdout_bytes, stderr_bytes = output
-            if stdout_bytes:
-                stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
-            if stderr_bytes:
-                stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
-            logger.debug("output tuple: %r", output)
-        else:
-            logger.warning("Unexpected output format: %r", output)
+        stdout = "".join(stdout_parts).strip() or None
+        stderr = "".join(stderr_parts).strip() or None
 
         logger.debug("parsed stdout: %r", stdout)
         logger.debug("parsed stderr: %r", stderr)
+
+        # Publish the completed event with final output and exit code.
+        publish_event(AssistantResponse(event=TerminalOutputPayload(
+            type="terminal_output",
+            cmd_id=cmd_id,
+            cmd=cmd,
+            status="completed",
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+        )))
 
         return BashCmdResult(
             stdout=stdout,

@@ -10,10 +10,11 @@ dependencies = [
     "playwright==1.52.0",
     "beautifulsoup4",
     "podman==5.4.0.1",
-    "ollama>=0.5.1",
+    "ollama>=0.6",
     "cachetools>=5.5.2",
     "python-dotenv>=1.1.0",
     "asyncpraw>=7.8.1",
+    "html2text>=2025.4.15",
 ]
 
 [project.optional-dependencies]

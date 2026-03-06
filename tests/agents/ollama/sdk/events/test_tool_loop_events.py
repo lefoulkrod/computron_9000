@@ -13,8 +13,10 @@ from typing import Any, List
 
 import pytest
 
+from agents.ollama.sdk.context import ConversationHistory
 from agents.ollama.sdk.events import AssistantResponse, ToolCallPayload, event_context
 from agents.ollama.sdk.tool_loop import run_tool_call_loop
+from agents.types import Agent
 
 
 @dataclass
@@ -75,14 +77,22 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     async def _handler(evt: AssistantResponse) -> None:
         captured.append(evt)
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": "ctx"}]
+    history = ConversationHistory([{"role": "system", "content": "ctx"}])
 
     # Act: run the tool loop inside an event context; drain is automatic on exit
+    agent = Agent(
+        name="Test Agent",
+        description="desc",
+        instruction="ctx",
+        model="dummy",
+        options={},
+        tools=[echo_tool],
+    )
+
     async with event_context(handler=_handler):
         async for _content, _thinking in run_tool_call_loop(
-            messages,
-            tools=[echo_tool],
-            model="dummy",
+            history,
+            agent=agent,
         ):
             pass
 

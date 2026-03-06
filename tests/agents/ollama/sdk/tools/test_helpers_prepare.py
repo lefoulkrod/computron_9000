@@ -255,28 +255,25 @@ def test_prepare_tool_arguments_apply_text_patch_example():
     This simulates a tool call for apply_text_patch with individual arguments,
     testing basic type validation.
     """
-    def apply_text_patch(path: str, start_line: int, end_line: int, replacement: str) -> ApplyPatchResult:
-        """Apply line-based text patches to a file."""
+    def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
+        """Replace a unique block of text in a file."""
         return ApplyPatchResult(success=True, file_path=path, diff="")
-    
+
     # Simulate a tool call with individual arguments
     arguments = {
         "path": "src/main.py",
-        "start_line": 5,
-        "end_line": 7,
-        "replacement": "def new_function():\n    return 'updated'\n"
+        "old_text": "def old_function():\n    return 'original'\n",
+        "new_text": "def new_function():\n    return 'updated'\n",
     }
-    
+
     result = _prepare_tool_arguments(apply_text_patch, arguments)
-    
+
     assert result["path"] == "src/main.py"
     assert isinstance(result["path"], str)
-    assert result["start_line"] == 5
-    assert isinstance(result["start_line"], int)
-    assert result["end_line"] == 7
-    assert isinstance(result["end_line"], int)
-    assert result["replacement"] == "def new_function():\n    return 'updated'\n"
-    assert isinstance(result["replacement"], str)
+    assert result["old_text"] == "def old_function():\n    return 'original'\n"
+    assert isinstance(result["old_text"], str)
+    assert result["new_text"] == "def new_function():\n    return 'updated'\n"
+    assert isinstance(result["new_text"], str)
 
 
 @pytest.mark.unit

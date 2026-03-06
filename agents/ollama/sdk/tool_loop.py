@@ -3,14 +3,16 @@
 import inspect
 import json
 import logging
-from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from ollama import AsyncClient, ChatResponse
 
+from agents.types import Agent
 from config import load_config
 
-from .events import AssistantResponse, ToolCallPayload, publish_event
+from .context import ConversationHistory
+from .events import AssistantResponse, StopRequestedError, ToolCallPayload, check_stop, publish_event
 from .tools import _normalize_tool_result, _prepare_tool_arguments
 
 
@@ -21,25 +23,29 @@ class ToolLoopError(Exception):
 logger = logging.getLogger(__name__)
 
 
+def _publish_final(content: str | None = None) -> None:
+    """Emit a terminal AssistantResponse. Logs but never raises on failure."""
+    try:
+        publish_event(AssistantResponse(content=content, final=True))
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to publish terminal AssistantResponse event")
+
+
 async def _chat_with_retries(
     client: AsyncClient,
     *,
-    model: str,
+    agent: Agent,
     messages: list[dict[str, Any]],
-    options: Mapping[str, Any] | None,
-    tools: Sequence[Callable[..., Any]] | None,
-    think: bool,
+    tools: list[Callable[..., Any]] | None = None,
     retries: int = 20,
 ) -> ChatResponse:
     """Call client.chat with simple retries and no backoff.
 
     Args:
         client (AsyncClient): The Ollama async client instance.
-        model (str): The model to use.
+        agent (Agent): The agent providing model, options, tools, and think flag.
         messages (list[dict[str, Any]]): The chat messages payload.
-        options (Mapping[str, Any] | None): Model options.
-        tools (Sequence[Callable[..., Any]] | None): Tool functions to expose.
-        think (bool): Whether to use "think" option.
+        tools: Tool list override. Falls back to ``agent.tools`` when *None*.
         retries (int): Number of retry attempts after the initial try. Defaults to 20.
 
     Returns:
@@ -48,82 +54,178 @@ async def _chat_with_retries(
     Raises:
         Exception: The last exception raised by client.chat after exhausting retries.
     """
+    resolved_tools = tools if tools is not None else (agent.tools or [])
     attempt = 0
     total_attempts = 1 + max(0, retries)
     while attempt < total_attempts:
         try:
             return await client.chat(
-                model=model,
+                model=agent.model,
                 messages=messages,
-                options=options,
-                tools=tools or [],
+                options=agent.options,
+                tools=resolved_tools,
                 stream=False,
-                think=think,
+                think=agent.think,
             )
         except Exception as exc:
             attempt += 1
-            if attempt >= total_attempts:
-                # Exhausted retries, re-raise the last exception
-                raise
+            # Log request context so we can diagnose what Ollama choked on
+            payload_bytes = sum(len(json.dumps(m)) for m in messages)
+            last_role = messages[-1].get("role", "?") if messages else "empty"
+            last_content = messages[-1].get("content", "") if messages else ""
+            last_preview = (last_content[:200] + "...") if isinstance(last_content, str) and len(last_content) > 200 else last_content  # noqa: E501
             logger.warning(
-                "client.chat failed (attempt %s/%s): %s",
+                "client.chat failed (attempt %s/%s): %s | "
+                "model=%s msgs=%d payload≈%dKB last_role=%s last_content=%s",
                 attempt,
                 total_attempts,
                 exc,
+                agent.model,
+                len(messages),
+                payload_bytes // 1024,
+                last_role,
+                last_preview,
             )
+            if attempt >= total_attempts:
+                # Exhausted retries, re-raise the last exception
+                raise
     # Should never reach here, but for type safety, raise an error
     msg = "Failed to get chat response after retries."
     raise ToolLoopError(msg)
 
 
+async def _execute_tool_call(
+    tool_call: Any,
+    tools: list[Callable[..., Any]],
+) -> dict[str, Any]:
+    """Resolve and execute a single tool call, returning the result message content.
+
+    Args:
+        tool_call: The tool call object from the model response.
+        tools: Available tool functions to match against.
+
+    Returns:
+        A dict with either ``{"result": ...}`` or ``{"error": ...}``.
+    """
+    function = getattr(tool_call, "function", None)
+    if not function:
+        logger.warning("Tool call missing function: %s", tool_call)
+        return {"error": "Tool call missing function"}
+
+    tool_name = getattr(function, "name", None)
+    arguments = getattr(function, "arguments", {})
+
+    # Some models emit function names with Python call syntax, e.g.
+    # "browse_page(full_page=True)" instead of "browse_page".  Strip the
+    # trailing parenthesised portion and merge any kwargs into arguments.
+    if tool_name and "(" in tool_name:
+        base, _, rest = tool_name.partition("(")
+        tool_name = base
+        # Try to parse kwargs like "full_page=True" into arguments
+        rest = rest.rstrip(")")
+        if rest and not arguments:
+            arguments = {}
+            for part in rest.split(","):
+                part = part.strip()
+                if "=" in part:
+                    k, _, v = part.partition("=")
+                    # Coerce simple Python literals
+                    v = v.strip()
+                    if v in ("True", "true"):
+                        arguments[k.strip()] = True
+                    elif v in ("False", "false"):
+                        arguments[k.strip()] = False
+                    elif v.isdigit():
+                        arguments[k.strip()] = int(v)
+                    else:
+                        arguments[k.strip()] = v.strip("\"'")
+
+    try:
+        publish_event(AssistantResponse(event=ToolCallPayload(type="tool_call", name=str(tool_name))))
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
+
+    tool_func = next(
+        (t for t in tools if getattr(t, "__name__", None) == tool_name),
+        None,
+    )
+    if not tool_func:
+        logger.error("Tool '%s' not found in tools.", tool_name)
+        return {"error": "Tool not found"}
+
+    try:
+        check_stop()
+        validated_args = _prepare_tool_arguments(tool_func, arguments)
+        if inspect.iscoroutinefunction(tool_func):
+            result = await tool_func(**validated_args)
+        else:
+            result = tool_func(**validated_args)
+        return {"result": _normalize_tool_result(result)}
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        logger.exception("Argument validation failed for tool '%s'", tool_name)
+        return {"error": f"Argument validation failed: {exc}"}
+    except Exception as exc:
+        logger.exception("Error running tool '%s'", tool_name)
+        return {"error": str(exc)}
+
+
 async def run_tool_call_loop(
-    messages: list[dict[str, Any]],
-    tools: Sequence[Callable[..., Any]] | None = None,
-    model: str = "",
-    model_options: Mapping[str, Any] | None = None,
+    history: ConversationHistory,
+    agent: Agent,
     *,
-    think: bool = False,
     before_model_callbacks: list[Callable[[list[dict[str, Any]]], None]] | None = None,
     after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
 ) -> AsyncGenerator[tuple[str | None, str | None]]:
     """Executes a chat loop with the LLM, handling tool calls and yielding message content.
 
-    This function mutates the messages list in place by appending assistant and tool messages
-    to maintain chat history.
-
     Args:
-        messages (list[dict[str, Any]]): The chat history (including system message).
-        tools (Optional[Sequence[Callable[..., Any]]]): Sequence of tool functions to use for tool calls.
-        model (str): The model name to use for the LLM.
-        model_options (Mapping[str, Any] | None): Options to pass to the LLM.
-        think (bool): Whether to enable the 'think' option for the model.
-        before_model_callbacks (list[Callable[[list[dict[str, Any]]], None]] | None): List of callbacks before model call.
-        after_model_callbacks (list[Callable[[ChatResponse], None]] | None): List of callbacks after model call.
-
+        history: The conversation history to read from and append to.
+        agent: The agent providing model, tools, options, and think flag.
+        before_model_callbacks: Callbacks invoked before each model call.
+        after_model_callbacks: Callbacks invoked after each model call.
 
     Yields:
         tuple[str | None, str | None]: The message content and thinking as they are generated.
 
     Raises:
-    ToolLoopError: If an unexpected error occurs in the tool loop.
-
-    """  # noqa: E501
+        ToolLoopError: If an unexpected error occurs in the tool loop.
+    """
     cfg = load_config()
     client = AsyncClient(host=cfg.llm.host) if getattr(cfg, "llm", None) and cfg.llm.host else AsyncClient()
-    tools = tools or []
+    tools = agent.tools or []
+    max_iterations = agent.max_iterations
+    iteration = 0
+    budget_exhausted = False
     while True:
+        iteration += 1
+        if max_iterations > 0 and iteration > max_iterations and not budget_exhausted:
+            logger.warning(
+                "Agent '%s' hit max_iterations (%d), forcing stop",
+                agent.name,
+                max_iterations,
+            )
+            history.append({
+                "role": "user",
+                "content": (
+                    f"Tool call budget exhausted ({max_iterations} iterations). "
+                    "Wrap up and respond with the information you have."
+                ),
+            })
+            # Strip tools so the normal path below produces a final text response.
+            tools = []
+            budget_exhausted = True
         if before_model_callbacks:
             for before_cb in before_model_callbacks:
-                before_cb(list(messages))
+                before_cb(history.messages)
         try:
+            # Bail out cleanly before hitting the model or a tool if stop was requested.
+            check_stop()
             # Call model with internal retry handling
             response = await _chat_with_retries(
                 client,
-                model=model,
-                messages=messages,
-                options=model_options,
+                agent=agent,
+                messages=history.messages,
                 tools=tools,
-                think=think,
             )
             if after_model_callbacks:
                 for after_cb in after_model_callbacks:
@@ -136,9 +238,9 @@ async def run_tool_call_loop(
                 "role": "assistant",
                 "content": content,
                 "tool_calls": tool_calls,
-                "thinking": thinking,
+                "thinking": thinking if agent.persist_thinking else None,
             }
-            messages.append(assistant_message)
+            history.append(assistant_message)
             # Emit an event for model content/thinking (non-final, actual final decided by loop end)
             try:
                 publish_event(AssistantResponse(content=content, thinking=thinking))
@@ -148,66 +250,25 @@ async def run_tool_call_loop(
                 yield content, thinking
 
             if not tool_calls:
-                # Normal completion path: no further tool calls. Emit a terminal
-                # AssistantResponse with final=True so downstream consumers can
-                # detect completion without relying on EOF. This is the ONLY
-                # location in the codebase that sets final=True for successful
-                # runs (centralized per Phase 2 plan).
-                try:
-                    publish_event(AssistantResponse(final=True))
-                except Exception:  # pragma: no cover - defensive
-                    logger.exception("Failed to publish terminal AssistantResponse event")
+                # Normal completion path (also handles budget exhaustion since
+                # tools are cleared, forcing the model to respond with text only).
+                _publish_final()
                 break
 
             for tool_call in tool_calls:
-                function = getattr(tool_call, "function", None)
-                if not function:
-                    logger.warning("Tool call missing function: %s", tool_call)
-                    continue
-                tool_name = getattr(function, "name", None)
-                arguments = getattr(function, "arguments", {})
-
-                try:
-                    publish_event(AssistantResponse(event=ToolCallPayload(type="tool_call", name=str(tool_name))))
-                except Exception:  # pragma: no cover - defensive
-                    logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
-
-                tool_func = next(
-                    (tool for tool in tools if getattr(tool, "__name__", None) == tool_name),
-                    None,
-                )
-                if not tool_func:
-                    logger.error("Tool '%s' not found in tools.", tool_name)
-                    tool_result: dict[str, Any] = {"error": "Tool not found"}
-                else:
-                    try:
-                        validated_args = _prepare_tool_arguments(tool_func, arguments)
-                        if inspect.iscoroutinefunction(tool_func):
-                            result = await tool_func(**validated_args)
-                        else:
-                            result = tool_func(**validated_args)
-                        serializable_result = _normalize_tool_result(result)
-                        tool_result = {"result": serializable_result}
-                    except (ValueError, TypeError, json.JSONDecodeError) as exc:
-                        logger.exception("Argument validation failed for tool '%s'", tool_name)
-                        tool_result = {"error": f"Argument validation failed: {exc}"}
-                    except Exception as exc:
-                        logger.exception("Error running tool '%s'", tool_name)
-                        tool_result = {"error": str(exc)}
-                tool_message = {
+                tool_result = await _execute_tool_call(tool_call, tools)
+                tool_name = getattr(getattr(tool_call, "function", None), "name", None)
+                history.append({
                     "role": "tool",
                     "tool_name": tool_name,
                     "content": json.dumps(tool_result),
-                }
-                messages.append(tool_message)
-            # Do not yield tool results, just continue looping
+                })
+        except StopRequestedError:
+            logger.info("Tool loop stopped by user request")
+            _publish_final()
+            return
         except Exception as exc:
-            # Error path: still emit a final event (single source of final=True)
-            # with a generic error message before propagating as ToolLoopError.
             logger.exception("Unhandled exception in tool loop")
             error_msg = "An error occurred while processing your message."
-            try:
-                publish_event(AssistantResponse(content=error_msg, final=True))
-            except Exception:  # pragma: no cover - defensive
-                logger.exception("Failed to publish terminal error AssistantResponse event")
+            _publish_final(content=error_msg)
             raise ToolLoopError(error_msg) from exc

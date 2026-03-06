@@ -49,7 +49,7 @@ def app(monkeypatch):
     app = create_app()
     from server import aiohttp_app as mod
 
-    async def _fake_handle_user_message(_msg: str, _data) -> AsyncIterator[object]:  # noqa: D401
+    async def _fake_handle_user_message(_msg: str, _data, **_kwargs) -> AsyncIterator[object]:  # noqa: D401
         async for ev in _fake_events_enriched():  # pragma: no branch
             yield ev
 

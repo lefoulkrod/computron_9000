@@ -11,8 +11,10 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel
 
-from tools.browser.core import get_browser
+from tools._truncation import truncate_args
+from tools.browser.core import get_active_view
 from tools.browser.core.exceptions import BrowserToolError
+from tools.browser.events import emit_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -31,61 +33,44 @@ class JavaScriptResult(BaseModel):
     error: str | None = None
 
 
+@truncate_args(code=500)
 async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptResult:
-    """Execute arbitrary JavaScript in the current page context.
+    """Execute JavaScript in the page context.  Advanced — prefer structured tools.
 
-    WARNING: This is an advanced tool. Prefer structured tools (click, fill_field,
-    snapshot, etc.) for reliability and debuggability. Only use this when
-    structured tools cannot accomplish the task.
-
-    The JavaScript code is executed in the page's main frame context and has
-    access to the DOM, window object, and all page JavaScript. The return value
-    must be JSON-serializable.
+    Only use when ``click()``, ``fill_field()``, ``browse_page()`` cannot
+    accomplish the task.  Useful for removing popups, extracting custom data
+    structures, or checking page state.  Return value must be JSON-serializable.
 
     Args:
-        code: JavaScript code to execute. Can be a function expression or statement.
-        timeout_ms: Maximum time to wait for execution in milliseconds.
+        code: JavaScript code or function expression to execute.
+        timeout_ms: Maximum wait time in milliseconds (default 10000).
 
     Returns:
         JavaScriptResult with success status, result value, and any error message.
 
     Raises:
         BrowserToolError: If browser is not initialized or page is not available.
-
-    Examples:
-        Extract custom data:
-            result = await execute_javascript(
-                "() => Array.from(document.querySelectorAll('.item')).map(el => ({
-                    title: el.querySelector('h2').textContent,
-                    price: el.querySelector('.price').textContent
-                }))"
-            )
-
-        Remove popup:
-            await execute_javascript("document.querySelector('#modal').remove()")
-
-        Check page state:
-            result = await execute_javascript("return window.location.href")
     """
-    browser = await get_browser()
-    page = await browser.current_page()
+    _browser, view = await get_active_view("execute_javascript")
 
-    if page is None or page.url in {"", "about:blank"}:
-        msg = "No active page. Call open_url() first to navigate to a page."
-        raise BrowserToolError(msg, tool="execute_javascript")
-
-    logger.info("Executing JavaScript on page %s", page.url)
+    logger.info("Executing JavaScript on page %s", view.url)
     logger.debug("JavaScript code: %s", code)
 
     try:
         # Execute the JavaScript with asyncio timeout
         result_value = await asyncio.wait_for(
-            page.evaluate(code),
+            view.frame.evaluate(code),
             timeout=timeout_ms / 1000,  # convert ms to seconds
         )
 
         logger.info("JavaScript executed successfully")
         logger.debug("Result: %s", result_value)
+
+        try:
+            page = await _browser.current_page()
+            await emit_screenshot(page)
+        except Exception:  # noqa: BLE001
+            logger.debug("Failed to emit screenshot after JS execution")
 
         return JavaScriptResult(
             success=True,

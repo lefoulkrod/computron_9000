@@ -8,9 +8,11 @@ browser and clear that state when needed.
 
 Public API:
 - open_url: Navigate to a URL and return a PageView.
-- view_page: View the current page (no navigation) with ``[role] name``
+- browse_page: Browse the current page (no navigation) with ``[role] name``
   markers for interactive elements.  Optional ``scope`` parameter to focus
   on a specific section.
+- read_page: Read the current page as clean markdown text for reading
+  articles, documentation, or search results.
 - click, fill_field, press_keys, select_option, scroll_page, go_back, drag:
   Interaction tools that return an ``InteractionResult`` with a page_view.
 - ask_about_screenshot: Capture the current page and answer a prompt about it.
@@ -27,17 +29,28 @@ from .core.page_view import PageView
 from .interactions import (
     InteractionResult,
     click,
+    click_at,
     drag,
     fill_field,
     go_back,
+    press_and_hold,
+    press_and_hold_at,
     press_keys,
     scroll_page,
 )
 from .javascript import JavaScriptResult, execute_javascript
 from .page import open_url
+from .read_content import read_page
+from .save_content import SaveContentResult, save_page_content
 from .select import select_option
-from .snapshot_tool import view_page
-from .vision import GroundingResult, ask_about_screenshot, ground_elements_by_text
+from .snapshot_tool import browse_page
+from .vision import (
+    GroundingResult,
+    ask_about_screenshot,
+    click_element,
+    ground_elements_by_text,
+    press_and_hold_element,
+)
 
 __all__ = [
     "Browser",
@@ -46,8 +59,12 @@ __all__ = [
     "InteractionResult",
     "JavaScriptResult",
     "PageView",
+    "SaveContentResult",
     "ask_about_screenshot",
+    "browse_page",
     "click",
+    "click_at",
+    "click_element",
     "close_browser",
     "drag",
     "execute_javascript",
@@ -56,8 +73,12 @@ __all__ = [
     "go_back",
     "ground_elements_by_text",
     "open_url",
+    "press_and_hold",
+    "press_and_hold_at",
+    "press_and_hold_element",
     "press_keys",
+    "read_page",
+    "save_page_content",
     "scroll_page",
     "select_option",
-    "view_page",
 ]

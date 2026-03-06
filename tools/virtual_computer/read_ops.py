@@ -1,6 +1,8 @@
 """Read operations: read range, head, tail.
 
 Simple, UTF-8 only helpers designed for LLM ergonomics.
+Content is returned with embedded line numbers (like ``cat -n``) so the model
+sees line references in context.
 """
 
 from __future__ import annotations
@@ -27,20 +29,28 @@ def _read_text_iter(path: Path) -> Iterable[str]:
         yield from f
 
 
+_MAX_LINES_DEFAULT: int = 2000
+
+
+def _numbered_line(lineno: int, text: str) -> str:
+    """Format a line with its number, like ``cat -n``."""
+    return f"{lineno:6d}\t{text}"
+
+
 def read_file(path: str, start: int | None = None, end: int | None = None) -> ReadTextResult:
-    """Read a UTF-8 text file fully or by inclusive 1-based line range.
+    """Read a UTF-8 text file fully or by line range.
+
+    Content is returned with embedded line numbers (``cat -n`` style).
+    Files over 2000 lines are automatically truncated when no range is given.
+    Use ``start``/``end`` or ``grep`` to read specific sections of large files.
 
     Args:
-        path: Relative or absolute path under the virtual computer home.
-        start: Optional inclusive start line (1-based). If None, begins at 1.
-        end: Optional inclusive end line (1-based). If None, reads to EOF.
+        path: File path (relative or absolute under home).
+        start: First line to read (1-based, inclusive). Omit to start at 1.
+        end: Last line to read (1-based, inclusive). Omit to read to EOF.
 
     Returns:
-        ReadTextResult: Success flag, normalized relative ``file_path``,
-        content string (or None on failure), and optional range info.
-
-    Raises:
-        None: errors are returned in the result and logged.
+        ReadTextResult: ``content`` with line numbers, ``total_lines``, and optional range info.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
@@ -59,18 +69,29 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
                 error="binary file not supported",
             )
 
-        # Fast path: no range requested
+        # No range requested — read full but cap at _MAX_LINES_DEFAULT
         if start is None and end is None:
-            content = abs_path.read_text(encoding="utf-8", errors="replace")
-            total_lines = content.count("\n") + (0 if (content == "" or content.endswith("\n")) else 1)
+            lines: list[str] = []
+            total_lines = 0
+            for line in _read_text_iter(abs_path):
+                total_lines += 1
+                if total_lines <= _MAX_LINES_DEFAULT:
+                    lines.append(_numbered_line(total_lines, line))
+
+            content = "".join(lines)
+            truncated = total_lines > _MAX_LINES_DEFAULT
+
             return ReadTextResult(
                 success=True,
                 file_path=rel,
                 content=content,
+                start=1 if truncated else None,
+                end=_MAX_LINES_DEFAULT if truncated else None,
                 total_lines=total_lines,
+                truncated=truncated,
             )
 
-        # Normalize range
+        # Explicit range requested
         s = 1 if start is None else max(1, start)
         e = end if end is not None and end >= s else None
         total = 0
@@ -81,7 +102,7 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
                 continue
             if e is not None and idx > e:
                 break
-            out_buf.write(line)
+            out_buf.write(_numbered_line(idx, line))
         content = out_buf.getvalue()
         return ReadTextResult(
             success=True,
@@ -110,14 +131,14 @@ def head(path: str, n: int = 200) -> ReadTextResult:
 
 
 def tail(path: str, n: int = 200) -> ReadTextResult:
-    """Read the last n lines of a UTF-8 text file using a rolling buffer.
+    """Read the last n lines of a UTF-8 text file.
 
     Args:
         path: File path (relative or absolute under home).
         n: Number of lines to return. Defaults to 200.
 
     Returns:
-        ReadTextResult: Content of the last n lines with range metadata when known.
+        ReadTextResult: Content of the last n lines with range metadata.
     """
     try:
         abs_path, _home, rel = resolve_under_home(path)
@@ -135,16 +156,17 @@ def tail(path: str, n: int = 200) -> ReadTextResult:
                 content=None,
                 error="binary file not supported",
             )
-        # Rolling buffer of last n lines
-        buf: list[str] = []
+        # Rolling buffer of last n lines (keep raw + line number)
+        buf: list[tuple[int, str]] = []
         total = 0
         for line in _read_text_iter(abs_path):
             total += 1
-            buf.append(line)
+            buf.append((total, line))
             if len(buf) > max(1, n):
                 buf.pop(0)
         effective_n = max(1, n)
-        content = "".join(buf[-effective_n:])
+        tail_items = buf[-effective_n:]
+        content = "".join(_numbered_line(lineno, text) for lineno, text in tail_items)
         start_line = max(1, total - effective_n + 1) if total > 0 else 1
         end_line = total if total > 0 else 1
         return ReadTextResult(

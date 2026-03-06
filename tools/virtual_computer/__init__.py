@@ -45,9 +45,34 @@ from .models import (
 )
 from .patching import apply_text_patch, apply_unified_diff
 from .read_ops import head, read_file, tail
-from .run_bash_cmd import BashCmdResult, run_bash_cmd
 from .search_ops import grep
 from .stat_ops import exists, is_dir, is_file
+
+# Deferred imports for modules that import from agents.ollama.sdk.events,
+# which would otherwise create a circular dependency:
+#   tools.virtual_computer.__init__ -> file_output -> agents.sdk.events
+#   -> agents.__init__ -> agents.ollama.media -> tools.virtual_computer
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "describe_image": (".describe_image", "describe_image"),
+    "output_file": (".file_output", "output_file"),
+    "play_audio": (".play_audio", "play_audio"),
+    "run_bash_cmd": (".run_bash_cmd", "run_bash_cmd"),
+    "BashCmdResult": (".run_bash_cmd", "BashCmdResult"),
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        module_path, attr = _LAZY_IMPORTS[name]
+        import importlib
+
+        mod = importlib.import_module(module_path, __package__)
+        value = getattr(mod, attr)
+        # Cache on the module so __getattr__ is only called once per name
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ApplyPatchResult",
@@ -72,6 +97,7 @@ __all__ = [
     "apply_text_patch",
     "apply_unified_diff",
     "copy_path",
+    "describe_image",
     "exists",
     "grep",
     "head",
@@ -81,7 +107,9 @@ __all__ = [
     "list_dir",
     "make_dirs",
     "move_path",
+    "output_file",
     "path_exists",
+    "play_audio",
     "prepend_to_file",
     "read_file",
     "remove_path",

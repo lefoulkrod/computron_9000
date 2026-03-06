@@ -29,7 +29,7 @@ def app(monkeypatch):
     # Patch handle_user_message to deterministic async generator
     from server import aiohttp_app as mod
 
-    async def _fake_handle_user_message(_msg: str, _data) -> AsyncIterator[_Event]:  # noqa: D401
+    async def _fake_handle_user_message(_msg: str, _data, **_kwargs) -> AsyncIterator[_Event]:  # noqa: D401
         async for ev in _fake_events():  # pragma: no branch
             yield ev
 

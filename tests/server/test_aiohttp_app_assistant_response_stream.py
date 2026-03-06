@@ -42,7 +42,7 @@ def app(monkeypatch):
         data: list[AssistantResponseData]
         event: ToolCallPayload | None = None
 
-    async def _fake_handle_user_message(_msg: str, _data):  # noqa: D401
+    async def _fake_handle_user_message(_msg: str, _data, **_kwargs):  # noqa: D401
         async for ev in _fake_events():
             yield _ShimEvent(
                 final=False,

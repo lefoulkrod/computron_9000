@@ -8,20 +8,14 @@ implemented correctly. It returns a strict JSON object that conforms to
 
 from __future__ import annotations
 
-import logging
 from textwrap import dedent
 
 from agents.ollama.coder.context_models import (
     generate_code_review_input_schema_summary,
 )
-from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
-    make_run_agent_as_tool_function,
-)
+from agents.ollama.sdk import make_run_agent_as_tool_function
 from agents.ollama.sdk.schema_tools import model_to_schema
-from agents.types import Agent
-from models import get_model_by_name
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import (
     exists,
     grep,
@@ -36,15 +30,11 @@ from tools.virtual_computer import (
 
 from .models import CodeReviewResult
 
-logger = logging.getLogger(__name__)
-
-
-model = get_model_by_name("coder_architect")
-
 _CODE_REVIEW_INPUT_SCHEMA = generate_code_review_input_schema_summary()
-# Generate strict JSON example from the actual Pydantic model
 _REVIEW_SCHEMA = model_to_schema(CodeReviewResult, indent=2, include_docs=True)
 
+NAME = "CODE_REVIEW_AGENT"
+DESCRIPTION = "Reviews a single step implementation and returns pass/required_changes."
 SYSTEM_PROMPT = dedent(
     f"""
 Role: Code Review Agent
@@ -82,30 +72,20 @@ Verification workflow - you must verify the results of the coder agent do not as
       fixes in required_changes.
 """
 )
+TOOLS = [run_bash_cmd, exists, is_dir, is_file, read_file, head, tail, grep, list_dir, save_to_scratchpad, recall_from_scratchpad]
 
-code_review_agent = Agent(
-    name="CODE_REVIEW_AGENT",
-    description="Reviews a single step implementation and returns pass/required_changes.",
-    instruction=SYSTEM_PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[run_bash_cmd, exists, is_dir, is_file, read_file, head, tail, grep, list_dir],
-    think=model.think,
-)
-
-before_model_call_callback = make_log_before_model_call(code_review_agent)
-after_model_call_callback = make_log_after_model_call(code_review_agent)
 code_review_agent_tool = make_run_agent_as_tool_function(
-    agent=code_review_agent,
-    tool_description=(
-        "Given standardized context (CodeReviewInput), decide if the step passes and provide required_changes if not."
-    ),
+    name=NAME,
+    description=DESCRIPTION,
+    instruction=SYSTEM_PROMPT,
+    tools=TOOLS,
     result_type=CodeReviewResult,
-    before_model_callbacks=[before_model_call_callback],
-    after_model_callbacks=[after_model_call_callback],
 )
 
 __all__ = [
-    "code_review_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "code_review_agent_tool",
 ]

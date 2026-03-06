@@ -1,27 +1,17 @@
 """Planner agent implementation."""
 
-import logging
-
 from agents.ollama.coder.planner_agent.models import (
     PlannerPlan,
     generate_planner_plan_schema_summary,
 )
-from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
-    make_run_agent_as_tool_function,
-)
-from agents.types import Agent
-from models import get_model_by_name
-
-logger = logging.getLogger(__name__)
-
-
-model = get_model_by_name("coder_architect")
+from agents.ollama.sdk import make_run_agent_as_tool_function
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 
 _PLAN_SCHEMA = generate_planner_plan_schema_summary()
 
-PLANNER_SYSTEM_PROMPT = f"""
+NAME = "PLANNER_AGENT"
+DESCRIPTION = "Creates a detailed, step-by-step implementation plan from a design."
+SYSTEM_PROMPT = f"""
 Role: Expert Implementation Planner
 
 Goal: Transform the software assignment and the architect's JSON design into a clear,
@@ -79,32 +69,20 @@ Language-specific tooling guidelines
     - Testing: go test ./... -v.
     - Build/run: go run ./cmd/<app> or go build -o bin/<app> ./cmd/<app>.
 """
+TOOLS = [save_to_scratchpad, recall_from_scratchpad]
 
-planner_agent = Agent(
-    name="PLANNER_AGENT",
-    description="Creates a detailed, step-by-step implementation plan from a design.",
-    instruction=PLANNER_SYSTEM_PROMPT,
-    model=model.model,
-    options=model.options,
-    tools=[],
-    think=model.think,
-)
-
-before_model_call_callback = make_log_before_model_call(planner_agent)
-after_model_call_callback = make_log_after_model_call(planner_agent)
 planner_agent_tool = make_run_agent_as_tool_function(
-    agent=planner_agent,
-    tool_description="""
-    Turn a high-level design into a structured, JSON implementation plan containing
-    top-level tooling and an ordered list of steps.
-    """,
-    # Return structured PlannerPlan; downstream code extracts steps
+    name=NAME,
+    description=DESCRIPTION,
+    instruction=SYSTEM_PROMPT,
+    tools=TOOLS,
     result_type=PlannerPlan,
-    before_model_callbacks=[before_model_call_callback],
-    after_model_callbacks=[after_model_call_callback],
 )
 
 __all__ = [
-    "planner_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "planner_agent_tool",
 ]

@@ -14,6 +14,16 @@ from tools.browser import BrowserToolError
 from tools.browser.vision import GroundingResult, ask_about_screenshot, ground_elements_by_text
 
 
+def _make_fake_get_active_view(browser):
+    """Build a fake ``get_active_view`` from a ``_FakeBrowser``."""
+    async def _fake(tool_name):
+        view = await browser.active_view()
+        if view.url in {"", "about:blank"}:
+            raise BrowserToolError("Navigate to a page first.", tool=tool_name)
+        return browser, view
+    return _fake
+
+
 class _ScreenshotFakeLocator:
     def __init__(self, screenshot_bytes: bytes, exists: bool = True) -> None:
         self._screenshot_bytes = screenshot_bytes
@@ -55,13 +65,15 @@ class _ScreenshotFakePage:
     def get_by_text(self, value: str, exact: bool = True) -> _ScreenshotFakeLocator:
         return _ScreenshotFakeLocator(b"", exists=False)
 
+    def get_by_alt_text(self, value: str, exact: bool = True) -> _ScreenshotFakeLocator:
+        return _ScreenshotFakeLocator(b"", exists=False)
+
 
 class _GroundingFakePage:
     def __init__(self, screenshot_bytes: bytes, url: str = "https://example.com") -> None:
         self._screenshot_bytes = screenshot_bytes
         self.url = url
         self.viewport_size = {"width": 1024, "height": 768}
-        self.evaluate_calls: list[tuple[str, list[int]]] = []
 
     async def title(self) -> str:
         return "Example"
@@ -79,11 +91,6 @@ class _GroundingFakePage:
         assert type == "png"
         return self._screenshot_bytes
 
-    async def evaluate_handle(self, script: str, args: list[int]) -> _FakeJSHandle:
-        self.evaluate_calls.append((script, args))
-        assert script.startswith("([x,y]) => document.elementFromPoint")
-        return _FakeJSHandle()
-
 
 class _FakeBrowser:
     def __init__(self, page: _ScreenshotFakePage | _GroundingFakePage) -> None:
@@ -91,6 +98,13 @@ class _FakeBrowser:
 
     async def current_page(self) -> _ScreenshotFakePage | _GroundingFakePage:
         return self._page
+
+    async def active_frame(self) -> _ScreenshotFakePage | _GroundingFakePage:
+        return self._page
+
+    async def active_view(self):
+        from tools.browser.core.browser import ActiveView
+        return ActiveView(frame=self._page, title="Example", url=self._page.url)
 
 
 class _FakeModel:
@@ -133,10 +147,10 @@ class _GroundingClient:
         _GroundingClient.last_prompt = cast(str | None, kwargs.get("prompt"))
         _GroundingClient.last_model = kwargs.get("model")
         _GroundingClient.last_images = kwargs.get("images")
-        # Model returns [y1, x1, y2, x2] in normalized coordinates (0-1000)
+        # Model returns [x1, y1, x2, y2] in normalized coordinates (0-1000)
         # For 1024x768 viewport: x=100px is ~97.7/1000, y=150px is ~195.3/1000
-        # We use values that convert cleanly: y1=195, x1=98, y2=326, x2=195
-        payload = '[{"element_type": "checkbox", "text": null, "bbox": [195, 98, 326, 195]}]'
+        # We use values that convert cleanly: x1=98, y1=195, x2=195, y2=326
+        payload = '[{"element_type": "checkbox", "text": null, "bbox": [98, 195, 195, 326]}]'
         return SimpleNamespace(response=payload)
 
 
@@ -153,42 +167,9 @@ class _GroundingStringBBoxClient:
         self._host = host
 
     async def generate(self, **kwargs: object) -> SimpleNamespace:
-        # Model returns [y1, x1, y2, x2] in normalized coordinates (0-1000) as string
-        return SimpleNamespace(response='[{"text": null, "element_type": "button", "bbox": "195,98,326,195"}]')
+        # Model returns [x1, y1, x2, y2] in normalized coordinates (0-1000) as string
+        return SimpleNamespace(response='[{"text": null, "element_type": "button", "bbox": "98,195,195,326"}]')
 
-
-class _FakeElementHandle:
-    def __init__(self) -> None:
-        self.disposed = False
-
-    def as_element(self) -> _FakeElementHandle:
-        return self
-
-    async def evaluate(self, script: str):
-        return None
-
-    async def get_attribute(self, name: str) -> None:
-        return None
-
-    async def bounding_box(self) -> dict[str, float]:
-        return {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0}
-
-    async def query_selector(self, selector: str):
-        return None
-
-    async def dispose(self) -> None:
-        self.disposed = True
-
-
-class _FakeJSHandle:
-    def __init__(self) -> None:
-        self._element = _FakeElementHandle()
-
-    def as_element(self) -> _FakeElementHandle:
-        return self._element
-
-    async def dispose(self) -> None:
-        await self._element.dispose()
 
 
 @pytest.mark.unit
@@ -210,6 +191,7 @@ async def test_ask_about_screenshot_success(monkeypatch: pytest.MonkeyPatch) -> 
     module = importlib.import_module("tools.browser.vision")
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
     monkeypatch.setattr(module, "get_model_by_name", lambda name: fake_model)
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
@@ -251,6 +233,7 @@ async def test_ask_about_screenshot_requires_navigation(monkeypatch: pytest.Monk
     module = importlib.import_module("tools.browser.vision")
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
         await ask_about_screenshot("Describe the page")
@@ -276,6 +259,7 @@ async def test_ask_about_screenshot_selector_mode(monkeypatch: pytest.MonkeyPatc
     module = importlib.import_module("tools.browser.vision")
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
     monkeypatch.setattr(module, "get_model_by_name", lambda name: fake_model)
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
@@ -307,6 +291,7 @@ async def test_selector_requires_non_empty(monkeypatch: pytest.MonkeyPatch) -> N
 
     module = importlib.import_module("tools.browser.vision")
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
         await ask_about_screenshot("prompt", mode="selector", selector="   ")
@@ -324,6 +309,7 @@ async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None
 
     module = importlib.import_module("tools.browser.vision")
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError) as excinfo:
         await ask_about_screenshot("Anything", mode="selector", selector="#missing")
@@ -345,14 +331,11 @@ async def test_request_grounding_by_text_success(monkeypatch: pytest.MonkeyPatch
         return browser
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _GroundingClient)
     monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
-    # Selector resolution now uses SelectorRegistry/build_unique_selector.
-    # We assert grounding behavior and that a selector slot is present; the
-    # exact selector string and internal resolution are tested under selectors
-    # unit tests and may vary depending on registry behavior with fakes.
     result = await ground_elements_by_text("Login")
 
     assert isinstance(result, list)
@@ -360,10 +343,9 @@ async def test_request_grounding_by_text_success(monkeypatch: pytest.MonkeyPatch
     first = result[0]
     assert isinstance(first, GroundingResult)
     assert first.text is None
-    # Model returns normalized [y1=195, x1=98, y2=326, x2=195] which converts to (100, 150, 200, 250) CSS pixels
+    # Model returns normalized [x1=98, y1=195, x2=195, y2=326] which converts to (100, 150, 200, 250) CSS pixels
     assert first.bbox == (100, 150, 200, 250)
-    # selector may be None or a string depending on registry resolution with fake page
-    assert hasattr(first, "selector")
+    assert first.center == (150, 200)
 
     expected_prompt = module._PROMPT_TEMPLATE.format(
         text_json=json.dumps("Login"),
@@ -394,6 +376,7 @@ async def test_request_grounding_by_text_requires_navigation(monkeypatch: pytest
         return browser
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
         await ground_elements_by_text("Login")
@@ -411,6 +394,7 @@ async def test_request_grounding_by_text_invalid_json(monkeypatch: pytest.Monkey
         return browser
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _GroundingDummyClient)
     monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
@@ -431,10 +415,11 @@ async def test_grounding_accepts_string_bbox(monkeypatch: pytest.MonkeyPatch) ->
         return browser
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _GroundingStringBBoxClient)
     monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
     result = await ground_elements_by_text("Button")
-    # Model returns normalized [y1=195, x1=98, y2=326, x2=195] which converts to (100, 150, 200, 250) CSS pixels
+    # Model returns normalized [x1=98, y1=195, x2=195, y2=326] which converts to (100, 150, 200, 250) CSS pixels
     assert result[0].bbox == (100, 150, 200, 250)

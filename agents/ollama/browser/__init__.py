@@ -1,13 +1,16 @@
 """Browser agent package.
 
 Public API:
-- browser_agent: Configured agent instance for simple web page summarization.
 - browser_agent_tool: Callable wrapper to run the agent as a tool.
+- NAME, DESCRIPTION, SYSTEM_PROMPT, TOOLS: Static agent config constants.
 """
 
-from .agent import browser_agent, browser_agent_tool
+from .agent import DESCRIPTION, NAME, SYSTEM_PROMPT, TOOLS, browser_agent_tool
 
 __all__ = [
-    "browser_agent",
+    "DESCRIPTION",
+    "NAME",
+    "SYSTEM_PROMPT",
+    "TOOLS",
     "browser_agent_tool",
 ]
