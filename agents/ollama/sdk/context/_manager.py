@@ -3,6 +3,9 @@
 import logging
 from typing import Any
 
+from rich.console import Console
+from rich.text import Text
+
 from agents.ollama.sdk.events import AssistantResponse, publish_event
 from agents.ollama.sdk.events.models import ContextUsagePayload
 
@@ -12,6 +15,7 @@ from ._strategy import ContextStrategy, TriggerPoint
 from ._token_tracker import OllamaTokenCounter, TokenCounter, TokenTracker
 
 logger = logging.getLogger(__name__)
+_console = Console(stderr=True)
 
 
 class ContextManager:
@@ -34,8 +38,10 @@ class ContextManager:
         context_limit: int = 0,
         token_counter: TokenCounter | None = None,
         strategies: list[ContextStrategy] | None = None,
+        agent_name: str = "",
     ) -> None:
         self._history = history
+        self._agent_name = agent_name
         self._tracker = TokenTracker(
             counter=token_counter or OllamaTokenCounter(),
             context_limit=context_limit,
@@ -58,11 +64,8 @@ class ContextManager:
         """
         usage = self._tracker.record(response)
         stats = self._tracker.stats
-        logger.debug(
-            "Context usage: %d / %d (%.1f%%) — prompt=%d completion=%d",
-            stats.context_used, stats.context_limit, stats.fill_ratio * 100,
-            usage.prompt_tokens, usage.completion_tokens,
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            _log_context_bar(stats, usage, self._agent_name)
         try:
             publish_event(AssistantResponse(
                 event=ContextUsagePayload(
@@ -93,3 +96,36 @@ class ContextManager:
                 # Re-read stats after mutation (fill_ratio won't change until
                 # next LLM call, but strategies may chain in the future).
                 stats = self._tracker.stats
+
+
+def _log_context_bar(stats: ContextStats, usage: TokenUsage, agent_name: str = "") -> None:
+    """Render a visual context-usage bar to the console."""
+    pct = stats.fill_ratio * 100
+    # Color the bar based on fill level
+    if pct < 50:
+        bar_style = "green"
+    elif pct < 80:
+        bar_style = "yellow"
+    else:
+        bar_style = "red"
+
+    # Build a visual bar using block characters
+    bar_width = 30
+    filled = int(bar_width * min(stats.fill_ratio, 1.0))
+    empty = bar_width - filled
+    bar_text = Text()
+    bar_text.append("━" * filled, style=bar_style)
+    bar_text.append("━" * empty, style="grey23")
+
+    line = Text()
+    if agent_name:
+        line.append(f"  {agent_name}", style="bold cyan")
+        line.append("  ", style="default")
+    line.append("Context  ", style="bold")
+    line.append_text(bar_text)
+    line.append(f"  {stats.context_used:,}", style="bold")
+    line.append(f" / {stats.context_limit:,}", style="dim")
+    line.append(f"  ({pct:.1f}%)", style=bar_style)
+    line.append(f"   prompt={usage.prompt_tokens:,}  completion={usage.completion_tokens:,}", style="dim")
+
+    _console.print(line)

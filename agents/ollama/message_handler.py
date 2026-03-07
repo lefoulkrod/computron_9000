@@ -157,6 +157,7 @@ async def handle_user_message(
                 session.context_manager = ContextManager(
                     history=session.history,
                     context_limit=num_ctx,
+                    agent_name=agent.name,
                 )
             try:
                 async with event_context(handler=_queue_handler, session_id=session_id):
