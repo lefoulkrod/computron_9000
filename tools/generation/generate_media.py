@@ -26,19 +26,16 @@ _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
 
 async def generate_media(
     description: str,
-    model: str = "schnell",
+    model: str = "fast",
+    size: str = "square",
 ) -> dict[str, str]:
-    """Generate an image with real-time streaming preview.
-
-    Delegates to the container's inference server via ``/generate-stream``.
-    Progress and TAESD-decoded preview images are published as
-    ``GenerationPreviewPayload`` events in real time.
+    """Generate an image.
 
     Args:
         description: Text prompt describing the image to generate.
-        model: Model to use — "schnell" (default, fast), "klein-4b"
-            (better quality, Apache 2.0), or "klein-9b" (best quality,
-            non-commercial).
+        model: "fast" (default), "quality" (best results), or
+            "photorealistic" (realistic photos).
+        size: "square" (default), "portrait" (tall), "landscape", or "wide".
 
     Returns:
         Dict with ``status``, ``path``, and ``media_type``.
@@ -50,7 +47,7 @@ async def generate_media(
     container_user = cfg.virtual_computer.container_user
 
     # Construct a compact script to run inside the container
-    params_json = json.dumps({"model": model})
+    params_json = json.dumps({"model": model, "size": size})
     script = (
         "import sys; sys.path.insert(0, '/opt/inference'); "
         "import json; "

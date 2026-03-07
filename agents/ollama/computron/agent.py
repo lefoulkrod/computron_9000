@@ -7,8 +7,8 @@ from textwrap import dedent
 
 from agents.ollama.browser import browser_agent_tool
 from agents.ollama.coding import coding_agent_tool
-from agents.ollama.media import inference_agent_tool
 from agents.ollama.sub_agent import run_sub_agent
+from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.memory import forget, remember
 from tools.virtual_computer import output_file, play_audio, run_bash_cmd
@@ -47,9 +47,6 @@ SYSTEM_PROMPT = dedent(
         AGENTS:
         - CODING_AGENT — file reading, code changes, running tests. Has grep, read_file,
           replace_in_file, and other structured file tools. Prefer over run_sub_agent for code.
-        - INFERENCE_AGENT — ALL image generation, voice/TTS, and GPU workloads.
-          For game sound effects (bleeps, explosions, etc.), prefer CODING_AGENT or
-          run_sub_agent to generate WAV files programmatically — do NOT use voice/TTS tools.
         - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
         - run_sub_agent(instructions, agent_name) — general tasks, data processing.
           Use descriptive UPPERCASE names (e.g. DATA_ANALYST). Sub-agents share /home/computron/.
@@ -77,7 +74,7 @@ TOOLS = [
     run_bash_cmd,
     coding_agent_tool,
     browser_agent_tool,
-    inference_agent_tool,
+    generate_media,
     create_custom_tool,
     lookup_custom_tools,
     run_custom_tool,

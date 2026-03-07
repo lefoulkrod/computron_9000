@@ -3,7 +3,7 @@
 This module exposes an asyncio-friendly API to publish AssistantResponse events
 without passing dispatcher handles through every call. It relies on a
 contextvars.ContextVar to track the currently active dispatcher for the
-duration of a single user message handling coroutine.
+duration of a single conversation turn.
 
 Guidelines:
 - No blocking calls; publishing delegates to the active dispatcher, which is
@@ -14,26 +14,21 @@ Guidelines:
 
 from __future__ import annotations
 
-import asyncio
 import itertools
 import logging
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
-    from collections.abc import AsyncIterator, Generator
+    from collections.abc import Generator
 
 from agents.types import LLMOptions
 
-from .dispatcher import EventDispatcher, Handler
+from .dispatcher import EventDispatcher
 from .models import AssistantResponse
 
 logger = logging.getLogger(__name__)
-
-
-class StopRequestedError(Exception):
-    """Raised at safe checkpoints when the user requests a stop."""
 
 
 # Active dispatcher for the current coroutine context.
@@ -41,38 +36,6 @@ _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
     "assistant_events_current_dispatcher", default=None
 )
 
-# Stop event bound to the currently active conversation turn, accessible
-# without passing it through every call frame.
-_stop_event: ContextVar[asyncio.Event | None] = ContextVar("assistant_events_stop_event", default=None)
-
-_DEFAULT_SESSION_ID = "default"
-
-# Per-session stop events so the HTTP stop endpoint can target a specific
-# session without interfering with others.
-_active_stop_events: dict[str, asyncio.Event] = {}
-
-
-def request_stop(session_id: str | None = None) -> None:
-    """Signal the active conversation turn to stop at the next safe checkpoint.
-
-    Args:
-        session_id: Target a specific session. If None, stops the default session.
-    """
-    sid = session_id or _DEFAULT_SESSION_ID
-    event = _active_stop_events.get(sid)
-    if event is not None:
-        event.set()
-
-
-def check_stop() -> None:
-    """Raise StopRequestedError if a stop has been requested for this turn.
-
-    Call this at safe checkpoints (e.g. top of tool loop, before each tool
-    execution) to allow clean interruption without cancelling tasks mid-await.
-    """
-    event = _stop_event.get()
-    if event is not None and event.is_set():
-        raise StopRequestedError()
 
 # Stack of (context_id, agent_name) frames for nested agent/tool executions.
 _context_stack: ContextVar[tuple[tuple[str, str | None], ...]] = ContextVar(
@@ -165,47 +128,3 @@ def publish_event(event: AssistantResponse) -> None:
         )
     except Exception:  # pragma: no cover - defensive logging path
         logger.exception("Failed to publish AssistantResponse event")
-
-
-@asynccontextmanager
-async def event_context(
-    handler: Handler | None = None,
-    session_id: str | None = None,
-) -> AsyncIterator[None]:
-    """Create a dispatcher, bind it to context, and optionally subscribe a handler.
-
-    This helper ensures:
-    - A fresh EventDispatcher is created per context
-    - The dispatcher is bound to the context var so ``publish_event`` works
-    - A fresh stop event is created and bound so ``check_stop`` works from any
-      depth without parameter passing
-    - If a handler is provided, it is subscribed for the duration of the context
-    - In-flight async handler tasks are drained before teardown
-    - Teardown always occurs, even if the body raises
-
-    Use ``agent_span`` inside this context to attribute events to specific agents.
-
-    Args:
-        handler: Optional subscriber callable (sync or async).
-        session_id: Session identifier for per-session stop event isolation.
-
-    Yields:
-        None
-    """
-    sid = session_id or _DEFAULT_SESSION_ID
-    dispatcher = EventDispatcher()
-    stop_event = asyncio.Event()
-    _active_stop_events[sid] = stop_event
-    dispatcher_token = _current_dispatcher.set(dispatcher)
-    stop_token = _stop_event.set(stop_event)
-    try:
-        if handler is not None:
-            async with dispatcher.subscription(handler):
-                yield None
-        else:
-            yield None
-    finally:
-        await dispatcher.drain()
-        _current_dispatcher.reset(dispatcher_token)
-        _stop_event.reset(stop_token)
-        _active_stop_events.pop(sid, None)

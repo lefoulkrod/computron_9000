@@ -12,7 +12,8 @@ from agents.types import Agent
 from config import load_config
 
 from .context import ConversationHistory
-from .events import AssistantResponse, StopRequestedError, ToolCallPayload, publish_event
+from .events import AssistantResponse, ToolCallPayload, publish_event
+from .turn import StopRequestedError
 from .tools import _normalize_tool_result, _prepare_tool_arguments
 
 

@@ -4,7 +4,7 @@ import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
 
-function ChatInput({ onSend, onStop, disabled, attachment }) {
+function ChatInput({ onSend, onStop, isStreaming, attachment }) {
     const [message, setMessage] = useState('');
     const [fileData, setFileData] = useState(null);
     const [filePreview, setFilePreview] = useState(null);
@@ -37,7 +37,7 @@ function ChatInput({ onSend, onStop, disabled, attachment }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (disabled) return;
+        if (!message.trim() && !fileData) return;
         onSend(message.trim(), fileData);
         setMessage('');
         clearAttachment();
@@ -123,8 +123,7 @@ function ChatInput({ onSend, onStop, disabled, attachment }) {
                             }
                         }}
                         onPaste={handlePaste}
-                        placeholder="Type your message..."
-                        disabled={disabled}
+                        placeholder={isStreaming ? "Send a nudge to the agent..." : "Type your message..."}
                     />
                 </div>
                 <div className={styles.inputAreaButtons}>
@@ -135,7 +134,6 @@ function ChatInput({ onSend, onStop, disabled, attachment }) {
                         onClick={() => fileInputRef.current && fileInputRef.current.click()}
                         title="Attach file"
                         aria-label="Attach file"
-                        disabled={disabled}
                     >
                         <PaperclipIcon />
                     </button>
@@ -149,7 +147,15 @@ function ChatInput({ onSend, onStop, disabled, attachment }) {
                         }}
                         onChange={handleFile}
                     />
-                    {disabled ? (
+                    <button
+                        type="submit"
+                        className={styles.iconButton}
+                        title={isStreaming ? "Send nudge" : "Send message"}
+                        aria-label={isStreaming ? "Send nudge" : "Send message"}
+                    >
+                        <SendIcon />
+                    </button>
+                    {isStreaming && (
                         <button
                             type="button"
                             className={`${styles.iconButton} ${styles.stopButton}`}
@@ -158,15 +164,6 @@ function ChatInput({ onSend, onStop, disabled, attachment }) {
                             onClick={onStop}
                         >
                             <StopIcon />
-                        </button>
-                    ) : (
-                        <button
-                            type="submit"
-                            className={styles.iconButton}
-                            title="Send message"
-                            aria-label="Send message"
-                        >
-                            <SendIcon />
                         </button>
                     )}
                 </div>
