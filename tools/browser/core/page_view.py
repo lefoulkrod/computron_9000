@@ -22,8 +22,23 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Response
 from pydantic import BaseModel
 
-from tools.browser.core._file_detection import DownloadInfo
+from tools.browser.core._file_detection import DownloadInfo, is_file_content_type
 from tools.browser.core.browser import ActiveView
+
+# URL extensions that indicate non-HTML content the DOM walker can't handle.
+_NON_HTML_EXTENSIONS = frozenset({
+    ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+    ".mp3", ".mp4", ".wav", ".ogg", ".webm",
+    ".zip", ".gz", ".tar", ".bz2", ".xz", ".7z",
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+})
+
+
+def _is_non_html_url(url: str) -> bool:
+    """Check if a URL points to a non-HTML resource based on its extension."""
+    # Strip query string and fragment before checking extension
+    path = url.split("?")[0].split("#")[0].lower()
+    return any(path.endswith(ext) for ext in _NON_HTML_EXTENSIONS)
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +62,7 @@ class PageView(BaseModel):
     url: str
     status_code: int | None = None
     content: str = ""
-    viewport: dict[str, int] = {}
+    viewport: dict[str, int] | None = None
     truncated: bool = False
     downloaded_file: DownloadInfo | None = None
 
@@ -498,9 +513,9 @@ _ANNOTATED_SNAPSHOT_JS = """
       return;
     }
 
-    // Images with alt text
+    // Images with alt text (or aria-label for div[role="img"])
     if (role === 'img') {
-      const alt = (el.getAttribute('alt') || '').trim();
+      const alt = (el.getAttribute('alt') || el.getAttribute('aria-label') || '').trim();
       if (alt) emit('[img] ' + truncName(alt));
       return;
     }
@@ -599,34 +614,70 @@ async def build_page_view(
     status_code = response.status if response is not None else None
     final_url = response.url if response is not None else view.url
 
-    # Run JS DOM walk and viewport query in parallel on the active frame
-    try:
-        walk_task = view.frame.evaluate(
-            _ANNOTATED_SNAPSHOT_JS,
-            {"budget": budget, "scopeQuery": scope, "nameLimit": MAX_NAME_LEN, "fullPage": full_page},
-        )
+    # Detect non-HTML content (PDF, images, etc.) before attempting JS evaluate
+    # which would hang indefinitely on pages without a normal DOM.
+    _non_html = False
+    if response is not None:
+        ct = getattr(response, "headers", {}).get("content-type", "")
+        if ct and is_file_content_type(ct):
+            _non_html = True
+            logger.debug("Non-HTML content-type detected: %s", ct)
+    if not _non_html and _is_non_html_url(view.url):
+        _non_html = True
+        logger.debug("Non-HTML URL extension detected: %s", view.url)
 
-        viewport_task = view.frame.evaluate(
-            """() => ({
-                scroll_top: Math.floor(window.scrollY),
-                viewport_height: Math.floor(window.innerHeight),
-                viewport_width: Math.floor(window.innerWidth),
-                document_height: Math.floor(document.scrollingElement
-                    ? document.scrollingElement.scrollHeight
-                    : document.body.scrollHeight)
-            })"""
-        )
-
-        walk_result, viewport_data = await asyncio.gather(walk_task, viewport_task)
-    except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.warning("Failed to build annotated snapshot: %s", exc)
-        walk_result = {"content": "", "truncated": False}
-        viewport_data = {
-            "scroll_top": 0,
-            "viewport_height": 800,
-            "viewport_width": 1280,
-            "document_height": 800,
+    if _non_html:
+        # Determine file type from extension for a clearer message
+        _ext = view.url.split("?")[0].rsplit(".", 1)[-1].lower() if "." in view.url else "file"
+        walk_result = {
+            "content": (
+                f"[This is a {_ext.upper()} file, not a web page: {view.url}]\n"
+                "The browser cannot display this content. Use go_back() to return "
+                "to the previous page. If you need this file, download it with "
+                "run_bash_cmd and curl/wget."
+            ),
+            "truncated": False,
         }
+        viewport_data = None
+    else:
+        # Run JS DOM walk and viewport query in parallel on the active frame
+        try:
+            walk_task = view.frame.evaluate(
+                _ANNOTATED_SNAPSHOT_JS,
+                {"budget": budget, "scopeQuery": scope, "nameLimit": MAX_NAME_LEN, "fullPage": full_page},
+            )
+
+            viewport_task = view.frame.evaluate(
+                """() => ({
+                    scroll_top: Math.floor(window.scrollY),
+                    viewport_height: Math.floor(window.innerHeight),
+                    viewport_width: Math.floor(window.innerWidth),
+                    document_height: Math.floor(document.scrollingElement
+                        ? document.scrollingElement.scrollHeight
+                        : document.body.scrollHeight)
+                })"""
+            )
+
+            walk_result, viewport_data = await asyncio.wait_for(
+                asyncio.gather(walk_task, viewport_task),
+                timeout=15,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("DOM snapshot timed out for %s (may be non-HTML content)", view.url)
+            walk_result = {
+                "content": (
+                    f"[Page content unavailable — snapshot timed out: {view.url}]\n"
+                    "This may be a PDF or non-HTML document. Use go_back() to return "
+                    "to the previous page. If you need this file, download it with "
+                    "run_bash_cmd and curl/wget."
+                ),
+                "truncated": False,
+            }
+            viewport_data = None
+        except PlaywrightError as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to build annotated snapshot: %s", exc)
+            walk_result = {"content": "", "truncated": False}
+            viewport_data = None
 
     return PageView(
         title=view.title,

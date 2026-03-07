@@ -562,6 +562,7 @@ class Browser:
         cls,
         profile_dir: str,
         *,
+        channel: str | None = None,
         headless: bool = False,
         user_agent: str = DEFAULT_UA,
         locale: str = "en-US",
@@ -578,6 +579,8 @@ class Browser:
 
         Args:
             profile_dir: Directory for Chromium user data (persisted across runs).
+            channel: Browser channel (``"chrome"`` for system Chrome, ``None``
+                for bundled Chromium).
             headless: Whether to launch without a visible window.
             user_agent: User-Agent string to present to websites.
             locale: BCP 47 locale tag.
@@ -633,6 +636,7 @@ class Browser:
 
         launch_kwargs: dict[str, Any] = dict(
             user_data_dir=str(profile_path),
+            channel=channel,
             headless=headless,
             proxy=proxy,
             args=chromium_args,
@@ -1018,8 +1022,9 @@ class Browser:
         captured_responses: list[Response] = []
 
         def _on_response(resp: Response) -> None:
-            # Only capture main-frame navigations (not sub-resources)
-            if resp.frame == page.main_frame:
+            # Only capture main-frame document navigations, not XHR/fetch or
+            # sub-resources (JS, CSS, etc.) that happen to run on the main frame.
+            if resp.frame == page.main_frame and resp.request.resource_type == "document":
                 captured_responses.append(resp)
 
         page.on("response", _on_response)
@@ -1216,7 +1221,8 @@ async def get_browser() -> Browser:
         # Route browser downloads to the virtual computer's shared home directory
         # so the agent can access downloaded files via run_bash_cmd.
         downloads_path = config.virtual_computer.home_dir
-        _browser = await Browser.start(str(profile_path), downloads_path=downloads_path)
+        channel = config.tools.browser.channel
+        _browser = await Browser.start(str(profile_path), channel=channel, downloads_path=downloads_path)
         _browser._downloads_dir = downloads_path
         _browser._container_dir = config.virtual_computer.container_working_dir
     return _browser

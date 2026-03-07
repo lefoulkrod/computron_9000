@@ -12,8 +12,7 @@ import logging
 from textwrap import dedent
 
 from agents.ollama.sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
+    default_hooks,
     run_tool_call_loop,
 )
 from agents.ollama.browser import browser_agent_tool
@@ -99,14 +98,17 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
         ])
         num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
         ctx_manager = ContextManager(history=history, context_limit=num_ctx)
-        after_cbs = [make_log_after_model_call(agent), ctx_manager.make_after_model_callback()]
+        hooks = default_hooks(
+            agent,
+            max_iterations=effective_max_iterations,
+            ctx_manager=ctx_manager,
+        )
         result_text = ""
         try:
             async for content, _ in run_tool_call_loop(
                 history=history,
                 agent=agent,
-                before_model_callbacks=[make_log_before_model_call(agent)],
-                after_model_callbacks=after_cbs,
+                hooks=hooks,
             ):
                 if content:
                     result_text = content

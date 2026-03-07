@@ -167,8 +167,8 @@ async def test_empty_or_whitespace_with_non_str_type_raises(monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_callbacks_are_created_and_passed(monkeypatch):
-    """Ensure before/after callbacks are created internally and passed to the loop."""
+async def test_hooks_are_created_and_passed(monkeypatch):
+    """Ensure hooks are created internally and passed to the loop."""
 
     received_kwargs = {}
 
@@ -182,12 +182,14 @@ async def test_callbacks_are_created_and_passed(monkeypatch):
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     res = await tool_fn("x")
     assert res == {"ok": True}
-    # Callbacks should be created internally and passed to the loop
-    assert "before_model_callbacks" in received_kwargs
-    assert "after_model_callbacks" in received_kwargs
-    assert len(received_kwargs["before_model_callbacks"]) == 1
-    # 2 after-model callbacks: logging + context manager
-    assert len(received_kwargs["after_model_callbacks"]) == 2
+    # Hooks should be created internally and passed to the loop
+    assert "hooks" in received_kwargs
+    hooks = received_kwargs["hooks"]
+    # Should contain at least LoopDetector, LoggingHook, ContextHook
+    from agents.ollama.sdk.hooks import ContextHook, LoggingHook, LoopDetector
+    assert any(isinstance(h, LoopDetector) for h in hooks)
+    assert any(isinstance(h, LoggingHook) for h in hooks)
+    assert any(isinstance(h, ContextHook) for h in hooks)
 
 
 @pytest.mark.unit

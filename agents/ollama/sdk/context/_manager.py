@@ -1,7 +1,6 @@
 """Context manager orchestrator tying history, tracking, and strategies together."""
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from agents.ollama.sdk.events import AssistantResponse, publish_event
@@ -81,13 +80,6 @@ class ContextManager:
     def apply_strategies(self) -> None:
         """Run before-model strategies (typically called before an LLM invocation)."""
         self._run_strategies(TriggerPoint.BEFORE_MODEL_CALL)
-
-    def make_after_model_callback(self) -> Callable[[Any], None]:
-        """Return a callback suitable for ``tool_loop``'s ``after_model_callbacks``."""
-        def _callback(response: Any) -> None:
-            self.record_response(response)
-
-        return _callback
 
     def _run_strategies(self, trigger: TriggerPoint) -> None:
         """Run all strategies matching *trigger*."""

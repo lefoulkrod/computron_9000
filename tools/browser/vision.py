@@ -91,19 +91,24 @@ async def ask_about_screenshot(
     mode: str = "full_page",
     selector: str | None = None,
 ) -> str:
-    """Capture a screenshot and ask the vision model about it.  SLOW.
+    """Ask a vision model a question about the current page.  SLOW.
 
-    Use sparingly — only when ``browse_page()`` and ``read_page()`` cannot
-    provide the information you need (e.g. visual layout, colors, charts).
+    Sends a screenshot to a vision model and returns its TEXT answer.
+    You never receive the image — only the model's text response.
+    Be specific in your prompt to get structured, usable answers:
+        GOOD: "List every item in the grid as row,col: value."
+        GOOD: "What color is each cell? Format: position → color."
+        GOOD: "Read the text shown in the image/canvas element."
+        BAD:  "What does the page look like?" (too vague)
 
     Args:
-        prompt: Question about the screenshot.
+        prompt: Specific question about what you see on the page.
         mode: ``"full_page"`` (default), ``"viewport"``, or ``"selector"``.
         selector: Required when ``mode="selector"`` — ``role:name`` of the
             element to capture.
 
     Returns:
-        The model's answer as a plain string.
+        A text answer from the vision model (never an image).
 
     Raises:
         BrowserToolError: If capture or model generation fails.

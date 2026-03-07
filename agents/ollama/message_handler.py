@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator, Sequence
 from contextlib import suppress
+from dataclasses import dataclass, field
 
 from agents.ollama.sdk.context import ContextManager, ConversationHistory
 from agents.ollama.sdk.events import (
@@ -19,8 +20,7 @@ from tools.virtual_computer.receive_file import receive_attachment
 
 from .computron import DESCRIPTION, NAME, SYSTEM_PROMPT, TOOLS
 from .sdk import (
-    make_log_after_model_call,
-    make_log_before_model_call,
+    default_hooks,
     run_tool_call_loop,
 )
 
@@ -28,19 +28,36 @@ logger = logging.getLogger(__name__)
 
 config = load_config()
 
-# Module-level conversation history and context manager for the chat session.
-_history = ConversationHistory()
-_context_manager: ContextManager | None = None
+_DEFAULT_SESSION_ID = "default"
 
 
-def reset_message_history() -> None:
-    """Resets the conversation history and context manager."""
-    global _context_manager
-    _history.clear()
-    _context_manager = None
+@dataclass
+class _Session:
+    """Per-session state: conversation history and context manager."""
+
+    history: ConversationHistory = field(default_factory=ConversationHistory)
+    context_manager: ContextManager | None = None
 
 
-def _refresh_system_message() -> None:
+# Session store keyed by session ID.
+_sessions: dict[str, _Session] = {}
+
+
+def _get_session(session_id: str | None = None) -> _Session:
+    """Return the session for the given ID, creating one if needed."""
+    sid = session_id or _DEFAULT_SESSION_ID
+    if sid not in _sessions:
+        _sessions[sid] = _Session()
+    return _sessions[sid]
+
+
+def reset_message_history(session_id: str | None = None) -> None:
+    """Resets the conversation history and context manager for a session."""
+    sid = session_id or _DEFAULT_SESSION_ID
+    _sessions.pop(sid, None)
+
+
+def _refresh_system_message(history: ConversationHistory) -> None:
     """Re-inserts the system message at the start of history with up-to-date memory.
 
     Called before each model invocation so any memories stored during the previous
@@ -54,7 +71,7 @@ def _refresh_system_message() -> None:
         memory_block = f"\n── Memory (persisted across sessions) ──────────────────────────\n{lines}\n{sep}\n"
         instruction = memory_block + instruction
 
-    _history.set_system_message(instruction)
+    history.set_system_message(instruction)
 
 
 def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str:
@@ -82,6 +99,7 @@ async def handle_user_message(
     data: Sequence[Data] | None = None,
     *,
     options: LLMOptions | None = None,
+    session_id: str | None = None,
 ) -> AsyncGenerator[AssistantResponse, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
@@ -89,10 +107,13 @@ async def handle_user_message(
         message: The user's message.
         data: Optional sequence of file attachment data.
         options: LLM inference options for this turn.
+        session_id: Optional session identifier for conversation isolation.
 
     Yields:
         AssistantResponse: Events from the LLM.
     """
+    session = _get_session(session_id)
+
     # Write any attachments to the virtual computer and augment the message
     # with file paths so the agent can access them via tools.
     user_content = message
@@ -116,7 +137,6 @@ async def handle_user_message(
                 logger.exception("Failed to enqueue AssistantResponse in message handler")
 
         async def _producer() -> None:
-            global _context_manager
             agent = Agent(
                 name=NAME,
                 description=DESCRIPTION,
@@ -132,26 +152,27 @@ async def handle_user_message(
             set_model_options(options)
 
             # Lazily create the context manager with the model's context limit.
-            if _context_manager is None:
+            if session.context_manager is None:
                 num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
-                _context_manager = ContextManager(
-                    history=_history,
+                session.context_manager = ContextManager(
+                    history=session.history,
                     context_limit=num_ctx,
                 )
             try:
-                async with event_context(handler=_queue_handler):
+                async with event_context(handler=_queue_handler, session_id=session_id):
                     with agent_span(agent.name):
-                        _history.append({"role": "user", "content": user_content})
-                        _refresh_system_message()
-                        _context_manager.apply_strategies()
+                        session.history.append({"role": "user", "content": user_content})
+                        _refresh_system_message(session.history)
+                        session.context_manager.apply_strategies()
+                        hooks = default_hooks(
+                            agent,
+                            max_iterations=agent.max_iterations,
+                            ctx_manager=session.context_manager,
+                        )
                         async for _, _ in run_tool_call_loop(
-                            history=_history,
+                            history=session.history,
                             agent=agent,
-                            before_model_callbacks=[make_log_before_model_call(agent)],
-                            after_model_callbacks=[
-                                make_log_after_model_call(agent),
-                                _context_manager.make_after_model_callback(),
-                            ],
+                            hooks=hooks,
                         ):
                             pass
             finally:

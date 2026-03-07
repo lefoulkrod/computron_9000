@@ -56,6 +56,7 @@ class ChatRequest(BaseModel):
     message: str
     data: list[Attachment] | None = None
     options: LLMOptions | None = None
+    session_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +162,7 @@ async def chat_handler(request: Request) -> StreamResponse:
         ]
     return await stream_events(
         request,
-        handle_user_message(user_query, data_objs, options=payload.options),
+        handle_user_message(user_query, data_objs, options=payload.options, session_id=payload.session_id),
     )
 
 
@@ -189,15 +190,17 @@ async def index_handler(_request: Request) -> StreamResponse:
     return web.FileResponse(index_path)
 
 
-async def stop_handler(_request: Request) -> Response:
+async def stop_handler(request: Request) -> Response:
     """Interrupt the active agent conversation turn."""
-    request_stop()
+    session_id = request.query.get("session_id")
+    request_stop(session_id=session_id)
     return web.json_response({"ok": True})
 
 
-async def delete_history_handler(_request: Request) -> Response:
-    """Clear chat history."""
-    reset_message_history()
+async def delete_history_handler(request: Request) -> Response:
+    """Clear chat history for a session."""
+    session_id = request.query.get("session_id")
+    reset_message_history(session_id=session_id)
     return web.Response(status=204)
 
 

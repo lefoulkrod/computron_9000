@@ -67,6 +67,21 @@ class TestIsFileContentType:
     def test_uppercase(self) -> None:
         assert is_file_content_type("Application/PDF") is True
 
+    def test_javascript(self) -> None:
+        assert is_file_content_type("application/javascript") is False
+
+    def test_text_javascript(self) -> None:
+        assert is_file_content_type("text/javascript") is False
+
+    def test_css(self) -> None:
+        assert is_file_content_type("text/css") is False
+
+    def test_svg(self) -> None:
+        assert is_file_content_type("image/svg+xml") is False
+
+    def test_wasm(self) -> None:
+        assert is_file_content_type("application/wasm") is False
+
 
 # ---------------------------------------------------------------------------
 # save_response_as_file
