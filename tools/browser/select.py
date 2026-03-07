@@ -176,7 +176,7 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
                 url="",
                 status_code=200,
                 content="",
-                viewport={"scroll_top": 0, "viewport_height": 0, "viewport_width": 0, "document_height": 0},
+                viewport=None,
                 truncated=False,
                 downloaded_file=browser_result.download,
             )

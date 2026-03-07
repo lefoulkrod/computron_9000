@@ -3,8 +3,9 @@ import { useState, useRef, useCallback } from 'react';
 /**
  * Build the request body for /api/chat including model options.
  */
-function _buildRequestBody(message, fileData, modelSettings) {
+function _buildRequestBody(message, fileData, modelSettings, sessionId) {
     const body = { message: message || '(uploaded file)' };
+    if (sessionId) body.session_id = sessionId;
     if (fileData) {
         body.data = [fileData];
     }
@@ -74,6 +75,7 @@ export default function useStreamingChat(callbacks) {
     const [messages, setMessages] = useState([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const abortControllerRef = useRef(null);
+    const sessionIdRef = useRef(crypto.randomUUID());
 
     const sendMessage = useCallback(async (message, fileData, modelSettings) => {
         if (!message && !fileData) return;
@@ -97,7 +99,7 @@ export default function useStreamingChat(callbacks) {
             { id: placeholderId, role: 'assistant', placeholder: true, tempId: placeholderId },
         ]);
 
-        const body = _buildRequestBody(message, fileData, modelSettings);
+        const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current);
 
         try {
             const controller = new AbortController();
@@ -287,7 +289,7 @@ export default function useStreamingChat(callbacks) {
     }, [callbacks]);
 
     const stopGeneration = useCallback(() => {
-        fetch('/api/chat/stop', { method: 'POST' }).catch(() => {});
+        fetch(`/api/chat/stop?session_id=${sessionIdRef.current}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
     }, []);
 
@@ -297,11 +299,14 @@ export default function useStreamingChat(callbacks) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
         }
-        fetch('/api/chat/stop', { method: 'POST' }).catch(() => {});
+        const oldSessionId = sessionIdRef.current;
+        fetch(`/api/chat/stop?session_id=${oldSessionId}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
         setMessages([]);
+        // Generate a fresh session ID for the new session
+        sessionIdRef.current = crypto.randomUUID();
         try {
-            await fetch('/api/chat/history', { method: 'DELETE' });
+            await fetch(`/api/chat/history?session_id=${oldSessionId}`, { method: 'DELETE' });
         } catch (err) {
             // ignore
         }

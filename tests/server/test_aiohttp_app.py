@@ -77,9 +77,9 @@ async def test_delete_history(aiohttp_client, app, monkeypatch):
     called = {}
     from agents import reset_message_history as real_reset
     # Patch where it's imported in the handler module
-    def _fake_reset():  # noqa: D401 - simple stub
+    def _fake_reset(session_id=None):  # noqa: D401 - simple stub
         called["yes"] = True
-        return real_reset()
+        return real_reset(session_id=session_id)
     monkeypatch.setattr("server.aiohttp_app.reset_message_history", _fake_reset)
     client = await aiohttp_client(app)
     resp = await client.delete("/api/chat/history")

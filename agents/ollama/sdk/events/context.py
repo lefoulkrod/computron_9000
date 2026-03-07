@@ -45,16 +45,23 @@ _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
 # without passing it through every call frame.
 _stop_event: ContextVar[asyncio.Event | None] = ContextVar("assistant_events_stop_event", default=None)
 
-# Module-level reference so the stop HTTP endpoint (a separate asyncio task)
-# can signal the running turn. Single-session app assumption.
-_active_stop_event: asyncio.Event | None = None
+_DEFAULT_SESSION_ID = "default"
+
+# Per-session stop events so the HTTP stop endpoint can target a specific
+# session without interfering with others.
+_active_stop_events: dict[str, asyncio.Event] = {}
 
 
-def request_stop() -> None:
-    """Signal the active conversation turn to stop at the next safe checkpoint."""
-    global _active_stop_event
-    if _active_stop_event is not None:
-        _active_stop_event.set()
+def request_stop(session_id: str | None = None) -> None:
+    """Signal the active conversation turn to stop at the next safe checkpoint.
+
+    Args:
+        session_id: Target a specific session. If None, stops the default session.
+    """
+    sid = session_id or _DEFAULT_SESSION_ID
+    event = _active_stop_events.get(sid)
+    if event is not None:
+        event.set()
 
 
 def check_stop() -> None:
@@ -163,6 +170,7 @@ def publish_event(event: AssistantResponse) -> None:
 @asynccontextmanager
 async def event_context(
     handler: Handler | None = None,
+    session_id: str | None = None,
 ) -> AsyncIterator[None]:
     """Create a dispatcher, bind it to context, and optionally subscribe a handler.
 
@@ -179,14 +187,15 @@ async def event_context(
 
     Args:
         handler: Optional subscriber callable (sync or async).
+        session_id: Session identifier for per-session stop event isolation.
 
     Yields:
         None
     """
-    global _active_stop_event
+    sid = session_id or _DEFAULT_SESSION_ID
     dispatcher = EventDispatcher()
     stop_event = asyncio.Event()
-    _active_stop_event = stop_event
+    _active_stop_events[sid] = stop_event
     dispatcher_token = _current_dispatcher.set(dispatcher)
     stop_token = _stop_event.set(stop_event)
     try:
@@ -199,4 +208,4 @@ async def event_context(
         await dispatcher.drain()
         _current_dispatcher.reset(dispatcher_token)
         _stop_event.reset(stop_token)
-        _active_stop_event = None
+        _active_stop_events.pop(sid, None)

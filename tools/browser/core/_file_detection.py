@@ -16,7 +16,9 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-# Content types that the DOM walker can meaningfully process.
+# Content types that the DOM walker can meaningfully process, plus web
+# resource types (JS, CSS, fonts, etc.) that should never be treated as
+# file downloads even if they appear as a main-frame response.
 _PAGE_CONTENT_TYPES = frozenset({
     "text/html",
     "application/xhtml+xml",
@@ -24,6 +26,15 @@ _PAGE_CONTENT_TYPES = frozenset({
     "text/plain",
     "text/xml",
     "application/xml",
+    # Web resources — not downloadable files
+    "application/javascript",
+    "text/javascript",
+    "text/css",
+    "application/wasm",
+    "text/csv",
+    "application/manifest+json",
+    "application/ld+json",
+    "image/svg+xml",
 })
 
 

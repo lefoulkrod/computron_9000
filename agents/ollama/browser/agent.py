@@ -44,6 +44,13 @@ SYSTEM_PROMPT = dedent(
         fill_field("searchbox:Search", "query")
         Multiple matches: click("link:Product[0]")
 
+    FORMS: Match the tool to the element role shown by browse_page():
+        [textbox] / [searchbox] → fill_field("textbox:Label", "value")
+        [combobox] (dropdowns)  → select_option("combobox:Label", "Option Text")
+        [checkbox]              → click("checkbox:Label")  (toggles on/off)
+        [radio]                 → click("radio:Option Text")
+        [button]                → click("button:Label")
+
     EFFICIENCY:
     - Stop when you have enough data — do NOT scroll for completeness.
     - Prefer site search/filters over scrolling through results.
@@ -57,23 +64,32 @@ SYSTEM_PROMPT = dedent(
     Do NOT start your own HTTP server (python -m http.server, etc.) — it is
     never needed.
 
+    DOWNLOADING FILES:
+    Click any file link to download it — the browser saves it automatically:
+        click("link:data.csv")  → saved to /home/computron/data.csv
+    The tool response will tell you the saved path. Then use run_bash_cmd
+    to process the file (grep, head, cat, python, etc.).
+
     RULES:
-    - NEVER use curl/wget/scripts for web fetching — use the browser.
-    - Use run_bash_cmd ONLY for processing saved files (grep, cat, ls).
-    - Downloads auto-save to /home/computron/.
+    - Prefer the browser for web fetching. Use curl/wget via run_bash_cmd
+      ONLY for direct file downloads (PDFs, CSVs, ZIPs) when you have the URL.
     - When you save/download a file, mention the path in your response.
 
-    VISION TOOLS (use only as a last resort):
+    VISION TOOLS — STRICT RULES:
     click_element, press_and_hold_element, and ask_about_screenshot use
-    vision (screenshot analysis) which is slow and expensive.  Always try
-    selector-based tools first (click, fill_field, press_keys, etc.).
-    Only fall back to vision tools when selectors repeatedly fail:
-        click_element("blue Submit button next to the price")
-        press_and_hold_element("press and hold captcha button", duration_ms=8000)
+    vision (screenshot analysis) which is 10x slower and more expensive.
+    NEVER use a vision tool unless you have ALREADY tried the selector-based
+    equivalent (click, fill_field, etc.) on the SAME page and it FAILED.
+    browse_page() gives you exact [role] name selectors — use them directly:
+        [link] Datasets       → click("link:Datasets")
+        [button] Submit       → click("button:Submit")
+        [menuitem] Search     → click("menuitem:Search")
+    Vision is ONLY for elements that have no selector (e.g. canvas, images,
+    CAPTCHAs) or after a selector-based click has failed twice.
 
     WHEN STUCK:
     - Can't find element → scroll + browse_page, or browse_page(scope="...")
-    - Selector still fails after scrolling → click_element("describe it visually")
+    - Selector failed twice → THEN use click_element("describe it visually")
     - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
     - Multiple similar elements → use index suffix: click("button:Submit[0]")
     - Ambiguous → ask user for clarification

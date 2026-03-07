@@ -14,7 +14,7 @@ def format_page_view(
     title: str,
     url: str,
     status_code: int | None,
-    viewport: dict[str, int],
+    viewport: dict[str, int] | None,
     content: str,
     truncated: bool,
     downloaded_file: Any | None = None,
@@ -39,13 +39,16 @@ def format_page_view(
         return format_download_message(downloaded_file)
 
     status = status_code if status_code is not None else ""
-    scroll_top = viewport.get("scroll_top", 0)
-    vh = viewport.get("viewport_height", 0)
-    doc_h = viewport.get("document_height", 0)
     trunc = " | truncated" if truncated else ""
 
     header = f"[Page: {title} | {url} | {status}]"
-    vp_line = f"[Viewport: {scroll_top}-{scroll_top + vh} of {doc_h}px{trunc}]"
+    if viewport is None:
+        vp_line = "[Viewport: unavailable]"
+    else:
+        scroll_top = viewport.get("scroll_top", 0)
+        vh = viewport.get("viewport_height", 0)
+        doc_h = viewport.get("document_height", 0)
+        vp_line = f"[Viewport: {scroll_top}-{scroll_top + vh} of {doc_h}px{trunc}]"
 
     return f"{header}\n{vp_line}\n\n{content}"
 

@@ -46,6 +46,7 @@ tools:
       no_save_state: false
       timeout: 6000
   browser:
+    channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
     human:
       pointer:
         move_steps: 12

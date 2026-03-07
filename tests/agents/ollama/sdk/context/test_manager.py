@@ -60,16 +60,19 @@ class TestContextManager:
         assert event.event.context_used == 105000
         assert event.event.context_limit == 128000
 
-    def test_make_after_model_callback(self):
+    def test_context_hook_records_response(self):
+        from agents.ollama.sdk.hooks import ContextHook
+
         history = ConversationHistory()
         cm = ContextManager(history, context_limit=128000)
-        cb = cm.make_after_model_callback()
+        hook = ContextHook(cm)
         resp = _FakeResponse(prompt_eval_count=50000, eval_count=1000)
 
         with patch("agents.ollama.sdk.context._manager.publish_event"):
-            cb(resp)
+            result = hook.after_model(resp, history, 1, "test")
 
         assert cm.stats.context_used == 51000
+        assert result is resp
 
     def test_apply_strategies_before_model(self):
         history = ConversationHistory([

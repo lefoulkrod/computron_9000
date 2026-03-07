@@ -12,7 +12,7 @@ from agents.types import Agent
 from config import load_config
 
 from .context import ConversationHistory
-from .events import AssistantResponse, StopRequestedError, ToolCallPayload, check_stop, publish_event
+from .events import AssistantResponse, StopRequestedError, ToolCallPayload, publish_event
 from .tools import _normalize_tool_result, _prepare_tool_arguments
 
 
@@ -154,7 +154,6 @@ async def _execute_tool_call(
         return {"error": "Tool not found"}
 
     try:
-        check_stop()
         validated_args = _prepare_tool_arguments(tool_func, arguments)
         if inspect.iscoroutinefunction(tool_func):
             result = await tool_func(**validated_args)
@@ -173,16 +172,14 @@ async def run_tool_call_loop(
     history: ConversationHistory,
     agent: Agent,
     *,
-    before_model_callbacks: list[Callable[[list[dict[str, Any]]], None]] | None = None,
-    after_model_callbacks: list[Callable[[ChatResponse], None]] | None = None,
+    hooks: list[Any] | None = None,
 ) -> AsyncGenerator[tuple[str | None, str | None]]:
     """Executes a chat loop with the LLM, handling tool calls and yielding message content.
 
     Args:
         history: The conversation history to read from and append to.
         agent: The agent providing model, tools, options, and think flag.
-        before_model_callbacks: Callbacks invoked before each model call.
-        after_model_callbacks: Callbacks invoked after each model call.
+        hooks: Pluggable hooks invoked at four phases of each iteration.
 
     Yields:
         tuple[str | None, str | None]: The message content and thinking as they are generated.
@@ -192,34 +189,20 @@ async def run_tool_call_loop(
     """
     cfg = load_config()
     client = AsyncClient(host=cfg.llm.host) if getattr(cfg, "llm", None) and cfg.llm.host else AsyncClient()
-    tools = agent.tools or []
-    max_iterations = agent.max_iterations
+    tools = list(agent.tools or [])
+    if hooks is None:
+        hooks = []
     iteration = 0
-    budget_exhausted = False
     while True:
         iteration += 1
-        if max_iterations > 0 and iteration > max_iterations and not budget_exhausted:
-            logger.warning(
-                "Agent '%s' hit max_iterations (%d), forcing stop",
-                agent.name,
-                max_iterations,
-            )
-            history.append({
-                "role": "user",
-                "content": (
-                    f"Tool call budget exhausted ({max_iterations} iterations). "
-                    "Wrap up and respond with the information you have."
-                ),
-            })
-            # Strip tools so the normal path below produces a final text response.
-            tools = []
-            budget_exhausted = True
-        if before_model_callbacks:
-            for before_cb in before_model_callbacks:
-                before_cb(history.messages)
+
+        # ── before_model hooks ───────────────────────────────────────
+        for hook in hooks:
+            fn = getattr(hook, "before_model", None)
+            if fn:
+                fn(history, iteration, agent.name)
+
         try:
-            # Bail out cleanly before hitting the model or a tool if stop was requested.
-            check_stop()
             # Call model with internal retry handling
             response = await _chat_with_retries(
                 client,
@@ -227,9 +210,12 @@ async def run_tool_call_loop(
                 messages=history.messages,
                 tools=tools,
             )
-            if after_model_callbacks:
-                for after_cb in after_model_callbacks:
-                    after_cb(response)
+
+            # ── after_model hooks (chain: each can rewrite response) ─
+            for hook in hooks:
+                fn = getattr(hook, "after_model", None)
+                if fn:
+                    response = fn(response, history, iteration, agent.name)
 
             content = response.message.content
             thinking = response.message.thinking
@@ -250,19 +236,40 @@ async def run_tool_call_loop(
                 yield content, thinking
 
             if not tool_calls:
-                # Normal completion path (also handles budget exhaustion since
-                # tools are cleared, forcing the model to respond with text only).
                 _publish_final()
                 break
 
             for tool_call in tool_calls:
-                tool_result = await _execute_tool_call(tool_call, tools)
-                tool_name = getattr(getattr(tool_call, "function", None), "name", None)
+                function = getattr(tool_call, "function", None)
+                tool_name = getattr(function, "name", None) if function else None
+                tool_arguments = getattr(function, "arguments", {}) if function else {}
+
+                # ── before_tool hooks ────────────────────────────────
+                intercepted = None
+                for hook in hooks:
+                    fn = getattr(hook, "before_tool", None)
+                    if fn:
+                        intercepted = fn(tool_name, tool_arguments)
+                        if intercepted is not None:
+                            break
+
+                if intercepted is not None:
+                    tool_result = intercepted
+                else:
+                    tool_result = await _execute_tool_call(tool_call, tools)
+
+                # ── after_tool hooks (chain: each rewrites result) ───
+                for hook in hooks:
+                    fn = getattr(hook, "after_tool", None)
+                    if fn:
+                        tool_result = fn(tool_name, tool_arguments, tool_result)
+
                 history.append({
                     "role": "tool",
                     "tool_name": tool_name,
                     "content": json.dumps(tool_result),
                 })
+
         except StopRequestedError:
             logger.info("Tool loop stopped by user request")
             _publish_final()

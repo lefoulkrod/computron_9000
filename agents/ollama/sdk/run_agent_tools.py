@@ -9,13 +9,11 @@ import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Protocol, cast, get_args, get_origin
 
-from ollama import ChatResponse
-
 from agents.types import Agent
 
 from .context import ContextManager, ConversationHistory
 from .events import agent_span, get_model_options
-from .logging_callbacks import make_log_after_model_call, make_log_before_model_call
+from .hooks import default_hooks
 from .tool_loop import run_tool_call_loop
 
 
@@ -168,16 +166,14 @@ async def _run_tool_loop_once(
     *,
     history: ConversationHistory,
     agent: Agent,
-    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None,
-    after_model_callbacks: list[Callable[[ChatResponse], None]] | None,
+    hooks: list[Any],
 ) -> str:
     """Run the tool-call loop once and return the final assistant text.
 
     Args:
         history: Conversation history to seed the model/tool loop.
         agent: Agent providing tools, model, options, and think flag.
-        before_model_callbacks: Optional pre-call callbacks.
-        after_model_callbacks: Optional post-call callbacks.
+        hooks: Loop hooks for all four phases.
 
     Returns:
         The last emitted assistant content, stripped.
@@ -190,8 +186,7 @@ async def _run_tool_loop_once(
         gen: AsyncGenerator[tuple[str | None, str | None], None] = run_tool_call_loop(
             history=history,
             agent=agent,
-            before_model_callbacks=before_model_callbacks,
-            after_model_callbacks=after_model_callbacks,
+            hooks=hooks,
         )
         async for content, _ in gen:
             if content:
@@ -211,8 +206,7 @@ async def _run_with_json_retry[T](
     history: ConversationHistory,
     agent: Agent,
     result_type: type[T],
-    before_model_callbacks: list[Callable[[list[dict[str, str]]], None]] | None,
-    after_model_callbacks: list[Callable[[ChatResponse], None]] | None,
+    hooks: list[Any],
     max_attempts: int = 5,
 ) -> T:
     """Run the tool loop with JSON-parse retries for non-string result types.
@@ -224,8 +218,7 @@ async def _run_with_json_retry[T](
         history: Conversation history.
         agent: Agent to execute.
         result_type: The target non-string type to convert the output into.
-        before_model_callbacks: Optional pre-call callbacks.
-        after_model_callbacks: Optional post-call callbacks.
+        hooks: Loop hooks for all four phases.
         max_attempts: Number of attempts to try when JSON parsing fails.
 
     Returns:
@@ -239,8 +232,7 @@ async def _run_with_json_retry[T](
         final_text = await _run_tool_loop_once(
             history=history,
             agent=agent,
-            before_model_callbacks=before_model_callbacks,
-            after_model_callbacks=after_model_callbacks,
+            hooks=hooks,
         )
         try:
             return _convert_result_to_type(final_text, result_type)
@@ -318,8 +310,6 @@ Returns:
             options=model_options.to_ollama_options() if model_options else {},
             max_iterations=effective_max_iterations,
         )
-        before_model_callbacks = [make_log_before_model_call(agent)]
-        after_model_callbacks = [make_log_after_model_call(agent)]
         with agent_span(agent.name):
             history = ConversationHistory([
                 {"role": "system", "content": agent.instruction},
@@ -327,15 +317,18 @@ Returns:
             ])
             num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
             ctx_manager = ContextManager(history=history, context_limit=num_ctx)
-            after_model_callbacks.append(ctx_manager.make_after_model_callback())
+            hooks = default_hooks(
+                agent,
+                max_iterations=effective_max_iterations,
+                ctx_manager=ctx_manager,
+            )
 
             # For string results, single pass without retry
             if result_type is str:
                 return await _run_tool_loop_once(
                     history=history,
                     agent=agent,
-                    before_model_callbacks=before_model_callbacks,
-                    after_model_callbacks=after_model_callbacks,
+                    hooks=hooks,
                 )  # type: ignore[return-value]
 
             # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
@@ -343,8 +336,7 @@ Returns:
                 history=history,
                 agent=agent,
                 result_type=result_type,
-                before_model_callbacks=before_model_callbacks,
-                after_model_callbacks=after_model_callbacks,
+                hooks=hooks,
                 max_attempts=5,
             )
 

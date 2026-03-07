@@ -96,7 +96,7 @@ async def _interact_and_snapshot(
             url="",
             status_code=200,
             content="",
-            viewport={"scroll_top": 0, "viewport_height": 0, "viewport_width": 0, "document_height": 0},
+            viewport=None,
             truncated=False,
             downloaded_file=result.download,
         )
@@ -386,7 +386,7 @@ async def drag(
             url="",
             status_code=200,
             content="",
-            viewport={"scroll_top": 0, "viewport_height": 0, "viewport_width": 0, "document_height": 0},
+            viewport=None,
             truncated=False,
             downloaded_file=browser_result.download,
         )
@@ -659,7 +659,7 @@ async def go_back() -> str:
             url="",
             status_code=200,
             content="",
-            viewport={"scroll_top": 0, "viewport_height": 0, "viewport_width": 0, "document_height": 0},
+            viewport=None,
             truncated=False,
             downloaded_file=browser_result.download,
         )

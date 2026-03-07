@@ -25,11 +25,13 @@ class JavaScriptResult(BaseModel):
     Attributes:
         success: True if JavaScript executed without errors.
         result: The JSON-serialized return value of the JavaScript code.
+        console_output: Captured console.log/warn/error output during execution.
         error: Error message if execution failed, None otherwise.
     """
 
     success: bool
     result: Any | None = None
+    console_output: list[str] | None = None
     error: str | None = None
 
 
@@ -39,7 +41,10 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
 
     Only use when ``click()``, ``fill_field()``, ``browse_page()`` cannot
     accomplish the task.  Useful for removing popups, extracting custom data
-    structures, or checking page state.  Return value must be JSON-serializable.
+    structures, or checking page state.
+
+    ``console.log()`` output is captured in the ``console_output`` field.
+    Use ``return`` for structured data — return values must be JSON-serializable.
 
     Args:
         code: JavaScript code or function expression to execute.
@@ -56,6 +61,17 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
     logger.info("Executing JavaScript on page %s", view.url)
     logger.debug("JavaScript code: %s", code)
 
+    # Capture console output during execution
+    console_lines: list[str] = []
+    page = await _browser.current_page()
+
+    def _on_console(msg: Any) -> None:
+        text = msg.text
+        if text:
+            console_lines.append(text)
+
+    page.on("console", _on_console)
+
     try:
         # Execute the JavaScript with asyncio timeout
         result_value = await asyncio.wait_for(
@@ -67,7 +83,6 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         logger.debug("Result: %s", result_value)
 
         try:
-            page = await _browser.current_page()
             await emit_screenshot(page)
         except Exception:  # noqa: BLE001
             logger.debug("Failed to emit screenshot after JS execution")
@@ -75,6 +90,7 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         return JavaScriptResult(
             success=True,
             result=result_value,
+            console_output=console_lines or None,
             error=None,
         )
 
@@ -84,6 +100,7 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         return JavaScriptResult(
             success=False,
             result=None,
+            console_output=console_lines or None,
             error=error_msg,
         )
 
@@ -93,6 +110,7 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         return JavaScriptResult(
             success=False,
             result=None,
+            console_output=console_lines or None,
             error=error_msg,
         )
 
@@ -102,6 +120,7 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         return JavaScriptResult(
             success=False,
             result=None,
+            console_output=console_lines or None,
             error=error_msg,
         )
 
@@ -111,6 +130,7 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         return JavaScriptResult(
             success=False,
             result=None,
+            console_output=console_lines or None,
             error=error_msg,
         )
 
@@ -120,8 +140,12 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> JavaScriptRe
         return JavaScriptResult(
             success=False,
             result=None,
+            console_output=console_lines or None,
             error=error_msg,
         )
+
+    finally:
+        page.remove_listener("console", _on_console)
 
 
 __all__ = ["JavaScriptResult", "execute_javascript"]

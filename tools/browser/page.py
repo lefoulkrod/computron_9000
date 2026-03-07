@@ -40,7 +40,7 @@ async def open_url(url: str) -> str:
                 url=url,
                 status_code=200,
                 content="",
-                viewport={"scroll_top": 0, "viewport_height": 0, "viewport_width": 0, "document_height": 0},
+                viewport=None,
                 truncated=False,
                 downloaded_file=result.download,
             )
