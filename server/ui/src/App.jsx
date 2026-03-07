@@ -29,6 +29,7 @@ function App() {
     const [generationPreview, setGenerationPreview] = useState(null);
     // Tracks panels the user has explicitly closed; new events reopen them.
     const [closedPanels, setClosedPanels] = useState(new Set());
+    const [nudgeToast, setNudgeToast] = useState(null);
 
     const modelSettings = useModelSettings();
 
@@ -66,6 +67,7 @@ function App() {
         onToolCreated: () => setToolsRefreshSignal((s) => s + 1),
         onMemoryChanged: () => setMemoryRefreshSignal((s) => s + 1),
         onAudioPlayback: (audio) => setPendingAudio(audio),
+        onNudgeSent: (text) => setNudgeToast(text || 'Nudge sent'),
         onGenerationPreview: (event) => {
             setGenerationPreview((prev) => {
                 if (!prev || prev.gen_id !== event.gen_id) return event;
@@ -86,6 +88,7 @@ function App() {
         onToolCreated: (...args) => _streamCallbacksRef.current.onToolCreated(...args),
         onMemoryChanged: (...args) => _streamCallbacksRef.current.onMemoryChanged(...args),
         onAudioPlayback: (...args) => _streamCallbacksRef.current.onAudioPlayback(...args),
+        onNudgeSent: (...args) => _streamCallbacksRef.current.onNudgeSent(...args),
         onGenerationPreview: (...args) => _streamCallbacksRef.current.onGenerationPreview(...args),
     }).current;
 
@@ -96,6 +99,13 @@ function App() {
         stopGeneration,
         newSession: chatNewSession,
     } = useStreamingChat(_stableCallbacks);
+
+    // Auto-dismiss nudge toast after 3 seconds
+    useEffect(() => {
+        if (!nudgeToast) return;
+        const timer = setTimeout(() => setNudgeToast(null), 3000);
+        return () => clearTimeout(timer);
+    }, [nudgeToast]);
 
     useEffect(() => {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -171,7 +181,7 @@ function App() {
                         <ChatInput
                             onSend={handleSend}
                             onStop={stopGeneration}
-                            disabled={isStreaming}
+                            isStreaming={isStreaming}
                             attachment={attachment}
                         />
                     </div>
@@ -232,6 +242,9 @@ function App() {
                     />
                 </div>
             </div>
+            {nudgeToast && (
+                <div className={styles.nudgeToast}>{nudgeToast}</div>
+            )}
         </>
     );
 }

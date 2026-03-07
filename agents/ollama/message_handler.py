@@ -10,9 +10,9 @@ from agents.ollama.sdk.context import ContextManager, ConversationHistory
 from agents.ollama.sdk.events import (
     AssistantResponse,
     agent_span,
-    event_context,
     set_model_options,
 )
+from agents.ollama.sdk.turn import turn_scope
 from agents.types import Agent, Data, LLMOptions
 from config import load_config
 from tools.memory import load_memory
@@ -160,7 +160,7 @@ async def handle_user_message(
                     agent_name=agent.name,
                 )
             try:
-                async with event_context(handler=_queue_handler, session_id=session_id):
+                async with turn_scope(handler=_queue_handler, session_id=session_id):
                     with agent_span(agent.name):
                         session.history.append({"role": "user", "content": user_content})
                         _refresh_system_message(session.history)

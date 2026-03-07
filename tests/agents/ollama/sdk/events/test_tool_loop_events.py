@@ -14,7 +14,8 @@ from typing import Any, List
 import pytest
 
 from agents.ollama.sdk.context import ConversationHistory
-from agents.ollama.sdk.events import AssistantResponse, ToolCallPayload, event_context
+from agents.ollama.sdk.events import AssistantResponse, ToolCallPayload
+from agents.ollama.sdk.turn import turn_scope
 from agents.ollama.sdk.tool_loop import run_tool_call_loop
 from agents.types import Agent
 
@@ -71,7 +72,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     def echo_tool(x: int) -> dict[str, int]:  # noqa: D401 - simple dummy
         return {"x": x}
 
-    # Capture emitted events via the event_context
+    # Capture emitted events via the turn_scope
     captured: List[AssistantResponse] = []
 
     async def _handler(evt: AssistantResponse) -> None:
@@ -79,7 +80,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "ctx"}])
 
-    # Act: run the tool loop inside an event context; drain is automatic on exit
+    # Act: run the tool loop inside a turn scope; drain is automatic on exit
     agent = Agent(
         name="Test Agent",
         description="desc",
@@ -89,7 +90,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
         tools=[echo_tool],
     )
 
-    async with event_context(handler=_handler):
+    async with turn_scope(handler=_handler):
         async for _content, _thinking in run_tool_call_loop(
             history,
             agent=agent,

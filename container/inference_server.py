@@ -59,23 +59,47 @@ logging.basicConfig(
 log = logging.getLogger("inference")
 
 # ── Model registry ────────────────────────────────────────────────────
-_DEFAULT_MODEL = "schnell"
+_DEFAULT_MODEL = "fast"
 
 _MODELS = {
-    "schnell": {
+    "quality": {
+        "model_id": "black-forest-labs/FLUX.1-dev",
+        "pipeline_class": "FluxPipeline",
+        "loras": [
+            {"id": "enhanceaiteam/Flux-Uncensored-V2", "weight_name": "lora.safetensors", "scale": 1.0},
+        ],
+        "num_inference_steps": 20,
+        "guidance_scale": 3.5,
+        "taesd_preview": True,
+    },
+    "photorealistic": {
+        "model_id": "black-forest-labs/FLUX.1-dev",
+        "pipeline_class": "FluxPipeline",
+        "loras": [
+            {"id": "enhanceaiteam/Flux-Uncensored-V2", "weight_name": "lora.safetensors", "scale": 1.0},
+            {"id": "kudzueye/boreal-flux-dev-v2", "weight_name": "boreal-v2.safetensors", "scale": 0.6},
+        ],
+        "num_inference_steps": 20,
+        "guidance_scale": 3.5,
+        "taesd_preview": True,
+    },
+    "fast": {
         "model_id": "black-forest-labs/FLUX.1-schnell",
         "pipeline_class": "FluxPipeline",
+        "loras": [
+            {"id": "enhanceaiteam/Flux-Uncensored-V2", "weight_name": "lora.safetensors", "scale": 1.0},
+        ],
         "num_inference_steps": 4,
         "guidance_scale": 0.0,
         "taesd_preview": True,
     },
-    "klein-4b": {
-        "model_id": "black-forest-labs/FLUX.2-klein-4B",
-        "pipeline_class": "Flux2KleinPipeline",
-        "num_inference_steps": 4,
-        "guidance_scale": 1.0,
-        "taesd_preview": True,
-    },
+}
+
+_SIZE_PRESETS = {
+    "square": (1024, 1024),
+    "landscape": (768, 1344),
+    "portrait": (1344, 768),
+    "wide": (768, 1536),
 }
 
 # ── GPU selection ─────────────────────────────────────────────────────
@@ -552,6 +576,9 @@ def _load_image_model(model_name: str, gpu_id: int, free_mb: float,
             torch_dtype=torch.bfloat16,
         )
 
+    # Load LoRA adapters if the model config specifies any
+    _load_loras(model_cfg, on_progress=on_progress)
+
     _emit(f"Setting up {strategy} on GPU {gpu_id}...")
     if strategy == "full_gpu":
         _pipe.to(f"cuda:{gpu_id}")
@@ -569,6 +596,57 @@ def _load_image_model(model_name: str, gpu_id: int, free_mb: float,
     _loaded_gpu = gpu_id
     _loaded_model = model_name
     _emit(f"{model_name} ready on GPU {gpu_id} ({strategy})")
+
+
+def _load_loras(model_cfg, on_progress=None):
+    """Load all LoRA adapters specified in a model config."""
+    def _emit(msg):
+        log.info(msg)
+        if on_progress:
+            on_progress(msg)
+
+    loras = model_cfg.get("loras", [])
+    if not loras:
+        return
+
+    adapter_names = []
+    adapter_scales = []
+    for i, lora in enumerate(loras):
+        lora_id = lora["id"]
+        adapter_name = f"lora_{i}"
+        if not _is_model_cached(lora_id):
+            _download_model(lora_id, on_progress=on_progress)
+        _emit(f"Loading LoRA: {lora_id}...")
+        _pipe.load_lora_weights(
+            lora_id,
+            weight_name=lora.get("weight_name"),
+            adapter_name=adapter_name,
+        )
+        adapter_names.append(adapter_name)
+        adapter_scales.append(lora.get("scale", 1.0))
+
+    _pipe.set_adapters(adapter_names, adapter_weights=adapter_scales)
+    _emit(f"Loaded {len(loras)} LoRA adapter(s)")
+
+
+def _swap_lora(model_name, model_cfg, on_progress=None):
+    """Unload current LoRAs and load new ones without restarting."""
+    global _loaded_model
+
+    def _emit(msg):
+        log.info(msg)
+        if on_progress:
+            on_progress(msg)
+
+    try:
+        _pipe.unload_lora_weights()
+        _emit("Unloaded previous LoRA(s)")
+    except Exception:
+        pass
+
+    _load_loras(model_cfg, on_progress=on_progress)
+    _loaded_model = model_name
+    _emit(f"Switched to {model_name} on GPU {_loaded_gpu}")
 
 
 class _ModelSwitchRequired(Exception):
@@ -591,12 +669,21 @@ def _ensure_image_model(model_name: str | None = None, on_progress=None):
     if model_name not in _MODELS:
         log.warning("Unknown model %r, falling back to %s", model_name, _DEFAULT_MODEL)
         model_name = _DEFAULT_MODEL
+    model_cfg = _MODELS[model_name]
 
     if _pipe_type == "image" and _pipe is not None and _loaded_model == model_name:
         log.info("Reusing %s on GPU %d", model_name, _loaded_gpu)
         return
 
-    # A different image model is already loaded — can't switch in-process
+    # If the base model is the same, just swap the LoRA instead of restarting
+    if (_pipe is not None and _loaded_model
+            and _loaded_model != model_name
+            and _MODELS[_loaded_model]["model_id"] == model_cfg["model_id"]):
+        log.info("Same base model, swapping LoRA: %s → %s", _loaded_model, model_name)
+        _swap_lora(model_name, model_cfg, on_progress)
+        return
+
+    # A different base model is already loaded — can't switch in-process
     if _pipe is not None and _loaded_model and _loaded_model != model_name:
         raise _ModelSwitchRequired(_loaded_model, model_name)
 
@@ -647,15 +734,17 @@ def _generate_image(body):
     _ensure_image_model(model_name)
     model_cfg = _MODELS.get(model_name, _MODELS[_DEFAULT_MODEL])
     prompt = body["description"]
+    height, width = _SIZE_PRESETS.get(body.get("size", "square"), (1024, 1024))
     torch.cuda.empty_cache()
+    pipe_kwargs = dict(
+        prompt=prompt,
+        num_inference_steps=model_cfg["num_inference_steps"],
+        guidance_scale=model_cfg["guidance_scale"],
+        height=height,
+        width=width,
+    )
     with torch.inference_mode():
-        image = _pipe(
-            prompt=prompt,
-            num_inference_steps=model_cfg["num_inference_steps"],
-            guidance_scale=model_cfg["guidance_scale"],
-            height=1024,
-            width=1024,
-        ).images[0]
+        image = _pipe(**pipe_kwargs).images[0]
     timestamp = int(time.time() * 1000)
     out_path = f"/home/computron/generated_images/generated_{timestamp}.png"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -720,6 +809,7 @@ def _generate_image_stream(body, write_line):
         _ensure_taesd()
 
     prompt = body["description"]
+    height, width = _SIZE_PRESETS.get(body.get("size", "square"), (1024, 1024))
 
     torch.cuda.empty_cache()
     write_line({"status": "generating", "step": 0, "total_steps": total_steps,
@@ -739,15 +829,16 @@ def _generate_image_stream(body, write_line):
         })
         return callback_kwargs
 
+    pipe_kwargs = dict(
+        prompt=prompt,
+        num_inference_steps=total_steps,
+        guidance_scale=model_cfg["guidance_scale"],
+        height=height,
+        width=width,
+        callback_on_step_end=on_step_end,
+    )
     with torch.inference_mode():
-        image = _pipe(
-            prompt=prompt,
-            num_inference_steps=total_steps,
-            guidance_scale=model_cfg["guidance_scale"],
-            height=1024,
-            width=1024,
-            callback_on_step_end=on_step_end,
-        ).images[0]
+        image = _pipe(**pipe_kwargs).images[0]
 
     timestamp = int(time.time() * 1000)
     out_path = f"/home/computron/generated_images/generated_{timestamp}.png"

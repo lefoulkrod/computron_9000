@@ -77,6 +77,32 @@
   z-index: 10;
 }
 
+/* Nudge toast */
+.nudgeToast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  z-index: 1000;
+  animation: nudgeFadeIn 0.2s ease-out, nudgeFadeOut 0.3s 2.7s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes nudgeFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(0.5rem); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes nudgeFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 @media (max-width: 700px) {
   .mainLayout {
     flex-direction: column;

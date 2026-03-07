@@ -4,6 +4,7 @@ These tests validate that:
 - publish_event is a no-op when no dispatcher is set
 - _current_dispatcher can be set/reset via ContextVar directly
 - publish_event delegates to the active dispatcher with the event content
+- agent_span forms a hierarchy of context ids
 """
 
 from __future__ import annotations
@@ -13,8 +14,8 @@ import pytest
 from agents.ollama.sdk.events import (
     AssistantResponse,
     EventDispatcher,
-    publish_event,
     agent_span,
+    publish_event,
 )
 from agents.ollama.sdk.events.context import _current_dispatcher
 

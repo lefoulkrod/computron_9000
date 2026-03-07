@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from aiohttp.web_response import Response, StreamResponse
 
 from agents import handle_user_message, reset_message_history
-from agents.ollama.sdk.events import request_stop
+from agents.ollama.sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
 from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
@@ -154,6 +154,12 @@ async def chat_handler(request: Request) -> StreamResponse:
     user_query = payload.message.strip()
     if not user_query:
         return web.json_response({"error": "Message field is required."}, status=400)
+
+    # If this session already has an active agent, queue the message as a nudge
+    if is_turn_active(payload.session_id):
+        queue_nudge(payload.session_id or "default", user_query)
+        return web.json_response({"ok": True})
+
     data_objs: list[Data] | None = None
     if payload.data:
         data_objs = [

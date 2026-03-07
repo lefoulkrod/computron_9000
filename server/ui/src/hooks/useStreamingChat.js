@@ -73,12 +73,29 @@ function _handleStreamEvent(data, callbacks) {
 
 export default function useStreamingChat(callbacks) {
     const [messages, setMessages] = useState([]);
-    const [isStreaming, setIsStreaming] = useState(false);
+    const [isStreaming, _setIsStreaming] = useState(false);
+    const isStreamingRef = useRef(false);
+    const setIsStreaming = useCallback((val) => {
+        isStreamingRef.current = val;
+        _setIsStreaming(val);
+    }, []);
     const abortControllerRef = useRef(null);
     const sessionIdRef = useRef(crypto.randomUUID());
 
     const sendMessage = useCallback(async (message, fileData, modelSettings) => {
         if (!message && !fileData) return;
+
+        // If already streaming, send as a nudge (fire-and-forget)
+        if (isStreamingRef.current) {
+            const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current);
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }).catch(() => {});
+            if (callbacks.onNudgeSent) callbacks.onNudgeSent(message || '');
+            return;
+        }
 
         // Build user message with optional attachment preview
         const userMsg = {
