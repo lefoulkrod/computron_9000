@@ -97,7 +97,7 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
             {"role": "user", "content": instructions},
         ])
         num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
-        ctx_manager = ContextManager(history=history, context_limit=num_ctx)
+        ctx_manager = ContextManager(history=history, context_limit=num_ctx, agent_name=agent.name)
         hooks = default_hooks(
             agent,
             max_iterations=effective_max_iterations,

@@ -1,11 +1,8 @@
 """Pluggable token counting and cumulative tracking."""
 
-import logging
 from typing import Any, Protocol
 
 from ._models import ContextStats, TokenUsage
-
-logger = logging.getLogger(__name__)
 
 
 class TokenCounter(Protocol):
@@ -48,12 +45,6 @@ class TokenTracker:
         """
         usage = self._counter.extract_usage(response)
         self._last_usage = usage
-        logger.debug(
-            "Token usage: prompt=%d completion=%d limit=%d",
-            usage.prompt_tokens,
-            usage.completion_tokens,
-            self._context_limit,
-        )
         return usage
 
     @property
