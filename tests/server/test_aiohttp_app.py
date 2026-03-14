@@ -75,7 +75,7 @@ async def test_streaming_chat(aiohttp_client, app):
 @pytest.mark.asyncio
 async def test_delete_history(aiohttp_client, app, monkeypatch):
     called = {}
-    from agents import reset_message_history as real_reset
+    from server.message_handler import reset_message_history as real_reset
     # Patch where it's imported in the handler module
     def _fake_reset(session_id=None):  # noqa: D401 - simple stub
         called["yes"] = True

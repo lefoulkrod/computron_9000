@@ -1,6 +1,7 @@
 """Tests for read_file_or_dir_in_home_dir using a temporary directory and config mocking.
 """
 
+import base64
 import os
 import tempfile
 from pathlib import Path
@@ -45,7 +46,6 @@ def test_read_file_returns_base64_for_binary(tmp_path: Path):
         assert result.type == "file"
         assert result.name == "bar.bin"
         assert result.encoding == "base64"
-        import base64
         assert result.content == base64.b64encode(test_bytes).decode("ascii")
 
 @pytest.mark.unit

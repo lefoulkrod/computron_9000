@@ -5,14 +5,12 @@ from __future__ import annotations
 import logging
 import random
 
-from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import ElementHandle, Error as PlaywrightError, Page
 
 from .core import get_active_view
-from .core._formatting import format_interaction_result, format_page_view
-from .core._selectors import _resolve_locator
 from .core.exceptions import BrowserToolError
 from .core.human import human_click, human_press_keys
-from .interactions import _build_snapshot
+from .interactions import _format_result, _resolve_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +20,8 @@ _MAX_KEYBOARD_NAV_STEPS = 30
 
 
 async def _keyboard_select(
-    page: object,
-    select_handle: object,
+    page: Page,
+    select_handle: ElementHandle,
     target_index: int,
 ) -> bool:
     """Try to select an option using keyboard navigation (trusted events).
@@ -44,20 +42,20 @@ async def _keyboard_select(
 
     try:
         # Home resets to the first option in a native <select>.
-        await human_press_keys(page, ["Home"])  # type: ignore[arg-type]
-        await page.wait_for_timeout(random.randint(30, 80))  # type: ignore[union-attr]
+        await human_press_keys(page, ["Home"])
+        await page.wait_for_timeout(random.randint(30, 80))
 
         # Navigate down to the target option
         for _ in range(target_index):
-            await human_press_keys(page, ["ArrowDown"])  # type: ignore[arg-type]
-            await page.wait_for_timeout(random.randint(20, 60))  # type: ignore[union-attr]
+            await human_press_keys(page, ["ArrowDown"])
+            await page.wait_for_timeout(random.randint(20, 60))
 
         # Confirm selection
-        await human_press_keys(page, ["Enter"])  # type: ignore[arg-type]
-        await page.wait_for_timeout(random.randint(50, 150))  # type: ignore[union-attr]
+        await human_press_keys(page, ["Enter"])
+        await page.wait_for_timeout(random.randint(50, 150))
 
         # Verify the native <select> actually changed
-        actual_index = await select_handle.evaluate("el => el.selectedIndex")  # type: ignore[union-attr]
+        actual_index = await select_handle.evaluate("el => el.selectedIndex")
         if actual_index == target_index:
             logger.debug("Keyboard navigation succeeded: selectedIndex=%d", actual_index)
             return True
@@ -73,13 +71,13 @@ async def _keyboard_select(
         return False
 
 
-async def _js_select(select_handle: object, target_index: int) -> None:
+async def _js_select(select_handle: ElementHandle, target_index: int) -> None:
     """Fall back to setting selectedIndex via JS with synthetic events.
 
     Event dispatch is wrapped in try/catch because some pages' handlers
     assume internal state from a real native interaction and can throw.
     """
-    await select_handle.evaluate(  # type: ignore[union-attr]
+    await select_handle.evaluate(
         """(el, idx) => {
             el.selectedIndex = idx;
             try {
@@ -97,8 +95,8 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
     """Select an option from a ``<select>`` dropdown by visible text.
 
     Args:
-        selector: ``role:name`` selector for the dropdown.  Examples:
-            ``"combobox:Sort by"``, ``"combobox"`` (bare role for unlabelled).
+        selector: Ref number from ``browse_page()`` output.
+            Examples: ``"7"``, ``"12"``.
         value: Exact visible text of the option (case-sensitive).
             Example: ``"Price: Low to High"``.
         wait_after_select_ms: Optional ms to wait after selecting.
@@ -114,18 +112,8 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
     browser, view = await get_active_view("select_option")
 
     try:
-        # Resolve selector using shared resolution (supports role:name and
-        # bare role formats like "combobox" for unlabelled dropdowns).
-        resolution = await _resolve_locator(
-            view.frame,
-            selector.strip(),
-            allow_substring_text=False,
-            require_single_match=True,
-            tool_name="select_option",
-        )
-        if resolution is None:
-            msg = f"No element found matching selector '{selector}'."
-            raise BrowserToolError(msg, tool="select_option")
+        # Resolve selector using shared resolution (ref number from page view).
+        resolution = await _resolve_or_raise(view.frame, selector.strip(), tool_name="select_option")
 
         select_locator = resolution.locator
 
@@ -169,41 +157,7 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
 
         # Perform interaction and check for page changes
         browser_result = await browser.perform_interaction(_perform_select)
-
-        if browser_result.download is not None:
-            pv_str = format_page_view(
-                title="File Download",
-                url="",
-                status_code=200,
-                content="",
-                viewport=None,
-                truncated=False,
-                downloaded_file=browser_result.download,
-            )
-            return format_interaction_result(
-                reason=browser_result.reason,
-                page_changed=browser_result.page_changed,
-                page_view_str=pv_str,
-            )
-
-        pv_str = None
-        if browser_result.page_changed:
-            annotated = await _build_snapshot(browser_result.navigation_response)
-            pv_str = format_page_view(
-                title=annotated.title,
-                url=annotated.url,
-                status_code=annotated.status_code,
-                viewport=annotated.viewport,
-                content=annotated.content,
-                truncated=annotated.truncated,
-            )
-
-        logger.info("Select option result: %s", browser_result.reason)
-        return format_interaction_result(
-            reason=browser_result.reason,
-            page_changed=browser_result.page_changed,
-            page_view_str=pv_str,
-        )
+        return await _format_result(browser_result)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:

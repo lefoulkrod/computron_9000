@@ -47,6 +47,13 @@ class _FakeFrame:
     async def evaluate(self, script: str) -> Any:
         if self._cross_origin:
             raise Exception("Execution context was destroyed")
+        # Content check used by _detect_dominant_frame
+        if "interactive" in script:
+            return {
+                "children": self._child_count,
+                "text": 100 if self._child_count > 0 else 0,
+                "interactive": self._child_count,
+            }
         return self._child_count
 
 

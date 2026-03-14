@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _HumanConfig:
-    move_steps: int
-    offset_px: float
     hover_min_ms: int
     hover_max_ms: int
     click_hold_min_ms: int
@@ -42,8 +40,6 @@ def _get_human_config() -> _HumanConfig:
         pointer = cfg.pointer
         typing = cfg.typing
         _config_cache = _HumanConfig(
-            move_steps=max(1, pointer.move_steps),
-            offset_px=max(0.0, pointer.offset_px),
             hover_min_ms=max(0, pointer.hover_min_ms),
             hover_max_ms=max(pointer.hover_min_ms, pointer.hover_max_ms),
             click_hold_min_ms=max(0, pointer.click_hold_min_ms),
@@ -196,20 +192,19 @@ def _build_trajectory(
     start_y: float,
     end_x: float,
     end_y: float,
-    steps: int,
 ) -> list[tuple[float, float]]:
     """Build a natural-looking mouse trajectory using a cubic Bezier curve.
 
     The trajectory uses random control points offset from the straight line,
     an ease-in-out velocity profile, and per-step micro-jitter to simulate
-    hand tremor. This replaces the previous linear interpolation.
+    hand tremor.  Step count scales with distance (~50px per step).
     """
     dx = end_x - start_x
     dy = end_y - start_y
     dist = math.hypot(dx, dy)
 
-    # Scale step count with distance for longer moves
-    adaptive_steps = max(steps, int(dist / 30))
+    # Calculate step count from distance — ~50px per step, minimum 2
+    adaptive_steps = max(2, int(dist / 50))
 
     # Generate two random control points offset perpendicular to the line.
     # Offset magnitude scales with distance but caps to avoid wild curves.
@@ -257,7 +252,7 @@ def _build_trajectory(
     return points
 
 
-async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps: int) -> None:
+async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float) -> None:
     """Move the Playwright mouse along a natural Bezier trajectory.
 
     Uses a cubic Bezier curve with random control points, an ease-in-out
@@ -304,7 +299,7 @@ async def _mouse_move_with_fake_cursor(page: Page, *, x: float, y: float, steps:
         )
 
     # Build a natural Bezier trajectory with jitter and ease-in-out pacing.
-    trajectory = _build_trajectory(start_x, start_y, x, y, steps)
+    trajectory = _build_trajectory(start_x, start_y, x, y)
 
     for xi, yi in trajectory:
         try:
@@ -390,20 +385,18 @@ async def human_click(target: Page | Frame, locator: Locator) -> None:
     target_x = box["x"] + box["width"] / 2
     target_y = box["y"] + box["height"] / 2
 
-    if cfg.offset_px > 0:
-        angle = random.random() * 2 * math.pi
-        radius = random.random() * cfg.offset_px
-        target_x += math.cos(angle) * radius
-        target_y += math.sin(angle) * radius
+    # Add small random offset within the element (~10% of dimensions)
+    jitter_x = box["width"] * 0.1
+    jitter_y = box["height"] * 0.1
+    target_x += random.uniform(-jitter_x, jitter_x)
+    target_y += random.uniform(-jitter_y, jitter_y)
 
     mouse = page.mouse
-    # Use the mouse-move wrapper which also updates the visual overlay.
-    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.down()
     await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
     await mouse.up()
-    # Ensure overlay is finally positioned on the click point (best-effort).
     try:
         await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
         # Small delay after positioning cursor to allow CSS transition to render
@@ -480,14 +473,13 @@ async def human_press_and_hold(
     target_x = box["x"] + box["width"] / 2
     target_y = box["y"] + box["height"] / 2
 
-    if cfg.offset_px > 0:
-        angle = random.random() * 2 * math.pi
-        radius = random.random() * cfg.offset_px
-        target_x += math.cos(angle) * radius
-        target_y += math.sin(angle) * radius
+    jitter_x = box["width"] * 0.1
+    jitter_y = box["height"] * 0.1
+    target_x += random.uniform(-jitter_x, jitter_x)
+    target_y += random.uniform(-jitter_y, jitter_y)
 
     mouse = page.mouse
-    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.down()
 
@@ -596,11 +588,10 @@ async def human_drag(
     start_x = source_box["x"] + source_box["width"] / 2
     start_y = source_box["y"] + source_box["height"] / 2
 
-    if cfg.offset_px > 0:
-        angle = random.random() * 2 * math.pi
-        radius = random.random() * cfg.offset_px
-        start_x += math.cos(angle) * radius
-        start_y += math.sin(angle) * radius
+    jitter_x = source_box["width"] * 0.1
+    jitter_y = source_box["height"] * 0.1
+    start_x += random.uniform(-jitter_x, jitter_x)
+    start_y += random.uniform(-jitter_y, jitter_y)
 
     dest_x: float
     dest_y: float
@@ -647,11 +638,10 @@ async def human_drag(
         dest_x = target_box["x"] + target_box["width"] / 2
         dest_y = target_box["y"] + target_box["height"] / 2
 
-        if cfg.offset_px > 0:
-            angle = random.random() * 2 * math.pi
-            radius = random.random() * cfg.offset_px
-            dest_x += math.cos(angle) * radius
-            dest_y += math.sin(angle) * radius
+        jitter_x = target_box["width"] * 0.1
+        jitter_y = target_box["height"] * 0.1
+        dest_x += random.uniform(-jitter_x, jitter_x)
+        dest_y += random.uniform(-jitter_y, jitter_y)
     else:
         if offset is None:
             raise BrowserToolError("offset must be provided when target_locator is None", tool="drag")
@@ -670,11 +660,11 @@ async def human_drag(
     mouse = page.mouse
 
     # Move to drag start, press, glide to destination, then release.
-    await _mouse_move_with_fake_cursor(page, x=start_x, y=start_y, steps=cfg.move_steps)
+    await _mouse_move_with_fake_cursor(page, x=start_x, y=start_y)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.down()
     await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
-    await _mouse_move_with_fake_cursor(page, x=dest_x, y=dest_y, steps=max(cfg.move_steps, 2))
+    await _mouse_move_with_fake_cursor(page, x=dest_x, y=dest_y)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.up()
 
@@ -848,13 +838,12 @@ async def human_click_at(
     target_x, target_y = _random_point_in_bbox(x1, y1, x2, y2)
 
     mouse = page.mouse
-    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.down()
     await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
     await mouse.up()
 
-    # Best-effort overlay update at the click point.
     try:
         await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
         await asyncio.sleep(0.05)
@@ -903,7 +892,7 @@ async def human_press_and_hold_at(
     target_x, target_y = _random_point_in_bbox(x1, y1, x2, y2)
 
     mouse = page.mouse
-    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y, steps=cfg.move_steps)
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y)
     await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
     await mouse.down()
 
@@ -1012,10 +1001,8 @@ async def human_scroll(target: Page | Frame, direction: str = "down", amount: in
                     raise BrowserToolError("amount must be an integer number of pixels", tool="scroll_page")
                 delta = amount if dir_norm == "down" else -amount
 
-            # Add jitter using config offset as fraction
-            jitter = round(cfg.offset_px) if cfg.offset_px else 0
-            if jitter > 0:
-                delta += random.randint(-jitter, jitter)
+            # Add small jitter to scroll distance
+            delta += random.randint(-4, 4)
 
             # Perform smooth scrolling with multiple wheel events to mimic human scrolling
             # Humans don't jump-scroll; they use mouse wheel in small increments

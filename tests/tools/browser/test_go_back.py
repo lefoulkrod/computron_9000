@@ -27,8 +27,7 @@ async def test_go_back_navigates_backward(
 
     result = await go_back()
     assert isinstance(result, str)
-    assert "page_changed: yes" in result
-    assert "browser-navigation" in result
+    assert "[Page:" in result
     assert "https://example.test/start" in result
     assert "Start body" in result
     assert settle_tracker["count"] == 1

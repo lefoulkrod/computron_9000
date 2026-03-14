@@ -48,10 +48,10 @@ from .read_ops import head, read_file, tail
 from .search_ops import grep
 from .stat_ops import exists, is_dir, is_file
 
-# Deferred imports for modules that import from agents.ollama.sdk.events,
+# Deferred imports for modules that import from sdk.events,
 # which would otherwise create a circular dependency:
 #   tools.virtual_computer.__init__ -> file_output -> agents.sdk.events
-#   -> agents.__init__ -> agents.ollama.media -> tools.virtual_computer
+#   -> agents.__init__ -> agents.media -> tools.virtual_computer
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "describe_image": (".describe_image", "describe_image"),
     "output_file": (".file_output", "output_file"),

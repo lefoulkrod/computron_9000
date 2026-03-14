@@ -1,11 +1,13 @@
 """String formatting for browser tool results.
 
-Converts internal PageView and InteractionResult data into plain-text
-strings for LLM consumption.  Keeps all formatting logic in one place.
+Converts internal PageView data into plain-text strings for LLM consumption.
+All browser tools that return page content use ``format_page_view`` so the
+LLM always sees a consistent format.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 
@@ -53,28 +55,63 @@ def format_page_view(
     return f"{header}\n{vp_line}\n\n{content}"
 
 
-def format_interaction_result(
+def format_javascript_result(
     *,
-    reason: str,
-    page_changed: bool,
-    page_view_str: str | None,
-    extras: dict[str, Any] | None = None,
+    success: bool,
+    result: Any | None = None,
+    console_output: list[str] | None = None,
+    error: str | None = None,
 ) -> str:
-    """Format an interaction result as a plain-text string for the LLM.
+    """Format a JavaScript execution result for the LLM.
 
     Args:
-        reason: Classification of the change.
-        page_changed: Whether the page changed.
-        page_view_str: Formatted page view string (from format_page_view).
-        extras: Additional metadata (scroll state, etc.).
+        success: Whether the execution succeeded.
+        result: The return value (omitted when None).
+        console_output: Captured console lines (omitted when empty).
+        error: Error message on failure (omitted when None).
 
     Returns:
-        Formatted string with action header and page view.
+        Formatted string like ``[JavaScript: success]\\nResult: ...``.
     """
-    changed = "yes" if page_changed else "no"
-    header = f"[Action: {reason} | page_changed: {changed}]"
+    status = "success" if success else "error"
+    parts = [f"[JavaScript: {status}]"]
 
-    if page_view_str is None:
-        return header
+    if error is not None:
+        parts.append(f"Error: {error}")
+    elif result is not None:
+        try:
+            serialized = json.dumps(result)
+        except (TypeError, ValueError):
+            serialized = repr(result)
+        parts.append(f"Result: {serialized}")
 
-    return f"{header}\n{page_view_str}"
+    if console_output:
+        parts.append(f"Console: {' | '.join(console_output)}")
+
+    return "\n".join(parts)
+
+
+def format_save_result(
+    *,
+    filename: str,
+    container_path: str,
+    size_bytes: int,
+) -> str:
+    """Format a save-content result for the LLM.
+
+    Args:
+        filename: The filename that was saved.
+        container_path: Absolute path accessible from inside the container.
+        size_bytes: File size in bytes.
+
+    Returns:
+        Formatted string like ``[Saved: page.md | /home/computron/page.md | 12345 bytes]``.
+    """
+    return f"[Saved: {filename} | {container_path} | {size_bytes} bytes]"
+
+
+__all__ = [
+    "format_javascript_result",
+    "format_page_view",
+    "format_save_result",
+]

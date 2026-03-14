@@ -16,6 +16,7 @@ dependencies = [
     "asyncpraw>=7.8.1",
     "html2text>=2025.4.15",
     "rich>=14.3.3",
+    "anthropic>=0.52.0",
 ]
 
 [project.optional-dependencies]

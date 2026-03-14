@@ -1,12 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import styles from './BrowserView.module.css';
 import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import BrowserIcon from './icons/BrowserIcon.jsx';
 import ChevronIcon from './icons/ChevronIcon.jsx';
 import LockIcon from './icons/LockIcon.jsx';
 
+function BrowserLightbox({ src, alt, onClose }) {
+    const handleKey = useCallback((e) => {
+        if (e.key === 'Escape') onClose();
+    }, [onClose]);
+
+    useEffect(() => {
+        document.addEventListener('keydown', handleKey);
+        return () => document.removeEventListener('keydown', handleKey);
+    }, [handleKey]);
+
+    return createPortal(
+        <div className={styles.lightboxOverlay} onClick={onClose}>
+            <img
+                className={styles.lightboxImg}
+                src={src}
+                alt={alt}
+                onClick={(e) => e.stopPropagation()}
+            />
+        </div>,
+        document.body
+    );
+}
+
 export default function BrowserView({ snapshot, onAttachScreenshot, onClose }) {
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [lightboxOpen, setLightboxOpen] = useState(false);
 
     if (!snapshot) {
         return null;
@@ -55,7 +80,10 @@ export default function BrowserView({ snapshot, onAttachScreenshot, onClose }) {
                     )}
 
                     {snapshot.screenshot && (
-                        <div className={styles.screenshotContainer}>
+                        <div
+                            className={styles.screenshotContainer}
+                            onClick={() => setLightboxOpen(true)}
+                        >
                             <img
                                 key={snapshot.screenshot.substring(0, 50)}
                                 src={`data:image/png;base64,${snapshot.screenshot}`}
@@ -65,7 +93,7 @@ export default function BrowserView({ snapshot, onAttachScreenshot, onClose }) {
                             {onAttachScreenshot && (
                                 <button
                                     className={styles.attachButton}
-                                    onClick={() => onAttachScreenshot(snapshot.screenshot)}
+                                    onClick={(e) => { e.stopPropagation(); onAttachScreenshot(snapshot.screenshot); }}
                                     title="Attach screenshot to chat"
                                     aria-label="Attach screenshot to chat"
                                 >
@@ -73,6 +101,13 @@ export default function BrowserView({ snapshot, onAttachScreenshot, onClose }) {
                                 </button>
                             )}
                         </div>
+                    )}
+                    {lightboxOpen && (
+                        <BrowserLightbox
+                            src={`data:image/png;base64,${snapshot.screenshot}`}
+                            alt="Browser screenshot"
+                            onClose={() => setLightboxOpen(false)}
+                        />
                     )}
                 </div>
             )}

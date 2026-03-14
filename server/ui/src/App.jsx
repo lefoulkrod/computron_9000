@@ -123,8 +123,8 @@ function App() {
         setAttachment({ base64: base64Screenshot, contentType: 'image/png' });
     };
 
-    // Wrap sendMessage to pass model settings and clear attachment
-    const handleSend = useCallback((message, fileData) => {
+    // Wrap sendMessage to pass model settings, agent selection, and clear attachment
+    const handleSend = useCallback((message, fileData, agent) => {
         setAttachment(null);
         sendMessage(message, fileData, {
             selectedModel: modelSettings.selectedModel,
@@ -138,7 +138,7 @@ function App() {
             numPredict: modelSettings.numPredict,
             unlimitedTurns: modelSettings.unlimitedTurns,
             agentTurns: modelSettings.agentTurns,
-        });
+        }, agent);
     }, [sendMessage, modelSettings.selectedModel, modelSettings.contextKb,
         modelSettings.think, modelSettings.persistThinking, modelSettings.temperature, modelSettings.topK,
         modelSettings.topP, modelSettings.repeatPenalty, modelSettings.numPredict,

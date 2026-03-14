@@ -57,21 +57,13 @@ class _SimpleBrowser:
     ) -> BrowserInteractionResult:
         """Mimic Browser.perform for tests without requiring Playwright."""
         page = await self.current_page()
-        initial_url = getattr(page, "url", "")
         await action()
-        final_url = getattr(page, "url", "")
-        navigation = bool(initial_url and final_url and final_url != initial_url)
-        page_changed = navigation
-        reason = "browser-navigation" if navigation else "no-change"
 
         from tools.browser.core.waits import wait_for_page_settle as settle_helper
         waits = load_config().tools.browser.waits
         await settle_helper(page, waits=waits)
 
         metadata = BrowserInteractionResult(
-            navigation=navigation,
-            page_changed=page_changed,
-            reason=reason,
             navigation_response=None,
         )
         self._last_metadata = metadata.model_dump()
@@ -92,9 +84,10 @@ class _NoSnapshotBrowser:
 @pytest.fixture(autouse=True)
 def _reset_scroll_budget() -> None:
     """Reset scroll budget tracking between tests."""
-    from tools.browser.interactions import _reset_scroll_budget
+    from tools.browser.interactions import _scroll_count_var, _scroll_url_var
 
-    _reset_scroll_budget()
+    _scroll_count_var.set(0)
+    _scroll_url_var.set("")
 
 
 @pytest.fixture
@@ -141,8 +134,11 @@ def settle_tracker(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     calls: dict[str, Any] = {"count": 0}
 
-    async def _fake_wait(page: Any, *, waits: Any) -> None:
+    async def _fake_wait(page: Any, *, waits: Any) -> Any:
+        from tools.browser.core.waits import SettleTimings
+
         calls["count"] += 1
+        return SettleTimings()
 
     monkeypatch.setattr("tools.browser.core.waits.wait_for_page_settle", _fake_wait)
     return calls

@@ -4,25 +4,17 @@ from __future__ import annotations
 
 import logging
 
-import html2text
 from playwright.async_api import Error as PlaywrightError
 
 from tools.browser.core import get_active_view
 from tools.browser.core._formatting import format_page_view
+from tools.browser.core._html import html_to_markdown
 from tools.browser.core.exceptions import BrowserToolError
 
 logger = logging.getLogger(__name__)
 
 _READ_BUDGET = 20_000
 _QUERY_CONTEXT_LINES = 1
-
-# Reusable converter — same config as save_content.py
-_converter = html2text.HTML2Text()
-_converter.ignore_images = True
-_converter.ignore_emphasis = False
-_converter.body_width = 0
-_converter.protect_links = True
-_converter.unicode_snob = True
 
 # JS to find the best content root and return its outerHTML.
 # Prefers <article>, then <main>, then falls back to <body>.
@@ -149,7 +141,7 @@ async def read_page(
 
     try:
         raw_html: str = await view.frame.evaluate(_CONTENT_ROOT_JS)
-        full_content = _converter.handle(raw_html)
+        full_content = html_to_markdown(raw_html)
 
         if query:
             # Filter mode — return only matching snippets

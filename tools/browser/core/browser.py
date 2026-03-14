@@ -7,14 +7,17 @@ shutdown while keeping a light surface area.
 
 from __future__ import annotations
 
+import atexit
 import asyncio
+import time
+import json
 import logging
 import os
-import random
 import secrets
+import signal
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from playwright.async_api import (
     BrowserContext,
@@ -58,7 +61,10 @@ class ActiveView(NamedTuple):
 logger = logging.getLogger(__name__)
 
 DEFAULT_UA = (
-    # Keep in sync with Playwright's bundled Chromium version (currently 136)
+    # Keep in sync with Playwright's bundled Chromium version (currently 136).
+    # Only used when launching bundled Chromium (channel=None).  When a real
+    # Chrome channel is specified the browser's native UA is kept as-is so
+    # that the User-Agent string and Sec-CH-UA client-hint headers stay in sync.
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 )
 
@@ -74,14 +80,16 @@ def _viewport() -> ViewportSize:
         A mapping compatible with Playwright's viewport format, containing
         ``width`` and ``height`` in pixels.
     """
-    w = 1366 + secrets.choice(range(-8, 9))
-    h = 768 + secrets.choice(range(-6, 7))
+    w = 1920 + secrets.choice(range(-8, 9))
+    h = 1080 + secrets.choice(range(-6, 7))
     return {"width": w, "height": h}
 
 
-ANTI_BOT_INIT_SCRIPT = r"""
-// --- Stealth patches to reduce automation detection ---
+# ---------------------------------------------------------------------------
+# Shared helper injected into both stealth scripts
+# ---------------------------------------------------------------------------
 
+_MAKE_NATIVE_JS = r"""
 // Helper: make a replaced function's .toString() return a native code string.
 // Handles the common check: fn.toString() and fn.toString.toString().
 // Note: Function.prototype.toString.call(fn) will still reveal the real source,
@@ -98,8 +106,15 @@ const _makeNative = (fn, nativeName) => {
   });
   return fn;
 };
+"""
 
-// 1) webdriver flag — real Chrome returns false (not undefined) when not automated.
+# ---------------------------------------------------------------------------
+# The only patch needed for real Chrome: Playwright forces
+# navigator.webdriver = true via CDP regardless of browser channel.
+# ---------------------------------------------------------------------------
+
+_CHROME_CHANNEL_PATCHES_JS = r"""
+// webdriver flag — real Chrome returns false (not undefined) when not automated.
 // Delete the existing property first so Object.getOwnPropertyDescriptor inspections
 // and prototype enumeration (as used by CreepJS) see our clean descriptor.
 delete Navigator.prototype.webdriver;
@@ -111,21 +126,72 @@ Object.defineProperty(Navigator.prototype, 'webdriver', {
 Object.defineProperty(navigator, 'webdriver', {
   get: _wdGetter, configurable: true, enumerable: true,
 });
+"""
 
-// 2) languages
+# ---------------------------------------------------------------------------
+# Full patch set for bundled Chromium (channel=None).
+# Bundled Chromium is missing native Chrome properties (plugins, brands,
+# chrome.runtime, etc.) and needs window/permissions fixes that headed
+# real Chrome handles correctly on its own.
+# ---------------------------------------------------------------------------
+
+_CHROMIUM_ONLY_PATCHES_JS = r"""
+// 1) webdriver flag — same as Chrome channel patch above
+delete Navigator.prototype.webdriver;
+const _wdGetter = _makeNative(() => false, 'get webdriver');
+Object.defineProperty(Navigator.prototype, 'webdriver', {
+  get: _wdGetter, configurable: true, enumerable: true,
+});
+Object.defineProperty(navigator, 'webdriver', {
+  get: _wdGetter, configurable: true, enumerable: true,
+});
+
+// 2) outerWidth/outerHeight — must not exceed screen dimensions
+// (Playwright's maximized window can exceed the emulated screen size, which is impossible in a real browser)
+Object.defineProperty(window, 'outerWidth',  { get: () => screen.width,        configurable: true });
+Object.defineProperty(window, 'outerHeight', { get: () => screen.height + 74,  configurable: true });
+
+// 3) Permissions API — intercept notifications query but keep the function looking native
+// Query a non-sensitive permission to get a real PermissionStatus object, then override
+// its state to 'prompt' (the default in a fresh Chrome install).  This way instanceof
+// PermissionStatus passes and the prototype chain looks genuine.
+// Also override Notification.permission to match — bot.sannysoft.com catches the mismatch
+// between Notification.permission ('denied' in headless) and permissionStatus.state ('prompt').
+(function() {
+  const _orig = window.navigator.permissions.query.bind(window.navigator.permissions);
+  const _patched = _makeNative(function query(parameters) {
+    if (parameters.name === 'notifications') {
+      return _orig({ name: 'geolocation' }).then(function(status) {
+        Object.defineProperty(status, 'state', { get: () => 'prompt', configurable: true });
+        Object.defineProperty(status, 'onchange', { value: null, writable: true, configurable: true });
+        return status;
+      });
+    }
+    return _orig(parameters);
+  }, 'query');
+  Object.defineProperty(window.navigator.permissions, 'query', {
+    value: _patched, writable: true, configurable: true,
+  });
+  Object.defineProperty(Notification, 'permission', {
+    get: _makeNative(() => 'default', 'get permission'),
+    configurable: true,
+  });
+})();
+
+// 4) languages
 Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
 
-// 3) platform
+// 5) platform
 Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
 
-// 4) chrome runtime object — Chromium sets window.chrome (loadTimes/csi/app) but NOT runtime.
+// 6) chrome runtime object — Chromium sets window.chrome (loadTimes/csi/app) but NOT runtime.
 // Real Chrome always has window.chrome.runtime (even without extensions).
 window.chrome = window.chrome || {};
 if (!window.chrome.runtime) {
   window.chrome.runtime = {};
 }
 
-// 5) plugins — use a Proxy wrapping the real PluginArray so instanceof checks pass.
+// 7) plugins — use a Proxy wrapping the real PluginArray so instanceof checks pass.
 // Object.setPrototypeOf(array, PluginArray.prototype) doesn't fool instanceof.
 (function() {
   const _fakeData = [
@@ -158,7 +224,7 @@ if (!window.chrome.runtime) {
   Object.defineProperty(navigator, 'plugins', { get: () => _proxy, configurable: true });
 })();
 
-// 6) WebGL vendor/renderer — patch both WebGL1 and WebGL2
+// 8) WebGL vendor/renderer — patch both WebGL1 and WebGL2
 (function() {
   function _patchWebGL(proto) {
     if (!proto) return;
@@ -174,40 +240,6 @@ if (!window.chrome.runtime) {
     _patchWebGL(WebGL2RenderingContext.prototype);
   }
 })();
-
-// 7) Permissions API — intercept notifications query but keep the function looking native
-// Query a non-sensitive permission to get a real PermissionStatus object, then override
-// its state to 'prompt' (the default in a fresh Chrome install).  This way instanceof
-// PermissionStatus passes and the prototype chain looks genuine.
-// Also override Notification.permission to match — bot.sannysoft.com catches the mismatch
-// between Notification.permission ('denied' in headless) and permissionStatus.state ('prompt').
-(function() {
-  const _orig = window.navigator.permissions.query.bind(window.navigator.permissions);
-  const _patched = _makeNative(function query(parameters) {
-    if (parameters.name === 'notifications') {
-      // Get a real PermissionStatus from a benign permission, then patch its state
-      return _orig({ name: 'geolocation' }).then(function(status) {
-        Object.defineProperty(status, 'state', { get: () => 'prompt', configurable: true });
-        Object.defineProperty(status, 'onchange', { value: null, writable: true, configurable: true });
-        return status;
-      });
-    }
-    return _orig(parameters);
-  }, 'query');
-  Object.defineProperty(window.navigator.permissions, 'query', {
-    value: _patched, writable: true, configurable: true,
-  });
-  // Keep Notification.permission in sync so the state/permission pair doesn't reveal spoofing
-  Object.defineProperty(Notification, 'permission', {
-    get: _makeNative(() => 'default', 'get permission'),
-    configurable: true,
-  });
-})();
-
-// 8) outerWidth/outerHeight — must not exceed screen dimensions
-// (Playwright's maximized window can exceed the emulated screen size, which is impossible in a real browser)
-Object.defineProperty(window, 'outerWidth',  { get: () => screen.width,        configurable: true });
-Object.defineProperty(window, 'outerHeight', { get: () => screen.height + 74,  configurable: true });
 
 // 9) userAgentData — add "Google Chrome" brand (Playwright only exposes "Chromium")
 (function() {
@@ -306,6 +338,32 @@ Object.defineProperty(window, 'outerHeight', { get: () => screen.height + 74,  c
 })();
 """
 
+
+def _build_anti_bot_script(*, use_channel: bool) -> str:
+    """Assemble the anti-bot init script for the given browser mode.
+
+    Args:
+        use_channel: True when launching a real Chrome channel (``"chrome"``),
+            False for bundled Chromium.  Real Chrome only needs the webdriver
+            patch — everything else (plugins, brands, permissions, window
+            dimensions, missing APIs) is already correct natively and patching
+            it would replace real functions with spoofed ones that are
+            themselves detectable.
+    """
+    parts = ["// --- Stealth patches to reduce automation detection ---"]
+    parts.append(_MAKE_NATIVE_JS)
+    if use_channel:
+        parts.append(_CHROME_CHANNEL_PATCHES_JS)
+    else:
+        parts.append(_CHROMIUM_ONLY_PATCHES_JS)
+    return "\n".join(parts)
+
+
+# Pre-built scripts for import convenience (e.g. tests).
+# ANTI_BOT_INIT_SCRIPT is the full Chromium script for backward compatibility.
+ANTI_BOT_INIT_SCRIPT = _build_anti_bot_script(use_channel=False)
+ANTI_BOT_INIT_SCRIPT_CHROME = _build_anti_bot_script(use_channel=True)
+
 # Force all shadow DOM attachments to use open mode so the DOM walker
 # in page_view.py can traverse shadow roots.  Closed shadow roots
 # return null from el.shadowRoot, making their contents invisible to
@@ -321,115 +379,16 @@ _OPEN_SHADOW_DOM_SCRIPT = r"""
 })();
 """
 
-PAGE_CHANGE_DETECTION_SCRIPT = r"""
-window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
-
-(function () {
-  // Define the read/reset API first so perform_interaction can always
-  // access them, even if the DOM observers below fail to attach
-  // (e.g. when addInitScript runs before document.documentElement exists).
-  window.__resetPageChange = () => {
-    window.__page_change__ = { nav: false, dom: false, hard: false, spa: false };
-  };
-  window.__getPageChange = () => window.__page_change__;
-
-  window.addEventListener("beforeunload", () => {
-    window.__page_change__.nav = true;
-    window.__page_change__.hard = true;
-  });
-
-  const push = history.pushState;
-  history.pushState = function () {
-    window.__page_change__.nav = true;
-    window.__page_change__.spa = true;
-    return push.apply(this, arguments);
-  };
-
-  const replace = history.replaceState;
-  history.replaceState = function () {
-    window.__page_change__.nav = true;
-    window.__page_change__.spa = true;
-    return replace.apply(this, arguments);
-  };
-
-  window.addEventListener("popstate", () => {
-    window.__page_change__.nav = true;
-    window.__page_change__.spa = true;
-  });
-
-  const markChange = () => {
-    window.__page_change__.dom = true;
-  };
-  window.addEventListener("input", markChange, true);
-  window.addEventListener("change", markChange, true);
-
-  // DOM observers need document.documentElement which may not exist yet
-  // when addInitScript runs early.  Defer attachment if necessary.
-  function _attachDomObservers() {
-    const root = document.documentElement || document.body;
-    if (!root) return;
-
-    new MutationObserver((mutations) => {
-      const significantMutation = mutations.some(m => {
-        if (m.type === 'attributes' && m.attributeName === 'value') {
-          const target = m.target;
-          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-            return false;
-          }
-        }
-        if (m.type === 'characterData') {
-          let node = m.target.parentNode;
-          while (node) {
-            if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
-              return false;
-            }
-            node = node.parentNode;
-          }
-        }
-        return true;
-      });
-      if (significantMutation) {
-        window.__page_change__.dom = true;
-      }
-    }).observe(root, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      characterData: true
-    });
-
-    try {
-      new ResizeObserver(() => {
-        window.__page_change__.dom = true;
-      }).observe(root);
-    } catch (err) {
-      window.addEventListener("resize", markChange);
-    }
-  }
-
-  // Attach immediately if the document root exists, otherwise wait.
-  if (document.documentElement) {
-    _attachDomObservers();
-  } else {
-    document.addEventListener("DOMContentLoaded", _attachDomObservers, { once: true });
-  }
-})();
-"""
-
-
-Reason = Literal["browser-navigation", "history-navigation", "dom-mutation", "no-change"]
-
-
 class BrowserInteractionResult(BaseModel):
     """Structured metadata describing the outcome of a browser interaction."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    navigation: bool
-    page_changed: bool
-    reason: Reason
     navigation_response: Response | None = None
     download: DownloadInfo | None = None
+    settle_timings: browser_waits.SettleTimings | None = None
+    frame_transition: str | None = None
+    action_ms: float = 0.0
 
 
 class Browser:
@@ -448,6 +407,7 @@ class Browser:
         context: BrowserContext,
         extra_headers: dict[str, str] | None = None,
         pw: Playwright | None = None,
+        use_channel: bool = False,
     ) -> None:
         """Initialize the browser wrapper.
 
@@ -455,10 +415,13 @@ class Browser:
             context: The persistent Playwright browser context.
             extra_headers: Default HTTP headers applied to all requests.
             pw: The Playwright driver instance used to launch the context.
+            use_channel: True when using a real Chrome channel. Disables
+                viewport overrides so the OS window manager controls sizing.
         """
         self._context: BrowserContext = context
         self._extra_headers: dict[str, str] = extra_headers or {}
         self._pw: Playwright | None = pw
+        self._use_channel: bool = use_channel
         self._closed: bool = False
         self._active_frame: Frame | None = None
         self._pending_downloads: list[DownloadInfo] = []
@@ -466,6 +429,18 @@ class Browser:
         self._container_dir: str = ""
         self._download_listener_pages: set[int] = set()  # page id() tracking
         self._download_tasks: set[asyncio.Task[None]] = set()
+
+        # Capture the Playwright driver PID so the atexit handler can kill the
+        # process tree if the async close path never ran (e.g. SIGKILL, event
+        # loop torn down before shutdown hooks complete).
+        self._driver_pid: int | None = None
+        try:
+            transport = pw._impl_obj._connection._transport  # type: ignore[union-attr]
+            proc = getattr(transport, "_proc", None)
+            if proc:
+                self._driver_pid = proc.pid
+        except Exception:  # noqa: BLE001
+            pass
 
     def _attach_download_listener(self, page: Page) -> None:
         """Attach a download event listener to a page if not already attached."""
@@ -557,6 +532,31 @@ class Browser:
             except OSError as exc:
                 logger.warning("Could not remove stale lock %s: %s", target_path, exc)
 
+    @staticmethod
+    def _mark_profile_clean_exit(profile_path: Path) -> None:
+        """Patch the Chromium ``Preferences`` file so the next launch won't
+        show the "Restore pages?" / "Chrome didn't shut down correctly" bubble.
+
+        Chrome checks ``profile.exit_type``; if it's ``"Crashed"`` or missing
+        it shows the restore prompt.  Writing ``"Normal"`` before launch
+        prevents that.
+        """
+        prefs_file = profile_path / "Default" / "Preferences"
+        if not prefs_file.exists():
+            return
+        try:
+            prefs = json.loads(prefs_file.read_text(encoding="utf-8"))
+            profile_section = prefs.setdefault("profile", {})
+            if profile_section.get("exit_type") != "Normal":
+                profile_section["exit_type"] = "Normal"
+                profile_section["exited_cleanly"] = True
+                prefs_file.write_text(
+                    json.dumps(prefs, separators=(",", ":")),
+                    encoding="utf-8",
+                )
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.debug("Could not patch profile exit_type: %s", exc)
+
     @classmethod
     async def start(
         cls,
@@ -604,19 +604,30 @@ class Browser:
         # Chromium can start even after a hard kill.
         cls._cleanup_stale_profile_locks(profile_path)
 
-        # Chromium args tuned for stealth / stability
+        # Mark the profile as cleanly exited so Chrome doesn't show the
+        # "Restore pages?" bubble on next launch.
+        cls._mark_profile_clean_exit(profile_path)
+
+        _use_channel = channel is not None
+
+        # -----------------------------------------------------------------
+        # Chromium args — real Chrome needs fewer overrides since it already
+        # has correct TLS fingerprint, client hints, and native APIs.
+        # -----------------------------------------------------------------
+        # Shared args: always needed regardless of channel
         chromium_args = [
             "--disable-blink-features=AutomationControlled",
+            "--disable-features=AutomationControlled",
             "--no-default-browser-check",
             "--disable-dev-shm-usage",
-            "--disable-features=IsolateOrigins,site-per-process",
-            "--disable-features=AutomationControlled",
             "--start-maximized",
-            "--disable-infobars",
-            "--enable-features=NetworkService,NetworkServiceInProcess",
-            "--ignore-certificate-errors",
-            # Enable software WebGL fallback so sites don't detect missing GPU acceleration
-            "--enable-unsafe-swiftshader",
+            # Suppress the "Chrome is being controlled by automated test software"
+            # infobar.  --disable-infobars is deprecated; the banner is triggered by
+            # Playwright's implicit --enable-automation flag, so we must explicitly
+            # opt out plus suppress the "crashed" bubble on unclean shutdown.
+            "--enable-automation=false",
+            "--disable-session-crashed-bubble",
+            "--hide-crash-restore-bubble",
             # Prevent IP leak via RTCPeerConnection without fully disabling WebRTC
             "--webrtc-ip-handling-policy=disable_non_proxied_udp",
             # Disable the built-in PDF/media viewer so files trigger download
@@ -624,6 +635,15 @@ class Browser:
             # listener captures real file bytes automatically.
             "--disable-pdf-viewer",
         ]
+        if not _use_channel:
+            # Bundled Chromium needs extra help to look like a real browser
+            chromium_args.extend([
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--enable-features=NetworkService,NetworkServiceInProcess",
+                "--ignore-certificate-errors",
+                # Software WebGL fallback so sites don't detect missing GPU
+                "--enable-unsafe-swiftshader",
+            ])
         if args:
             chromium_args.extend(args)
 
@@ -634,14 +654,19 @@ class Browser:
             dl_path.mkdir(parents=True, exist_ok=True)
             resolved_downloads_path = str(dl_path)
 
+        # Both real Chrome and bundled Chromium get an explicit viewport.
+        # --start-maximized is unreliable on some Linux window managers,
+        # leading to odd window dimensions.  The jitter keeps runs from
+        # being pixel-identical.
+        viewport = _viewport()
+
         launch_kwargs: dict[str, Any] = dict(
             user_data_dir=str(profile_path),
             channel=channel,
             headless=headless,
             proxy=proxy,
             args=chromium_args,
-            viewport=_viewport(),
-            user_agent=user_agent,
+            viewport=viewport,
             locale=locale,
             timezone_id=timezone_id,
             accept_downloads=accept_downloads,
@@ -650,6 +675,11 @@ class Browser:
             permissions=permissions or [],
             java_script_enabled=True,  # ensure JS is enabled
         )
+        # Only override the UA for bundled Chromium.  Real Chrome already
+        # sends a correct User-Agent that matches its Sec-CH-UA client-hint
+        # headers; overriding it creates a detectable mismatch.
+        if not _use_channel:
+            launch_kwargs["user_agent"] = user_agent
 
         pw: Playwright = await async_playwright().start()
         try:
@@ -672,17 +702,21 @@ class Browser:
         # them globally breaks subresource loading on CDNs that validate the headers.
         headers = {
             "Accept-Language": f"{locale},en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",  # 👈 important for GitHub
             **(extra_headers or {}),
         }
+        if not _use_channel:
+            # Real Chrome sets Accept-Encoding natively; only force it for
+            # bundled Chromium where GitHub needs explicit br support.
+            headers["Accept-Encoding"] = "gzip, deflate, br"
         await context.set_extra_http_headers(headers)
 
-        # Anti-bot JS shims
-        await context.add_init_script(ANTI_BOT_INIT_SCRIPT)
+        # Anti-bot JS shims — channel-aware to avoid conflicts with real
+        # Chrome's native properties (plugins, userAgentData, etc.)
+        anti_bot = _build_anti_bot_script(use_channel=_use_channel)
+        await context.add_init_script(anti_bot)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
-        await context.add_init_script(PAGE_CHANGE_DETECTION_SCRIPT)
 
-        return cls(context=context, extra_headers=headers, pw=pw)
+        return cls(context=context, extra_headers=headers, pw=pw, use_channel=_use_channel)
 
     async def new_page(self) -> Page:
         """Open a new page within the persistent context.
@@ -816,12 +850,26 @@ class Browser:
             if area < min_area:
                 continue
 
-            # Verify the frame's content is accessible (not cross-origin blocked)
+            # Verify the frame has accessible, meaningful content — not
+            # just an ad iframe with images/scripts but no real UI.
             try:
-                child_count = await frame.evaluate(
-                    "() => document.body ? document.body.children.length : 0"
+                content_check = await frame.evaluate(
+                    """() => {
+                        if (!document.body) return { children: 0, text: 0, interactive: 0 };
+                        return {
+                            children: document.body.children.length,
+                            text: (document.body.innerText || '').trim().length,
+                            interactive: document.body.querySelectorAll(
+                                'a[href], button, input, select, textarea'
+                            ).length,
+                        };
+                    }"""
                 )
-                if child_count and area > best_area:
+                has_content = (
+                    content_check["children"] > 0
+                    and (content_check["text"] > 0 or content_check["interactive"] > 3)
+                )
+                if has_content and area > best_area:
                     best_frame = frame
                     best_area = area
             except Exception:  # noqa: BLE001 - cross-origin or detached
@@ -845,64 +893,16 @@ class Browser:
         return self._context
 
     async def navigate(self, url: str) -> BrowserInteractionResult:
-        """Navigate to *url* and return a ``BrowserInteractionResult``.
-
-        Handles page creation, frame clearing, settling, iframe detection,
-        and file download detection so callers get a unified result.
-        """
-        from tools.browser.core._file_detection import (
-            is_file_content_type,
-            save_response_as_file,
-        )
-
+        """Navigate to *url* and return a ``BrowserInteractionResult``."""
         try:
             page = await self.current_page()
         except RuntimeError:
             page = await self.new_page()
         self.clear_active_frame()
-        # Clear any pending downloads before navigation
         self._pending_downloads.clear()
+        initial_url = getattr(page, "url", "")
         response = await page.goto(url, wait_until="domcontentloaded")
-
-        # --- File download detection ---
-        # With --disable-pdf-viewer, PDFs trigger a download event instead
-        # of loading inline.  Wait for any pending download tasks, then
-        # check the download listener first (real file bytes).  Fall back
-        # to response.body() for servers that stream the file inline.
-        download_info: DownloadInfo | None = None
-
-        # Wait for download tasks that may still be completing
-        if self._download_tasks:
-            await asyncio.gather(*self._download_tasks, return_exceptions=True)
-
-        # Prefer download event (has real bytes from disk)
-        downloads = self.drain_downloads()
-        if downloads:
-            download_info = downloads[0]
-        elif response is not None:
-            ct = response.headers.get("content-type", "")
-            if is_file_content_type(ct):
-                try:
-                    download_info = await save_response_as_file(
-                        response,
-                        downloads_dir=self._downloads_dir or ".",
-                        container_dir=self._container_dir or "/tmp",
-                    )
-                except Exception:
-                    logger.exception("Failed to save file from navigation to %s", url)
-
-        if download_info is None:
-            # Normal page — settle and detect iframes
-            wait_cfg = load_config().tools.browser.waits
-            await browser_waits.wait_for_page_settle(page, waits=wait_cfg)
-
-        return BrowserInteractionResult(
-            navigation=True,
-            page_changed=True,
-            reason="browser-navigation",
-            navigation_response=response,
-            download=download_info,
-        )
+        return await self._finalize_action(page, response=response, initial_url=initial_url)
 
     async def navigate_back(self) -> BrowserInteractionResult:
         """Navigate back in history via ``perform_interaction``."""
@@ -1001,171 +1001,56 @@ class Browser:
         if context_exc:
             logger.debug("Browser.close completed with suppressed context exception")
 
-    async def perform_interaction(
+    async def _finalize_action(
         self,
-        action: Callable[[], Awaitable[Any]],
+        page: Page,
+        *,
+        response: Response | None,
+        initial_url: str,
     ) -> BrowserInteractionResult:
-        """Perform an interaction while tracking navigation and DOM changes."""
-        page = await self.current_page()
+        """Shared post-action pipeline: downloads, settle, iframe detection, logging."""
         wait_cfg = load_config().tools.browser.waits
-        initial_url = getattr(page, "url", "")
 
-        try:
-            await page.evaluate("window.__resetPageChange && window.__resetPageChange()")
-        except PlaywrightError as exc:
-            logger.debug("Failed to reset page change markers on %s: %s", initial_url or "<unknown>", exc)
-        except Exception as exc:  # noqa: BLE001 - best-effort guard
-            logger.debug("Unexpected error resetting page change markers on %s: %s", initial_url or "<unknown>", exc)
-
-        # Clear downloads and capture main-frame responses during the action
-        self._pending_downloads.clear()
-        captured_responses: list[Response] = []
-
-        def _on_response(resp: Response) -> None:
-            # Only capture main-frame document navigations, not XHR/fetch or
-            # sub-resources (JS, CSS, etc.) that happen to run on the main frame.
-            if resp.frame == page.main_frame and resp.request.resource_type == "document":
-                captured_responses.append(resp)
-
-        page.on("response", _on_response)
-
-        await action()
-
-        # Drain any in-flight progressive screenshot so it doesn't race with
-        # the post-action page.evaluate calls below (both share the CDP
-        # connection).  This is the single chokepoint for all interactions,
-        # so individual callers never need to flush manually.
-        from tools.browser.events import flush_progressive_screenshot
-
-        await flush_progressive_screenshot()
-
-        def _extract_flags(state: dict[str, object], *, current_url: str, initial_url: str) -> tuple[bool, bool, bool]:
-            hard = bool(state.get("hard"))
-            spa = bool(state.get("spa"))
-            dom = bool(state.get("dom"))
-            if not (hard or spa) and initial_url and current_url and current_url != initial_url:
-                hard = True
-            return hard, spa, dom
-
-        change_state: dict[str, object] = {}
-        try:
-            result = await page.evaluate("window.__getPageChange && window.__getPageChange()")
-        except PlaywrightError as exc:
-            logger.debug("Failed to read page change markers on %s: %s", initial_url or "<unknown>", exc)
-        except Exception as exc:  # noqa: BLE001 - best-effort guard
-            logger.debug("Unexpected error reading page change markers on %s: %s", initial_url or "<unknown>", exc)
-        else:
-            if isinstance(result, dict):
-                change_state = result
-                logger.debug("Initial change_state after action: %s", change_state)
-
-        current_url = getattr(page, "url", initial_url)
-        hard_nav, spa_nav, dom_change = _extract_flags(change_state, current_url=current_url, initial_url=initial_url)
-
-        navigation_detected = hard_nav or spa_nav
-        if navigation_detected:
-            reason_value: Reason = "browser-navigation" if hard_nav else "history-navigation"
-        elif dom_change:
-            reason_value = "dom-mutation"
-        else:
-            reason_value = "no-change"
-
-        page_changed = navigation_detected or dom_change
-
-        try:
-            await browser_waits.wait_for_page_settle(page, waits=wait_cfg)
-        except Exception as exc:  # noqa: BLE001 - wait helper already logs Playwright errors
-            logger.debug("Page settle helper raised unexpectedly: %s", exc)
-        else:
-            # Re-read change markers after settling in case asynchronous updates occurred.
-            try:
-                post_state = await page.evaluate("window.__getPageChange && window.__getPageChange()")
-            except PlaywrightError as exc:
-                logger.debug(
-                    "Failed to read post-settle page change markers on %s: %s",
-                    getattr(page, "url", "<unknown>") or "<unknown>",
-                    exc,
-                )
-            except Exception as exc:  # noqa: BLE001 - best-effort guard
-                logger.debug(
-                    "Unexpected error reading post-settle change markers on %s: %s",
-                    getattr(page, "url", "<unknown>") or "<unknown>",
-                    exc,
-                )
-            else:
-                if isinstance(post_state, dict):
-                    logger.debug("Post-settle change_state: %s", post_state)
-                    for key in ("hard", "spa", "dom"):
-                        if post_state.get(key):
-                            change_state[key] = True
-                    logger.debug("Merged change_state after post-settle: %s", change_state)
-
-        final_url = getattr(page, "url", current_url)
-        hard_nav, spa_nav, dom_change = _extract_flags(change_state, current_url=final_url, initial_url=initial_url)
-        navigation_detected = hard_nav or spa_nav
-        if navigation_detected:
-            reason_value = "browser-navigation" if hard_nav else "history-navigation"
-        elif dom_change:
-            reason_value = "dom-mutation"
-        else:
-            reason_value = "no-change"
-
-        page_changed = navigation_detected or dom_change
-
-        # Remove the temporary response listener
-        page.remove_listener("response", _on_response)
-
-        # Detect file downloads from the interaction
+        # 1. Download detection
         download_info: DownloadInfo | None = None
 
-        # Wait briefly for any in-flight download events to complete
         if self._download_tasks:
             await asyncio.gather(*self._download_tasks, return_exceptions=True)
 
-        # Case 1: Playwright download event (Content-Disposition: attachment)
         pending = self.drain_downloads()
         if pending:
-            download_info = pending[0]  # Use the first download
+            download_info = pending[0]
 
-        # Case 2: Navigation to an inline file (PDF viewer, image)
-        if download_info is None and captured_responses:
+        if download_info is None and response is not None:
             from tools.browser.core._file_detection import (
                 is_file_content_type,
                 save_response_as_file,
             )
-
-            # Check the last main-frame response (final redirect target)
-            last_response = captured_responses[-1]
-            ct = last_response.headers.get("content-type", "")
+            ct = response.headers.get("content-type", "")
             if is_file_content_type(ct):
                 try:
                     download_info = await save_response_as_file(
-                        last_response,
+                        response,
                         downloads_dir=self._downloads_dir or ".",
                         container_dir=self._container_dir or "/tmp",
                     )
                 except Exception:
-                    logger.exception("Failed to save file from interaction response")
+                    logger.exception("Failed to save file from response")
 
-        metadata = BrowserInteractionResult(
-            navigation=navigation_detected,
-            page_changed=page_changed,
-            reason=reason_value,
-            navigation_response=None,
-            download=download_info,
-        )
+        # 2. Settle (skip if download — no page to settle)
+        settle_timings = None
+        if download_info is None:
+            try:
+                settle_timings = await browser_waits.wait_for_page_settle(page, waits=wait_cfg)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Page settle raised unexpectedly: %s", exc)
 
-        logger.debug(
-            "Browser.perform_interaction completed for %s | navigation=%s reason=%s dom_change=%s",
-            current_url or "<unknown>",
-            navigation_detected,
-            reason_value,
-            dom_change,
-        )
+        # 3. Iframe detection
+        frame_transition: str | None = None
+        final_url = getattr(page, "url", initial_url)
+        navigated = bool(initial_url and final_url and final_url != initial_url)
 
-        # Detect dominant iframe after the interaction settles.
-        # Navigation clears any previously tracked frame (new page = fresh state).
-        if navigation_detected:
+        if navigated:
             self._active_frame = None
         else:
             try:
@@ -1173,38 +1058,96 @@ class Browser:
                 dominant = await self._detect_dominant_frame(page)
                 if dominant != self._active_frame:
                     if dominant is not None:
-                        logger.debug("Dominant iframe detected; shifting tools to frame %s", dominant.url)
+                        frame_transition = f"→ iframe {dominant.url}"
                     elif self._active_frame is not None:
-                        logger.debug("Dominant iframe no longer present; returning to main page")
+                        frame_transition = "→ main page"
                     self._active_frame = dominant
 
-                # When a NEW dominant iframe appears (e.g. a booking widget),
-                # wait for its content to load.  SPA iframes insert quickly
-                # into the DOM but their JS frameworks need time to render.
-                # Use "load" (not "domcontentloaded") so scripts finish
-                # executing before we snapshot — otherwise we'd capture the
-                # noscript fallback instead of the rendered SPA content.
                 if dominant is not None and dominant != previous_frame:
                     try:
                         await dominant.wait_for_load_state("load", timeout=5000)
-                        await browser_waits.wait_for_page_settle(
-                            dominant, waits=wait_cfg,
-                        )
+                        await browser_waits.wait_for_page_settle(dominant, waits=wait_cfg)
                     except (PlaywrightTimeoutError, PlaywrightError):
-                        pass  # Best effort — some iframes may be slow
-            except Exception:  # noqa: BLE001 - detection is best-effort
+                        pass
+            except Exception:  # noqa: BLE001
                 logger.debug("Dominant frame detection failed; keeping current state")
 
-        # Add human-like delay after page changes (looks like user is reading/processing)
-        if page_changed:
-            delay_ms = random.randint(300, 800)
-            logger.debug("Adding %dms post-page-change delay to mimic human reading", delay_ms)
-            await asyncio.sleep(delay_ms / 1000.0)
+        return BrowserInteractionResult(
+            navigation_response=response,
+            download=download_info,
+            settle_timings=settle_timings,
+            frame_transition=frame_transition,
+        )
 
-        return metadata
+    async def perform_interaction(
+        self,
+        action: Callable[[], Awaitable[Any]],
+    ) -> BrowserInteractionResult:
+        """Perform an interaction and run the shared post-action pipeline."""
+        page = await self.current_page()
+        initial_url = getattr(page, "url", "")
+
+        self._pending_downloads.clear()
+        captured_responses: list[Response] = []
+
+        def _on_response(resp: Response) -> None:
+            if resp.frame == page.main_frame and resp.request.resource_type == "document":
+                captured_responses.append(resp)
+
+        page.on("response", _on_response)
+
+        t0 = time.monotonic()
+        await action()
+        action_ms = (time.monotonic() - t0) * 1000
+
+        from tools.browser.events import flush_progressive_screenshot
+        await flush_progressive_screenshot()
+
+        page.remove_listener("response", _on_response)
+
+        response = captured_responses[-1] if captured_responses else None
+        result = await self._finalize_action(page, response=response, initial_url=initial_url)
+        result.action_ms = action_ms
+        return result
 
 
 _browser: Browser | None = None
+
+
+def _kill_driver_tree(pid: int) -> None:
+    """Send SIGTERM to a Playwright driver process and its children.
+
+    This is a synchronous, best-effort fallback used by the ``atexit`` handler
+    when the async close path didn't run (e.g. the event loop was torn down).
+    Killing the driver also kills the Chromium child it manages.
+    """
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    except OSError:
+        # Fallback: kill just the driver process if pgid failed
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+
+
+def _atexit_kill_browser() -> None:
+    """Last-resort cleanup: kill the Chromium/driver process tree on exit.
+
+    Registered via ``atexit`` when a browser is created.  If the async
+    ``close_browser()`` already ran, ``_browser`` is ``None`` and this is a
+    no-op.  Otherwise it sends SIGTERM to the Playwright driver PID, which
+    takes Chromium down with it.
+    """
+    if _browser is None or _browser._closed:
+        return
+    pid = _browser._driver_pid
+    if pid is None:
+        return
+    logger.debug("atexit: killing browser driver tree (pid %d)", pid)
+    _kill_driver_tree(pid)
 
 
 async def get_browser() -> Browser:
@@ -1225,6 +1168,7 @@ async def get_browser() -> Browser:
         _browser = await Browser.start(str(profile_path), channel=channel, downloads_path=downloads_path)
         _browser._downloads_dir = downloads_path
         _browser._container_dir = config.virtual_computer.container_working_dir
+        atexit.register(_atexit_kill_browser)
     return _browser
 
 
@@ -1232,9 +1176,6 @@ async def close_browser() -> None:
     """Shutdown the persistent browser instance if it exists.
 
     This function closes the browser context and resets the singleton instance.
-
-    Returns:
-        None
     """
     global _browser
     if _browser is None:

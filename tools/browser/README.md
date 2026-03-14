@@ -21,20 +21,21 @@ Browser automation tools powered by Playwright. These tools are used by the brow
 |  Browser          PageView        Selectors     Human        |
 |  (browser.py)     (page_view.py)  (_selectors   (human.py)   |
 |                                    .py)                      |
-|  - Lifecycle      - DOM walker    - role:name   - Bezier     |
+|  - Lifecycle      - DOM walker    - Ref-based   - Bezier     |
 |  - ActiveView     - ARIA roles      resolution    mouse      |
-|  - Interaction    - Viewport      - CSS/text    - Typing     |
-|    cycle            clipping        fallbacks     delays     |
-|  - Anti-bot       - Shadow DOM    - Fuzzy       - Scroll     |
-|  - Frame detect   - Scoping         matching      timing    |
+|  - Interaction    - Viewport      - CSS         - Typing     |
+|    cycle            clipping        fallback      delays     |
+|  - Anti-bot       - Shadow DOM                  - Scroll     |
+|  - Frame detect   - Scoping                       timing    |
+|                   - Ref stamping                             |
 |                                                              |
-|  Waits            Events          Exceptions    Selectors    |
-|  (waits.py)       (events.py)     (exceptions   (selectors   |
-|                                    .py)          .py)        |
-|  - Network idle   - Progressive   - Unified     - CSS        |
-|  - DOM quiet        screenshots     errors        generation |
-|    window         - Throttling    - Context     - Vision     |
-|                   - UI events       details       support    |
+|  Waits            Events          Exceptions                 |
+|  (waits.py)       (events.py)     (exceptions.py)            |
+|                                                              |
+|  - Network idle   - Progressive   - Unified errors           |
+|  - DOM quiet        screenshots   - Context details          |
+|    window         - Throttling                               |
+|                   - UI events                                |
 +-----------------------------+--------------------------------+
                               |
                               v
@@ -50,9 +51,10 @@ Browser automation tools powered by Playwright. These tools are used by the brow
 | File | Purpose |
 |------|---------|
 | `core/browser.py` | Singleton `Browser` class — manages Playwright lifecycle, page tracking, and the settle/interaction cycle |
-| `core/page_view.py` | `build_page_view()` — annotates the DOM with `[role] name` markers for the agent |
-| `core/_selectors.py` | `_resolve_locator()` — maps `role:name` selectors from snapshots to Playwright locators |
-| `core/selectors.py` | `SelectorRegistry` — generates unique CSS selectors for vision-grounded elements |
+| `core/page_view.py` | `build_page_view()` — walks the DOM producing `[ref] [role] name` annotated text, stamps `data-ct-ref` attributes |
+| `core/_selectors.py` | `_resolve_locator()` — resolves ref numbers to Playwright locators via `[data-ct-ref="N"]` |
+| `core/_dom_nodes.py` | `DomNode` dataclass and `parse_nodes()` for structured DOM node data |
+| `core/_pipeline.py` | Rendering pipeline — converts `DomNode` list to formatted text output |
 | `core/human.py` | Human-like mouse movement, click hold, and keystroke timing |
 | `core/waits.py` | Navigation detection and DOM settle logic |
 | `core/exceptions.py` | `BrowserToolError` base exception |
@@ -136,22 +138,26 @@ Every interaction tool (click, fill, scroll, etc.) delegates to `perform_interac
 
 ---
 
-### 3. DOM Snapshots & Content Extraction (`core/page_view.py`)
+### 3. DOM Snapshots & Ref Stamping (`core/page_view.py`)
 
-Walks the DOM once per snapshot and produces LLM-consumable annotated text. The output uses `[role] name` inline annotations:
+Walks the DOM once per snapshot and produces LLM-consumable annotated text. Each interactive element is stamped with a `data-ct-ref` attribute and shown with a `[ref] [role] name` annotation:
 
 ```
 Welcome to our store
-[link] Home  [link] Products  [link] Cart (3)
+[1] [link] Home  [2] [link] Products  [3] [link] Cart (3)
 Search for products
-[textbox] Search...
-[button] Search
+[4] [textbox] Search...
+[5] [button] Search
 ```
+
+The agent uses the ref number as the selector for interaction tools: `click("5")`, `fill_field("4", "laptop")`.
 
 **The JavaScript walker** (`_ANNOTATED_SNAPSHOT_JS`) handles:
 
 | Concern | How |
 |---------|-----|
+| Ref stamping | Assigns sequential `data-ct-ref` attributes to each interactive element |
+| Stale cleanup | Removes old `data-ct-ref` attributes before each snapshot |
 | Role mapping | HTML tag -> ARIA role (A->link, BUTTON->button, INPUT[type]->specific role) |
 | Accessible name | aria-label -> aria-labelledby -> label[for] -> placeholder -> alt -> innerText |
 | Visibility | Skips aria-hidden, display:none, opacity:0, overflow-clipped elements |
@@ -168,57 +174,36 @@ Search for products
 
 ### 4. Selector Resolution (`core/_selectors.py`)
 
-Converts `role:name` strings from annotated snapshots into Playwright Locators.
+Resolves ref numbers from annotated page views into Playwright Locators using `data-ct-ref` attribute selectors.
 
 ```
-Agent sees:    [button] Add to Cart
-Agent passes:  "button:Add to Cart"
+Agent sees:    [5] [button] Add to Cart
+Agent passes:  "5"
                     |
                     v
             +-------------------+
             | _resolve_locator  |
             |                   |
-            | 1. role:name      |  <-- Primary (from snapshot annotations)
-            | 2. CSS selector   |  <-- Fallback (#id, [data-testid])
-            | 3. Exact text     |  <-- get_by_text(exact=True)
-            | 4. Substring text |  <-- get_by_text(exact=False)
-            | 5. Alt text       |  <-- get_by_alt_text (for images)
+            | 1. Parse as int   |
+            | 2. Lookup via     |
+            |    [data-ct-ref]  |
+            | 3. CSS fallback   |  <-- Non-numeric strings tried as CSS
             +--------+----------+
                      |
                      v
             Playwright Locator (scoped to frame)
 ```
 
-**Features:**
+**How it works:**
 
-- **Indexed selectors** — `button:Submit[2]` targets the 2nd visible "Submit" button.
-- **Truncated names** — Names ending with `...` trigger fuzzy prefix matching.
-- **Ambiguity handling** — Filters to viewport-visible elements; provides suggestions on mismatch.
-- **`_LocatorResolution` dataclass** — Tracks which strategy won, match count, and resolved selector string.
-
----
-
-### 5. CSS Selector Generation (`core/selectors.py`)
-
-Generates unique CSS selectors for vision-grounded elements. Used by `vision.py` when the agent clicks by visual position and needs a stable selector.
-
-**`SelectorRegistry`** tries strategies in cost order:
-
-1. `#id`
-2. `[data-testid]`, `[data-test]`, `[data-qa]`, `[data-cy]`
-3. `[name]` (form fields)
-4. ARIA role + label
-5. Exact text match
-6. Substring text
-7. DOM position (`:nth-of-type()`)
-8. Full DOM path
-9. Fallback with `>> nth=0`
-
-Each strategy is verified for uniqueness on the live page before acceptance.
+- **Ref lookup** — Numeric strings (e.g. `"5"`) resolve via `page.locator('[data-ct-ref="5"]')`. This is 100% reliable because the walker stamps each element during the snapshot.
+- **CSS fallback** — Non-numeric strings are tried as CSS selectors for backwards compatibility.
+- **Stale refs** — If a ref is not found (page changed since snapshot), a `BrowserToolError` tells the agent to call `browse_page()` for fresh refs.
+- **`_LocatorResolution` dataclass** — `locator`, `query`, `resolved_selector`.
 
 ---
 
-### 6. Human-Like Simulation (`core/human.py`)
+### 5. Human-Like Simulation (`core/human.py`)
 
 Makes browser interactions look human to anti-bot systems.
 
@@ -270,7 +255,7 @@ All browser tool failures raise `BrowserToolError` with:
 - `tool` — Short identifier (e.g. `"click"`, `"fill_field"`)
 - `details` — Optional JSON-serializable context dict
 
-Formatted as: `[click] Element not found: button:Submit ({"selector": "button:Submit"})`
+Formatted as: `[click] Ref 5 not found on the page. ({"selector": "[data-ct-ref=\"5\"]"})`
 
 ---
 
@@ -287,20 +272,18 @@ Every interaction tool follows the same pattern:
 |  1. get_active_view("tool_name")             |
 |     -> (Browser, ActiveView)                 |
 |                                              |
-|  2. _resolve_locator(view.frame, selector)   |
-|     -> Playwright Locator                    |
+|  2. _resolve_or_raise(view.frame, selector)  |
+|     -> _LocatorResolution                    |
+|     (ref number -> [data-ct-ref] locator)    |
 |                                              |
 |  3. browser.perform_interaction(action_fn)   |
 |     -> BrowserInteractionResult              |
 |     (action + settle + change detection)     |
 |                                              |
-|  4. _build_snapshot(response)                |
-|     -> PageView (if page changed)            |
+|  4. _format_result(browser_result)           |
+|     -> Formatted string with page snapshot   |
 |                                              |
-|  5. Return InteractionResult                 |
-|     (page_view, page_changed, reason, extras)|
-|                                              |
-|  6. @emit_screenshot_after    |
+|  5. @emit_screenshot_after                   |
 |     -> Screenshot event to UI (decorator)    |
 +---------------------------------------------+
 ```
@@ -309,7 +292,7 @@ Every interaction tool follows the same pattern:
 
 | Function | What it does |
 |----------|-------------|
-| `click(selector)` | Resolves selector, human-clicks, returns snapshot if changed |
+| `click(selector)` | Resolves ref, human-clicks, returns snapshot |
 | `fill_field(selector, value)` | Validates input/textarea, clicks, clears, types with human timing |
 | `press_keys(keys)` | Types key sequences with random delays, supports modifier chains |
 | `scroll_page(direction, amount)` | Scrolls with budget enforcement per URL |
@@ -319,7 +302,7 @@ Every interaction tool follows the same pattern:
 | `click_at(x, y)` | Coordinate-based click |
 | `press_and_hold_at(x, y, duration)` | Coordinate-based press-and-hold |
 
-**`InteractionResult` model:** `page_view` (None if no change), `page_changed`, `reason`, `extras`
+All interaction tools return a formatted string containing the action header and updated page snapshot.
 
 ### Dropdown Selection (`select.py`)
 
@@ -332,7 +315,7 @@ Two-phase approach for `<select>` elements:
 
 | Tool | File | What it does |
 |------|------|-------------|
-| `browse_page(scope, full_page)` | `snapshot_tool.py` | Annotated `[role] name` snapshot, no side effects |
+| `browse_page(scope, full_page)` | `snapshot_tool.py` | Annotated `[ref] [role] name` snapshot, no side effects |
 | `open_url(url)` | `page.py` | Navigates + returns snapshot with status_code |
 | `read_page(page_number, query)` | `read_content.py` | Full markdown via html2text, 20K char pagination, optional query filtering |
 | `save_page_content(filename)` | `save_content.py` | Saves page as markdown file |
@@ -360,11 +343,11 @@ ground_elements_by_text(text)
                     +-- click_at(center_x, center_y)
 ```
 
-This provides a fallback path when DOM-based selectors can't find an element — the agent can "look" at the page and click by visual position.
+This provides a fallback path when ref-based selectors can't find an element — the agent can "look" at the page and click by visual position.
 
 ### JavaScript Execution (`javascript.py`)
 
-`execute_javascript(code, timeout_ms)` — Evaluates arbitrary JavaScript in the page context. Returns `JavaScriptResult` with `success`, `result`, and `error` fields.
+`execute_javascript(code, timeout_ms)` — Evaluates arbitrary JavaScript in the page context. Returns a dict with `success`, `result`, and `error` fields.
 
 ---
 
@@ -378,26 +361,26 @@ Streams browser screenshots to the UI without blocking tool execution.
 |                                              |
 |  Tool call in progress                       |
 |       |                                      |
-|       +-- request_progressive_screenshot()     |
+|       +-- request_progressive_screenshot()   |
 |       |   (fire-and-forget)                  |
 |       |        |                             |
 |       |        v                             |
-|       |   _ScreenshotEmitter (background task) |
+|       |   _ScreenshotEmitter (background)    |
 |       |   - Coalesces rapid requests         |
 |       |   - Min interval ~250ms (~4 fps)     |
 |       |   - "Latest-value-only" drain        |
-|       |   - Emits BrowserScreenshotPayload     |
+|       |   - Emits BrowserScreenshotPayload   |
 |       |        |                             |
 |       |        v                             |
 |       |   UI receives screenshot event       |
 |       |                                      |
-|       +-- flush_progressive_screenshot()       |
+|       +-- flush_progressive_screenshot()     |
 |       |   (awaits in-flight capture)         |
 |       |                                      |
 |       +-- Tool returns result                |
 |            |                                 |
 |            v                                 |
-|  @emit_screenshot_after       |
+|  @emit_screenshot_after                      |
 |  (decorator captures final screenshot)       |
 +---------------------------------------------+
 ```
@@ -441,7 +424,7 @@ tools:
 ```
                     Agent (LLM)
                         |
-                        | tool call: click("button:Submit")
+                        | tool call: click("5")
                         v
               +------------------+
               |  interactions.py  |
@@ -462,7 +445,7 @@ tools:
     ActiveView          |
     (frame,title,url)   |
                         v
-                    Locator
+              [data-ct-ref="5"]
                         |
                         v
               +-----------------+
@@ -479,7 +462,7 @@ tools:
               (page_view.py)
                        |
                        v
-              InteractionResult
+              Formatted string
               (back to agent)
 ```
 
@@ -491,10 +474,7 @@ tools:
 |-------|------|--------|
 | `ActiveView` | NamedTuple | `frame`, `title`, `url` |
 | `PageView` | Pydantic | `title`, `url`, `status_code`, `content`, `viewport`, `truncated` |
-| `InteractionResult` | Pydantic | `page_view`, `page_changed`, `reason`, `extras` |
+| `DomNode` | dataclass | `type`, `text`, `role`, `name`, `ref`, `value`, `checked`, `viewport` |
 | `BrowserInteractionResult` | Pydantic | `navigation`, `page_changed`, `reason`, `navigation_response` |
 | `GroundingResult` | Pydantic | `text`, `bbox`, `center`, `selector`, `reasoning` |
-| `JavaScriptResult` | Pydantic | `success`, `result`, `error` |
-| `SaveContentResult` | Pydantic | `filename`, `container_path`, `size_bytes` |
-| `SelectorResult` | dataclass | `selector`, `strategy`, `collision_count`, `fallbacks_tried` |
-| `_LocatorResolution` | dataclass | `locator`, `strategy`, `query`, `match_count`, `resolved_selector` |
+| `_LocatorResolution` | dataclass | `locator`, `query`, `resolved_selector` |

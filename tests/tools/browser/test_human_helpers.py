@@ -157,8 +157,8 @@ async def test_human_click_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch
 
     # Force small timings via config cache
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=2,
-        offset_px=0.0,
+
+
         hover_min_ms=0,
         hover_max_ms=0,
         click_hold_min_ms=0,
@@ -205,8 +205,8 @@ async def test_human_drag_sequence_to_target(monkeypatch: pytest.MonkeyPatch) ->
     target_locator = DummyLocator(DummyElementHandle(bounding_box=target_box, frame=frame))
 
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=2,
-        offset_px=0.0,
+
+
         hover_min_ms=0,
         hover_max_ms=0,
         click_hold_min_ms=0,
@@ -238,6 +238,7 @@ async def test_human_drag_offset_and_validation(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(random, "random", lambda: 0.0)
     monkeypatch.setattr(random, "randint", lambda a, b: 0)
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
 
     mouse = DummyMouse(recorder)
     page = DummyPage(mouse=mouse)
@@ -247,8 +248,8 @@ async def test_human_drag_offset_and_validation(monkeypatch: pytest.MonkeyPatch)
     source_locator = DummyLocator(DummyElementHandle(bounding_box=source_box, frame=frame))
 
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=2,
-        offset_px=0.0,
+
+
         hover_min_ms=0,
         hover_max_ms=0,
         click_hold_min_ms=0,
@@ -311,8 +312,8 @@ async def test_human_type_sequence_and_fallback(monkeypatch: pytest.MonkeyPatch)
     locator = DummyLocator(handle)
 
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=1,
-        offset_px=0.0,
+
+
         hover_min_ms=0,
         hover_max_ms=0,
         click_hold_min_ms=0,
@@ -404,8 +405,8 @@ async def test_human_press_and_hold_sequence(monkeypatch: pytest.MonkeyPatch) ->
     locator = DummyLocator(handle)
 
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=2,
-        offset_px=0.0,
+
+
         hover_min_ms=0,
         hover_max_ms=0,
         click_hold_min_ms=0,
@@ -441,7 +442,7 @@ async def test_human_press_and_hold_no_frame_raises(monkeypatch: pytest.MonkeyPa
     locator = DummyLocator(handle)
 
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=1, offset_px=0.0, hover_min_ms=0, hover_max_ms=0,
+        hover_min_ms=0, hover_max_ms=0,
         click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
         delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
         extra_pause_max_ms=0,
@@ -462,7 +463,7 @@ async def test_human_press_and_hold_no_mouse_raises(monkeypatch: pytest.MonkeyPa
     locator = DummyLocator(handle)
 
     monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
-        move_steps=1, offset_px=0.0, hover_min_ms=0, hover_max_ms=0,
+        hover_min_ms=0, hover_max_ms=0,
         click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
         delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
         extra_pause_max_ms=0,
@@ -517,9 +518,10 @@ def test_ease_in_out_monotonic() -> None:
 def test_build_trajectory_endpoints() -> None:
     """Trajectory starts near start and ends exactly at destination."""
     random.seed(42)
-    points = _build_trajectory(10.0, 20.0, 300.0, 400.0, steps=10)
+    points = _build_trajectory(10.0, 20.0, 300.0, 400.0)
 
-    assert len(points) >= 10
+    # Distance ~492px → ~10 steps at 50px/step
+    assert len(points) >= 2
     # Final point should land exactly on the target (no jitter on last step)
     last_x, last_y = points[-1]
     assert abs(last_x - 300.0) < 1e-6
@@ -530,8 +532,8 @@ def test_build_trajectory_endpoints() -> None:
 def test_build_trajectory_zero_distance() -> None:
     """Trajectory for same start/end doesn't crash and lands on target."""
     random.seed(0)
-    points = _build_trajectory(50.0, 50.0, 50.0, 50.0, steps=5)
-    assert len(points) >= 1
+    points = _build_trajectory(50.0, 50.0, 50.0, 50.0)
+    assert len(points) >= 2
     last_x, last_y = points[-1]
     assert abs(last_x - 50.0) < 1e-6
     assert abs(last_y - 50.0) < 1e-6

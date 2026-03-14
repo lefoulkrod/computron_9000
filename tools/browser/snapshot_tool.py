@@ -1,9 +1,8 @@
 """Browse the current page with annotated content and interactive elements.
 
 Returns a single view combining page content and interactive elements,
-annotated with ``[role] name`` markers.  The ``role:name`` pair can be
-used directly as a selector in ``click()``, ``fill_field()``, and other
-interaction tools.
+annotated with ``[ref] [role] name`` markers.  Pass the ref number to
+``click()``, ``fill_field()``, and other interaction tools.
 """
 
 from __future__ import annotations
@@ -21,25 +20,25 @@ logger = logging.getLogger(__name__)
 
 @emit_screenshot_after
 async def browse_page(scope: str | None = None, full_page: bool = False) -> str:
-    """See interactive elements on the current page with [role] name markers.
+    """See interactive elements on the current page with ref numbers.
 
     Use this when you need to INTERACT: find buttons, links, forms, and get
-    selectors for ``click()``, ``fill_field()``, etc.  For reading text
+    ref numbers for ``click()``, ``fill_field()``, etc.  For reading text
     content, use ``read_page()`` instead.  After click/fill/scroll, the
     page_view is returned automatically — only call ``browse_page()`` to
     re-examine without acting.
 
-    Output format — each element shown as ``[role] name``::
+    Output format — each element shown as ``[ref] [role] name``::
 
-        [searchbox] Search Amazon
-        [link] Sony WH-1000XM5
+        [3] [searchbox] Search Amazon
+        [4] [link] Sony WH-1000XM5
         $348.00
-        [button] Add to Cart
+        [5] [button] Add to Cart
 
-    Use ``role:name`` as selectors::
+    Use the ref number as selector::
 
-        click("button:Add to Cart")
-        fill_field("searchbox:Search Amazon", "laptop")
+        click("5")
+        fill_field("3", "laptop")
 
     Args:
         scope: Narrow to a section by heading or landmark text.  Example:

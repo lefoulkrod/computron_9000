@@ -44,8 +44,7 @@ async def test_drag_with_target_selector(
 
     result = await drag("#handle", target=".drop-zone")
     assert isinstance(result, str)
-    assert "page_changed: no" in result
-    assert "no-change" in result
+    assert "[Page:" in result
     assert page.drag_calls == [
         {"source": source_locator, "target": target_locator, "offset": None}
     ]
@@ -65,14 +64,13 @@ async def test_drag_with_offset(
         url="https://example.test/drag",
     )
     page.drag_calls = []  # type: ignore[attr-defined]
-    source_locator = page.add_text_locator("Drag me")
+    source_locator = page.add_ref_locator(1)
 
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
-    result = await drag("Drag me", offset=(25, -10))
-    assert "page_changed: no" in result
-    assert "no-change" in result
+    result = await drag("1", offset=(25, -10))
+    assert "[Page:" in result
     assert page.drag_calls == [
         {"source": source_locator, "target": None, "offset": (25.0, -10.0)}
     ]
@@ -126,8 +124,8 @@ async def test_drag_invalid_offset_type(
         body_text="Welcome to the drag playground.",
         url="https://example.test/drag",
     )
-    page.add_text_locator("Drag me")
+    page.add_ref_locator(1)
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
-        await drag("Drag me", offset=("bad", 5))  # type: ignore[arg-type]
+        await drag("1", offset=("bad", 5))  # type: ignore[arg-type]

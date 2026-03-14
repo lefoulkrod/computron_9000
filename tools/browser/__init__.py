@@ -14,7 +14,7 @@ Public API:
 - read_page: Read the current page as clean markdown text for reading
   articles, documentation, or search results.
 - click, fill_field, press_keys, select_option, scroll_page, go_back, drag:
-  Interaction tools that return an ``InteractionResult`` with a page_view.
+  Interaction tools that return a formatted page view string.
 - ask_about_screenshot: Capture the current page and answer a prompt about it.
 - ground_elements_by_text: Locate UI elements via vision model (use descriptive prompts
   with spatial context, colors, and element types for best accuracy).
@@ -27,7 +27,6 @@ from .core import Browser, close_browser, get_browser
 from .core.exceptions import BrowserToolError
 from .core.page_view import PageView
 from .interactions import (
-    InteractionResult,
     click,
     click_at,
     drag,
@@ -38,14 +37,13 @@ from .interactions import (
     press_keys,
     scroll_page,
 )
-from .javascript import JavaScriptResult, execute_javascript
+from .javascript import execute_javascript
 from .page import open_url
 from .read_content import read_page
-from .save_content import SaveContentResult, save_page_content
+from .save_content import save_page_content
 from .select import select_option
 from .snapshot_tool import browse_page
 from .vision import (
-    GroundingResult,
     ask_about_screenshot,
     click_element,
     ground_elements_by_text,
@@ -55,11 +53,7 @@ from .vision import (
 __all__ = [
     "Browser",
     "BrowserToolError",
-    "GroundingResult",
-    "InteractionResult",
-    "JavaScriptResult",
     "PageView",
-    "SaveContentResult",
     "ask_about_screenshot",
     "browse_page",
     "click",

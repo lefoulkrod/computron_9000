@@ -47,8 +47,8 @@ class LLMOptions(BaseModel):
     max_iterations: int | None = None
     persist_thinking: bool | None = None
 
-    def to_ollama_options(self) -> dict[str, Any]:
-        """Build an ollama options dict containing only explicitly set values."""
+    def to_options(self) -> dict[str, Any]:
+        """Build a provider options dict containing only explicitly set values."""
         mapping: dict[str, Any] = {
             "num_ctx": self.num_ctx,
             "num_predict": self.num_predict,

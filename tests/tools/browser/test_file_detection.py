@@ -297,9 +297,6 @@ class TestOpenUrlFileDetection:
         )
 
         result = BrowserInteractionResult(
-            navigation=True,
-            page_changed=True,
-            reason="browser-navigation",
             navigation_response=None,
             download=download_info,
         )
@@ -329,9 +326,6 @@ class TestOpenUrlFileDetection:
         from tools.browser.core.page_view import PageView
 
         result = BrowserInteractionResult(
-            navigation=True,
-            page_changed=True,
-            reason="browser-navigation",
             navigation_response=None,
             download=None,
         )
@@ -347,6 +341,8 @@ class TestOpenUrlFileDetection:
 
         monkeypatch.setattr("tools.browser.events.get_browser", _get_browser)
         monkeypatch.setattr("tools.browser.page.browser_core.get_browser", _get_browser)
+        # _format_result calls get_browser from interactions module
+        monkeypatch.setattr("tools.browser.interactions.get_browser", _get_browser)
 
         async def _mock_build(view: object, response: object) -> PageView:
             return PageView(
@@ -358,7 +354,7 @@ class TestOpenUrlFileDetection:
                 truncated=False,
             )
 
-        monkeypatch.setattr("tools.browser.page.build_page_view", _mock_build)
+        monkeypatch.setattr("tools.browser.interactions.build_page_view", _mock_build)
 
         from tools.browser.page import open_url
 
@@ -370,19 +366,19 @@ class TestOpenUrlFileDetection:
 
 
 # ---------------------------------------------------------------------------
-# _interact_and_snapshot file detection
+# _format_result file detection
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestInteractAndSnapshotFileDetection:
-    """Tests for interaction tools detecting downloads."""
+class TestFormatResultFileDetection:
+    """Tests for _format_result detecting downloads."""
 
     @pytest.mark.asyncio
-    async def test_interact_returns_download(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """_interact_and_snapshot returns download message string when detected."""
+    async def test_format_result_returns_download(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_format_result returns download message string when detected."""
         from tools.browser.core.browser import BrowserInteractionResult
-        from tools.browser.interactions import _interact_and_snapshot
+        from tools.browser.interactions import _format_result
 
         download_info = DownloadInfo(
             host_path="/host/doc.pdf",
@@ -393,41 +389,27 @@ class TestInteractAndSnapshotFileDetection:
         )
 
         result = BrowserInteractionResult(
-            navigation=True,
-            page_changed=True,
-            reason="browser-navigation",
             navigation_response=None,
             download=download_info,
         )
 
-        mock_browser = AsyncMock()
-        mock_browser.perform_interaction = AsyncMock(return_value=result)
-
-        output = await _interact_and_snapshot(
-            mock_browser, AsyncMock(),
-        )
+        output = await _format_result(result)
 
         assert isinstance(output, str)
         assert "doc.pdf" in output
         assert "/home/computron/doc.pdf" in output
 
     @pytest.mark.asyncio
-    async def test_interact_normal_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """_interact_and_snapshot returns formatted string when no download."""
+    async def test_format_result_normal_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_format_result returns formatted string when no download."""
         from tools.browser.core.browser import BrowserInteractionResult
         from tools.browser.core.page_view import PageView
-        from tools.browser.interactions import _interact_and_snapshot
+        from tools.browser.interactions import _format_result
 
         result = BrowserInteractionResult(
-            navigation=False,
-            page_changed=True,
-            reason="dom-mutation",
             navigation_response=None,
             download=None,
         )
-
-        mock_browser = AsyncMock()
-        mock_browser.perform_interaction = AsyncMock(return_value=result)
 
         async def _mock_build(response: object) -> PageView:
             return PageView(
@@ -441,9 +423,7 @@ class TestInteractAndSnapshotFileDetection:
 
         monkeypatch.setattr("tools.browser.interactions._build_snapshot", _mock_build)
 
-        output = await _interact_and_snapshot(
-            mock_browser, AsyncMock(),
-        )
+        output = await _format_result(result)
 
         assert isinstance(output, str)
         assert "Test" in output

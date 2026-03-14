@@ -52,8 +52,6 @@ async def test_scroll_page_delegates(
 
     result = await scroll_page("down")
     assert isinstance(result, str)
-    assert "page_changed: yes" in result
-    assert "scroll" in result
     assert "[Page:" in result
     assert "Viewport:" in result
     assert settle_tracker["count"] == 1

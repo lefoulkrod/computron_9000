@@ -12,7 +12,7 @@ from typing import AsyncIterator
 import pytest
 from pydantic import BaseModel
 
-from agents.ollama.sdk.events import AssistantResponse, AssistantResponseData, ToolCallPayload
+from sdk.events import AssistantResponse, AssistantResponseData, ToolCallPayload
 from server.aiohttp_app import create_app
 
 pytestmark = [pytest.mark.unit]

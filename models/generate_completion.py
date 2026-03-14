@@ -1,14 +1,12 @@
-"""Completion generation utilities for Ollama LLM.
+"""Completion generation utilities.
 
-Provides async function to generate completions using Ollama AsyncClient.
+Provides async function to generate completions using the configured LLM provider.
 """
 
 import logging
 from typing import Any
 
-from ollama import AsyncClient
-
-from config import load_config
+from sdk.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -37,20 +35,24 @@ async def generate_completion(
         RuntimeError: If the LLM call fails.
     """
     try:
-        cfg = load_config()
-        client = AsyncClient(host=cfg.llm.host) if getattr(cfg, "llm", None) and cfg.llm.host else AsyncClient()
-        response = await client.generate(
+        provider = get_provider()
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system or "Generate a response based on the provided prompt."},
+            {"role": "user", "content": prompt},
+        ]
+        response = await provider.chat(
             model=model,
-            prompt=prompt,  # prompt_to_send,
-            system=system or "Generate a response based on the provided prompt.",
+            messages=messages,
             options=options if options is not None else {},
             think=think,
         )
-        logger.debug("Generated response: %s", response.response)
-        logger.debug("Thinking: %s", response.thinking)
+        content = response.message.content or ""
+        thinking = response.message.thinking
+        logger.debug("Generated response: %s", content)
+        logger.debug("Thinking: %s", thinking)
     except Exception as e:
-        logger.exception("Error in Ollama AsyncClient.generate")
+        logger.exception("Error generating completion via provider")
         msg: str = f"Failed to generate completion: {e}"
         raise RuntimeError(msg) from e
     else:
-        return response.response, response.thinking
+        return content, thinking

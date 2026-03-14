@@ -29,18 +29,14 @@ async def test_press_and_hold_basic(
         body_text="Press and hold to verify",
         url="https://example.test/challenge",
     )
-    page.add_role_locator(
-        "button",
-        name="Press and hold to verify",
-        tag="button",
-    )
+    page.add_ref_locator(1, tag="button")
     patch_interactions_browser(page)
     monkeypatch.setattr(
         "tools.browser.interactions.human_press_and_hold",
         _human_press_and_hold_passthrough,
     )
 
-    result = await press_and_hold("button:Press and hold to verify", duration_ms=3000)
+    result = await press_and_hold("1", duration_ms=3000)
     assert isinstance(result, str)
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
@@ -74,7 +70,7 @@ async def test_press_and_hold_about_blank(
     )
 
     with pytest.raises(BrowserToolError, match="Navigate"):
-        await press_and_hold("button:Hold Me")
+        await press_and_hold("1")
 
 
 @pytest.mark.unit
@@ -96,7 +92,7 @@ async def test_press_and_hold_not_found(
     )
 
     with pytest.raises(BrowserToolError):
-        await press_and_hold("button:Does Not Exist")
+        await press_and_hold("99")
 
 
 @pytest.mark.unit
@@ -117,7 +113,7 @@ async def test_press_and_hold_duration_clamped(
         body_text="Hold button",
         url="https://example.test/challenge",
     )
-    page.add_role_locator("button", name="Hold Me", tag="button")
+    page.add_ref_locator(1, tag="button")
     patch_interactions_browser(page)
     monkeypatch.setattr(
         "tools.browser.interactions.human_press_and_hold",
@@ -125,13 +121,13 @@ async def test_press_and_hold_duration_clamped(
     )
 
     # Below minimum: should clamp to 500
-    await press_and_hold("button:Hold Me", duration_ms=100)
+    await press_and_hold("1", duration_ms=100)
     assert captured_durations[-1] == 500
 
     # Above maximum: should clamp to 10000
-    await press_and_hold("button:Hold Me", duration_ms=99999)
+    await press_and_hold("1", duration_ms=99999)
     assert captured_durations[-1] == 10000
 
     # Within range: should pass through
-    await press_and_hold("button:Hold Me", duration_ms=5000)
+    await press_and_hold("1", duration_ms=5000)
     assert captured_durations[-1] == 5000

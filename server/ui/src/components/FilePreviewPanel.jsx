@@ -1,17 +1,73 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from './FilePreviewPanel.module.css';
 import ChevronIcon from './icons/ChevronIcon.jsx';
+import LockIcon from './icons/LockIcon.jsx';
 
 function decodeText(b64) {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     return new TextDecoder().decode(bytes);
 }
 
+function FilePreviewOverlay({ iframeSrc, text, isHtml, isMarkdown, filename, path, onClose }) {
+    const handleKey = useCallback((e) => {
+        if (e.key === 'Escape') onClose();
+    }, [onClose]);
+
+    useEffect(() => {
+        document.addEventListener('keydown', handleKey);
+        return () => document.removeEventListener('keydown', handleKey);
+    }, [handleKey]);
+
+    const displayUrl = path || filename;
+
+    return createPortal(
+        <div className={styles.overlay} onClick={onClose}>
+            <div className={styles.overlayPanel} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.overlayHeader}>
+                    <div className={styles.overlayUrlBar}>
+                        <LockIcon size={12} className={styles.overlayLockIcon} />
+                        <span className={styles.overlayUrl} title={displayUrl}>
+                            {displayUrl}
+                        </span>
+                    </div>
+                    <button
+                        className={styles.overlayCloseBtn}
+                        onClick={onClose}
+                        aria-label="Close overlay"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div className={styles.overlayContent}>
+                    {isHtml ? (
+                        <iframe
+                            className={styles.overlayFrame}
+                            src={iframeSrc}
+                            title={filename}
+                        />
+                    ) : text == null ? (
+                        <div className={styles.statusText}>Loading...</div>
+                    ) : isMarkdown ? (
+                        <div className={styles.markdownContent}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+                        </div>
+                    ) : (
+                        <pre className={styles.plainText}>{text}</pre>
+                    )}
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
 export default function FilePreviewPanel({ item, onClose }) {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [fetchedText, setFetchedText] = useState(null);
+    const [overlayOpen, setOverlayOpen] = useState(false);
     const { filename, content_type, content, path } = item;
 
     // Reset local state when a different item is loaded
@@ -19,6 +75,7 @@ export default function FilePreviewPanel({ item, onClose }) {
     useEffect(() => {
         setIsCollapsed(false);
         setFetchedText(null);
+        setOverlayOpen(false);
     }, [itemKey]);
 
     const text = useMemo(() => {
@@ -69,6 +126,14 @@ export default function FilePreviewPanel({ item, onClose }) {
                 </div>
                 <div className={styles.headerRight}>
                     <button
+                        className={styles.expandBtn}
+                        onClick={(e) => { e.stopPropagation(); setOverlayOpen(true); }}
+                        aria-label="Open fullscreen"
+                        title="Open fullscreen"
+                    >
+                        ⛶
+                    </button>
+                    <button
                         className={styles.collapseBtn}
                         aria-label={isCollapsed ? 'Expand' : 'Collapse'}
                     >
@@ -102,6 +167,18 @@ export default function FilePreviewPanel({ item, onClose }) {
                         <pre className={styles.plainText}>{text}</pre>
                     )}
                 </div>
+            )}
+
+            {overlayOpen && (
+                <FilePreviewOverlay
+                    iframeSrc={iframeSrc}
+                    text={text}
+                    isHtml={isHtml}
+                    isMarkdown={isMarkdown}
+                    filename={filename}
+                    path={path}
+                    onClose={() => setOverlayOpen(false)}
+                />
             )}
         </div>
     );

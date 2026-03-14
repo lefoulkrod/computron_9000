@@ -44,7 +44,7 @@ async def _emit_screenshot(page: Page) -> None:
     This is the single code path for all screenshot emission.  Uses JPEG at
     reduced quality for fast encoding and small payloads.
     """
-    from agents.ollama.sdk.events import (
+    from sdk.events import (
         AssistantResponse,
         BrowserScreenshotPayload,
         publish_event,
@@ -65,7 +65,6 @@ async def _emit_screenshot(page: Page) -> None:
         title=title,
         screenshot=screenshot_base64,
     )))
-    logger.debug("Emitted screenshot for URL: %s", url)
 
 
 async def emit_screenshot(page: Page) -> None:
@@ -210,8 +209,8 @@ async def flush_progressive_screenshot() -> None:
 def emit_screenshot_after[F: Callable[..., Any]](func: F) -> F:
     """Decorator that emits a browser screenshot after the wrapped tool runs.
 
-    Wraps browser tool functions that return ``InteractionResult`` or
-    ``PageView``.  After the tool completes, captures a screenshot via
+    Wraps browser tool functions that return a page view string.
+    After the tool completes, captures a screenshot via
     ``_emit_screenshot`` and publishes it to the UI.  The screenshot is NOT
     included in the tool's return value to avoid wasting context tokens.
 
