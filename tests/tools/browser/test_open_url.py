@@ -35,6 +35,7 @@ async def test_open_url_returns_page_view(monkeypatch: pytest.MonkeyPatch) -> No
         return fake_browser
 
     monkeypatch.setattr("tools.browser.core.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
     monkeypatch.setattr("tools.browser.events.get_browser", _no_snapshot_get_browser)
 
     result = await open_url("https://example.com")
@@ -57,6 +58,7 @@ async def test_open_url_viewport_info(monkeypatch: pytest.MonkeyPatch) -> None:
         return fake_browser
 
     monkeypatch.setattr("tools.browser.core.get_browser", fake_get_browser)
+    monkeypatch.setattr("tools.browser.interactions.get_browser", fake_get_browser)
     monkeypatch.setattr("tools.browser.events.get_browser", _no_snapshot_get_browser)
 
     result = await open_url("https://example.com")

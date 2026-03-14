@@ -3,9 +3,10 @@ import { useState, useRef, useCallback } from 'react';
 /**
  * Build the request body for /api/chat including model options.
  */
-function _buildRequestBody(message, fileData, modelSettings, sessionId) {
+function _buildRequestBody(message, fileData, modelSettings, sessionId, agent) {
     const body = { message: message || '(uploaded file)' };
     if (sessionId) body.session_id = sessionId;
+    if (agent) body.agent = agent;
     if (fileData) {
         body.data = [fileData];
     }
@@ -82,12 +83,12 @@ export default function useStreamingChat(callbacks) {
     const abortControllerRef = useRef(null);
     const sessionIdRef = useRef(crypto.randomUUID());
 
-    const sendMessage = useCallback(async (message, fileData, modelSettings) => {
+    const sendMessage = useCallback(async (message, fileData, modelSettings, agent) => {
         if (!message && !fileData) return;
 
         // If already streaming, send as a nudge (fire-and-forget)
         if (isStreamingRef.current) {
-            const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current);
+            const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current, agent);
             fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -116,7 +117,7 @@ export default function useStreamingChat(callbacks) {
             { id: placeholderId, role: 'assistant', placeholder: true, tempId: placeholderId },
         ]);
 
-        const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current);
+        const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current, agent);
 
         try {
             const controller = new AbortController();

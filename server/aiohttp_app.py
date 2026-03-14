@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aiohttp import web
-from ollama import AsyncClient
 from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -24,13 +23,27 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from aiohttp.web_request import Request
     from aiohttp.web_response import Response, StreamResponse
 
-from agents import handle_user_message, reset_message_history
-from agents.ollama.sdk.turn import is_turn_active, queue_nudge, request_stop
+import asyncio
+
+from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history
+from sdk.providers import get_provider
+from sdk.loop import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
 from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
+from tools.skills._extractor import skill_extraction_loop
+from tools.skills._registry import (
+    delete_skill as _delete_skill,
+    list_skills as _list_skills,
+    toggle_skill as _toggle_skill,
+)
+from tools.conversations._store import (
+    delete_conversation as _delete_conversation,
+    list_conversations as _list_conversations,
+    load_conversation as _load_conversation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +70,7 @@ class ChatRequest(BaseModel):
     data: list[Attachment] | None = None
     options: LLMOptions | None = None
     session_id: str | None = None
+    agent: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +108,7 @@ async def cors_and_error_middleware(
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from agents.ollama.sdk.events import AssistantResponse
+    from sdk.events import AssistantResponse
 
 
 async def stream_events(
@@ -168,7 +182,10 @@ async def chat_handler(request: Request) -> StreamResponse:
         ]
     return await stream_events(
         request,
-        handle_user_message(user_query, data_objs, options=payload.options, session_id=payload.session_id),
+        handle_user_message(
+            user_query, data_objs, options=payload.options,
+            session_id=payload.session_id, agent=payload.agent,
+        ),
     )
 
 
@@ -237,16 +254,17 @@ async def delete_custom_tool_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
+async def list_agents_handler(_request: Request) -> Response:
+    """Return the list of available agent IDs."""
+    return web.json_response({"agents": AVAILABLE_AGENTS, "default": "computron"})
+
+
 async def list_models_handler(_request: Request) -> Response:
-    """Return available Ollama models and the configured default."""
-    cfg = load_config()
-    host = cfg.llm.host or None
-    client = AsyncClient(host=host) if host else AsyncClient()
-    response = await client.list()
-    models = [m.model for m in response.models if m.model is not None]
+    """Return available models from the provider."""
+    provider = get_provider()
+    models = await provider.list_models()
     return web.json_response({
         "models": models,
-        "default": cfg.settings.default_model,
     })
 
 
@@ -265,6 +283,83 @@ async def delete_memory_handler(request: Request) -> Response:
     result = await forget_memory(key)
     if result.get("status") == "not_found":
         return web.json_response({"error": f"Memory key '{key}' not found"}, status=404)
+    return web.Response(status=204)
+
+
+async def list_skills_handler(_request: Request) -> Response:
+    """Return all skill definitions as JSON."""
+    skills = _list_skills(active_only=False)
+    data = [
+        {
+            "id": s.id,
+            "name": s.name,
+            "description": s.description,
+            "agent_scope": s.agent_scope,
+            "category": s.category,
+            "confidence": s.confidence,
+            "usage_count": s.usage_count,
+            "success_count": s.success_count,
+            "failure_count": s.failure_count,
+            "active": s.active,
+            "steps": len(s.steps),
+            "created_at": s.created_at,
+            "last_used_at": s.last_used_at,
+        }
+        for s in skills
+    ]
+    return web.json_response(data)
+
+
+async def delete_skill_handler(request: Request) -> Response:
+    """Delete a skill by name."""
+    name = request.match_info["name"]
+    found = _delete_skill(name)
+    if not found:
+        return web.json_response({"error": f"Skill '{name}' not found"}, status=404)
+    return web.Response(status=204)
+
+
+async def patch_skill_handler(request: Request) -> Response:
+    """Toggle a skill's active state."""
+    name = request.match_info["name"]
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+    active = body.get("active")
+    if active is None:
+        return web.json_response({"error": "Missing 'active' field"}, status=400)
+    found = _toggle_skill(name, active=bool(active))
+    if not found:
+        return web.json_response({"error": f"Skill '{name}' not found"}, status=404)
+    return web.Response(status=204)
+
+
+async def list_conversations_handler(request: Request) -> Response:
+    """Return conversation index entries (paginated)."""
+    limit = int(request.query.get("limit", "50"))
+    offset = int(request.query.get("offset", "0"))
+    outcome = request.query.get("outcome")
+    entries = _list_conversations(limit=limit, offset=offset, outcome=outcome)
+    data = [e.model_dump() for e in entries]
+    return web.json_response(data)
+
+
+async def get_conversation_handler(request: Request) -> Response:
+    """Return a full conversation transcript."""
+    conv_id = request.match_info["id"]
+    record = _load_conversation(conv_id)
+    if record is None:
+        return web.json_response({"error": "Conversation not found"}, status=404)
+    return web.json_response(record.model_dump())
+
+
+async def delete_conversation_handler(request: Request) -> Response:
+    """Delete a conversation by ID."""
+    conv_id = request.match_info["id"]
+    found = _delete_conversation(conv_id)
+    if not found:
+        return web.json_response({"error": "Conversation not found"}, status=404)
     return web.Response(status=204)
 
 
@@ -301,12 +396,39 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("POST", "/api/chat", chat_handler)
     app.router.add_route("POST", "/api/chat/stop", stop_handler)
     app.router.add_route("DELETE", "/api/chat/history", delete_history_handler)
+    app.router.add_route("GET", "/api/agents", list_agents_handler)
     app.router.add_route("GET", "/api/models", list_models_handler)
     app.router.add_route("GET", "/api/custom-tools", list_custom_tools_handler)
     app.router.add_route("DELETE", "/api/custom-tools/{name}", delete_custom_tool_handler)
     app.router.add_route("GET", "/api/memory", list_memory_handler)
     app.router.add_route("DELETE", "/api/memory/{key}", delete_memory_handler)
     app.router.add_route("POST", "/api/memory/{key}/hidden", set_memory_hidden_handler)
+
+    # Skills API
+    app.router.add_route("GET", "/api/skills", list_skills_handler)
+    app.router.add_route("DELETE", "/api/skills/{name}", delete_skill_handler)
+    app.router.add_route("PATCH", "/api/skills/{name}", patch_skill_handler)
+
+    # Conversations API
+    app.router.add_route("GET", "/api/conversations", list_conversations_handler)
+    app.router.add_route("GET", "/api/conversations/{id}", get_conversation_handler)
+    app.router.add_route("DELETE", "/api/conversations/{id}", delete_conversation_handler)
+
+    # Start background skill extraction loop
+    async def _start_extraction(app: web.Application) -> None:
+        app["_skill_extraction_task"] = asyncio.create_task(skill_extraction_loop())
+
+    async def _stop_extraction(app: web.Application) -> None:
+        task = app.get("_skill_extraction_task")
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    app.on_startup.append(_start_extraction)
+    app.on_cleanup.append(_stop_extraction)
 
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.

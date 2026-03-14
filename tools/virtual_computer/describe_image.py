@@ -11,7 +11,6 @@ from typing import cast
 from ollama import AsyncClient, Image
 
 from config import load_config
-from models.model_configs import get_model_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +69,19 @@ async def describe_image(
 
     encoded = base64.b64encode(raw).decode("ascii")
 
-    model = get_model_by_name("vision")
+    if cfg.vision is None:
+        return "Error: Vision model configuration missing."
+    vision = cfg.vision
     host = cfg.llm.host if getattr(cfg, "llm", None) else None
     client = AsyncClient(host=host) if host else AsyncClient()
 
     try:
         response = await client.generate(
-            model=model.model,
+            model=vision.model,
             prompt=prompt,
-            options=model.options,
+            options=vision.options,
             images=[Image(value=encoded)],
-            think=model.think,
+            think=vision.think,
         )
     except Exception as exc:
         logger.exception("Vision model failed for image %s", path)

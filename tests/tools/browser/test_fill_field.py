@@ -39,31 +39,29 @@ async def test_fill_field_by_css(
 
     result = await fill_field(".search-box", "chips")
     assert isinstance(result, str)
-    assert "page_changed: no" in result
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_fill_field_by_visible_text(
+async def test_fill_field_by_ref(
     monkeypatch: pytest.MonkeyPatch,
     patch_interactions_browser,
     settle_tracker,
 ) -> None:
-    """Falls back to exact visible text to locate the input field."""
+    """Locates the input field by ref number."""
     page = StubPage(
         title="Initial",
         body_text="Before fill",
         url="https://example.test/form",
     )
-    page.add_text_locator("Email", tag="input")
+    page.add_ref_locator(1, tag="input")
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
-    result = await fill_field("Email", "user@example.com")
-    assert "page_changed: no" in result
+    result = await fill_field("1", "user@example.com")
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
 

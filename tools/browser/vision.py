@@ -7,10 +7,7 @@ import json
 import logging
 import os
 import re
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    pass  # formerly imported InteractionResult
+from typing import Any, cast
 
 from ollama import AsyncClient, Image
 from playwright.async_api import Error as PlaywrightError
@@ -18,7 +15,6 @@ from playwright.async_api import Page
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from config import load_config
-from models.model_configs import get_model_by_name
 from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
@@ -104,7 +100,7 @@ async def ask_about_screenshot(
     Args:
         prompt: Specific question about what you see on the page.
         mode: ``"full_page"`` (default), ``"viewport"``, or ``"selector"``.
-        selector: Required when ``mode="selector"`` — ``role:name`` of the
+        selector: Required when ``mode="selector"`` — ref number of the
             element to capture.
 
     Returns:
@@ -246,7 +242,7 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
     encoded_image = _encode_image(screenshot_bytes)
 
     client, model = _make_vision_client(tool_name=_GROUNDING_TOOL_NAME)
-    prompt = _render_prompt(clean_text, width_px, height_px)
+    prompt = _render_prompt(clean_text)
     logger.debug("Grounding prompt: %s", prompt)
     try:
         response = await client.generate(
@@ -413,8 +409,6 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
     resolution = await _resolve_locator(
         active_view.frame,
         clean_selector,
-        allow_substring_text=False,
-        require_single_match=True,
         tool_name=_SCREENSHOT_TOOL_NAME,
     )
     if resolution is None:
@@ -426,18 +420,15 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
 
 def _make_vision_client(*, tool_name: str) -> tuple[AsyncClient, Any]:
     """Return a configured AsyncClient and model tuple for the shared vision model."""
-    try:
-        model = get_model_by_name("vision")
-    except Exception as exc:  # pragma: no cover - configuration guard
-        logger.exception("Vision model configuration missing for tool %s", tool_name)
-        msg = "Vision model configuration missing."
-        raise BrowserToolError(msg, tool=tool_name) from exc
-
     config = load_config()
+    if config.vision is None:
+        msg = "Vision model configuration missing."
+        raise BrowserToolError(msg, tool=tool_name)
+
     host = getattr(getattr(config, "llm", None), "host", None)
     client = AsyncClient(host=host) if host else AsyncClient()
 
-    return client, model
+    return client, config.vision
 
 
 def _encode_image(image_bytes: bytes) -> str:
@@ -446,10 +437,10 @@ def _encode_image(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
 
-def _render_prompt(visible_text: str, width: int, height: int) -> str:
-    """Build the grounding prompt with JSON-compliant quoting and viewport dimensions."""
+def _render_prompt(visible_text: str) -> str:
+    """Build the grounding prompt with JSON-compliant quoting."""
     quoted = json.dumps(visible_text)
-    return _PROMPT_TEMPLATE.format(text_json=quoted, width=width, height=height)
+    return _PROMPT_TEMPLATE.format(text_json=quoted)
 
 
 async def click_element(description: str) -> str:
@@ -465,13 +456,13 @@ async def click_element(description: str) -> str:
             ``ground_elements_by_text``.
 
     Returns:
-        InteractionResult with snapshot after the click.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If no element is found or the click fails.
     """
     from tools.browser.core.human import human_click_at
-    from tools.browser.interactions import _interact_and_snapshot
+    from tools.browser.interactions import _format_result
 
     results = await ground_elements_by_text(description)
     if not results:
@@ -484,10 +475,8 @@ async def click_element(description: str) -> str:
     browser, view = await get_active_view("click_element")
 
     try:
-        return await _interact_and_snapshot(
-            browser,
-            lambda: human_click_at(view.frame, *best.bbox),
-        )
+        result = await browser.perform_interaction(lambda: human_click_at(view.frame, *best.bbox))
+        return await _format_result(result)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover
@@ -512,13 +501,13 @@ async def press_and_hold_element(
             Defaults to 3000 (3 seconds). Range: 500-10000.
 
     Returns:
-        InteractionResult with snapshot after the hold is released.
+        Updated page snapshot string after the hold is released.
 
     Raises:
         BrowserToolError: If no element is found or the hold fails.
     """
     from tools.browser.core.human import human_press_and_hold_at
-    from tools.browser.interactions import _interact_and_snapshot
+    from tools.browser.interactions import _format_result
 
     results = await ground_elements_by_text(description)
     if not results:
@@ -532,10 +521,10 @@ async def press_and_hold_element(
     browser, view = await get_active_view("press_and_hold_element")
 
     try:
-        return await _interact_and_snapshot(
-            browser,
+        result = await browser.perform_interaction(
             lambda: human_press_and_hold_at(view.frame, *best.bbox, duration_ms=clamped),
         )
+        return await _format_result(result)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover
@@ -546,7 +535,6 @@ async def press_and_hold_element(
 
 
 __all__ = [
-    "GroundingResult",
     "ask_about_screenshot",
     "click_element",
     "ground_elements_by_text",

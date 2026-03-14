@@ -1,44 +1,11 @@
-models:
-  - name: glm-4.7-flash:q8_0
-    model: glm-4.7-flash:q8_0
-    think: true
-    options:
-      num_ctx: 60000
-  - name: gpt
-    model: gpt-oss:120b
-    think: true
-    options:
-      num_ctx: 60000
-  - name: handoff_agent
-    model: gpt-oss:120b
-    think: false
-    options:
-      num_ctx: 128000
-  - name: coder_architect
-    model: gpt-oss:120b
-    think: true
-    options:
-      num_ctx: 128000
-      reasoning_effort: high
-  - name: coder_developer
-    model: gpt-oss:120b
-    think: true
-    options:
-      num_ctx: 128000
-      reasoning_effort: high
-  - name: vision
-    model: qwen3.5:35b-a3b
-    options:
-      num_ctx: 60000
 settings:
   home_dir: /home/larry/.computron_9000
-  default_model: glm-4.7-flash:q8_0
 virtual_computer:
   container_name: computron_virtual_computer
-  container_user: computron 
+  container_user: computron
   home_dir: /home/larry/.computron_9000/container_home
   container_working_dir: /home/computron
-  
+
 tools:
   web:
     search_google:
@@ -49,8 +16,6 @@ tools:
     channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
     human:
       pointer:
-        move_steps: 12
-        offset_px: 4.0
         hover_min_ms: 90
         hover_max_ms: 180
         click_hold_min_ms: 35
@@ -75,7 +40,30 @@ agents:
   file_system:
     think: false
 
+vision:
+  model: qwen3.5:35b-a3b
+  think: true
+  options:
+    num_ctx: 60000
+
+summary:
+  model: qwen3:8b
+  think: false
+  options:
+    num_ctx: 60000
+    temperature: 0.3
+    top_k: 20
+
+skills:
+  enabled: true
+  extraction_interval_seconds: 300
+  extraction_model: qwen3:8b
+  min_confidence: 0.15
+  decay_days: 90
+  max_skills: 200
+  single_conversation_extraction: true
+
 # LLM settings. If LLM_HOST env var is set and non-blank, it overrides this value.
 # Otherwise, this YAML value is used as the default.
 llm:
-  host: http://127.0.0.1:11434
+  provider: ollama

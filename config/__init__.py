@@ -15,7 +15,6 @@ class Settings(BaseModel):
     """Application settings."""
 
     home_dir: str
-    default_model: str
 
     @field_validator("home_dir")
     @classmethod
@@ -24,32 +23,31 @@ class Settings(BaseModel):
         return str(Path(v).expanduser())
 
 
-class ModelConfig(BaseModel):
-    """Configuration for a single model."""
+class _ModelOptions(BaseModel):
+    """Shared base for config sections that specify a model with options."""
 
-    name: str
     model: str
-    # Make options optional in YAML (missing or null) and normalize to an empty dict
     options: dict[str, Any] = Field(default_factory=dict)
     think: bool = False
 
     @field_validator("options", mode="before")
     @classmethod
     def _normalize_options(cls, v: object) -> dict[str, Any]:
-        """Normalize ``options`` allowing missing or null values.
-
-        Args:
-            v: Incoming value from YAML (may be None, dict, or missing).
-
-        Returns:
-            A dictionary of options (empty if unspecified).
-        """
+        """Normalize ``options`` allowing missing or null values."""
         if v is None:
             return {}
         if isinstance(v, dict):
             return v
         msg = "options must be a mapping if provided"
         raise TypeError(msg)
+
+
+class VisionConfig(_ModelOptions):
+    """Configuration for the vision model used by browser and virtual computer tools."""
+
+
+class SummaryConfig(_ModelOptions):
+    """Configuration for the summarization model used for context compaction."""
 
 
 class SearchGoogleConfig(BaseModel):
@@ -77,8 +75,6 @@ class HumanTypingConfig(BaseModel):
 class HumanPointerConfig(BaseModel):
     """Pointer movement simulation configuration."""
 
-    move_steps: int = 10
-    offset_px: float = 3.0
     hover_min_ms: int = 80
     hover_max_ms: int = 160
     click_hold_min_ms: int = 25
@@ -105,22 +101,10 @@ class BrowserToolsConfig(BaseModel):
 class BrowserWaitConfig(BaseModel):
     """Configuration controlling browser wait/settle timeouts."""
 
-    # Wait up to this many ms for network idle after any interaction.
-    # Pages with persistent HTTP connections (SSE, long-polling) will
-    # hit this timeout and move on.  If the network is already idle
-    # the check resolves instantly.
     network_idle_timeout_ms: int = 3000
-    # Cap for waiting on web font loading after network settles.
-    # Fonts are already downloaded by networkidle; this covers the
-    # parsing/layout time.  Resolves instantly when no fonts are loading.
     font_timeout_ms: int = 1000
-    # Cap for DOM mutation observer before giving up (ms).
-    # Also observes open shadow roots so web component updates are caught.
     dom_mutation_timeout_ms: int = 1500
-    # Window of quiet DOM mutations required before settling (ms)
     dom_quiet_window_ms: int = 150
-    # Cap for waiting on short CSS animations (modal slide-ins, fades)
-    # after DOM settles.  Only animations ≤ 1s are waited on.
     animation_timeout_ms: int = 1000
 
 
@@ -176,56 +160,36 @@ class VirtualComputerConfig(BaseModel):
 class LLMConfig(BaseModel):
     """Configuration for Large Language Model connection."""
 
+    provider: str = "ollama"
     host: str | None = None
+    api_key: str | None = Field(default_factory=lambda: os.getenv("LLM_API_KEY"))
+    base_url: str | None = None
+
+
+class SkillsConfig(BaseModel):
+    """Configuration for the skills learning system."""
+
+    enabled: bool = True
+    extraction_interval_seconds: int = 300
+    extraction_model: str = "qwen3:8b"
+    min_confidence: float = 0.15
+    decay_days: int = 90
+    max_skills: int = 200
+    single_conversation_extraction: bool = True
 
 
 class AppConfig(BaseModel):
     """Application level configuration."""
 
-    models: list[ModelConfig]
     settings: Settings
     virtual_computer: VirtualComputerConfig
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
-
-    @field_validator("models")
-    @classmethod
-    def validate_models_not_empty(cls, v: list[ModelConfig]) -> list[ModelConfig]:
-        """Ensure at least one model is configured."""
-        if not v:
-            msg = "At least one model must be configured"
-            raise ValueError(msg)
-        return v
-
-    def get_model_by_name(self, name: str) -> ModelConfig | None:
-        """Get a model configuration by name.
-
-        Args:
-            name: The model name to search for.
-
-        Returns:
-            The model configuration if found, None otherwise.
-
-        """
-        return next((model for model in self.models if model.name == name), None)
-
-    def get_default_model(self) -> ModelConfig:
-        """Get the default model configuration.
-
-        Returns:
-            The default model configuration.
-
-        Raises:
-            ValueError: If the default model is not found.
-
-        """
-        model = self.get_model_by_name(self.settings.default_model)
-        if model is None:
-            msg = f"Default model '{self.settings.default_model}' not found in configured models"
-            raise ValueError(msg)
-        return model
+    vision: VisionConfig | None = None
+    summary: SummaryConfig | None = None
+    skills: SkillsConfig = Field(default_factory=SkillsConfig)
 
 
 logger = logging.getLogger(__name__)
@@ -254,20 +218,13 @@ def load_config() -> AppConfig:
         with path.open(encoding="utf-8") as f:
             data: dict[str, Any] = yaml.safe_load(f)
 
-        # Convert models to list of ModelConfig if present
-        if "models" in data:
-            data["models"] = [ModelConfig(**m) for m in data["models"]]
-
         config = AppConfig(**data)
         # Apply environment variable precedence: if LLM_HOST is set and non-blank,
         # override any YAML-provided llm.host value.
         env_host = os.getenv("LLM_HOST")
         if env_host is not None and env_host.strip() != "":
             config.llm.host = env_host
-        logger.info(
-            "Successfully loaded configuration with %d models",
-            len(config.models),
-        )
+        logger.info("Successfully loaded configuration")
 
     except FileNotFoundError as exc:
         msg = f"Config file not found: {path}"

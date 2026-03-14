@@ -136,7 +136,6 @@ class StubLocator:
         dom_tag: str | None = None,
         dom_nth: int = 1,
         dom_path: str | None = None,
-        role_name: str | None = None,
     ) -> None:
         self._page = page
         self.key = key
@@ -157,7 +156,6 @@ class StubLocator:
         self._dom_tag = dom_tag or tag
         self._dom_nth = dom_nth
         self._dom_path = dom_path or f"{dom_parent_selector} > {self._dom_tag}:nth-of-type({dom_nth})"
-        self._role_name = role_name
 
     async def count(self) -> int:
         if not self._present:
@@ -243,8 +241,7 @@ class StubLocator:
         return ""
 
     async def evaluate(self, script: str) -> Any:
-        # Support the accessible-name probe used by _resolve_locator
-        return self._text_value or self._role_name or ""
+        return self._text_value or ""
 
     async def wait_for(self, timeout: int | None = None) -> None:
         return None
@@ -274,9 +271,8 @@ class StubPage:
         self._title = title
         self._body_text = body_text
         self.url = url
-        self._text_locators: dict[str, StubLocator] = {}
         self._css_locators: dict[str, StubLocator] = {}
-        self._role_locators: dict[str, list[StubLocator]] = {}
+        self._ref_locators: dict[str, StubLocator] = {}
         self._all_locators: set[StubLocator] = set()
         self._nav_event = asyncio.Event()
         self.main_frame = object()
@@ -320,9 +316,17 @@ class StubPage:
         if script in self._evaluate_overrides:
             result = self._evaluate_overrides[script]
             return result() if callable(result) else result
-        # Handle annotated snapshot JS DOM walker (called with params dict)
-        if isinstance(script, str) and "budget" in script and "scopeQuery" in script and arg is not None:
-            return {"content": self._body_text, "truncated": False}
+        # Handle structured snapshot JS DOM walker (called with params dict)
+        if isinstance(script, str) and "fullPage" in script and "nodes" in script and arg is not None:
+            return {
+                "nodes": [{"type": "text", "depth": 0, "text": self._body_text, "viewport": "in"}],
+                "viewport": {
+                    "width": self._scroll_state.get("viewport_width", 1280),
+                    "height": self._scroll_state.get("viewport_height", 800),
+                    "scroll_top": self._scroll_state.get("scroll_top", 0),
+                    "document_height": self._scroll_state.get("document_height", 2000),
+                },
+            }
         # Handle viewport info query (used in snapshot building)
         if isinstance(script, str) and "scroll_top" in script and ("scrollY" in script or "scrollHeight" in script):
             # Return viewport data structure
@@ -336,23 +340,6 @@ class StubPage:
         if isinstance(script, str) and ("querySelectorAll" in script or "innerText" in script) and "viewportHeight" in script:
             return self._body_text
         return None
-
-    def get_by_role(self, role: str, *, name: str | None = None, exact: bool = True) -> StubLocator:
-        key = f"role={role}[name={name}]" if name else f"role={role}"
-        for loc in self._role_locators.get(role, []):
-            if name is None:
-                return loc
-            if exact and loc._role_name == name:
-                return loc
-            if not exact and loc._role_name and name in loc._role_name:
-                return loc
-        return StubLocator(self, key=key, present=False)
-
-    def get_by_text(self, text: str, *, exact: bool = True) -> StubLocator:
-        return self._text_locators.get(text, StubLocator(self, key=f"text={text}", present=False))
-
-    def get_by_alt_text(self, text: str, *, exact: bool = True) -> StubLocator:
-        return StubLocator(self, key=f"alt={text}", present=False)
 
     def locator(self, selector: str) -> StubLocator:
         if selector == "html":
@@ -398,59 +385,13 @@ class StubPage:
         if selector in self._css_locators:
             return self._css_locators[selector]
 
-        if selector.startswith("text="):
-            raw = selector[len("text=") :]
-            text = raw.strip('"')
-            for key, loc in self._text_locators.items():
-                if key == text:
-                    return loc
-
-        for loc in self._text_locators.values():
-            if getattr(loc, "_dom_path", None) == selector:
-                return loc
+        if selector in self._ref_locators:
+            return self._ref_locators[selector]
 
         return StubLocator(self, key=selector, present=False)
 
     async def wait_for_function(self, script: str, timeout: int | None = None) -> None:
         return None
-
-    def add_text_locator(
-        self,
-        text: str,
-        *,
-        tag: str = "div",
-        navigates_to: str | None = None,
-        navigation_title: str | None = None,
-        navigation_body: str | None = None,
-        bounding_box: dict[str, float] | None = None,
-        frame: Any | None = None,
-        text_value: str | None = None,
-        dom_parent_selector: str = "body",
-        dom_path: str | None = None,
-        dom_nth: int = 1,
-    ) -> StubLocator:
-        text_payload = text if text_value is None else text_value
-        dom_tag = tag
-        resolved_dom_path = dom_path or f"{dom_parent_selector} > {dom_tag}:nth-of-type({dom_nth})"
-        locator = StubLocator(
-            self,
-            key=f"text={text}",
-            present=True,
-            tag=tag,
-            navigates_to=navigates_to,
-            navigation_title=navigation_title,
-            navigation_body=navigation_body,
-            bounding_box=bounding_box,
-            frame=frame,
-            text_value=text_payload,
-            dom_parent_selector=dom_parent_selector,
-            dom_tag=dom_tag,
-            dom_nth=dom_nth,
-            dom_path=resolved_dom_path,
-        )
-        self._text_locators[text] = locator
-        self._all_locators.add(locator)
-        return locator
 
     def add_css_locator(
         self,
@@ -491,36 +432,39 @@ class StubPage:
         self._all_locators.add(locator)
         return locator
 
-    def add_role_locator(
+    def add_ref_locator(
         self,
-        role: str,
+        ref: int | str,
         *,
-        name: str | None = None,
         tag: str = "div",
         input_type: str | None = None,
         navigates_to: str | None = None,
         navigation_title: str | None = None,
         navigation_body: str | None = None,
+        on_click: Callable[["StubPage", "StubLocator"], Awaitable[None] | None] | None = None,
         bounding_box: dict[str, float] | None = None,
+        frame: Any | None = None,
         text_value: str | None = None,
         texts: Sequence[str] | None = None,
     ) -> StubLocator:
-        key = f"role={role}[name={name}]" if name else f"role={role}"
+        """Register a locator accessible by ``[data-ct-ref="N"]`` selector."""
+        selector = f'[data-ct-ref="{ref}"]'
         locator = StubLocator(
             self,
-            key=key,
+            key=selector,
             present=True,
             tag=tag,
             input_type=input_type,
             navigates_to=navigates_to,
             navigation_title=navigation_title,
             navigation_body=navigation_body,
+            on_click=on_click,
             bounding_box=bounding_box,
+            frame=frame,
             text_value=text_value,
             texts=texts,
-            role_name=name,
         )
-        self._role_locators.setdefault(role, []).append(locator)
+        self._ref_locators[selector] = locator
         self._all_locators.add(locator)
         return locator
 
@@ -605,7 +549,7 @@ class StubFrame:
     """Minimal Frame stub for testing iframe-aware tools.
 
     Mirrors the subset of Frame API used by tools: evaluate, locator,
-    get_by_role, get_by_text, title, url, content, is_detached.
+    title, url, content, is_detached.
     Does NOT have mouse, keyboard, screenshot, or viewport_size.
     """
 
@@ -637,9 +581,17 @@ class StubFrame:
         # Support the child_count check used by _detect_dominant_frame
         if "document.body" in script and "children.length" in script:
             return self._child_count
-        # Handle annotated snapshot JS DOM walker
-        if isinstance(script, str) and "budget" in script and "scopeQuery" in script and arg is not None:
-            return {"content": self._body_text, "truncated": False}
+        # Handle structured snapshot JS DOM walker
+        if isinstance(script, str) and "fullPage" in script and "nodes" in script and arg is not None:
+            return {
+                "nodes": [{"type": "text", "depth": 0, "text": self._body_text, "viewport": "in"}],
+                "viewport": {
+                    "width": 1200,
+                    "height": 700,
+                    "scroll_top": 0,
+                    "document_height": 1500,
+                },
+            }
         # Handle viewport info query
         if isinstance(script, str) and "scroll_top" in script:
             return {
@@ -658,16 +610,6 @@ class StubFrame:
 
     async def content(self) -> str:
         return f"<html><body>{self._body_text}</body></html>"
-
-    def get_by_role(self, role: str, *, name: str | None = None, exact: bool = True) -> StubLocator:
-        key = f"role={role}[name={name}]" if name else f"role={role}"
-        return StubLocator(StubPage(), key=key, present=False)
-
-    def get_by_text(self, text: str, *, exact: bool = True) -> StubLocator:
-        return StubLocator(StubPage(), key=f"text={text}", present=False)
-
-    def get_by_alt_text(self, text: str, *, exact: bool = True) -> StubLocator:
-        return StubLocator(StubPage(), key=f"alt={text}", present=False)
 
     def locator(self, selector: str) -> StubLocator:
         return StubLocator(StubPage(), key=selector, present=False)
@@ -718,14 +660,11 @@ class StubBrowser:
         self.clear_active_frame()
         await self._page.goto(url)
         return BrowserInteractionResult(
-            navigation=True,
-            page_changed=True,
-            reason="browser-navigation",
             navigation_response=None,
             download=None,
         )
 
-    async def navigate_back(self) -> "BrowserInteractionResult":
+    async def navigate_back(self) -> Any:
         from tools.browser.core.browser import BrowserInteractionResult
 
         async def _back() -> None:
@@ -736,13 +675,9 @@ class StubBrowser:
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
-    ) -> "BrowserInteractionResult":
+    ) -> Any:
         """Match Browser.perform return contract for tests."""
-        initial_url = getattr(self._page, "url", "")
         await action()
-        final_url = getattr(self._page, "url", "")
-        navigation = bool(initial_url and final_url and initial_url != final_url)
-        reason = "browser-navigation" if navigation else "no-change"
 
         from config import load_config
         from tools.browser.core.browser import BrowserInteractionResult
@@ -752,9 +687,6 @@ class StubBrowser:
         await settle_helper(self._page, waits=waits)
 
         return BrowserInteractionResult(
-            navigation=navigation,
-            page_changed=navigation,
-            reason=reason,
             navigation_response=None,
         )
 

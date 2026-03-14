@@ -1,4 +1,4 @@
-"""Tests that ANTI_BOT_INIT_SCRIPT contains the expected stealth patches.
+"""Tests that stealth init scripts contain the expected patches.
 
 These are marker tests — they verify that each critical section exists in the
 script string so accidental deletions or regressions are caught early.  They
@@ -6,108 +6,201 @@ do NOT execute the JavaScript; runtime behavior is validated via live browser
 testing against bot-detection sites.
 """
 
+import inspect
+
 import pytest
 
-from tools.browser.core.browser import ANTI_BOT_INIT_SCRIPT, Browser
+from tools.browser.core.browser import (
+    ANTI_BOT_INIT_SCRIPT,
+    ANTI_BOT_INIT_SCRIPT_CHROME,
+    Browser,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SCRIPT = ANTI_BOT_INIT_SCRIPT
+_CHROMIUM_SCRIPT = ANTI_BOT_INIT_SCRIPT
+_CHROME_SCRIPT = ANTI_BOT_INIT_SCRIPT_CHROME
 
 
-def _contains(needle: str) -> bool:
-    return needle in _SCRIPT
+def _chromium_contains(needle: str) -> bool:
+    return needle in _CHROMIUM_SCRIPT
+
+
+def _chrome_contains(needle: str) -> bool:
+    return needle in _CHROME_SCRIPT
 
 
 # ---------------------------------------------------------------------------
-# Patch existence markers
+# Webdriver patch — present in BOTH scripts (Playwright always sets it)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestWebdriverPatch:
-    """Patch #1 — navigator.webdriver deep detection defeat."""
+    """navigator.webdriver deep detection defeat — both scripts."""
 
-    def test_deletes_prototype_property(self):
-        assert _contains("delete Navigator.prototype.webdriver")
+    @pytest.mark.parametrize(
+        "script", [_CHROMIUM_SCRIPT, _CHROME_SCRIPT], ids=["chromium", "chrome"]
+    )
+    def test_deletes_prototype_property(self, script):
+        assert "delete Navigator.prototype.webdriver" in script
 
-    def test_returns_false_not_undefined(self):
-        assert _contains("() => false")
+    @pytest.mark.parametrize(
+        "script", [_CHROMIUM_SCRIPT, _CHROME_SCRIPT], ids=["chromium", "chrome"]
+    )
+    def test_returns_false_not_undefined(self, script):
+        assert "() => false" in script
 
-    def test_defines_on_navigator_instance(self):
-        assert _contains("Object.defineProperty(navigator, 'webdriver'")
+    @pytest.mark.parametrize(
+        "script", [_CHROMIUM_SCRIPT, _CHROME_SCRIPT], ids=["chromium", "chrome"]
+    )
+    def test_defines_on_navigator_instance(self, script):
+        assert "Object.defineProperty(navigator, 'webdriver'" in script
 
 
-@pytest.mark.unit
-class TestPluginArrayPatch:
-    """Patch #5 — PluginArray instanceof fix via Proxy."""
-
-    def test_uses_proxy(self):
-        assert _contains("new Proxy(_real")
-
-    def test_has_item_method(self):
-        assert _contains("function item(i)")
-
-    def test_has_named_item_method(self):
-        assert _contains("function namedItem(n)")
-
-    def test_has_symbol_iterator(self):
-        assert _contains("Symbol.iterator")
+# ---------------------------------------------------------------------------
+# Patches ONLY in bundled Chromium script — real Chrome handles these natively
+# and patching them would replace real functions with detectable spoofs.
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestWebGLPatch:
-    """Patch #6 — WebGL vendor/renderer for both WebGL1 and WebGL2."""
+class TestWindowDimensionsPatch:
+    """Window dimensions — Chromium only (real Chrome's OS window manager handles this)."""
 
-    def test_patches_webgl1(self):
-        assert _contains("_patchWebGL(WebGLRenderingContext.prototype)")
+    def test_present_in_chromium(self):
+        assert _chromium_contains("outerWidth")
+        assert _chromium_contains("outerHeight")
 
-    def test_patches_webgl2(self):
-        assert _contains("_patchWebGL(WebGL2RenderingContext.prototype)")
-
-    def test_makes_native(self):
-        # The patched getParameter should be wrapped with _makeNative
-        assert _contains("_makeNative(function getParameter")
+    def test_absent_from_chrome_script(self):
+        assert not _chrome_contains("outerWidth")
+        assert not _chrome_contains("outerHeight")
 
 
 @pytest.mark.unit
 class TestPermissionsApiPatch:
-    """Patch #7 — Permissions API returns 'prompt' via real PermissionStatus."""
+    """Permissions API — Chromium only (headed Chrome has correct notification state)."""
 
     def test_returns_prompt(self):
-        assert _contains("'prompt'")
+        assert _chromium_contains("'prompt'")
 
     def test_uses_real_permission_status(self):
-        # Must query a real permission to get a genuine PermissionStatus object
-        assert _contains("geolocation")
+        assert _chromium_contains("geolocation")
 
     def test_includes_onchange(self):
-        assert _contains("onchange")
+        assert _chromium_contains("onchange")
+
+    def test_absent_from_chrome_script(self):
+        assert not _chrome_contains("permissions.query")
+
+
+@pytest.mark.unit
+class TestPluginArrayPatch:
+    """PluginArray instanceof fix via Proxy — Chromium only."""
+
+    def test_uses_proxy(self):
+        assert _chromium_contains("new Proxy(_real")
+
+    def test_has_item_method(self):
+        assert _chromium_contains("function item(i)")
+
+    def test_has_named_item_method(self):
+        assert _chromium_contains("function namedItem(n)")
+
+    def test_has_symbol_iterator(self):
+        assert _chromium_contains("Symbol.iterator")
+
+    def test_absent_from_chrome_script(self):
+        assert not _chrome_contains("new Proxy(_real")
+
+
+@pytest.mark.unit
+class TestWebGLPatch:
+    """WebGL vendor/renderer — Chromium only."""
+
+    def test_patches_webgl1(self):
+        assert _chromium_contains("_patchWebGL(WebGLRenderingContext.prototype)")
+
+    def test_patches_webgl2(self):
+        assert _chromium_contains("_patchWebGL(WebGL2RenderingContext.prototype)")
+
+    def test_makes_native(self):
+        assert _chromium_contains("_makeNative(function getParameter")
+
+    def test_absent_from_chrome_script(self):
+        assert not _chrome_contains("_patchWebGL")
+
+
+@pytest.mark.unit
+class TestUserAgentDataPatch:
+    """userAgentData Chrome branding — Chromium only."""
+
+    def test_adds_google_chrome_brand(self):
+        assert _chromium_contains("Google Chrome")
+
+    def test_absent_from_chrome_script(self):
+        assert not _chrome_contains("Google Chrome")
 
 
 @pytest.mark.unit
 class TestMissingApiStubs:
-    """Patch #10 — CreepJS missing API stubs."""
+    """CreepJS missing API stubs — Chromium only."""
 
     def test_navigator_connection(self):
-        assert _contains("navigator.connection") and _contains("effectiveType: '4g'")
+        assert _chromium_contains("navigator.connection") and _chromium_contains(
+            "effectiveType: '4g'"
+        )
 
     def test_navigator_share(self):
-        assert _contains("function share()")
+        assert _chromium_contains("function share()")
 
     def test_navigator_can_share(self):
-        assert _contains("function canShare()")
+        assert _chromium_contains("function canShare()")
 
     def test_content_index_api(self):
-        assert _contains("ServiceWorkerRegistration.prototype.index")
+        assert _chromium_contains("ServiceWorkerRegistration.prototype.index")
 
     def test_navigator_contacts(self):
-        assert _contains("navigator.contacts") and _contains("function select()")
+        assert _chromium_contains("navigator.contacts") and _chromium_contains(
+            "function select()"
+        )
 
     def test_window_controls_overlay(self):
-        assert _contains("navigator.windowControlsOverlay") and _contains("getTitlebarAreaRect")
+        assert _chromium_contains(
+            "navigator.windowControlsOverlay"
+        ) and _chromium_contains("getTitlebarAreaRect")
+
+    def test_stubs_absent_from_chrome_script(self):
+        """Real Chrome has these APIs natively — stubs must not be injected."""
+        assert not _chrome_contains("effectiveType: '4g'")
+        assert not _chrome_contains("ServiceWorkerRegistration.prototype.index")
+
+
+# ---------------------------------------------------------------------------
+# Chrome script should be minimal — only _makeNative + webdriver patch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestChromeScriptMinimal:
+    """The Chrome channel script should contain nothing beyond the webdriver patch."""
+
+    def test_has_make_native_helper(self):
+        assert _chrome_contains("_makeNative")
+
+    def test_has_webdriver_patch(self):
+        assert _chrome_contains("delete Navigator.prototype.webdriver")
+
+    def test_no_languages_override(self):
+        assert not _chrome_contains("navigator, 'languages'")
+
+    def test_no_platform_override(self):
+        assert not _chrome_contains("navigator, 'platform'")
+
+    def test_no_chrome_runtime_shim(self):
+        assert not _chrome_contains("window.chrome.runtime")
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +214,26 @@ class TestChromiumArgs:
 
     def test_webrtc_ip_leak_prevention(self):
         """The WebRTC flag must be in Browser.start's default chromium_args."""
-        import inspect
-
         source = inspect.getsource(Browser.start)
         assert "--webrtc-ip-handling-policy=disable_non_proxied_udp" in source
+
+
+# ---------------------------------------------------------------------------
+# Channel-aware launch configuration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestChannelAwareLaunch:
+    """Verify Browser.start adjusts settings based on browser channel."""
+
+    def test_user_agent_not_forced_for_chrome_channel(self):
+        """When a channel is specified, user_agent should not be in launch_kwargs."""
+        source = inspect.getsource(Browser.start)
+        assert "if not _use_channel" in source
+        assert 'launch_kwargs["user_agent"]' in source
+
+    def test_swiftshader_only_for_bundled_chromium(self):
+        """--enable-unsafe-swiftshader is only needed for bundled Chromium."""
+        source = inspect.getsource(Browser.start)
+        assert "--enable-unsafe-swiftshader" in source

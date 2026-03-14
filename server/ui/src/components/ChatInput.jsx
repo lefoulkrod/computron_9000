@@ -4,8 +4,15 @@ import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
 
+const AGENTS = [
+    { id: 'computron', label: 'Computron' },
+    { id: 'browser', label: 'Browser' },
+    { id: 'coder', label: 'Coder' },
+];
+
 function ChatInput({ onSend, onStop, isStreaming, attachment }) {
     const [message, setMessage] = useState('');
+    const [selectedAgent, setSelectedAgent] = useState('computron');
     const [fileData, setFileData] = useState(null);
     const [filePreview, setFilePreview] = useState(null);
     const [fileName, setFileName] = useState(null);
@@ -38,7 +45,7 @@ function ChatInput({ onSend, onStop, isStreaming, attachment }) {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!message.trim() && !fileData) return;
-        onSend(message.trim(), fileData);
+        onSend(message.trim(), fileData, selectedAgent);
         setMessage('');
         clearAttachment();
     };
@@ -127,6 +134,20 @@ function ChatInput({ onSend, onStop, isStreaming, attachment }) {
                     />
                 </div>
                 <div className={styles.inputAreaButtons}>
+                    <div className={styles.agentSelector}>
+                        {AGENTS.map((a) => (
+                            <button
+                                key={a.id}
+                                type="button"
+                                className={`${styles.agentButton} ${selectedAgent === a.id ? styles.agentButtonActive : ''}`}
+                                onClick={() => setSelectedAgent(a.id)}
+                                title={`Use ${a.label} agent`}
+                            >
+                                {a.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className={styles.actionButtons}>
                     <button
                         type="button"
                         id="fileButton"
@@ -166,6 +187,7 @@ function ChatInput({ onSend, onStop, isStreaming, attachment }) {
                             <StopIcon />
                         </button>
                     )}
+                    </div>
                 </div>
             </form>
         </div>

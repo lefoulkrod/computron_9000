@@ -15,8 +15,12 @@ import mimetypes
 import uuid
 from pathlib import Path
 
-from agents.ollama.sdk.events import AssistantResponse, publish_event
-from agents.ollama.sdk.events.models import FileOutputPayload, GenerationPreviewPayload
+from sdk.events import (
+    AssistantResponse,
+    FileOutputPayload,
+    GenerationPreviewPayload,
+    publish_event,
+)
 from config import load_config
 
 logger = logging.getLogger(__name__)

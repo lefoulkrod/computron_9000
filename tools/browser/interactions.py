@@ -1,9 +1,8 @@
 """Browser interaction tools.
 
-This module exposes helpers for interacting with the active browser page. The
-``click`` function clicks an element specified by visible text or a selector and
-Each tool returns an ``InteractionResult`` with a ``page_view``
-showing the updated page content and interactive elements.
+This module exposes helpers for interacting with the active browser page.
+Each tool returns a formatted page view string showing the updated page
+content and interactive elements.
 """
 
 from __future__ import annotations
@@ -11,20 +10,18 @@ from __future__ import annotations
 import contextvars
 import logging
 import math
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from playwright.async_api import Error as PlaywrightError
-from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from playwright.async_api import Response
 
 from config import load_config
 from tools.browser.core import get_active_view, get_browser
-from tools.browser.core._formatting import format_interaction_result, format_page_view
+from tools.browser.core._formatting import format_page_view
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
-from tools.browser.core.browser import Browser
+from tools.browser.core.browser import BrowserInteractionResult
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.human import (
     human_click,
@@ -39,8 +36,6 @@ from tools.browser.core.human import (
 from tools.browser.core.page_view import PageView, build_page_view
 from tools.browser.events import emit_screenshot_after
 
-Reason = Literal["browser-navigation", "history-navigation", "dom-mutation", "no-change", "scroll"]
-
 # ---------------------------------------------------------------------------
 # Scroll budget tracking
 # ---------------------------------------------------------------------------
@@ -52,26 +47,75 @@ _scroll_count_var: contextvars.ContextVar[int] = contextvars.ContextVar("_scroll
 _scroll_url_var: contextvars.ContextVar[str] = contextvars.ContextVar("_scroll_url", default="")
 
 
-class InteractionResult(BaseModel):
-    """Public result returned by interaction tools.
-
-    Attributes:
-        page_view: Page view with ``[role] name`` markers for interactive
-            elements.  The agent can pull selectors directly from the content
-            (e.g. ``button:Add to Cart``) for use in ``click()``,
-            ``fill_field()``, etc.
-        page_changed: True if navigation or DOM mutation was detected.
-        reason: Classification of the change (browser-navigation, dom-mutation, no-change, etc.).
-        extras: Additional tool-specific metadata (scroll position, etc.).
-    """
-
-    page_view: PageView | None = None
-    page_changed: bool
-    reason: Reason
-    extras: dict[str, Any] = Field(default_factory=dict)
-
-
 logger = logging.getLogger(__name__)
+
+
+def _log_browser_panel(
+    result: BrowserInteractionResult,
+    *,
+    snapshot: PageView | None,
+    tool_name: str = "",
+    resolution: _LocatorResolution | None = None,
+) -> None:
+    """Emit a single Rich panel summarising a browser tool call."""
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    table = Table(show_header=False, expand=False, padding=(0, 1))
+    table.add_column("Phase", style="bold")
+    table.add_column("Duration", justify="right")
+    table.add_column("Status")
+
+    if result.action_ms > 0:
+        table.add_row("interaction", f"{result.action_ms:.0f}ms", "")
+
+    settle = result.settle_timings
+    if settle is not None:
+        for name, duration_ms, timed_out in settle.phases:
+            status = "[yellow]timeout[/yellow]" if timed_out else "[green]ok[/green]"
+            table.add_row(name, f"{duration_ms:.0f}ms", status)
+        if settle.error:
+            table.add_row("error", "", f"[red]{settle.error}[/red]")
+
+    if snapshot is not None and snapshot.snapshot_nodes > 0:
+        total_snap = snapshot.snapshot_js_ms + snapshot.snapshot_py_ms
+        table.add_row("snapshot", f"{total_snap:.0f}ms", f"{snapshot.snapshot_nodes} nodes")
+
+    settle_total = settle.total_ms if settle else 0
+    snap_total = (snapshot.snapshot_js_ms + snapshot.snapshot_py_ms) if snapshot else 0
+    total_ms = result.action_ms + settle_total + snap_total
+
+    url = snapshot.url if snapshot else ""
+    display_url = url if len(url) <= 80 else url[:77] + "…"
+
+    # Title: "click  ref=7 → [data-ct-ref='7']" or just "browser"
+    title_parts: list[str] = [f"[bold cyan]{tool_name or 'browser'}[/bold cyan]"]
+    if resolution:
+        title_parts.append(f"ref={resolution.query}")
+    title = "  ".join(title_parts)
+
+    # Subtitle: total + url + optional frame/download info
+    parts: list[str] = [f"total=[bold]{total_ms:.0f}ms[/bold]"]
+    if display_url:
+        parts.append(display_url)
+    if result.frame_transition:
+        parts.append(f"frame: {result.frame_transition}")
+    if result.download:
+        parts.append(f"download: {result.download.filename}")
+    subtitle = "  ".join(parts)
+
+    console = Console(stderr=True)
+    console.print(Panel(
+        table,
+        title=title,
+        subtitle=subtitle,
+        border_style="dim",
+        expand=False,
+    ))
 
 
 async def _build_snapshot(
@@ -83,15 +127,16 @@ async def _build_snapshot(
     return await build_page_view(view, response)
 
 
-async def _interact_and_snapshot(
-    browser: Browser,
-    action: Callable[[], Awaitable[Any]],
+async def _format_result(
+    result: BrowserInteractionResult,
+    *,
+    tool_name: str = "",
+    resolution: _LocatorResolution | None = None,
 ) -> str:
-    """Perform interaction + snapshot in one call."""
-    result = await browser.perform_interaction(action)
-
+    """Format a BrowserInteractionResult as a page view string."""
     if result.download is not None:
-        pv_str = format_page_view(
+        _log_browser_panel(result, snapshot=None, tool_name=tool_name, resolution=resolution)
+        return format_page_view(
             title="File Download",
             url="",
             status_code=200,
@@ -100,14 +145,9 @@ async def _interact_and_snapshot(
             truncated=False,
             downloaded_file=result.download,
         )
-        return format_interaction_result(
-            reason=result.reason,
-            page_changed=result.page_changed,
-            page_view_str=pv_str,
-        )
-
     snapshot = await _build_snapshot(result.navigation_response)
-    pv_str = format_page_view(
+    _log_browser_panel(result, snapshot=snapshot, tool_name=tool_name, resolution=resolution)
+    return format_page_view(
         title=snapshot.title,
         url=snapshot.url,
         status_code=snapshot.status_code,
@@ -115,27 +155,60 @@ async def _interact_and_snapshot(
         content=snapshot.content,
         truncated=snapshot.truncated,
     )
-    return format_interaction_result(
-        reason=result.reason,
-        page_changed=result.page_changed,
-        page_view_str=pv_str,
-    )
+
+
+def _validate_bbox(
+    x1: float | int, y1: float | int, x2: float | int, y2: float | int,
+    *, tool_name: str,
+) -> tuple[float, float, float, float]:
+    """Validate and convert bounding box coordinates."""
+    try:
+        coords = (float(x1), float(y1), float(x2), float(y2))
+    except (TypeError, ValueError) as exc:
+        raise BrowserToolError("All coordinates must be numeric", tool=tool_name) from exc
+    if not all(math.isfinite(c) for c in coords):
+        raise BrowserToolError("All coordinates must be finite numbers", tool=tool_name)
+    return coords
+
+
+async def _resolve_or_raise(
+    frame: Any,
+    selector: str,
+    *,
+    tool_name: str,
+) -> _LocatorResolution:
+    """Resolve a ref number or selector, raising BrowserToolError on failure."""
+    try:
+        resolution = await _resolve_locator(
+            frame,
+            selector,
+            tool_name=tool_name,
+        )
+    except BrowserToolError:
+        raise
+    except PlaywrightError as exc:
+        logger.exception("Locator resolution failed for %s selector %s", tool_name, selector)
+        msg = f"Failed to locate element for selector '{selector}'."
+        raise BrowserToolError(msg, tool=tool_name) from exc
+    if resolution is None:
+        msg = f"No element found for '{selector}'. Use a ref number from browse_page() output."
+        raise BrowserToolError(msg, tool=tool_name)
+    return resolution
 
 
 @emit_screenshot_after
 async def click(selector: str) -> str:
-    """Click an element by its role:name selector.
+    """Click an element by its ref number from the page view.
 
     Always returns an updated page snapshot.  For AJAX actions (e.g. add-to-cart),
     ``page_changed`` may be False but snapshot content will differ.
 
     Args:
-        selector: Selector in ``role:name`` format from ``browse_page()`` output.
-            Examples: ``"button:Add to Cart"``, ``"link:Sign In"``.
-            For multiple matches, append index: ``"button:Add to Cart[0]"``.
+        selector: Ref number from ``browse_page()`` output.
+            Examples: ``"7"``, ``"12"``.
 
     Returns:
-        InteractionResult with snapshot, page_changed, and reason.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If the element is not found or the click fails.
@@ -148,40 +221,18 @@ async def click(selector: str) -> str:
     browser, view = await get_active_view("click")
 
     try:
-        resolution: _LocatorResolution | None = await _resolve_locator(
-            view.frame,
-            clean_selector,
-            allow_substring_text=False,
-            require_single_match=True,
-            tool_name="click",
-        )
-    except BrowserToolError:
-        raise
-    except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for selector %s", clean_selector)
-        msg = f"Failed to locate element for selector '{clean_selector}'."
-        raise BrowserToolError(msg, tool="click") from exc
-
-    if resolution is None:
-        msg = f"No element found matching text or selector '{clean_selector}'."
-        raise BrowserToolError(msg, tool="click")
-
-    details = {
-        "strategy": resolution.strategy,
-        "query": resolution.query,
-        "selector": resolution.resolved_selector,
-    }
+        resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="click")
+    except BrowserToolError as exc:
+        return str(exc)
 
     try:
-        return await _interact_and_snapshot(
-            browser, lambda: human_click(view.frame, resolution.locator),
-        )
-    except BrowserToolError:
-        raise  # already wrapped
+        result = await browser.perform_interaction(lambda: human_click(view.frame, resolution.locator))
+        return await _format_result(result, tool_name="click", resolution=resolution)
+    except BrowserToolError as exc:
+        return str(exc)
     except PlaywrightError as exc:  # pragma: no cover - final safety net
         logger.exception("Failed to build snapshot after click for selector %s", clean_selector)
-        msg = "Failed to complete click operation"
-        raise BrowserToolError(msg, tool="click", details=details) from exc
+        return "[click] Failed to complete click operation."
 
 
 @emit_screenshot_after
@@ -192,13 +243,13 @@ async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
     for several seconds (e.g. Walmart's press-and-hold verification).
 
     Args:
-        selector: ``role:name`` selector from ``browse_page()`` output.
-            Examples: ``"button:Press and hold to verify"``, ``"button:Hold Me"``.
+        selector: Ref number from ``browse_page()`` output.
+            Examples: ``"7"``, ``"12"``.
         duration_ms: How long to hold the mouse button in milliseconds.
             Defaults to 3000 (3 seconds). Range: 500-10000.
 
     Returns:
-        InteractionResult with snapshot after the hold is released.
+        Updated page snapshot string after the hold is released.
 
     Raises:
         BrowserToolError: If the element is not found or the hold fails.
@@ -211,40 +262,19 @@ async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
 
     browser, view = await get_active_view("press_and_hold")
 
-    try:
-        resolution: _LocatorResolution | None = await _resolve_locator(
-            view.frame,
-            clean_selector,
-            allow_substring_text=False,
-            require_single_match=True,
-            tool_name="press_and_hold",
-        )
-    except BrowserToolError:
-        raise
-    except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for press_and_hold selector %s", clean_selector)
-        raise BrowserToolError(
-            f"Failed to locate element for selector '{clean_selector}'.",
-            tool="press_and_hold",
-        ) from exc
-
-    if resolution is None:
-        raise BrowserToolError(
-            f"No element found matching text or selector '{clean_selector}'.",
-            tool="press_and_hold",
-        )
+    resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="press_and_hold")
 
     details = {
-        "strategy": resolution.strategy,
         "query": resolution.query,
         "selector": resolution.resolved_selector,
         "duration_ms": clamped_duration,
     }
 
     try:
-        return await _interact_and_snapshot(
-            browser, lambda: human_press_and_hold(view.frame, resolution.locator, duration_ms=clamped_duration),
+        result = await browser.perform_interaction(
+            lambda: human_press_and_hold(view.frame, resolution.locator, duration_ms=clamped_duration),
         )
+        return await _format_result(result, tool_name="press_and_hold", resolution=resolution)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -268,12 +298,12 @@ async def drag(
     Provide either ``target`` or ``offset``, not both.
 
     Args:
-        source: ``role:name`` selector for the drag start element.
-        target: Optional ``role:name`` selector for the drop destination.
+        source: Ref number from ``browse_page()`` for the drag start element.
+        target: Optional ref number for the drop destination.
         offset: Optional ``(dx, dy)`` pixel offset from source center.
 
     Returns:
-        InteractionResult with snapshot when page changed.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If elements are not found or the drag fails.
@@ -307,56 +337,20 @@ async def drag(
 
     browser, view = await get_active_view("drag")
 
-    try:
-        source_resolution: _LocatorResolution | None = await _resolve_locator(
-            view.frame,
-            clean_source,
-            allow_substring_text=False,
-            require_single_match=True,
-            tool_name="drag",
-        )
-    except BrowserToolError:
-        raise
-    except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for drag source %s", clean_source)
-        msg = f"Failed to locate element for source '{clean_source}'."
-        raise BrowserToolError(msg, tool="drag") from exc
-
-    if source_resolution is None:
-        msg = f"No element found matching text or selector '{clean_source}'."
-        raise BrowserToolError(msg, tool="drag")
+    source_resolution = await _resolve_or_raise(view.frame, clean_source, tool_name="drag")
 
     target_resolution: _LocatorResolution | None = None
     if clean_target is not None:
-        try:
-            target_resolution = await _resolve_locator(
-                view.frame,
-                clean_target,
-                allow_substring_text=False,
-                require_single_match=True,
-                tool_name="drag",
-            )
-        except BrowserToolError:
-            raise
-        except PlaywrightError as exc:  # pragma: no cover - defensive
-            logger.exception("Locator resolution failed for drag target %s", clean_target)
-            msg = f"Failed to locate element for target '{clean_target}'."
-            raise BrowserToolError(msg, tool="drag") from exc
-
-        if target_resolution is None:
-            msg = f"No element found matching text or selector '{clean_target}'."
-            raise BrowserToolError(msg, tool="drag")
+        target_resolution = await _resolve_or_raise(view.frame, clean_target, tool_name="drag")
 
     details: dict[str, Any] = {
         "source": {
-            "strategy": source_resolution.strategy,
             "selector": source_resolution.resolved_selector,
             "query": source_resolution.query,
         }
     }
     if target_resolution is not None:
         details["target"] = {
-            "strategy": target_resolution.strategy,
             "selector": target_resolution.resolved_selector,
             "query": target_resolution.query,
         }
@@ -380,38 +374,7 @@ async def drag(
         msg = "Playwright error performing drag"
         raise BrowserToolError(msg, tool="drag", details=details) from exc
 
-    if browser_result.download is not None:
-        pv_str = format_page_view(
-            title="File Download",
-            url="",
-            status_code=200,
-            content="",
-            viewport=None,
-            truncated=False,
-            downloaded_file=browser_result.download,
-        )
-        return format_interaction_result(
-            reason=browser_result.reason,
-            page_changed=browser_result.page_changed,
-            page_view_str=pv_str,
-        )
-
-    pv_str = None
-    if browser_result.page_changed:
-        annotated = await _build_snapshot(browser_result.navigation_response)
-        pv_str = format_page_view(
-            title=annotated.title,
-            url=annotated.url,
-            status_code=annotated.status_code,
-            viewport=annotated.viewport,
-            content=annotated.content,
-            truncated=annotated.truncated,
-        )
-    return format_interaction_result(
-        reason=browser_result.reason,
-        page_changed=browser_result.page_changed,
-        page_view_str=pv_str,
-    )
+    return await _format_result(browser_result, tool_name="drag", resolution=source_resolution)
 
 
 @emit_screenshot_after
@@ -422,12 +385,12 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
     with individual characters.  Returns an updated page snapshot.
 
     Args:
-        selector: ``role:name`` selector from ``browse_page()`` output.
-            Examples: ``"textbox:Email"``, ``"searchbox:Search"``.
+        selector: Ref number from ``browse_page()`` output.
+            Examples: ``"7"``, ``"12"``.
         value: The complete text to type (converted to string).
 
     Returns:
-        InteractionResult with snapshot.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If the element is not found or is unsupported.
@@ -442,28 +405,10 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
 
     browser, view = await get_active_view("fill_field")
 
-    try:
-        resolution: _LocatorResolution | None = await _resolve_locator(
-            view.frame,
-            clean_selector,
-            allow_substring_text=False,
-            require_single_match=True,
-            tool_name="fill_field",
-        )
-    except BrowserToolError:
-        raise
-    except PlaywrightError as exc:  # pragma: no cover - defensive
-        logger.exception("Locator resolution failed for fill selector %s", clean_selector)
-        msg = f"Failed to locate element for selector '{clean_selector}'."
-        raise BrowserToolError(msg, tool="fill_field") from exc
-
-    if resolution is None:
-        msg = f"No element found matching text or selector '{clean_selector}'."
-        raise BrowserToolError(msg, tool="fill_field")
+    resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="fill_field")
 
     locator = resolution.locator
     details = {
-        "strategy": resolution.strategy,
         "query": resolution.query,
         "selector": resolution.resolved_selector,
     }
@@ -497,7 +442,8 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
         await human_type(view.frame, locator, text_value, clear_existing=True)
 
     try:
-        return await _interact_and_snapshot(browser, _perform_fill)
+        result = await browser.perform_interaction(_perform_fill)
+        return await _format_result(result, tool_name="fill_field", resolution=resolution)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -518,7 +464,7 @@ async def press_keys(keys: list[str]) -> str:
             ``["ArrowDown"]``, ``["Control+Shift+P"]``.
 
     Returns:
-        InteractionResult with snapshot when page changed.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If keys are invalid or key presses fail.
@@ -529,9 +475,8 @@ async def press_keys(keys: list[str]) -> str:
     browser, view = await get_active_view("press_keys")
 
     try:
-        return await _interact_and_snapshot(
-            browser, lambda: human_press_keys(view.frame, keys),
-        )
+        result = await browser.perform_interaction(lambda: human_press_keys(view.frame, keys))
+        return await _format_result(result, tool_name="press_keys")
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -556,7 +501,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
             a viewport-sized scroll.
 
     Returns:
-        InteractionResult with snapshot and scroll state in extras.
+        Updated page snapshot string with scroll state.
 
     Raises:
         BrowserToolError: If direction is invalid or scroll budget exhausted.
@@ -591,7 +536,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
     _scroll_count_var.set(scroll_count)
 
     try:
-        await browser.perform_interaction(lambda: human_scroll(view.frame, direction=direction, amount=amount))
+        interaction_result = await browser.perform_interaction(lambda: human_scroll(view.frame, direction=direction, amount=amount))
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -600,6 +545,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
 
     # Build snapshot which includes viewport/scroll info
     annotated = await _build_snapshot(None)  # Scroll never produces navigation
+    _log_browser_panel(interaction_result, snapshot=annotated, tool_name="scroll_page")
 
     content = annotated.content
     # Inject warning after threshold
@@ -613,18 +559,13 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
             "---\n"
         )
 
-    pv_str = format_page_view(
+    return format_page_view(
         title=annotated.title,
         url=annotated.url,
         status_code=annotated.status_code,
         viewport=annotated.viewport,
         content=content,
         truncated=annotated.truncated,
-    )
-    return format_interaction_result(
-        reason="scroll",
-        page_changed=True,
-        page_view_str=pv_str,
     )
 
 
@@ -633,12 +574,13 @@ async def go_back() -> str:
     """Navigate back in browser history and return an updated snapshot.
 
     Returns:
-        InteractionResult with snapshot when navigation succeeds.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If back navigation fails or no history available.
     """
-    browser, _ = await get_active_view("go_back")
+    browser, view = await get_active_view("go_back")
+    initial_url = view.url
 
     try:
         browser_result = await browser.navigate_back()
@@ -649,40 +591,12 @@ async def go_back() -> str:
         msg = "Failed to navigate back"
         raise BrowserToolError(msg, tool="go_back") from exc
 
-    if not browser_result.page_changed:
+    page = await browser.current_page()
+    if page.url == initial_url:
         msg = "No previous page available to navigate back to."
         raise BrowserToolError(msg, tool="go_back")
 
-    if browser_result.download is not None:
-        pv_str = format_page_view(
-            title="File Download",
-            url="",
-            status_code=200,
-            content="",
-            viewport=None,
-            truncated=False,
-            downloaded_file=browser_result.download,
-        )
-        return format_interaction_result(
-            reason=browser_result.reason,
-            page_changed=browser_result.page_changed,
-            page_view_str=pv_str,
-        )
-
-    annotated = await _build_snapshot(browser_result.navigation_response)
-    pv_str = format_page_view(
-        title=annotated.title,
-        url=annotated.url,
-        status_code=annotated.status_code,
-        viewport=annotated.viewport,
-        content=annotated.content,
-        truncated=annotated.truncated,
-    )
-    return format_interaction_result(
-        reason=browser_result.reason,
-        page_changed=browser_result.page_changed,
-        page_view_str=pv_str,
-    )
+    return await _format_result(browser_result, tool_name="go_back")
 
 
 @emit_screenshot_after
@@ -701,25 +615,18 @@ async def click_at(
         y2: Bottom edge of the bounding box (CSS pixels).
 
     Returns:
-        InteractionResult with snapshot after the click.
+        Updated page snapshot string.
 
     Raises:
         BrowserToolError: If coordinates are invalid or the click fails.
     """
-    try:
-        fx1, fy1, fx2, fy2 = float(x1), float(y1), float(x2), float(y2)
-    except (TypeError, ValueError) as exc:
-        raise BrowserToolError("All coordinates must be numeric", tool="click_at") from exc
-
-    if not all(math.isfinite(c) for c in (fx1, fy1, fx2, fy2)):
-        raise BrowserToolError("All coordinates must be finite numbers", tool="click_at")
+    fx1, fy1, fx2, fy2 = _validate_bbox(x1, y1, x2, y2, tool_name="click_at")
 
     browser, view = await get_active_view("click_at")
 
     try:
-        return await _interact_and_snapshot(
-            browser, lambda: human_click_at(view.frame, fx1, fy1, fx2, fy2),
-        )
+        result = await browser.perform_interaction(lambda: human_click_at(view.frame, fx1, fy1, fx2, fy2))
+        return await _format_result(result, tool_name="click_at")
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -746,28 +653,22 @@ async def press_and_hold_at(
             Defaults to 3000 (3 seconds). Range: 500-10000.
 
     Returns:
-        InteractionResult with snapshot after the hold is released.
+        Updated page snapshot string after the hold is released.
 
     Raises:
         BrowserToolError: If coordinates are invalid or the hold fails.
     """
-    try:
-        fx1, fy1, fx2, fy2 = float(x1), float(y1), float(x2), float(y2)
-    except (TypeError, ValueError) as exc:
-        raise BrowserToolError("All coordinates must be numeric", tool="press_and_hold_at") from exc
-
-    if not all(math.isfinite(c) for c in (fx1, fy1, fx2, fy2)):
-        raise BrowserToolError("All coordinates must be finite numbers", tool="press_and_hold_at")
+    fx1, fy1, fx2, fy2 = _validate_bbox(x1, y1, x2, y2, tool_name="press_and_hold_at")
 
     clamped_duration = max(500, min(10000, duration_ms))
 
     browser, view = await get_active_view("press_and_hold_at")
 
     try:
-        return await _interact_and_snapshot(
-            browser,
+        result = await browser.perform_interaction(
             lambda: human_press_and_hold_at(view.frame, fx1, fy1, fx2, fy2, duration_ms=clamped_duration),
         )
+        return await _format_result(result, tool_name="press_and_hold_at")
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -778,14 +679,7 @@ async def press_and_hold_at(
         ) from exc
 
 
-def _reset_scroll_budget() -> None:
-    """Reset scroll budget tracking state. Used by tests."""
-    _scroll_count_var.set(0)
-    _scroll_url_var.set("")
-
-
 __all__ = [
-    "InteractionResult",
     "click",
     "click_at",
     "drag",

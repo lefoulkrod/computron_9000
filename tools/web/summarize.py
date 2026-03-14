@@ -8,10 +8,9 @@ import logging
 import pydantic
 
 from config import load_config
-from models import generate_completion, get_default_model
+from models import generate_completion
 
 logger = logging.getLogger(__name__)
-config = load_config()
 
 
 class SectionSummary(pydantic.BaseModel):
@@ -38,7 +37,11 @@ async def _summarize_text_full(text: str) -> str:
         The summarized text.
 
     """
-    model = get_default_model()
+    cfg = load_config()
+    if cfg.summary is None:
+        msg = "No summary model configured. Add a 'summary' section to config.yaml."
+        raise RuntimeError(msg)
+    summary = cfg.summary
     final_prompt_template = (
         "This text is a set of summaries created by summarizing a longer text in sections.\n"
         "Create a single summary from them. /no_think\n{combined_summary}"
@@ -51,10 +54,10 @@ async def _summarize_text_full(text: str) -> str:
             final_prompt = final_prompt_template.format(combined_summary=combined_summary)
             final_response, _ = await generate_completion(
                 prompt=final_prompt,
-                model=model.model,
+                model=summary.model,
                 think=False,
                 system="You are an expert summarizer. Create a concise summary from the provided section summaries.",
-                options=model.options,
+                options=summary.options,
             )
             logger.debug("Final summary response: %s", final_response)
             return final_response
@@ -76,7 +79,11 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
         List of section summaries with indices and positions.
 
     """
-    model = get_default_model()
+    cfg = load_config()
+    if cfg.summary is None:
+        msg = "No summary model configured. Add a 'summary' section to config.yaml."
+        raise RuntimeError(msg)
+    summary = cfg.summary
     part_prompt_template = (
         "The following text is part {part_num} of {total_parts} of a larger document. "
         "Summarize this part as if it is not the whole. /no_think\n{section}"
@@ -109,10 +116,10 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
             )
             response, _ = await generate_completion(
                 prompt=prompt,
-                model=model.model,
+                model=summary.model,
                 think=False,
                 system="You are an expert summarizer. Create a concise summary of the provided text section.",
-                options=model.options,
+                options=summary.options,
             )
             logger.debug("Section summary response: %s", response)
             summaries.append(

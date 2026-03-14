@@ -118,6 +118,7 @@ class _FakeConfig:
         host = "http://fake-host"
 
     llm = _LLM()
+    vision = _FakeModel()
 
 
 class _ScreenshotClient:
@@ -193,7 +194,7 @@ async def test_ask_about_screenshot_success(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
-    monkeypatch.setattr(module, "get_model_by_name", lambda name: fake_model)
+
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
     answer = await ask_about_screenshot("What is in the header?")
@@ -261,7 +262,7 @@ async def test_ask_about_screenshot_selector_mode(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
-    monkeypatch.setattr(module, "get_model_by_name", lambda name: fake_model)
+
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
     answer = await ask_about_screenshot("Describe the hero", mode="selector", selector="#hero")
@@ -333,7 +334,7 @@ async def test_request_grounding_by_text_success(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _GroundingClient)
-    monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
+
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
     result = await ground_elements_by_text("Login")
@@ -396,7 +397,7 @@ async def test_request_grounding_by_text_invalid_json(monkeypatch: pytest.Monkey
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _GroundingDummyClient)
-    monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
+
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
     with pytest.raises(BrowserToolError):
@@ -417,7 +418,7 @@ async def test_grounding_accepts_string_bbox(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _GroundingStringBBoxClient)
-    monkeypatch.setattr(module, "get_model_by_name", lambda name: _FakeModel())
+
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
     result = await ground_elements_by_text("Button")

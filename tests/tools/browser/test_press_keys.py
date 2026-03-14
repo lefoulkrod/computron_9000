@@ -49,9 +49,6 @@ async def test_press_keys_success(
 
     result = await press_keys(["Enter"])
     assert isinstance(result, str)
-    assert "page_changed: no" in result
-    assert "no-change" in result
-    # press_keys always builds a snapshot so the agent sees key-press results
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
 

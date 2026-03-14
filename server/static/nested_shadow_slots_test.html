@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nested Shadow DOM Slots Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background: #f5f5f5;
+    }
+
+    section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #333;
+      border-bottom: 2px solid #e91e63;
+      padding-bottom: 0.5rem;
+    }
+
+    p {
+      color: #555;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Nested Shadow DOM Slots Test</h1>
+  <p>Tests the DOM walker's handling of nested slot delegation — the pattern used by
+    Reddit (shreddit-app), Salesforce Lightning, and other web component frameworks where
+    slots project content through multiple shadow boundaries.</p>
+
+  <!-- 1. Reddit-style nested slot delegation -->
+  <section id="nested-slot-section">
+    <h2>1. Nested Slot Delegation (Reddit Pattern)</h2>
+    <p>An outer custom element wraps an inner custom element. Light DOM children of the
+      outer element are projected through two levels of shadow DOM via slot chaining.</p>
+    <app-shell id="app-shell">
+      <!-- These light DOM children should be visible after traversing two shadow boundaries -->
+      <nav id="app-nav">
+        <a href="#home">Home</a>
+        <a href="#explore">Explore</a>
+      </nav>
+      <div id="app-search">
+        <input type="text" placeholder="Search..." aria-label="Search">
+        <button>Go</button>
+      </div>
+      <main id="app-main">
+        <h3>Main Content</h3>
+        <p>This paragraph is light DOM content projected through nested slots.</p>
+        <a href="#post-1">First Post</a>
+        <a href="#post-2">Second Post</a>
+        <button id="upvote-btn">Upvote</button>
+      </main>
+    </app-shell>
+  </section>
+
+  <!-- 2. 0x0 shadow host with visible shadow content -->
+  <section id="zero-rect-section">
+    <h2>2. Zero-Rect Shadow Host</h2>
+    <p>A custom element with no intrinsic size (display:contents) whose shadow root
+      renders visible interactive elements.</p>
+    <zero-rect-host id="zero-host"></zero-rect-host>
+  </section>
+
+  <!-- 3. Triple-nested slot delegation -->
+  <section id="triple-nested-section">
+    <h2>3. Triple-Nested Slots</h2>
+    <p>Three levels of shadow DOM slot delegation.</p>
+    <level-one id="triple-host">
+      <button id="deep-btn">Deeply Projected Button</button>
+      <a href="#deep-link">Deeply Projected Link</a>
+    </level-one>
+  </section>
+
+  <!-- 4. Named slots across shadow boundaries -->
+  <section id="named-slots-section">
+    <h2>4. Named Slots Across Boundaries</h2>
+    <p>Named slots projected through multiple shadow boundaries.</p>
+    <outer-panel id="named-host">
+      <span slot="header"><button>Header Action</button></span>
+      <span slot="body">
+        <input type="text" placeholder="Enter value" aria-label="Panel input">
+        <a href="#panel-link">Panel Link</a>
+      </span>
+      <span slot="footer"><button>Save</button></span>
+    </outer-panel>
+  </section>
+
+  <!-- 5. Mixed: some slots delegated, some with direct shadow content -->
+  <section id="mixed-slots-section">
+    <h2>5. Mixed Direct and Delegated Content</h2>
+    <p>Shadow DOM with both direct interactive elements and slotted content from light DOM.</p>
+    <mixed-component id="mixed-host">
+      <a href="#slotted" slot="actions">Slotted Link</a>
+      <button slot="actions">Slotted Button</button>
+    </mixed-component>
+  </section>
+
+  <script>
+    // 1. Reddit-style nested slot delegation
+    // Outer: <app-shell> -> shadow -> <app-wrapper> (with <slot> as light child)
+    // Inner: <app-wrapper> -> shadow -> <div><slot></div>
+    class AppWrapper extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <style>
+            .wrapper { display: flex; flex-direction: column; gap: 1rem; }
+          </style>
+          <div class="wrapper">
+            <slot></slot>
+          </div>
+        `;
+      }
+    }
+    customElements.define('app-wrapper', AppWrapper);
+
+    class AppShell extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        // The shadow contains app-wrapper with a <slot> as its light child.
+        // This <slot> will receive app-shell's light children.
+        shadow.innerHTML = `
+          <style>
+            :host { display: block; }
+          </style>
+          <app-wrapper>
+            <slot></slot>
+          </app-wrapper>
+        `;
+      }
+    }
+    customElements.define('app-shell', AppShell);
+
+    // 2. Zero-rect shadow host (display:contents)
+    class ZeroRectHost extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <style>
+            :host { display: contents; }
+            .toolbar { display: flex; gap: 0.5rem; padding: 0.5rem; background: #e3f2fd; border-radius: 4px; }
+            button { padding: 8px 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; }
+            a { padding: 8px 16px; color: #1976d2; }
+          </style>
+          <div class="toolbar">
+            <button>Shadow Action 1</button>
+            <button>Shadow Action 2</button>
+            <a href="#shadow-nav">Shadow Nav Link</a>
+          </div>
+        `;
+      }
+    }
+    customElements.define('zero-rect-host', ZeroRectHost);
+
+    // 3. Triple-nested slot delegation
+    class LevelThree extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <div class="level3"><slot></slot></div>
+        `;
+      }
+    }
+    customElements.define('level-three', LevelThree);
+
+    class LevelTwo extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <level-three><slot></slot></level-three>
+        `;
+      }
+    }
+    customElements.define('level-two', LevelTwo);
+
+    class LevelOne extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <level-two><slot></slot></level-two>
+        `;
+      }
+    }
+    customElements.define('level-one', LevelOne);
+
+    // 4. Named slots across boundaries
+    class InnerPanel extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <style>
+            .panel { border: 1px solid #ccc; border-radius: 4px; overflow: hidden; }
+            .panel-header { background: #f5f5f5; padding: 0.75rem; border-bottom: 1px solid #ccc; }
+            .panel-body { padding: 1rem; }
+            .panel-footer { background: #f5f5f5; padding: 0.75rem; border-top: 1px solid #ccc; text-align: right; }
+          </style>
+          <div class="panel">
+            <div class="panel-header"><slot name="header">Default Header</slot></div>
+            <div class="panel-body"><slot name="body">Default Body</slot></div>
+            <div class="panel-footer"><slot name="footer">Default Footer</slot></div>
+          </div>
+        `;
+      }
+    }
+    customElements.define('inner-panel', InnerPanel);
+
+    class OuterPanel extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        // Re-project named slots through inner-panel
+        shadow.innerHTML = `
+          <inner-panel>
+            <span slot="header"><slot name="header"></slot></span>
+            <span slot="body"><slot name="body"></slot></span>
+            <span slot="footer"><slot name="footer"></slot></span>
+          </inner-panel>
+        `;
+      }
+    }
+    customElements.define('outer-panel', OuterPanel);
+
+    // 5. Mixed direct + delegated content
+    class MixedComponent extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <style>
+            .container { padding: 1rem; background: #fce4ec; border-radius: 4px; }
+            button { padding: 8px 16px; background: #e91e63; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 0.25rem; }
+            .actions { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #f8bbd0; }
+          </style>
+          <div class="container">
+            <button>Direct Shadow Button</button>
+            <input type="text" placeholder="Direct shadow input" aria-label="Shadow input">
+            <div class="actions">
+              <slot name="actions"></slot>
+            </div>
+          </div>
+        `;
+      }
+    }
+    customElements.define('mixed-component', MixedComponent);
+  </script>
+</body>
+
+</html>

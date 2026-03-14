@@ -3,12 +3,12 @@ import styles from './TerminalOutput.module.css';
 import ChevronIcon from './icons/ChevronIcon.jsx';
 
 export default function TerminalPanel({ lines, onClose }) {
-    const bottomRef = useRef(null);
+    const bodyRef = useRef(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        if (!isCollapsed) {
-            bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+        if (!isCollapsed && bodyRef.current) {
+            bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
         }
     }, [lines, isCollapsed]);
 
@@ -40,7 +40,7 @@ export default function TerminalPanel({ lines, onClose }) {
                 </div>
             </div>
             {!isCollapsed && (
-                <div className={styles.body}>
+                <div className={styles.body} ref={bodyRef}>
                     {lines.map((item, i) => {
                         const isRunning = item.status === 'running';
                         const isStreaming = item.status === 'streaming';
@@ -71,7 +71,6 @@ export default function TerminalPanel({ lines, onClose }) {
                             </div>
                         );
                     })}
-                    <div ref={bottomRef} />
                 </div>
             )}
         </div>

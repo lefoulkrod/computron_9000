@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from agents.ollama.sdk.events import AssistantResponse, publish_event
-from agents.ollama.sdk.events.models import ToolCreatedPayload
+from sdk.events import AssistantResponse, ToolCreatedPayload, publish_event
 
 from tools._truncation import truncate_args
 

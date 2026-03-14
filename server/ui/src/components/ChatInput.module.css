@@ -75,8 +75,44 @@
   display: flex;
   gap: 0.4rem;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 0.25rem;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.agentSelector {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.agentButton {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--button);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  line-height: 1.2;
+}
+
+.agentButton:hover {
+  background: var(--button);
+}
+
+.agentButtonActive {
+  background: var(--button);
+  border-color: #7aa2ff;
+  color: #7aa2ff;
+  font-weight: 600;
 }
 
 

@@ -7,8 +7,7 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from agents.ollama.sdk.events import AssistantResponse, publish_event
-from agents.ollama.sdk.events.models import AudioPlaybackPayload
+from sdk.events import AssistantResponse, AudioPlaybackPayload, publish_event
 from config import load_config
 
 logger = logging.getLogger(__name__)

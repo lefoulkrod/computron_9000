@@ -25,4 +25,4 @@ def test_setup_logging_sets_expected_levels() -> None:
     assert logging.getLogger("repls").getEffectiveLevel() == logging.INFO
     assert logging.getLogger("tools").getEffectiveLevel() == logging.WARNING
     assert logging.getLogger("ollama").getEffectiveLevel() == logging.WARNING
-    assert logging.getLogger("agents.ollama").getEffectiveLevel() == logging.DEBUG
+    assert logging.getLogger("agents").getEffectiveLevel() == logging.DEBUG

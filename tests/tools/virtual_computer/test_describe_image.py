@@ -20,6 +20,12 @@ _spec.loader.exec_module(_mod)
 describe_image = _mod.describe_image
 
 
+class _FakeVision:
+    model = "vision-model"
+    options = {}
+    think = False
+
+
 @pytest.fixture()
 def mock_env(tmp_path):
     """Provide a mock config and temp directory for describe_image."""
@@ -27,6 +33,7 @@ def mock_env(tmp_path):
     cfg.virtual_computer.home_dir = str(tmp_path)
     cfg.virtual_computer.container_working_dir = "/home/computron"
     cfg.llm.host = None
+    cfg.vision = _FakeVision()
     with patch.object(_mod, "load_config", return_value=cfg):
         yield cfg, tmp_path
 
@@ -70,15 +77,7 @@ async def test_describe_image_success(mock_env):
     mock_client = AsyncMock()
     mock_client.generate = AsyncMock(return_value=mock_response)
 
-    model = MagicMock()
-    model.model = "vision-model"
-    model.options = {}
-    model.think = False
-
-    with (
-        patch.object(_mod, "get_model_by_name", return_value=model),
-        patch.object(_mod, "AsyncClient", return_value=mock_client),
-    ):
+    with patch.object(_mod, "AsyncClient", return_value=mock_client):
         result = await describe_image("/home/computron/uploads/test.png", "What is in this image?")
         assert result == "A test image showing a cat."
         mock_client.generate.assert_called_once()

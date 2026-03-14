@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -110,8 +111,6 @@ def search_tools(query: str) -> list[CustomToolDefinition]:
     The query is split on whitespace and commas into individual keywords.
     A tool matches if ANY keyword is found in its name, description, or tags.
     """
-    import re
-
     keywords = [k for k in re.split(r"[,\s]+", query.lower()) if k]
     if not keywords:
         return []

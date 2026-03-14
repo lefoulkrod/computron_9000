@@ -13,20 +13,20 @@ async def _human_click_passthrough(page: object, locator: StubLocator) -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_click_by_text(
+async def test_click_by_ref(
     monkeypatch: pytest.MonkeyPatch,
     patch_interactions_browser,
     settle_tracker,
 ) -> None:
-    """Clicking by visible text performs navigation and returns a snapshot."""
+    """Clicking by ref number performs navigation and returns a snapshot."""
 
     page = StubPage(
         title="Initial",
         body_text="Before click",
         url="https://example.test/start",
     )
-    page.add_text_locator(
-        "Continue",
+    page.add_ref_locator(
+        1,
         navigates_to="https://example.test/after",
         navigation_title="After Click",
         navigation_body="Arrived after navigation",
@@ -34,10 +34,9 @@ async def test_click_by_text(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    result = await click("Continue")
+    result = await click("1")
     assert isinstance(result, str)
-    assert "page_changed: yes" in result
-    assert "browser-navigation" in result
+    assert "[Page:" in result
     assert "https://example.test/after" in result
     assert "After Click" in result
     assert "Arrived" in result
@@ -68,8 +67,7 @@ async def test_click_by_css_selector(
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
     result = await click(".cta")
-    assert "page_changed: yes" in result
-    assert "browser-navigation" in result
+    assert "[Page:" in result
     assert "/cta" in result
     assert "After Click" in result
     assert settle_tracker["count"] == 1
@@ -77,65 +75,27 @@ async def test_click_by_css_selector(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_click_role_name_suggests_full_name_on_partial_match(
+async def test_click_ref_not_found(
     monkeypatch: pytest.MonkeyPatch,
     patch_interactions_browser,
 ) -> None:
-    """Surfaces the full accessible name when visible text is only a prefix."""
+    """Returns error when ref number doesn't exist on the page."""
     page = StubPage(
         title="Cart",
         body_text="Shopping Cart",
         url="https://example.test/cart",
     )
-    page.add_role_locator(
-        "button",
-        name="Proceed to checkout Check out Amazon Cart",
-        tag="input",
-        input_type="submit",
-        text_value="Proceed to checkout",
-    )
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    with pytest.raises(BrowserToolError, match="No exact match"):
-        await click("button:Proceed to checkout")
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_click_role_name_works_with_full_accessible_name(
-    monkeypatch: pytest.MonkeyPatch,
-    patch_interactions_browser,
-    settle_tracker,
-) -> None:
-    """Clicking with the full accessible name succeeds on the first try."""
-    page = StubPage(
-        title="Cart",
-        body_text="Shopping Cart",
-        url="https://example.test/cart",
-    )
-    page.add_role_locator(
-        "button",
-        name="Proceed to checkout Check out Amazon Cart",
-        tag="input",
-        input_type="submit",
-        navigates_to="https://example.test/checkout",
-        navigation_title="Checkout",
-        navigation_body="Checkout page",
-    )
-    patch_interactions_browser(page)
-    monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
-
-    result = await click("button:Proceed to checkout Check out Amazon Cart")
-    assert isinstance(result, str)
-    assert "page_changed: yes" in result
-    assert "https://example.test/checkout" in result
+    result = await click("99")
+    assert "Ref 99 not found" in result
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_click_not_found(monkeypatch: pytest.MonkeyPatch, patch_interactions_browser) -> None:
-    """Raises BrowserToolError when element can't be located."""
+    """Returns error string when element can't be located."""
 
     page = StubPage(
         title="Initial",
@@ -146,5 +106,5 @@ async def test_click_not_found(monkeypatch: pytest.MonkeyPatch, patch_interactio
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    with pytest.raises(BrowserToolError):
-        await click("Does Not Exist")
+    result = await click("Does Not Exist")
+    assert "No element found" in result

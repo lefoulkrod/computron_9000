@@ -16,8 +16,7 @@ from podman.api import stream_frames
 from podman.domain.containers import Container
 from pydantic import BaseModel
 
-from agents.ollama.sdk.events import AssistantResponse, publish_event
-from agents.ollama.sdk.events.models import TerminalOutputPayload
+from sdk.events import AssistantResponse, TerminalOutputPayload, publish_event
 from tools._truncation import truncate_args
 from config import load_config
 from tools.virtual_computer.workspace import get_current_workspace_folder

@@ -41,11 +41,11 @@ export default function useModelSettings() {
                 const models = data.models || [];
                 setAvailableModels(models);
                 const saved = _loadSavedSettings();
-                // Restore saved model even if it's not in the local list
-                // (could be a cloud model or one not pulled yet)
-                const model = saved.selectedModel
+                // Use saved model only if it exists in the fetched list;
+                // otherwise fall back to the first model.
+                const model = saved.selectedModel && models.includes(saved.selectedModel)
                     ? saved.selectedModel
-                    : data.default || '';
+                    : (models[0] || '');
                 setSelectedModel(model);
             })
             .catch(() => {}); // silently ignore if ollama is unreachable

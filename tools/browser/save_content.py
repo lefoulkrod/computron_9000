@@ -5,39 +5,16 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import html2text
-from pydantic import BaseModel
-
 from config import load_config
 from tools.browser.core import get_active_view
+from tools.browser.core._formatting import format_save_result
+from tools.browser.core._html import html_to_markdown
 from tools.browser.core.exceptions import BrowserToolError
 
 logger = logging.getLogger(__name__)
 
-# Reusable converter — configured once, thread-safe for reads.
-_converter = html2text.HTML2Text()
-_converter.ignore_images = True
-_converter.ignore_emphasis = False
-_converter.body_width = 0  # no line wrapping
-_converter.protect_links = True
-_converter.unicode_snob = True
 
-
-class SaveContentResult(BaseModel):
-    """Result of saving page content to the virtual computer.
-
-    Attributes:
-        filename: The filename that was saved.
-        container_path: Absolute path accessible from inside the container.
-        size_bytes: File size in bytes.
-    """
-
-    filename: str
-    container_path: str
-    size_bytes: int
-
-
-async def save_page_content(filename: str) -> SaveContentResult:
+async def save_page_content(filename: str) -> str:
     """Save the current page as markdown to /home/computron/<filename>.
 
     Use when ``read_page()`` output is truncated and you need the full page
@@ -47,7 +24,7 @@ async def save_page_content(filename: str) -> SaveContentResult:
         filename: Plain filename without directories (e.g. ``"page.md"``).
 
     Returns:
-        SaveContentResult with filename and container path.
+        Formatted string with filename, container path, and size.
     """
     _, view = await get_active_view("save_page_content")
 
@@ -67,13 +44,13 @@ async def save_page_content(filename: str) -> SaveContentResult:
 
     try:
         raw_html = await view.frame.content()
-        content = _converter.handle(raw_html)
+        content = html_to_markdown(raw_html)
         home_dir.mkdir(parents=True, exist_ok=True)
         host_path.write_text(content, encoding="utf-8")
         size = host_path.stat().st_size
 
         logger.info("Saved %d bytes to %s", size, host_path)
-        return SaveContentResult(
+        return format_save_result(
             filename=filename,
             container_path=container_path,
             size_bytes=size,
@@ -85,4 +62,4 @@ async def save_page_content(filename: str) -> SaveContentResult:
         raise BrowserToolError(str(exc), tool="save_page_content") from exc
 
 
-__all__ = ["SaveContentResult", "save_page_content"]
+__all__ = ["save_page_content"]

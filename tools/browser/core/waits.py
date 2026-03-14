@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from dataclasses import dataclass
 
 from playwright.async_api import (
     Error as PlaywrightError,
@@ -20,11 +22,40 @@ from config import BrowserWaitConfig
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class SettleTimings:
+    """Per-phase timing data from wait_for_page_settle."""
+
+    network_idle_ms: float = 0
+    network_idle_timed_out: bool = False
+    font_ms: float = 0
+    font_timed_out: bool = False
+    dom_quiet_ms: float = 0
+    dom_quiet_timed_out: bool = False
+    animation_ms: float = 0
+    animation_timed_out: bool = False
+    error: str | None = None
+
+    @property
+    def total_ms(self) -> float:
+        return self.network_idle_ms + self.font_ms + self.dom_quiet_ms + self.animation_ms
+
+    @property
+    def phases(self) -> list[tuple[str, float, bool]]:
+        """Return (name, duration_ms, timed_out) for each phase."""
+        return [
+            ("network idle", self.network_idle_ms, self.network_idle_timed_out),
+            ("fonts", self.font_ms, self.font_timed_out),
+            ("DOM quiet", self.dom_quiet_ms, self.dom_quiet_timed_out),
+            ("animations", self.animation_ms, self.animation_timed_out),
+        ]
+
+
 async def wait_for_page_settle(
     page: Page | Frame,
     *,
     waits: BrowserWaitConfig,
-) -> None:
+) -> SettleTimings:
     """Wait for network, fonts, DOM, and CSS animation activity to quiet.
 
     Four phases run in sequence:
@@ -43,23 +74,25 @@ async def wait_for_page_settle(
     4. **CSS animations** — waits for short animations (≤ 1 s) to
        finish so modal slide-ins, fades, and skeleton transitions are
        fully rendered.  Capped to avoid blocking on infinite loops.
+
+    Returns:
+        SettleTimings with per-phase durations.
     """
+    timings = SettleTimings()
     try:
         # Phase 1: network idle
         if hasattr(page, "wait_for_load_state"):
+            t0 = time.monotonic()
             try:
                 await page.wait_for_load_state(
                     "networkidle", timeout=waits.network_idle_timeout_ms,
                 )
             except PlaywrightTimeoutError:
-                logger.debug(
-                    "networkidle wait timed out after %d ms",
-                    waits.network_idle_timeout_ms,
-                )
+                timings.network_idle_timed_out = True
+            timings.network_idle_ms = (time.monotonic() - t0) * 1000
 
         if not hasattr(page, "evaluate"):
-            logger.debug("Page object has no evaluate; skipping font/DOM/animation waits")
-            return
+            return timings
 
         # Phase 2: web fonts
         font_timeout_ms = max(0, waits.font_timeout_ms)
@@ -71,15 +104,16 @@ async def wait_for_page_settle(
                 ]);
             }} catch {{}}
         }}"""
+        t0 = time.monotonic()
         try:
             await page.evaluate(font_js)
         except PlaywrightTimeoutError:
-            logger.debug("Font ready wait timed out after %d ms", font_timeout_ms)
+            timings.font_timed_out = True
+        timings.font_ms = (time.monotonic() - t0) * 1000
 
         # Phase 3: DOM quiet window (including shadow roots)
         if not hasattr(page, "wait_for_function"):
-            logger.debug("Page object has no wait_for_function; skipping DOM quiet wait")
-            return
+            return timings
 
         dom_quiet_ms = max(0, waits.dom_quiet_window_ms)
         dom_js = f"""() => {{
@@ -147,10 +181,12 @@ async def wait_for_page_settle(
                 }}
             }});
         }}"""
+        t0 = time.monotonic()
         try:
             await page.wait_for_function(dom_js, timeout=waits.dom_mutation_timeout_ms)
         except PlaywrightTimeoutError:
-            logger.debug("DOM mutation quiet wait timed out after %d ms", waits.dom_mutation_timeout_ms)
+            timings.dom_quiet_timed_out = True
+        timings.dom_quiet_ms = (time.monotonic() - t0) * 1000
 
         # Phase 4: wait for short CSS animations to finish.
         # Only waits on animations with duration ≤ 1s (modal fades,
@@ -173,12 +209,16 @@ async def wait_for_page_settle(
                 }}
             }} catch {{}}
         }}"""
+        t0 = time.monotonic()
         try:
             await page.evaluate(anim_js)
         except PlaywrightTimeoutError:
-            logger.debug("CSS animation wait timed out after %d ms", anim_timeout_ms)
+            timings.animation_timed_out = True
+        timings.animation_ms = (time.monotonic() - t0) * 1000
     except PlaywrightError as exc:
-        logger.debug("Error while waiting for page settle: %s", exc)
+        timings.error = str(exc)
+
+    return timings
 
 
-__all__ = ["wait_for_page_settle"]
+__all__ = ["SettleTimings", "wait_for_page_settle"]
