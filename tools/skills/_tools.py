@@ -97,7 +97,6 @@ async def apply_skill(skill_name: str) -> dict[str, object]:
                     event=SkillAppliedPayload(
                         type="skill_applied",
                         skill_name=skill.name,
-                        confidence=skill.confidence,
                     )
                 )
             )

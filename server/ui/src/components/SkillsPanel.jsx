@@ -7,7 +7,6 @@ export default function SkillsPanel({ refreshSignal }) {
     const [skills, setSkills] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(null);
-    const [toggling, setToggling] = useState(null);
     const [collapsed, setCollapsed] = useState(false);
     const [newSkillIds, setNewSkillIds] = useState(new Set());
     const [hoveredSkill, setHoveredSkill] = useState(null);
@@ -43,26 +42,6 @@ export default function SkillsPanel({ refreshSignal }) {
         if (refreshSignal > 0) fetchSkills();
     }, [refreshSignal, fetchSkills]);
 
-    const handleToggle = async (name, currentActive) => {
-        setToggling(name);
-        try {
-            const resp = await fetch(`/api/skills/${encodeURIComponent(name)}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ active: !currentActive }),
-            });
-            if (resp.ok) {
-                setSkills(prev => prev.map(s =>
-                    s.name === name ? { ...s, active: !currentActive } : s
-                ));
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setToggling(null);
-        }
-    };
-
     const handleDelete = async (name) => {
         setDeleting(name);
         try {
@@ -89,12 +68,6 @@ export default function SkillsPanel({ refreshSignal }) {
         setTooltipPos(null);
     };
 
-    const confidenceClass = (confidence) => {
-        if (confidence < 0.3) return styles.confidenceLow;
-        if (confidence < 0.7) return styles.confidenceMid;
-        return styles.confidenceHigh;
-    };
-
     if (loading) return null;
     if (skills.length === 0) return null;
 
@@ -114,28 +87,14 @@ export default function SkillsPanel({ refreshSignal }) {
                             onMouseLeave={handleMouseLeave}
                         >
                             <div className={shared.itemMain}>
-                                <button
-                                    className={`${styles.toggle} ${skill.active ? styles.toggleActive : styles.toggleInactive}`}
-                                    onClick={() => handleToggle(skill.name, skill.active)}
-                                    disabled={toggling === skill.name}
-                                    title={skill.active ? 'Disable skill' : 'Enable skill'}
-                                >
-                                    <span className={styles.toggleKnob} />
-                                </button>
                                 <span className={shared.name}>{skill.name}</span>
                             </div>
                             <p className={shared.desc}>{skill.description}</p>
-                            <div className={styles.skillMeta}>
-                                <div className={styles.confidenceBar}>
-                                    <div
-                                        className={`${styles.confidenceFill} ${confidenceClass(skill.confidence ?? 0)}`}
-                                        style={{ width: `${(skill.confidence ?? 0) * 100}%` }}
-                                    />
-                                </div>
+                            {(skill.usage_count ?? 0) > 0 && (
                                 <span className={styles.stats}>
-                                    used {skill.use_count ?? 0}× · {Math.round((skill.confidence ?? 0) * 100)}% confidence
+                                    used {skill.usage_count}×
                                 </span>
-                            </div>
+                            )}
                             <button
                                 className={shared.deleteBtn}
                                 onClick={() => handleDelete(skill.name)}

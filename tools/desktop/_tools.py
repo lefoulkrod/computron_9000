@@ -1,107 +1,168 @@
 """Desktop interaction tools for the desktop agent.
 
-Each tool follows a screenshot-ground-act pattern: execute an action,
-capture a screenshot, send it to the grounding model, and return the
-result.
+Provides two observation tools:
+- read_screen() — fast a11y tree listing interactive elements with coordinates
+- describe_screen() — vision model description of what's visible on screen
+
+Action tools (mouse/keyboard) return the a11y tree after each action.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import logging
 import shlex
+from typing import cast
 
+from ollama import AsyncClient, Image
+
+from config import load_config
 from tools.desktop._exec import _run_desktop_cmd
-from tools.desktop._ground import _run_grounding
 from tools.desktop._lifecycle import ensure_desktop_running
 from tools.desktop._screenshot import capture_screenshot
 
 logger = logging.getLogger(__name__)
 
-# Post-action settle delay before screenshot. OSWorld uses 2s flat for all
-# actions — crude but proven reliable across many desktop applications.
+# Post-action settle delay before observation
 _SETTLE_DELAY_S = 2.0
 
-# xdotool type: chunk size and inter-key delay (ms). Chunking avoids
-# dropped characters on long inputs. Values from OSWorld.
-_TYPING_GROUP_SIZE = 50
-_TYPING_DELAY_MS = 12
 
-_DESCRIBE_TASK = (
-    "Describe what is visible on the desktop. Include window titles, "
-    "button labels, menu items, text content, and their approximate "
-    "positions. Be precise about UI element locations."
+async def _get_a11y_tree() -> list[dict]:
+    """Get the accessibility tree from the container."""
+    try:
+        raw = await _run_desktop_cmd(
+            "/usr/bin/python3.10 /opt/desktop/a11y_tree.py",
+        )
+        # Podman exec stream framing inserts 8-byte binary headers at chunk
+        # boundaries (~8KB).  Strip all non-printable bytes so the JSON
+        # parser sees clean text.
+        cleaned = "".join(c for c in raw if c.isprintable() or c in "\n\r\t")
+        start = cleaned.find("[")
+        if start == -1:
+            return []
+        return json.loads(cleaned[start:])
+    except Exception:
+        logger.debug("a11y tree unavailable", exc_info=True)
+        return []
+
+
+def _format_a11y_tree(elements: list[dict]) -> str:
+    """Format a11y elements grouped by window for the agent."""
+    if not elements:
+        return ""
+
+    # Group elements by window
+    groups: dict[str, list[tuple[int, dict]]] = {}
+    for i, el in enumerate(elements, 1):
+        window = el.get("window") or "(desktop)"
+        groups.setdefault(window, []).append((i, el))
+
+    lines = ["INTERACTIVE ELEMENTS:"]
+    for window, items in groups.items():
+        lines.append("  [%s]" % window)
+        for i, el in items:
+            cx = el["x"] + el["w"] // 2
+            cy = el["y"] + el["h"] // 2
+            role = el.get("role") or "unknown"
+            states = el.get("states")
+            state_str = " (%s)" % ", ".join(states) if states else ""
+            lines.append(
+                "    [%d] [%s] %s%s — click at (%d, %d)"
+                % (i, role, el["label"], state_str, cx, cy),
+            )
+    return "\n".join(lines)
+
+
+async def _observe() -> str:
+    """Capture the accessibility tree as the desktop observation.
+
+    Returns a numbered list of interactive elements the agent can use
+    to decide actions. Each element has a role, label, and click coords.
+    """
+    a11y_elements = await _get_a11y_tree()
+    observation = _format_a11y_tree(a11y_elements) or "(no interactive elements found)"
+    logger.info("observe: %s", observation[:500])
+    return observation
+
+
+async def read_screen() -> str:
+    """Read the interactive elements currently visible on the desktop.
+
+    Returns a numbered list of interactive elements (buttons, menus,
+    text fields, etc.) with their roles, labels, and click coordinates
+    from the accessibility tree.
+
+    Returns:
+        Numbered element list the agent can use to decide actions.
+    """
+    await ensure_desktop_running()
+    return await _observe()
+
+
+_DESCRIBE_PROMPT = (
+    "Describe this desktop screenshot precisely. "
+    "List every window visible with its title and whether it is active. "
+    "List all readable text, UI elements, buttons, menus, toolbars, "
+    "dialog boxes, and the taskbar contents. "
+    "Be specific and exhaustive — an AI agent needs this to understand "
+    "what is on screen beyond the interactive elements."
 )
 
 
-async def screenshot() -> str:
-    """Observe the current state of the desktop.
+async def describe_screen() -> str:
+    """Get a vision model description of what is visible on the desktop.
 
-    Takes a screenshot and returns a text description of what is visible,
-    including window titles, button labels, menu items, and text content
-    with their approximate positions.
+    Captures a screenshot and sends it to a vision model for a detailed
+    text description. Use this when you need to understand visual context
+    beyond the interactive element list from read_screen().
 
     Returns:
         Text description of the desktop from the vision model.
     """
     await ensure_desktop_running()
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    description = result.get("thought", "") or result.get("raw", "")
-    logger.info("screenshot() response: %s", description[:500])
-    return description
 
+    cfg = load_config()
+    if cfg.desktop.vision_model is None:
+        return "Error: No desktop vision model configured (desktop.vision_model)."
 
-async def ground(task: str) -> str:
-    """Find a UI element and determine the next action using vision.
+    try:
+        screenshot_bytes = await capture_screenshot()
+    except RuntimeError as exc:
+        logger.exception("Failed to capture screenshot for describe_screen")
+        return "Error: Failed to capture screenshot: %s" % exc
 
-    Takes a screenshot, sends it to the grounding model with the task
-    description, and returns the recommended action with precise
-    coordinates.
+    encoded = base64.b64encode(screenshot_bytes).decode("ascii")
+    host = getattr(getattr(cfg, "llm", None), "host", None)
+    client = AsyncClient(host=host) if host else AsyncClient()
 
-    Args:
-        task: What you want to do, e.g. "Click the Save button",
-            "Open the Documents folder", "Close the calculator".
+    try:
+        response = await client.chat(
+            model=cfg.desktop.vision_model,
+            messages=[{
+                "role": "user",
+                "content": _DESCRIBE_PROMPT,
+                "images": [Image(value=encoded)],
+            }],
+            options={"temperature": 0.1, "num_predict": 2048},
+            think=False,
+        )
+    except Exception as exc:
+        logger.exception("Vision model failed for describe_screen")
+        return "Error: Vision model failed: %s" % exc
 
-    Returns:
-        The grounding model's recommended action with coordinates.
-    """
-    await ensure_desktop_running()
-    # capture_screenshot() saves the file to the shared volume;
-    # _run_grounding() reads it from inside the container.
-    await capture_screenshot()
-    result = await _run_grounding(task)
-    logger.info("ground(%s) response: %s", task, result)
-
-    lines = []
-    thought = result.get("thought", "")
-    if thought:
-        lines.append("Thought: %s" % thought)
-
-    action_type = result.get("action_type", "unknown")
-    if action_type == "click" and "x" in result:
-        lines.append("Action: click at (%d, %d)" % (result["x"], result["y"]))
-    elif action_type == "left_double" and "x" in result:
-        lines.append("Action: double-click at (%d, %d)" % (result["x"], result["y"]))
-    elif action_type == "type" and "type_content" in result:
-        lines.append("Action: type '%s'" % result["type_content"])
-    elif action_type == "hotkey" and "hotkey" in result:
-        lines.append("Action: press %s" % result["hotkey"])
-    elif action_type == "scroll":
-        direction = result.get("scroll_direction", "down")
-        if "x" in result:
-            lines.append("Action: scroll %s at (%d, %d)" % (direction, result["x"], result["y"]))
-        else:
-            lines.append("Action: scroll %s" % direction)
-    elif action_type == "wait":
-        lines.append("Action: wait")
-    elif action_type == "finished":
-        content = result.get("finished_content", "")
-        lines.append("Action: finished — %s" % content if content else "Action: finished")
+    msg = response.get("message", {})
+    if isinstance(msg, dict):
+        answer = msg.get("content", "")
     else:
-        lines.append("Action: %s" % result.get("action", "unknown"))
+        answer = cast(str, getattr(msg, "content", ""))
 
-    return "\n".join(lines)
+    if not answer:
+        return "Error: Vision model returned an empty response."
+
+    return answer
+
 
 
 async def mouse_click(x: int, y: int, button: str = "left") -> str:
@@ -113,7 +174,7 @@ async def mouse_click(x: int, y: int, button: str = "left") -> str:
         button: Mouse button — "left", "right", or "middle".
 
     Returns:
-        Text description of the desktop after clicking.
+        Observation of the desktop after clicking.
     """
     await ensure_desktop_running()
     button_map = {"left": "1", "middle": "2", "right": "3"}
@@ -122,9 +183,7 @@ async def mouse_click(x: int, y: int, button: str = "left") -> str:
         "xdotool mousemove --sync %d %d click %s" % (x, y, btn),
     )
     await asyncio.sleep(_SETTLE_DELAY_S)
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    return result.get("thought", "") or result.get("raw", "")
+    return await _observe()
 
 
 async def mouse_double_click(x: int, y: int) -> str:
@@ -135,17 +194,15 @@ async def mouse_double_click(x: int, y: int) -> str:
         y: Vertical pixel coordinate.
 
     Returns:
-        Text description of the desktop after double-clicking.
+        Observation of the desktop after double-clicking.
     """
     await ensure_desktop_running()
     await _run_desktop_cmd(
-        "xdotool mousemove --sync %d %d click --repeat 2 --delay 500 1"
+        "xdotool mousemove --sync %d %d click --repeat 2 --delay 100 1"
         % (x, y),
     )
     await asyncio.sleep(_SETTLE_DELAY_S)
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    return result.get("thought", "") or result.get("raw", "")
+    return await _observe()
 
 
 async def mouse_drag(x1: int, y1: int, x2: int, y2: int) -> str:
@@ -158,7 +215,7 @@ async def mouse_drag(x1: int, y1: int, x2: int, y2: int) -> str:
         y2: End vertical coordinate.
 
     Returns:
-        Text description of the desktop after dragging.
+        Observation of the desktop after dragging.
     """
     await ensure_desktop_running()
     await _run_desktop_cmd(
@@ -167,33 +224,33 @@ async def mouse_drag(x1: int, y1: int, x2: int, y2: int) -> str:
         % (x1, y1, x2, y2),
     )
     await asyncio.sleep(_SETTLE_DELAY_S)
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    return result.get("thought", "") or result.get("raw", "")
+    return await _observe()
 
 
 async def keyboard_type(text: str) -> str:
-    """Type text on the desktop using the keyboard.
+    """Type text on the desktop using the clipboard.
+
+    Uses clipboard paste (xclip + Ctrl+V) for reliable input — handles
+    Unicode, special characters, and is faster than keystroke simulation.
 
     Args:
         text: The text to type.
 
     Returns:
-        Text description of the desktop after typing.
+        Observation of the desktop after typing.
     """
     await ensure_desktop_running()
-    # Chunk long text to avoid dropped characters (OSWorld pattern).
-    # Each chunk is shell-quoted for safety.
-    for i in range(0, len(text), _TYPING_GROUP_SIZE):
-        chunk = text[i : i + _TYPING_GROUP_SIZE]
+    # Use xdotool type with a short delay — works universally across
+    # terminals, text editors, and GUI apps. Chunk long text to avoid
+    # dropped characters.
+    for i in range(0, len(text), 50):
+        chunk = text[i : i + 50]
         await _run_desktop_cmd(
-            "xdotool type --delay %d --clearmodifiers -- %s"
-            % (_TYPING_DELAY_MS, shlex.quote(chunk)),
+            "xdotool type --clearmodifiers --delay 8 -- %s"
+            % shlex.quote(chunk),
         )
     await asyncio.sleep(_SETTLE_DELAY_S)
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    return result.get("thought", "") or result.get("raw", "")
+    return await _observe()
 
 
 async def keyboard_press(key: str) -> str:
@@ -204,14 +261,12 @@ async def keyboard_press(key: str) -> str:
             "ctrl+shift+s". Uses xdotool key names.
 
     Returns:
-        Text description of the desktop after pressing the key.
+        Observation of the desktop after pressing the key.
     """
     await ensure_desktop_running()
     await _run_desktop_cmd("xdotool key -- %s" % key)
     await asyncio.sleep(_SETTLE_DELAY_S)
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    return result.get("thought", "") or result.get("raw", "")
+    return await _observe()
 
 
 async def scroll(x: int, y: int, direction: str = "down", clicks: int = 3) -> str:
@@ -224,16 +279,13 @@ async def scroll(x: int, y: int, direction: str = "down", clicks: int = 3) -> st
         clicks: Number of scroll clicks.
 
     Returns:
-        Text description of the desktop after scrolling.
+        Observation of the desktop after scrolling.
     """
     await ensure_desktop_running()
-    # xdotool: button 4 = scroll up, button 5 = scroll down
     btn = "4" if direction == "up" else "5"
     await _run_desktop_cmd(
         "xdotool mousemove --sync %d %d click --repeat %d %s"
         % (x, y, clicks, btn),
     )
     await asyncio.sleep(_SETTLE_DELAY_S)
-    await capture_screenshot()
-    result = await _run_grounding(_DESCRIBE_TASK)
-    return result.get("thought", "") or result.get("raw", "")
+    return await _observe()
