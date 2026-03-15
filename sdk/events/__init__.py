@@ -12,7 +12,10 @@ in ``sdk.loop``.
 
 from ._context import (
     agent_span,
+    collect_sub_agent_history,
     get_model_options,
+    get_sub_agent_histories,
+    init_sub_agent_collector,
     publish_event,
     set_model_options,
 )
@@ -48,7 +51,10 @@ __all__ = [
     "ToolCallPayload",
     "ToolCreatedPayload",
     "agent_span",
+    "collect_sub_agent_history",
     "get_model_options",
+    "get_sub_agent_histories",
+    "init_sub_agent_collector",
     "publish_event",
     "set_model_options",
 ]

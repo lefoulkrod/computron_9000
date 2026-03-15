@@ -7,15 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from tools.skills._models import SkillDefinition, SkillParameter, SkillStep
-from tools.skills._registry import (
+from skills._models import SkillDefinition, SkillStep
+from skills._registry import (
     add_skill,
     delete_skill,
     get_skill,
     list_skills,
-    record_skill_usage,
+    record_skill_used,
     search_skills,
-    toggle_skill,
 )
 
 
@@ -24,7 +23,7 @@ def _skills_dir(tmp_path: Path) -> Path:
     """Patch the registry path to a temp directory."""
     registry_path = tmp_path / "skills" / "registry.json"
     with patch(
-        "tools.skills._registry._get_registry_path",
+        "skills._registry._get_registry_path",
         return_value=registry_path,
     ):
         yield tmp_path
@@ -34,20 +33,17 @@ def _make_skill(
     name: str = "test_skill",
     description: str = "A test skill",
     agent_scope: str = "ANY",
-    category: str = "other",
 ) -> SkillDefinition:
     return SkillDefinition(
         id="",
         name=name,
         description=description,
         agent_scope=agent_scope,
-        category=category,
         trigger_patterns=[f"do {name}"],
         steps=[
             SkillStep(
                 description="Step 1",
                 tool="run_bash_cmd",
-                argument_template={"cmd": "echo hello"},
             ),
         ],
     )
@@ -77,7 +73,7 @@ class TestSkillRegistry:
     def test_add_overwrite(self) -> None:
         """Overwriting preserves ID and usage stats."""
         original = add_skill(_make_skill())
-        record_skill_usage("test_skill", success=True)
+        record_skill_used("test_skill")
 
         updated = add_skill(
             _make_skill(description="Updated"),
@@ -85,7 +81,7 @@ class TestSkillRegistry:
         )
         assert updated.id == original.id
         assert updated.description == "Updated"
-        assert updated.usage_count == 1  # Preserved
+        assert updated.usage_count == 1
 
     def test_get_nonexistent(self) -> None:
         """Getting a missing skill returns None."""
@@ -93,15 +89,15 @@ class TestSkillRegistry:
 
     def test_search(self) -> None:
         """Search by keywords."""
-        add_skill(_make_skill("scrape_prices", "Scrape product prices", category="web_scraping"))
+        add_skill(_make_skill("scrape_prices", "Scrape product prices"))
         add_skill(_make_skill("generate_report", "Generate a report"))
 
         results = search_skills("scrape prices")
         assert len(results) == 1
         assert results[0].name == "scrape_prices"
 
-        results = search_skills("web_scraping")
-        assert len(results) == 1
+        results = search_skills("nonexistent_query")
+        assert len(results) == 0
 
     def test_search_agent_scope_filter(self) -> None:
         """Search respects agent_scope filter."""
@@ -119,24 +115,12 @@ class TestSkillRegistry:
         assert results[0].name == "any_skill"
 
     def test_list_skills(self) -> None:
-        """List all active skills."""
+        """List all skills."""
         add_skill(_make_skill("s1"))
         add_skill(_make_skill("s2"))
 
         skills = list_skills()
         assert len(skills) == 2
-
-    def test_list_includes_inactive(self) -> None:
-        """List with active_only=False includes inactive."""
-        add_skill(_make_skill("active"))
-        s = add_skill(_make_skill("inactive"))
-        toggle_skill("inactive", active=False)
-
-        active = list_skills(active_only=True)
-        assert len(active) == 1
-
-        all_skills = list_skills(active_only=False)
-        assert len(all_skills) == 2
 
     def test_delete(self) -> None:
         """Delete a skill."""
@@ -148,70 +132,28 @@ class TestSkillRegistry:
         """Deleting a missing skill returns False."""
         assert delete_skill("nope") is False
 
-    def test_toggle_skill(self) -> None:
-        """Toggle active state."""
-        add_skill(_make_skill())
-        assert toggle_skill("test_skill", active=False) is True
-
-        skill = get_skill("test_skill")
-        assert skill is not None
-        assert skill.active is False
-
-        toggle_skill("test_skill", active=True)
-        skill = get_skill("test_skill")
-        assert skill is not None
-        assert skill.active is True
-
-    def test_toggle_nonexistent(self) -> None:
-        """Toggling missing skill returns False."""
-        assert toggle_skill("nope", active=True) is False
-
 
 @pytest.mark.unit
 class TestSkillUsageTracking:
-    """Tests for usage counting and confidence scoring."""
+    """Tests for usage counting."""
 
-    def test_record_success(self) -> None:
-        """Record a successful usage."""
+    def test_record_used(self) -> None:
+        """Record a usage bumps count and timestamp."""
         add_skill(_make_skill())
-        record_skill_usage("test_skill", success=True)
+        record_skill_used("test_skill")
 
         skill = get_skill("test_skill")
         assert skill is not None
         assert skill.usage_count == 1
-        assert skill.success_count == 1
-        assert skill.confidence == 1.0
         assert skill.last_used_at is not None
 
-    def test_record_failure(self) -> None:
-        """Record a failed usage."""
+    def test_record_multiple(self) -> None:
+        """Multiple usages accumulate."""
         add_skill(_make_skill())
-        record_skill_usage("test_skill", success=False)
-
-        skill = get_skill("test_skill")
-        assert skill is not None
-        assert skill.failure_count == 1
-        assert skill.confidence == 0.0
-
-    def test_confidence_calculation(self) -> None:
-        """Confidence is success_count / usage_count."""
-        add_skill(_make_skill())
-        record_skill_usage("test_skill", success=True)
-        record_skill_usage("test_skill", success=True)
-        record_skill_usage("test_skill", success=False)
+        record_skill_used("test_skill")
+        record_skill_used("test_skill")
+        record_skill_used("test_skill")
 
         skill = get_skill("test_skill")
         assert skill is not None
         assert skill.usage_count == 3
-        assert skill.confidence == pytest.approx(2 / 3)
-
-    def test_auto_deactivate_low_confidence(self) -> None:
-        """Skills with low confidence after 5+ uses are auto-deactivated."""
-        add_skill(_make_skill())
-        # 5 failures, 0 successes → confidence = 0.0
-        for _ in range(5):
-            record_skill_usage("test_skill", success=False)
-
-        skill = get_skill("test_skill")
-        assert skill is not None
-        assert skill.active is False

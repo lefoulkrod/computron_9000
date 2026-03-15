@@ -218,6 +218,50 @@ class TestSummarizeStrategy:
         assert call_args.kwargs["model"] == "custom-model:latest"
 
 
+    @pytest.mark.asyncio
+    async def test_apply_saves_summary_record(self):
+        """A SummaryRecord is saved after successful compaction."""
+        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
+        history = self._make_history(5)
+        stats = ContextStats(context_used=100000, context_limit=128000)
+
+        fake_resp = _make_fake_chat_response("This is the summary.")
+        fake_provider = _make_fake_provider(fake_resp)
+
+        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
+            with patch("sdk.context._strategy.load_config") as mock_cfg:
+                mock_cfg.return_value = _fake_config()
+                with patch("sdk.context._strategy.save_summary_record") as mock_save:
+                    await strategy.apply(history, stats)
+
+        mock_save.assert_called_once()
+        record = mock_save.call_args[0][0]
+        assert record.model == "glm-4.7-flash:q8_0"
+        assert record.summary_text == "This is the summary."
+        # 10 non-sys - 1 pinned - 2 kept = 7 compacted
+        assert record.messages_compacted == 7
+        assert record.fill_ratio == pytest.approx(100000 / 128000)
+        assert record.input_char_count > 0
+
+    @pytest.mark.asyncio
+    async def test_apply_no_summary_record_on_failure(self):
+        """No SummaryRecord is saved when the LLM call fails."""
+        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
+        history = self._make_history(5)
+        stats = ContextStats(context_used=100000, context_limit=128000)
+
+        fake_provider = AsyncMock()
+        fake_provider.chat.side_effect = Exception("LLM unavailable")
+
+        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
+            with patch("sdk.context._strategy.load_config") as mock_cfg:
+                mock_cfg.return_value = _fake_config()
+                with patch("sdk.context._strategy.save_summary_record") as mock_save:
+                    await strategy.apply(history, stats)
+
+        mock_save.assert_not_called()
+
+
 def _fake_config():
     """Create a fake config for tests."""
     cfg = MagicMock()

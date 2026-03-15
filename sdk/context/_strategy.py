@@ -2,6 +2,8 @@
 
 import json
 import logging
+import uuid
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol
 
@@ -12,6 +14,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from config import load_config
+from conversations import SummaryRecord, save_summary_record
 
 from ._history import ConversationHistory
 from ._models import ContextStats
@@ -127,10 +130,27 @@ class SummarizeStrategy:
         conversation_text = _serialize_messages(compactable)
 
         try:
-            summary = await self._call_summarizer(conversation_text, prior_summary)
+            summary, model_name = await self._call_summarizer(
+                conversation_text, prior_summary,
+            )
         except Exception:
             logger.exception("SummarizeStrategy: LLM call failed, skipping compaction")
             return
+
+        # Persist the summarization event for quality evaluation.
+        record = SummaryRecord(
+            id=str(uuid.uuid4()),
+            created_at=datetime.now(UTC).isoformat(),
+            model=model_name,
+            input_messages=compactable,
+            input_char_count=len(conversation_text),
+            prior_summary=prior_summary,
+            summary_text=summary,
+            summary_char_count=len(summary),
+            messages_compacted=len(compactable),
+            fill_ratio=stats.fill_ratio,
+        )
+        save_summary_record(record)
 
         # Determine the range to drop within the full history list.
         # Skip system message (if any) and the pinned first user message.
@@ -148,8 +168,8 @@ class SummarizeStrategy:
 
     async def _call_summarizer(
         self, conversation_text: str, prior_summary: str | None = None,
-    ) -> str:
-        """Call the summarization LLM and return the summary text."""
+    ) -> tuple[str, str]:
+        """Call the summarization LLM and return (summary_text, model_name)."""
         cfg = load_config()
         provider = get_provider()
 
@@ -174,7 +194,7 @@ class SummarizeStrategy:
             think=False,
             options=options,
         )
-        return response.message.content or ""
+        return response.message.content or "", model
 
     def _resolve_model(self, cfg: object) -> tuple[str, dict]:
         """Determine which model and options to use for summarization."""

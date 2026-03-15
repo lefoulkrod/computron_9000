@@ -1,26 +1,24 @@
-"""Agent-facing skill tools — lookup and apply reusable workflow recipes."""
+"""Skills package — models, registry, and extraction for reusable workflow recipes."""
 
-from skills import (
-    SkillDefinition,
-    SkillStep,
+from ._models import SkillDefinition, SkillStep
+from ._registry import (
     add_skill,
     delete_skill,
     get_skill,
     list_skills,
     record_skill_used,
+    save_registry,
     search_skills,
 )
-from ._tools import apply_skill, lookup_skills
 
 __all__ = [
     "SkillDefinition",
     "SkillStep",
     "add_skill",
-    "apply_skill",
     "delete_skill",
     "get_skill",
     "list_skills",
-    "lookup_skills",
     "record_skill_used",
+    "save_registry",
     "search_skills",
 ]

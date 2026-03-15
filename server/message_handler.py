@@ -10,6 +10,8 @@ from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import (
     AssistantResponse,
     agent_span,
+    get_sub_agent_histories,
+    init_sub_agent_collector,
     set_model_options,
 )
 from sdk.loop import turn_scope
@@ -35,8 +37,9 @@ from agents.coding import (
     SYSTEM_PROMPT as _CODER_PROMPT,
     TOOLS as _CODER_TOOLS,
 )
+from conversations import save_conversation_history, save_sub_agent_histories, load_conversation_history
 from sdk import (
-    ConversationRecorderHook,
+    TurnRecorderHook,
     SkillTrackingHook,
     default_hooks,
     run_tool_call_loop,
@@ -93,6 +96,20 @@ def reset_message_history(session_id: str | None = None) -> None:
     """Resets the conversation history and context manager for a session."""
     sid = session_id or _DEFAULT_SESSION_ID
     _sessions.pop(sid, None)
+
+
+def resume_session(conversation_id: str) -> list[dict] | None:
+    """Load a conversation's full-fidelity history and install it as a session.
+
+    Returns the raw messages for the UI to display, or None if not found.
+    """
+    messages = load_conversation_history(conversation_id)
+    if messages is None:
+        return None
+
+    session = _Session(history=ConversationHistory(messages))
+    _sessions[conversation_id] = session
+    return messages
 
 
 def _refresh_system_message(history: ConversationHistory, system_prompt: str) -> None:
@@ -190,6 +207,8 @@ async def handle_user_message(
             )
             # Propagate options to sub-agents via context vars
             set_model_options(options)
+            # Initialize sub-agent history collector for skill extraction
+            init_sub_agent_collector()
 
             # Lazily create the context manager with the model's context limit.
             if session.context_manager is None:
@@ -212,18 +231,18 @@ async def handle_user_message(
                             ctx_manager=session.context_manager,
                         )
 
-                        # Conversation recording and skill tracking hooks
+                        # Turn recording and skill tracking hooks
                         summary_cfg = None
                         try:
                             from config import load_config as _load_cfg
                             summary_cfg = _load_cfg().summary
                         except Exception:
                             pass
-                        recorder = ConversationRecorderHook(
+                        recorder = TurnRecorderHook(
                             user_message=user_content,
                             agent_name=active_agent.name,
                             model=active_agent.model,
-                            session_id=session_id or "default",
+                            conversation_id=session_id or "default",
                             summary_model=summary_cfg.model if summary_cfg else None,
                         )
                         skill_tracker = SkillTrackingHook()
@@ -238,14 +257,17 @@ async def handle_user_message(
                             ):
                                 pass
                         finally:
-                            # Persist conversation record and track skill outcome
+                            # Persist turn record and track skill outcome
                             record = recorder.finalize()
                             if skill_tracker.applied_skill:
                                 record.metadata.skill_applied = skill_tracker.applied_skill
-                                outcome = record.metadata.outcome
-                                success = outcome in ("success", "unknown")
-                                skill_tracker.record_outcome(success=success)
-                            recorder.classify_outcome_async()
+
+                            # Save full-fidelity conversation history + sub-agent histories
+                            conv_id = session_id or "default"
+                            save_conversation_history(conv_id, session.history.messages)
+                            sub_histories = get_sub_agent_histories()
+                            if sub_histories:
+                                save_sub_agent_histories(conv_id, sub_histories)
             finally:
                 await queue.put(None)
 

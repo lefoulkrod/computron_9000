@@ -8,7 +8,7 @@ import logging
 import pydantic
 
 from config import load_config
-from models import generate_completion
+from sdk.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +52,18 @@ async def _summarize_text_full(text: str) -> str:
         if len(summaries) > 1:
             combined_summary = " ".join(summaries)
             final_prompt = final_prompt_template.format(combined_summary=combined_summary)
-            final_response, _ = await generate_completion(
-                prompt=final_prompt,
+            provider = get_provider()
+            messages = [
+                {"role": "system", "content": "You are an expert summarizer. Create a concise summary from the provided section summaries."},
+                {"role": "user", "content": final_prompt},
+            ]
+            response = await provider.chat(
                 model=summary.model,
-                think=False,
-                system="You are an expert summarizer. Create a concise summary from the provided section summaries.",
+                messages=messages,
                 options=summary.options,
+                think=False,
             )
+            final_response = response.message.content or ""
             logger.debug("Final summary response: %s", final_response)
             return final_response
         return " ".join(summaries)
@@ -114,13 +119,18 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
                 total_parts=total_parts,
                 section=section,
             )
-            response, _ = await generate_completion(
-                prompt=prompt,
+            provider = get_provider()
+            messages = [
+                {"role": "system", "content": "You are an expert summarizer. Create a concise summary of the provided text section."},
+                {"role": "user", "content": prompt},
+            ]
+            resp = await provider.chat(
                 model=summary.model,
-                think=False,
-                system="You are an expert summarizer. Create a concise summary of the provided text section.",
+                messages=messages,
                 options=summary.options,
+                think=False,
             )
+            response = resp.message.content or ""
             logger.debug("Section summary response: %s", response)
             summaries.append(
                 SectionSummary(

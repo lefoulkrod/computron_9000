@@ -172,8 +172,9 @@ class SkillsConfig(BaseModel):
     enabled: bool = True
     extraction_interval_seconds: int = 300
     extraction_model: str = "qwen3:8b"
-    min_confidence: float = 0.15
-    decay_days: int = 90
+    extraction_options: dict[str, Any] = Field(
+        default_factory=lambda: {"num_ctx": 60000},
+    )
     max_skills: int = 200
     single_conversation_extraction: bool = True
 

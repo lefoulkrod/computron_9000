@@ -11,7 +11,7 @@ from typing import Any, Protocol, cast, get_args, get_origin
 
 from agents.types import Agent
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
-from sdk.events import agent_span, get_model_options
+from sdk.events import agent_span, collect_sub_agent_history, get_model_options
 from sdk.hooks import default_hooks
 from sdk.loop import run_tool_call_loop
 
@@ -326,22 +326,30 @@ Returns:
                 ctx_manager=ctx_manager,
             )
 
-            # For string results, single pass without retry
-            if result_type is str:
-                return await _run_tool_loop_once(
+            try:
+                # For string results, single pass without retry
+                if result_type is str:
+                    return await _run_tool_loop_once(
+                        history=history,
+                        agent=agent,
+                        hooks=hooks,
+                    )  # type: ignore[return-value]
+
+                # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
+                return await _run_with_json_retry(
                     history=history,
                     agent=agent,
+                    result_type=result_type,
                     hooks=hooks,
-                )  # type: ignore[return-value]
-
-            # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
-            return await _run_with_json_retry(
-                history=history,
-                agent=agent,
-                result_type=result_type,
-                hooks=hooks,
-                max_attempts=5,
-            )
+                    max_attempts=5,
+                )
+            finally:
+                # Collect sub-agent history for skill extraction
+                collect_sub_agent_history(
+                    agent_name=name,
+                    parent_tool=func_name,
+                    messages=history.messages,
+                )
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
     # distinguish multiple agent tools. We assume name values are unique.

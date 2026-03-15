@@ -68,8 +68,41 @@ function _handleStreamEvent(data, callbacks) {
         callbacks.onGenerationPreview(data.event);
     }
 
+    if (type === 'skill_applied') {
+        callbacks.onSkillApplied(data.event);
+    }
+
     // context_usage events are handled inline by the message component,
     // not as a side-effect callback.
+}
+
+/**
+ * Convert raw LLM messages into UI-friendly message objects for display.
+ */
+function _historyToMessages(rawMessages) {
+    const uiMessages = [];
+    for (const msg of rawMessages) {
+        if (msg.role === 'system') continue;
+        if (msg.role === 'user') {
+            uiMessages.push({
+                id: `hist_u_${uiMessages.length}`,
+                role: 'user',
+                content: msg.content || '',
+            });
+        } else if (msg.role === 'assistant') {
+            const content = msg.content || '';
+            if (content) {
+                uiMessages.push({
+                    id: `hist_a_${uiMessages.length}`,
+                    role: 'assistant',
+                    content,
+                    streaming: false,
+                });
+            }
+        }
+        // Skip tool messages — they aren't displayed directly
+    }
+    return uiMessages;
 }
 
 export default function useStreamingChat(callbacks) {
@@ -311,6 +344,28 @@ export default function useStreamingChat(callbacks) {
         setIsStreaming(false);
     }, []);
 
+    const loadSession = useCallback(async (conversationId) => {
+        // Abort any in-flight stream
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setIsStreaming(false);
+
+        try {
+            const resp = await fetch(`/api/conversations/sessions/${conversationId}/resume`, {
+                method: 'POST',
+            });
+            if (!resp.ok) return false;
+            const data = await resp.json();
+            sessionIdRef.current = conversationId;
+            setMessages(_historyToMessages(data.messages || []));
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }, []);
+
     const newSession = useCallback(async () => {
         // Abort any in-flight stream so it doesn't write into the cleared message list
         if (abortControllerRef.current) {
@@ -335,6 +390,7 @@ export default function useStreamingChat(callbacks) {
         isStreaming,
         sendMessage,
         stopGeneration,
+        loadSession,
         newSession,
     };
 }

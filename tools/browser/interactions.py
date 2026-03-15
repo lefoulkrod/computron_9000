@@ -577,10 +577,9 @@ async def go_back() -> str:
         Updated page snapshot string.
 
     Raises:
-        BrowserToolError: If back navigation fails or no history available.
+        BrowserToolError: If back navigation fails.
     """
-    browser, view = await get_active_view("go_back")
-    initial_url = view.url
+    browser, _view = await get_active_view("go_back")
 
     try:
         browser_result = await browser.navigate_back()
@@ -590,11 +589,6 @@ async def go_back() -> str:
         logger.exception("Playwright error during go_back")
         msg = "Failed to navigate back"
         raise BrowserToolError(msg, tool="go_back") from exc
-
-    page = await browser.current_page()
-    if page.url == initial_url:
-        msg = "No previous page available to navigate back to."
-        raise BrowserToolError(msg, tool="go_back")
 
     return await _format_result(browser_result, tool_name="go_back")
 

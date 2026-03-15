@@ -2,36 +2,19 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any
 
-from . import _registry
+from skills import _registry
 
 logger = logging.getLogger(__name__)
 
 
 def _format_skill_summary(skill: _registry.SkillDefinition) -> str:
     """Build a concise summary line for a skill."""
-    confidence_pct = int(skill.confidence * 100)
     return (
-        f"- {skill.name} (confidence: {confidence_pct}%, "
-        f"used {skill.usage_count} times, {len(skill.steps)} steps)\n"
+        f"- {skill.name} (used {skill.usage_count} times, {len(skill.steps)} steps)\n"
         f"  {skill.description}"
     )
-
-
-def _fill_template(template: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
-    """Replace {param_name} placeholders in argument templates."""
-    filled: dict[str, Any] = {}
-    for key, value in template.items():
-        if isinstance(value, str):
-            for param_name, param_value in params.items():
-                value = value.replace(f"{{{param_name}}}", str(param_value))
-            filled[key] = value
-        else:
-            filled[key] = value
-    return filled
 
 
 async def lookup_skills(query: str) -> dict[str, object]:
@@ -43,7 +26,7 @@ async def lookup_skills(query: str) -> dict[str, object]:
 
     Args:
         query: Search keywords (space or comma separated). Matches against
-            skill names, descriptions, trigger patterns, and categories.
+            skill names, descriptions, and trigger patterns.
 
     Returns:
         dict with matching skills.
@@ -69,16 +52,14 @@ async def lookup_skills(query: str) -> dict[str, object]:
         return {"status": "error", "message": str(exc)}
 
 
-async def apply_skill(skill_name: str, parameters_json: str = "{}") -> dict[str, object]:
-    """Load a skill and return a formatted execution plan with parameters filled in.
+async def apply_skill(skill_name: str) -> dict[str, object]:
+    """Load a skill and return its execution plan.
 
-    The plan is advisory — follow the steps using your normal tools but
-    adapt as needed based on actual results.
+    The plan is advisory — follow the steps using your normal tools,
+    fill in parameters from context, and adapt as needed.
 
     Args:
         skill_name: Exact name of the skill to apply.
-        parameters_json: JSON object mapping parameter names to values.
-            Example: '{"target_url": "https://example.com", "query": "pasta recipes"}'
 
     Returns:
         dict with the formatted execution plan.
@@ -91,66 +72,21 @@ async def apply_skill(skill_name: str, parameters_json: str = "{}") -> dict[str,
                 "message": f"No skill named '{skill_name}'. Use lookup_skills() to search.",
             }
 
-        if not skill.active:
-            return {
-                "status": "inactive",
-                "message": f"Skill '{skill_name}' is inactive (confidence too low).",
-            }
-
-        # Parse parameters
-        try:
-            params = json.loads(parameters_json) if parameters_json else {}
-        except json.JSONDecodeError:
-            return {"status": "error", "message": "Invalid JSON in parameters_json."}
-
-        # Validate required parameters
-        missing = [
-            p.name
-            for p in skill.parameters
-            if p.required and p.name not in params
-        ]
-        if missing:
-            return {
-                "status": "error",
-                "message": f"Missing required parameters: {', '.join(missing)}",
-                "parameters": [
-                    {
-                        "name": p.name,
-                        "description": p.description,
-                        "type": p.type,
-                        "required": p.required,
-                        "example": p.example,
-                    }
-                    for p in skill.parameters
-                ],
-            }
-
         # Build execution plan
-        confidence_pct = int(skill.confidence * 100)
         lines = [
-            f"SKILL: {skill.name} (confidence: {confidence_pct}%, used {skill.usage_count} times)",
+            f"SKILL: {skill.name} (used {skill.usage_count} times)",
+            f"{skill.description}",
             "",
             "STEPS:",
         ]
 
         for i, step in enumerate(skill.steps, 1):
-            filled_args = _fill_template(step.argument_template, params)
-            args_str = ", ".join(f'{k}="{v}"' for k, v in filled_args.items())
-            lines.append(f"{i}. {step.tool}({args_str})")
-            lines.append(f"   {step.description}")
-            if step.expected_outcome:
-                lines.append(f"   → Expected: {step.expected_outcome}")
+            lines.append(f"{i}. [{step.tool}] {step.description}")
             if step.notes:
                 lines.append(f"   Note: {step.notes}")
             lines.append("")
 
-        if skill.preconditions:
-            lines.append("PRECONDITIONS:")
-            for pre in skill.preconditions:
-                lines.append(f"  - {pre}")
-            lines.append("")
-
-        lines.append("Follow the plan but adapt as needed based on actual results.")
+        lines.append("Follow the steps but adapt as needed. Fill in specifics from the user's request.")
 
         # Emit a skill_applied event for the UI
         try:

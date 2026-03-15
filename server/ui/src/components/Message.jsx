@@ -112,8 +112,15 @@ function normalizeUnicode(md) {
     return md;
 }
 
+// Escape $ followed by digits (currency like $347, $1,234.56)
+// so remark-math doesn't treat them as math delimiters.
+function escapeCurrencyDollars(md) {
+    if (typeof md !== 'string' || md.length === 0) return '';
+    return md.replace(/(?<!\\)\$(?=\d)/g, '\\$');
+}
+
 function preprocessContent(md) {
-    return normalizeMathDelimiters(normalizeUnicode(md));
+    return normalizeMathDelimiters(normalizeUnicode(escapeCurrencyDollars(md)));
 }
 
 const markdownComponents = {

@@ -162,9 +162,7 @@ async def _ensure_cursor_overlay(page: Page) -> None:
             getattr(page, "url", "<unknown>"),
             exc,
         )
-    if installed:
-        logger.debug("Injected fake cursor overlay into page %s", getattr(page, "url", "<unknown>"))
-    else:
+    if not installed:
         logger.debug("Fake cursor overlay not present on page %s", getattr(page, "url", "<unknown>"))
 
 

@@ -12,7 +12,6 @@ Phase signatures:
 
 from ._budget_guard import BudgetGuard
 from ._context_hook import ContextHook
-from ._conversation_recorder import ConversationRecorderHook
 from ._default import default_hooks
 from ._logging_hook import LoggingHook
 from ._loop_detector import LoopDetector
@@ -20,16 +19,17 @@ from ._nudge_hook import NudgeHook
 from ._scratchpad_hook import ScratchpadHook
 from ._skill_tracking import SkillTrackingHook
 from ._stop_hook import StopHook
+from ._turn_recorder import TurnRecorderHook
 
 __all__ = [
     "BudgetGuard",
     "ContextHook",
-    "ConversationRecorderHook",
     "LoggingHook",
     "LoopDetector",
     "NudgeHook",
     "ScratchpadHook",
     "SkillTrackingHook",
     "StopHook",
+    "TurnRecorderHook",
     "default_hooks",
 ]
