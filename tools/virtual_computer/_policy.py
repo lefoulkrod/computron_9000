@@ -27,9 +27,6 @@ _DENY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"sleep\s+inf(inity)?", re.IGNORECASE),
     re.compile(r"python3?\s+-m\s+http\.server"),
     re.compile(r"playwright\b.*\bheaded\b", re.IGNORECASE),
-    # Block reinstalling torch/torchvision — overwrites the pre-installed CUDA build
-    # with a CPU-only version. Allows torch-related packages like torchaudio, torchtext, etc.
-    re.compile(r"\bpip3?\s+install\b.*\btorch(?:vision)?\b(?![\w-])", re.IGNORECASE),
 )
 
 

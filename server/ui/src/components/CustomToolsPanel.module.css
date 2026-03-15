@@ -24,7 +24,7 @@
 }
 
 .title {
-    font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
     color: var(--text);
     font-weight: 600;
@@ -104,7 +104,7 @@
 }
 
 .name {
-    font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-mono);
     font-size: 0.85em;
     color: var(--text);
     font-weight: 500;
@@ -180,7 +180,7 @@
     background: rgba(220, 60, 60, 0.15);
     border-color: rgba(200, 60, 60, 0.35);
     opacity: 1;
-    color: #c0392b;
+    color: var(--color-danger);
 }
 
 .deleteBtn:disabled {
@@ -191,7 +191,7 @@
 /* Language/type badges */
 .badge {
     display: inline-block;
-    font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-mono);
     font-size: 0.7em;
     padding: 0.1em 0.45em;
     border-radius: 3px;

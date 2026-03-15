@@ -1,9 +1,7 @@
-FROM docker.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04
+FROM docker.io/ubuntu:22.04
 
 # Non-interactive + UTC timezone
 ENV DEBIAN_FRONTEND=noninteractive
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone
 
@@ -71,26 +69,6 @@ RUN python3.12 -m pip install --no-cache-dir \
       edge-tts \
       kokoro-onnx soundfile
 
-# PyTorch with CUDA 12.4 support for GPU-accelerated workloads (e.g. Stable Diffusion).
-# Pin exact versions — torch/torchvision/torchaudio must stay in lockstep.
-# Unpinned installs (e.g. agent running `pip install torch`) will silently
-# pull a mismatched version and break torchvision op registration.
-RUN python3.12 -m pip install --no-cache-dir \
-      torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
-      --index-url https://download.pytorch.org/whl/cu124
-
-# Image generation stack (Flux + FLUX.2 klein via HuggingFace diffusers)
-# Install diffusers from git main for Flux2KleinPipeline support.
-# --no-deps on torch-dependent packages to prevent pip from upgrading torch.
-RUN python3.12 -m pip install --no-cache-dir \
-      git+https://github.com/huggingface/diffusers.git \
-      transformers accelerate safetensors sentencepiece protobuf \
-      "huggingface_hub[cli]" bitsandbytes ftfy opencv-python-headless
-
-# Pre-download TAESD (AutoencoderTiny) for cheap image preview decoding (~50 MB).
-# Used by the inference server to stream denoising previews during generation.
-RUN python3.12 -c "from diffusers import AutoencoderTiny; AutoencoderTiny.from_pretrained('madebyollin/taef1')"
-
 # Pre-download Kokoro-82M model files (int8 quantized, ~88 MB) so the agent
 # can use TTS without fetching weights at runtime.
 RUN mkdir -p /opt/kokoro && \
@@ -112,12 +90,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xcursor-themes dmz-cursor-theme \
     fonts-dejavu-core \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Inference server scripts — baked into the image so the container is self-contained.
-# Placed outside the agent's home directory so agents can't read or modify them.
-COPY container/inference_server.py container/inference_client.py /opt/inference/
-COPY container/grounding_server.py container/grounding_client.py /opt/inference/
-RUN chmod -R 755 /opt/inference
 
 # Xfce desktop config (theme, icons, cursor, disable power management)
 RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \

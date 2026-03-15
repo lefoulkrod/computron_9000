@@ -211,9 +211,16 @@ def _ensure_taesd():
     from diffusers import AutoencoderTiny
 
     log.info("Loading TAESD (madebyollin/taef1) for previews...")
-    _taesd = AutoencoderTiny.from_pretrained(
-        "madebyollin/taef1", torch_dtype=torch.float32,
-    )
+    try:
+        _taesd = AutoencoderTiny.from_pretrained(
+            "madebyollin/taef1", torch_dtype=torch.float32,
+        )
+    except Exception:
+        log.info("Online TAESD load failed, falling back to local cache")
+        _taesd = AutoencoderTiny.from_pretrained(
+            "madebyollin/taef1", torch_dtype=torch.float32,
+            local_files_only=True,
+        )
     _taesd = _taesd.to("cpu")
     _taesd.eval()
     log.info("TAESD ready on CPU")

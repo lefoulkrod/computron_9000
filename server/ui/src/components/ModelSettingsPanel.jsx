@@ -45,20 +45,20 @@ function InfoTip({ text }) {
     );
 }
 
-export default function ModelSettingsPanel({
-    models, selectedModel, onModelChange,
-    contextKb, onContextKbChange,
-    think, onThinkChange,
-    persistThinking, onPersistThinkingChange,
-    temperature, onTemperatureChange,
-    topK, onTopKChange,
-    topP, onTopPChange,
-    repeatPenalty, onRepeatPenaltyChange,
-    numPredict, onNumPredictChange,
-    unlimitedTurns, onUnlimitedTurnsChange,
-    agentTurns, onAgentTurnsChange,
-    disabled,
-}) {
+export default function ModelSettingsPanel({ settings, disabled }) {
+    const {
+        availableModels: models, selectedModel, setSelectedModel: onModelChange,
+        contextKb, setContextKb: onContextKbChange,
+        think, setThink: onThinkChange,
+        persistThinking, setPersistThinking: onPersistThinkingChange,
+        temperature, setTemperature: onTemperatureChange,
+        topK, setTopK: onTopKChange,
+        topP, setTopP: onTopPChange,
+        repeatPenalty, setRepeatPenalty: onRepeatPenaltyChange,
+        numPredict, setNumPredict: onNumPredictChange,
+        unlimitedTurns, setUnlimitedTurns: onUnlimitedTurnsChange,
+        agentTurns, setAgentTurns: onAgentTurnsChange,
+    } = settings;
     const [collapsed, setCollapsed] = useState(true);
 
     return (

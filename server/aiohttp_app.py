@@ -144,12 +144,20 @@ async def stream_events(
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
             if data_out.get("final"):
                 break
+    except ConnectionResetError:
+        logger.debug("Client disconnected during event stream")
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Error while streaming events")
-        error_data = {"error": "Server error", "final": True}
-        await resp.write((json.dumps(error_data) + "\n").encode("utf-8"))
+        try:
+            error_data = {"error": "Server error", "final": True}
+            await resp.write((json.dumps(error_data) + "\n").encode("utf-8"))
+        except ConnectionResetError:
+            pass
     finally:
-        await resp.write_eof()
+        try:
+            await resp.write_eof()
+        except ConnectionResetError:
+            pass
     return resp
 
 

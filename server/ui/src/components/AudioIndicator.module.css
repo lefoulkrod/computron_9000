@@ -55,10 +55,3 @@
     0%, 100% { transform: scaleY(0.5); }
     50%      { transform: scaleY(1.2); }
 }
-
-@media (max-width: 700px) {
-    .button {
-        width: 32px;
-        height: 32px;
-    }
-}

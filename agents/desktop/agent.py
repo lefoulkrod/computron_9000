@@ -88,12 +88,13 @@ SYSTEM_PROMPT = dedent(
 
     WINDOW MANAGEMENT:
     Window title bar buttons (close, minimize, maximize) are NOT in the
-    element list. Use these keyboard shortcuts instead:
-    - alt+F4 — close the focused window
-    - alt+F9 — minimize the focused window
-    - alt+F10 — maximize/restore the focused window
-    - alt+Tab — switch between open windows
-    - super — open the application menu
+    element list. Use wmctrl via run_bash_cmd to manage windows:
+    - List windows:   run_bash_cmd("DISPLAY=:1 wmctrl -l")
+    - Focus window:   run_bash_cmd("DISPLAY=:1 wmctrl -a 'Window Title'")
+    - Close window:   run_bash_cmd("DISPLAY=:1 wmctrl -c 'Window Title'")
+    - Move/resize:    run_bash_cmd("DISPLAY=:1 wmctrl -r 'Title' -e 0,x,y,w,h")
+    - Maximize:       run_bash_cmd("DISPLAY=:1 wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
+    - Switch windows: alt+Tab (keyboard shortcut)
 
     LAUNCHING APPS:
     - Use run_bash_cmd: run_bash_cmd("DISPLAY=:1 libreoffice &")

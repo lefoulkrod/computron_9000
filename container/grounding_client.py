@@ -114,6 +114,27 @@ def ground(image_b64, task):
     _ensure_server()
 
     body = json.dumps({"image": image_b64, "task": task}).encode()
+    return _post_ground(body)
+
+
+def ground_from_path(image_path, task):
+    """Send a grounding request using an image file path on disk.
+
+    Args:
+        image_path: Absolute path to a screenshot file accessible to the server.
+        task: Natural language task description, e.g. "Click the Save button".
+
+    Returns:
+        dict with keys: action_type, x, y, thought, action, raw, etc.
+    """
+    _ensure_server()
+
+    body = json.dumps({"image_path": image_path, "task": task}).encode()
+    return _post_ground(body)
+
+
+def _post_ground(body):
+    """POST to /ground and return the parsed response."""
     req = urllib.request.Request(
         f"{SERVER_URL}/ground",
         data=body,

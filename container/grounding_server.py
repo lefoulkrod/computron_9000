@@ -147,24 +147,16 @@ def _load_model():
     torch.cuda.set_device(gpu_idx)
     device = "cuda:%d" % gpu_idx
 
-    log.info("Loading %s onto %s (4-bit quantized) ...", MODEL_ID, device)
+    log.info("Loading %s onto %s (bfloat16) ...", MODEL_ID, device)
     t0 = time.time()
-
-    from transformers import BitsAndBytesConfig
-
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_quant_type="nf4",
-    )
 
     _model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         MODEL_ID,
-        quantization_config=quantization_config,
+        torch_dtype=torch.bfloat16,
         device_map=device,
     )
     _processor = AutoProcessor.from_pretrained(MODEL_ID)
-    log.info("Model loaded in %.1fs (~4-bit, single GPU)", time.time() - t0)
+    log.info("Model loaded in %.1fs (bfloat16, single GPU)", time.time() - t0)
 
 
 def _run_inference(image_bytes, task):
@@ -305,19 +297,30 @@ class _Handler(BaseHTTPRequestHandler):
             self._json_response({"error": "Invalid JSON: %s" % exc}, 400)
             return
 
-        image_b64 = body.get("image")
         task = body.get("task", "")
-        if not image_b64:
-            self._json_response({"error": "Missing 'image' field"}, 400)
-            return
         if not task:
             self._json_response({"error": "Missing 'task' field"}, 400)
             return
 
-        try:
-            image_bytes = base64.b64decode(image_b64)
-        except Exception:
-            self._json_response({"error": "Invalid base64 image"}, 400)
+        # Accept either image_path (file on disk) or image (base64).
+        image_path = body.get("image_path")
+        image_b64 = body.get("image")
+
+        if image_path:
+            try:
+                with open(image_path, "rb") as f:
+                    image_bytes = f.read()
+            except OSError as exc:
+                self._json_response({"error": "Cannot read image_path: %s" % exc}, 400)
+                return
+        elif image_b64:
+            try:
+                image_bytes = base64.b64decode(image_b64)
+            except Exception:
+                self._json_response({"error": "Invalid base64 image"}, 400)
+                return
+        else:
+            self._json_response({"error": "Missing 'image' or 'image_path' field"}, 400)
             return
 
         with _lock:

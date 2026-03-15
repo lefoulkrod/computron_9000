@@ -65,8 +65,11 @@ SYSTEM_PROMPT = dedent(
 
         AGENTS:
         - COMPUTER_AGENT — full access to the virtual computer. Writes code, generates
-          assets (audio, images, SVGs via Python/ffmpeg/etc.), edits files, runs commands,
+          assets (audio, SVGs via Python/ffmpeg/etc.), edits files, runs commands,
           and searches codebases. Use for any work that involves creating or modifying files.
+
+        IMAGE GENERATION — use the generate_media tool directly for image generation.
+        Do NOT delegate image generation to COMPUTER_AGENT or other sub-agents.
         - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
           Use ONLY for web browsing — never for creating files or assets.
         - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.

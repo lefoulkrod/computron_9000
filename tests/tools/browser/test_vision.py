@@ -1,26 +1,30 @@
-"""Legacy placeholder to avoid duplicate tests; coverage lives in module-specific suites."""
+"""Tests for browser vision tools (inspect_page + perform_visual_action)."""
 
 from __future__ import annotations
 
 import base64
 import importlib
-import json
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 
+from tools._grounding import GroundingResponse
 from tools.browser import BrowserToolError
-from tools.browser.vision import GroundingResult, ask_about_screenshot, ground_elements_by_text
+from tools.browser.vision import inspect_page, perform_visual_action
+
+
+# ── Shared helpers ────────────────────────────────────────────────────
 
 
 def _make_fake_get_active_view(browser):
     """Build a fake ``get_active_view`` from a ``_FakeBrowser``."""
+
     async def _fake(tool_name):
         view = await browser.active_view()
         if view.url in {"", "about:blank"}:
             raise BrowserToolError("Navigate to a page first.", tool=tool_name)
         return browser, view
+
     return _fake
 
 
@@ -55,9 +59,10 @@ class _ScreenshotFakePage:
 
     async def screenshot(self, *, full_page: bool = False, type: str = "png") -> bytes:
         assert type == "png"
-        if full_page:
-            return self._screenshot_bytes
         return self._screenshot_bytes
+
+    async def evaluate(self, script: str, arg: object = None) -> str | dict:
+        return ""
 
     def locator(self, selector: str) -> _ScreenshotFakeLocator:
         return self._locator_map.get(selector, _ScreenshotFakeLocator(b"", exists=False))
@@ -69,42 +74,30 @@ class _ScreenshotFakePage:
         return _ScreenshotFakeLocator(b"", exists=False)
 
 
-class _GroundingFakePage:
-    def __init__(self, screenshot_bytes: bytes, url: str = "https://example.com") -> None:
-        self._screenshot_bytes = screenshot_bytes
-        self.url = url
-        self.viewport_size = {"width": 1024, "height": 768}
-
-    async def title(self) -> str:
-        return "Example"
-
-    async def evaluate(self, script: str, arg: object = None) -> str | dict:
-        # Support viewport info query
-        if "scroll_top" in script and ("scrollY" in script or "scrollHeight" in script):
-            return {"scroll_top": 0, "viewport_height": 768, "viewport_width": 1024, "document_height": 2000}
-        # Support viewport text extraction script
-        if "viewportHeight" in script and "querySelectorAll" in script:
-            return "Example body text"
-        return ""
-
-    async def screenshot(self, *, full_page: bool = True, type: str = "png") -> bytes:
-        assert type == "png"
-        return self._screenshot_bytes
-
-
 class _FakeBrowser:
-    def __init__(self, page: _ScreenshotFakePage | _GroundingFakePage) -> None:
+    def __init__(self, page: _ScreenshotFakePage) -> None:
         self._page = page
 
-    async def current_page(self) -> _ScreenshotFakePage | _GroundingFakePage:
+    async def current_page(self) -> _ScreenshotFakePage:
         return self._page
 
-    async def active_frame(self) -> _ScreenshotFakePage | _GroundingFakePage:
+    async def active_frame(self) -> _ScreenshotFakePage:
         return self._page
 
     async def active_view(self):
         from tools.browser.core.browser import ActiveView
+
         return ActiveView(frame=self._page, title="Example", url=self._page.url)
+
+    async def perform_interaction(self, action_fn):
+        from tools.browser.core.browser import BrowserInteractionResult
+
+        await action_fn()
+        return BrowserInteractionResult(
+            action_ms=10.0,
+            settle_timings=None,
+            navigation_response=None,
+        )
 
 
 class _FakeModel:
@@ -135,48 +128,13 @@ class _ScreenshotClient:
         return SimpleNamespace(response="Mock answer")
 
 
-class _GroundingClient:
-    last_prompt: str | None = None
-    last_model: object | None = None
-    last_images: object | None = None
-    last_host: str | None = None
-
-    def __init__(self, host: str | None = None) -> None:
-        _GroundingClient.last_host = host
-
-    async def generate(self, **kwargs: object) -> SimpleNamespace:
-        _GroundingClient.last_prompt = cast(str | None, kwargs.get("prompt"))
-        _GroundingClient.last_model = kwargs.get("model")
-        _GroundingClient.last_images = kwargs.get("images")
-        # Model returns [x1, y1, x2, y2] in normalized coordinates (0-1000)
-        # For 1024x768 viewport: x=100px is ~97.7/1000, y=150px is ~195.3/1000
-        # We use values that convert cleanly: x1=98, y1=195, x2=195, y2=326
-        payload = '[{"element_type": "checkbox", "text": null, "bbox": [98, 195, 195, 326]}]'
-        return SimpleNamespace(response=payload)
-
-
-class _GroundingDummyClient:
-    def __init__(self, host: str | None = None) -> None:
-        self._host = host
-
-    async def generate(self, **kwargs: object) -> SimpleNamespace:
-        return SimpleNamespace(response="not-json")
-
-
-class _GroundingStringBBoxClient:
-    def __init__(self, host: str | None = None) -> None:
-        self._host = host
-
-    async def generate(self, **kwargs: object) -> SimpleNamespace:
-        # Model returns [x1, y1, x2, y2] in normalized coordinates (0-1000) as string
-        return SimpleNamespace(response='[{"text": null, "element_type": "button", "bbox": "98,195,195,326"}]')
-
+# ── inspect_page tests ────────────────────────────────────────────────
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_ask_about_screenshot_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ask_about_screenshot should capture a screenshot and forward it to the model."""
+async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """inspect_page should capture a screenshot and forward it to the model."""
     page = _ScreenshotFakePage(b"fake-image-bytes")
     browser = _FakeBrowser(page)
 
@@ -197,7 +155,7 @@ async def test_ask_about_screenshot_success(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
-    answer = await ask_about_screenshot("What is in the header?")
+    answer = await inspect_page("What is in the header?")
 
     assert answer == "Mock answer"
     assert _ScreenshotClient.last_host == _FakeConfig.llm.host
@@ -215,16 +173,16 @@ async def test_ask_about_screenshot_success(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_ask_about_screenshot_rejects_blank_prompt() -> None:
+async def test_inspect_page_rejects_blank_prompt() -> None:
     """Blank prompts should raise a BrowserToolError."""
     with pytest.raises(BrowserToolError):
-        await ask_about_screenshot("   ")
+        await inspect_page("   ")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_ask_about_screenshot_requires_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ask_about_screenshot should require a navigated page."""
+async def test_inspect_page_requires_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """inspect_page should require a navigated page."""
     page = _ScreenshotFakePage(b"img", url="about:blank")
     browser = _FakeBrowser(page)
 
@@ -237,12 +195,12 @@ async def test_ask_about_screenshot_requires_navigation(monkeypatch: pytest.Monk
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await ask_about_screenshot("Describe the page")
+        await inspect_page("Describe the page")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_ask_about_screenshot_selector_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_inspect_page_selector_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Selector screenshots should focus on the requested element."""
     locator = _ScreenshotFakeLocator(b"element-bytes")
     page = _ScreenshotFakePage(b"page-bytes", locator_map={"#hero": locator})
@@ -250,8 +208,6 @@ async def test_ask_about_screenshot_selector_mode(monkeypatch: pytest.MonkeyPatc
 
     async def fake_get_browser() -> _FakeBrowser:
         return browser
-
-    fake_model = _FakeModel()
 
     _ScreenshotClient.called = False
     _ScreenshotClient.last_kwargs = {}
@@ -265,7 +221,7 @@ async def test_ask_about_screenshot_selector_mode(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
 
-    answer = await ask_about_screenshot("Describe the hero", mode="selector", selector="#hero")
+    answer = await inspect_page("Describe the hero", mode="selector", selector="#hero")
 
     assert answer == "Mock answer"
     assert _ScreenshotClient.called
@@ -295,7 +251,7 @@ async def test_selector_requires_non_empty(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await ask_about_screenshot("prompt", mode="selector", selector="   ")
+        await inspect_page("prompt", mode="selector", selector="   ")
 
 
 @pytest.mark.unit
@@ -313,114 +269,155 @@ async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError) as excinfo:
-        await ask_about_screenshot("Anything", mode="selector", selector="#missing")
+        await inspect_page("Anything", mode="selector", selector="#missing")
 
     msg = str(excinfo.value)
     assert "No element matched selector handle '#missing'" in msg or "No element matched selector '#missing'" in msg
 
 
+# ── perform_visual_action tests ───────────────────────────────────────
+
+
+_CLICK_GROUNDING_RESPONSE = GroundingResponse(
+    x=500,
+    y=300,
+    thought="Found the login button",
+    action_type="click",
+    raw={"x": 500, "y": 300, "coordinates": [{"screen": [500, 300]}]},
+)
+
+_TYPE_GROUNDING_RESPONSE = GroundingResponse(
+    x=None,
+    y=None,
+    thought="Need to type text",
+    action_type="type",
+    raw={"type_content": "hello world"},
+)
+
+_FINISHED_GROUNDING_RESPONSE = GroundingResponse(
+    x=None,
+    y=None,
+    thought="Done",
+    action_type="finished",
+    raw={"finished_content": "Login was successful"},
+)
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_request_grounding_by_text_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ground_elements_by_text should return validated GroundingResult objects."""
-    page = _GroundingFakePage(b"fake-bytes")
+async def test_perform_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> None:
+    """perform_visual_action with a click response should execute the click."""
+    page = _ScreenshotFakePage(b"fake-bytes")
     browser = _FakeBrowser(page)
 
     module = importlib.import_module("tools.browser.vision")
+    grounding_module = importlib.import_module("tools._grounding")
 
-    async def fake_get_browser() -> _FakeBrowser:
-        return browser
-
-    monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
-    monkeypatch.setattr(module, "AsyncClient", _GroundingClient)
 
-    monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
+    async def fake_run_grounding(screenshot_bytes, task, *, screenshot_filename=""):
+        return _CLICK_GROUNDING_RESPONSE
 
-    result = await ground_elements_by_text("Login")
+    monkeypatch.setattr(grounding_module, "run_grounding", fake_run_grounding)
 
-    assert isinstance(result, list)
-    assert len(result) == 1
-    first = result[0]
-    assert isinstance(first, GroundingResult)
-    assert first.text is None
-    # Model returns normalized [x1=98, y1=195, x2=195, y2=326] which converts to (100, 150, 200, 250) CSS pixels
-    assert first.bbox == (100, 150, 200, 250)
-    assert first.center == (150, 200)
+    # Mock execute_action to avoid needing real Playwright
+    from unittest.mock import AsyncMock
 
-    expected_prompt = module._PROMPT_TEMPLATE.format(
-        text_json=json.dumps("Login"),
-        width=1024,
-        height=768,
+    mock_execute = AsyncMock()
+    monkeypatch.setattr("tools.browser._action_map.execute_action", mock_execute)
+
+    # Mock _format_result — it's imported lazily inside perform_visual_action
+    interactions_module = importlib.import_module("tools.browser.interactions")
+
+    async def fake_format_result(result, *, tool_name="", resolution=None):
+        return "[page snapshot]"
+
+    monkeypatch.setattr(interactions_module, "_format_result", fake_format_result)
+
+    result = await perform_visual_action("Click the login button")
+    assert isinstance(result, str)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_perform_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -> None:
+    """perform_visual_action with finished response should return snapshot with note."""
+    page = _ScreenshotFakePage(b"fake-bytes")
+    browser = _FakeBrowser(page)
+
+    module = importlib.import_module("tools.browser.vision")
+    grounding_module = importlib.import_module("tools._grounding")
+
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
+
+    async def fake_run_grounding(screenshot_bytes, task, *, screenshot_filename=""):
+        return _FINISHED_GROUNDING_RESPONSE
+
+    monkeypatch.setattr(grounding_module, "run_grounding", fake_run_grounding)
+
+    # Mock build_page_view — it's lazy-imported inside perform_visual_action
+    from tools.browser.core.page_view import PageView
+    page_view_module = importlib.import_module("tools.browser.core.page_view")
+
+    fake_snapshot = PageView(
+        title="Test Page",
+        url="https://example.com",
+        status_code=200,
+        content="Page content here",
+        viewport=None,
+        truncated=False,
+        snapshot_nodes=0,
+        snapshot_js_ms=0.0,
+        snapshot_py_ms=0.0,
     )
-    assert _GroundingClient.last_prompt == expected_prompt
-    assert _GroundingClient.last_model == _FakeModel().model
-    assert _GroundingClient.last_host == _FakeConfig.llm.host
 
-    images = _GroundingClient.last_images
-    if not isinstance(images, list):
-        pytest.fail("Vision client did not receive images list")
-    assert len(images) == 1
-    expected_image = base64.b64encode(b"fake-bytes").decode("ascii")
-    assert getattr(images[0], "value", None) == expected_image
+    async def fake_build_page_view(view, response):
+        return fake_snapshot
+
+    monkeypatch.setattr(page_view_module, "build_page_view", fake_build_page_view)
+
+    result = await perform_visual_action("Check if login succeeded")
+    assert "finished" in result.lower() or "Login was successful" in result
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_request_grounding_by_text_requires_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Grounding requests should fail when the page is not navigated."""
-    page = _GroundingFakePage(b"bytes", url="about:blank")
+async def test_perform_visual_action_empty_task() -> None:
+    """Empty task should raise BrowserToolError."""
+    with pytest.raises(BrowserToolError):
+        await perform_visual_action("   ")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_perform_visual_action_grounding_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """RuntimeError from grounding should become BrowserToolError."""
+    page = _ScreenshotFakePage(b"fake")
+    browser = _FakeBrowser(page)
+
+    module = importlib.import_module("tools.browser.vision")
+    grounding_module = importlib.import_module("tools._grounding")
+
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
+
+    async def failing_grounding(*args, **kwargs):
+        raise RuntimeError("Grounding failed: container not running")
+
+    monkeypatch.setattr(grounding_module, "run_grounding", failing_grounding)
+
+    with pytest.raises(BrowserToolError, match="Grounding request failed"):
+        await perform_visual_action("Click login")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_perform_visual_action_requires_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """perform_visual_action should require a navigated page."""
+    page = _ScreenshotFakePage(b"bytes", url="about:blank")
     browser = _FakeBrowser(page)
     module = importlib.import_module("tools.browser.vision")
 
-    async def fake_get_browser() -> _FakeBrowser:
-        return browser
-
-    monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await ground_elements_by_text("Login")
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_request_grounding_by_text_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Invalid JSON responses should raise a BrowserToolError."""
-    page = _GroundingFakePage(b"fake", url="https://example.com")
-    browser = _FakeBrowser(page)
-    module = importlib.import_module("tools.browser.vision")
-
-    async def fake_get_browser() -> _FakeBrowser:
-        return browser
-
-    monkeypatch.setattr(module, "get_browser", fake_get_browser)
-    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
-    monkeypatch.setattr(module, "AsyncClient", _GroundingDummyClient)
-
-    monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
-
-    with pytest.raises(BrowserToolError):
-        await ground_elements_by_text("Login")
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_grounding_accepts_string_bbox(monkeypatch: pytest.MonkeyPatch) -> None:
-    """String bbox values should be parsed into numeric coordinates."""
-    page = _GroundingFakePage(b"fake", url="https://example.com")
-    browser = _FakeBrowser(page)
-    module = importlib.import_module("tools.browser.vision")
-
-    async def fake_get_browser() -> _FakeBrowser:
-        return browser
-
-    monkeypatch.setattr(module, "get_browser", fake_get_browser)
-    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
-    monkeypatch.setattr(module, "AsyncClient", _GroundingStringBBoxClient)
-
-    monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
-
-    result = await ground_elements_by_text("Button")
-    # Model returns normalized [x1=98, y1=195, x2=195, y2=326] which converts to (100, 150, 200, 250) CSS pixels
-    assert result[0].bbox == (100, 150, 200, 250)
+        await perform_visual_action("Click login")

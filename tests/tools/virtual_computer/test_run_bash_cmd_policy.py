@@ -50,22 +50,12 @@ def test_pip_install_package_with_serve_in_name_allowed() -> None:
 
 
 @pytest.mark.unit
-def test_block_pip_install_torch() -> None:
-    """Reinstalling torch/torchvision should be blocked to protect the CUDA build."""
+def test_allow_pip_install_torch() -> None:
+    """Torch installs are allowed — inference runs in a separate container."""
     for cmd in (
         "pip install torch",
         "pip3 install torch",
         "pip install torchvision",
-        "pip install diffusers torch",
-        "pip install torch torchvision",
-    ):
-        assert not is_allowed_command(cmd), f"Expected block for: {cmd}"
-
-
-@pytest.mark.unit
-def test_allow_torch_related_packages() -> None:
-    """Packages with 'torch' as a prefix (e.g. torchaudio) should be allowed."""
-    for cmd in (
         "pip install torchaudio",
         "pip install torch-geometric",
         "pip install pytorch-lightning",

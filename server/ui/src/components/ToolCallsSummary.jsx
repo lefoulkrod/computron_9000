@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import styles from './ToolCallsSummary.module.css';
-import WrenchIcon from './icons/WrenchIcon';
+import WrenchIcon from './icons/WrenchIcon.jsx';
 
 function formatName(name) {
     return name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
