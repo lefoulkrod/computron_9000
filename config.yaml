@@ -57,9 +57,10 @@ summary:
 skills:
   enabled: true
   extraction_interval_seconds: 300
-  extraction_model: qwen3:8b
-  min_confidence: 0.15
-  decay_days: 90
+  extraction_model: qwen3.5:cloud
+  extraction_options:
+    num_ctx: 60000
+    temperature: 0.3
   max_skills: 200
   single_conversation_extraction: true
 

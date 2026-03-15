@@ -7,11 +7,11 @@ from .context import ContextManager, ConversationHistory
 from .hooks import (
     BudgetGuard,
     ContextHook,
-    ConversationRecorderHook,
     LoggingHook,
     LoopDetector,
     SkillTrackingHook,
     StopHook,
+    TurnRecorderHook,
     default_hooks,
 )
 from .loop import run_tool_call_loop
@@ -21,7 +21,6 @@ from .tools import make_run_agent_as_tool_function
 __all__ = [
     "BudgetGuard",
     "ContextHook",
-    "ConversationRecorderHook",
     "ContextManager",
     "ConversationHistory",
     "LLMRuntimeStats",
@@ -29,6 +28,7 @@ __all__ = [
     "LoopDetector",
     "SkillTrackingHook",
     "StopHook",
+    "TurnRecorderHook",
     "default_hooks",
     "llm_runtime_stats",
     "make_run_agent_as_tool_function",

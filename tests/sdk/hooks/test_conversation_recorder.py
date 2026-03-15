@@ -1,4 +1,4 @@
-"""Unit tests for ConversationRecorderHook."""
+"""Unit tests for TurnRecorderHook."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sdk.hooks._conversation_recorder import ConversationRecorderHook
+from sdk.hooks._turn_recorder import TurnRecorderHook
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +16,7 @@ def _conv_dir(tmp_path: Path) -> Path:
     """Patch the conversations directory to a temp directory."""
     conv_dir = tmp_path / "conversations"
     with patch(
-        "tools.conversations._store._get_conversations_dir",
+        "conversations._store._get_conversations_dir",
         return_value=conv_dir,
     ):
         yield conv_dir
@@ -41,23 +41,23 @@ def _make_tool_call(name: str, args: dict | None = None) -> SimpleNamespace:
 
 
 @pytest.mark.unit
-class TestConversationRecorderHook:
-    """Tests for the conversation recording hook."""
+class TestTurnRecorderHook:
+    """Tests for the turn recording hook."""
 
     def test_initialization(self) -> None:
         """Verify hook initializes with correct state."""
-        hook = ConversationRecorderHook(
+        hook = TurnRecorderHook(
             user_message="hello",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
         )
-        assert hook.conversation_id
+        assert hook.turn_id
         assert hook._user_message == "hello"
 
     @pytest.mark.asyncio
-    async def test_after_model_records_turn(self) -> None:
-        """after_model records assistant turns."""
-        hook = ConversationRecorderHook(
+    async def test_after_model_records_message(self) -> None:
+        """after_model records assistant messages."""
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
@@ -66,14 +66,14 @@ class TestConversationRecorderHook:
         result = await hook.after_model(response, None, 1, "COMPUTRON_9000")
 
         assert result is response
-        assert len(hook._turns) == 1
-        assert hook._turns[0].role == "assistant"
-        assert hook._turns[0].content == "I'll help you."
+        assert len(hook._messages) == 1
+        assert hook._messages[0].role == "assistant"
+        assert hook._messages[0].content == "I'll help you."
 
     @pytest.mark.asyncio
     async def test_after_model_with_tool_calls(self) -> None:
         """after_model captures tool calls."""
-        hook = ConversationRecorderHook(
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
@@ -82,13 +82,13 @@ class TestConversationRecorderHook:
         response = _make_response("Searching...", tool_calls=[tc])
         await hook.after_model(response, None, 1, "COMPUTRON_9000")
 
-        assert len(hook._turns) == 1
-        assert len(hook._turns[0].tool_calls) == 1
-        assert hook._turns[0].tool_calls[0].name == "browser_agent_tool"
+        assert len(hook._messages) == 1
+        assert len(hook._messages[0].tool_calls) == 1
+        assert hook._messages[0].tool_calls[0].name == "browser_agent_tool"
 
     def test_before_tool_returns_none(self) -> None:
         """before_tool should not intercept."""
-        hook = ConversationRecorderHook(
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
@@ -99,7 +99,7 @@ class TestConversationRecorderHook:
 
     def test_after_tool_records_result(self) -> None:
         """after_tool records tool results and passes through."""
-        hook = ConversationRecorderHook(
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
@@ -108,13 +108,13 @@ class TestConversationRecorderHook:
         result = hook.after_tool("click", {"ref": "7"}, "Clicked button")
 
         assert result == "Clicked button"
-        assert len(hook._turns) == 1
-        assert hook._turns[0].role == "tool"
-        assert hook._turns[0].tool_calls[0].duration_ms is not None
+        assert len(hook._messages) == 1
+        assert hook._messages[0].role == "tool"
+        assert hook._messages[0].tool_calls[0].duration_ms is not None
 
-    def test_after_tool_truncates_long_results(self) -> None:
-        """Tool results are truncated to 500 chars."""
-        hook = ConversationRecorderHook(
+    def test_after_tool_stores_full_results(self) -> None:
+        """Tool results are stored without truncation."""
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
@@ -124,41 +124,41 @@ class TestConversationRecorderHook:
 
         # Original result passed through unchanged
         assert len(result) == 1000
-        # Stored result is truncated
-        assert len(hook._turns[0].tool_calls[0].result_summary) == 500
+        # Stored result is NOT truncated (full fidelity)
+        assert len(hook._messages[0].tool_calls[0].result_summary) == 1000
 
     def test_after_tool_detects_errors(self) -> None:
         """Error results are marked as not successful."""
-        hook = ConversationRecorderHook(
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
         )
         hook.after_tool("click", {}, "Error: Element not found")
-        assert hook._turns[0].tool_calls[0].success is False
+        assert hook._messages[0].tool_calls[0].success is False
 
     def test_finalize_saves_record(self, _conv_dir: Path) -> None:
-        """finalize persists the conversation record."""
-        hook = ConversationRecorderHook(
+        """finalize persists the turn record."""
+        hook = TurnRecorderHook(
             user_message="find pasta recipes",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",
         )
         record = hook.finalize()
 
-        assert record.id == hook.conversation_id
+        assert record.id == hook.turn_id
         assert record.user_message == "find pasta recipes"
         assert record.agent == "COMPUTRON_9000"
         assert record.metadata.duration_seconds >= 0
 
         # Check file was written
-        conv_file = _conv_dir / f"{record.id}.json"
-        assert conv_file.exists()
+        turn_file = _conv_dir / f"{record.id}.json"
+        assert turn_file.exists()
 
     @pytest.mark.asyncio
     async def test_agent_chain_tracking(self) -> None:
         """Agent chain tracks all agents that participated."""
-        hook = ConversationRecorderHook(
+        hook = TurnRecorderHook(
             user_message="test",
             agent_name="COMPUTRON_9000",
             model="qwen3:8b",

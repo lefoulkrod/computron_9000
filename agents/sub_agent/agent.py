@@ -23,7 +23,16 @@ from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_cust
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.skills import apply_skill, lookup_skills
 from tools.generation import generate_media
-from tools.virtual_computer import describe_image, grep, read_file, run_bash_cmd, write_file
+from tools.virtual_computer import (
+    apply_text_patch,
+    describe_image,
+    grep,
+    list_dir,
+    read_file,
+    replace_in_file,
+    run_bash_cmd,
+    write_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +43,10 @@ _SYSTEM_PROMPT = dedent(
     Check for existing custom tools before writing new code (lookup_custom_tools or
     run_custom_tool). Prefer write_file over shell redirects. Use grep to find code,
     then read_file(start=N, end=M) for targeted sections — avoid reading entire large
-    files. Use generate_media for images. Use run_browser_agent_as_tool for any web
-    browsing. Use describe_image to analyze images from the container.
+    files. Use apply_text_patch for precise edits and replace_in_file for bulk
+    find/replace. Use generate_media
+    for images. Use run_browser_agent_as_tool for any web browsing. Use describe_image
+    to analyze images from the container.
     Do NOT run "pip install torch".
 
     In HTML/web content, reference assets by container path
@@ -52,18 +63,30 @@ _SYSTEM_PROMPT = dedent(
     """
 )
 _TOOLS = [
-    run_bash_cmd,
-    write_file,
+    # Reading
     read_file,
     grep,
+    list_dir,
+    # Writing
+    write_file,
+    # Editing
+    apply_text_patch,
+    replace_in_file,
+    # Shell
+    run_bash_cmd,
+    # Media
     generate_media,
     describe_image,
+    # Browsing
     browser_agent_tool,
+    # Custom tools
     create_custom_tool,
     lookup_custom_tools,
     run_custom_tool,
+    # Scratchpad
     save_to_scratchpad,
     recall_from_scratchpad,
+    # Skills
     lookup_skills,
     apply_skill,
 ]

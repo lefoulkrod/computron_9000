@@ -6,6 +6,8 @@ import ChatMessages from './components/ChatMessages.jsx';
 import BrowserView from './components/BrowserView.jsx';
 import FilePreviewPanel from './components/FilePreviewPanel.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
+import SkillsPanel from './components/SkillsPanel.jsx';
+import SessionsPanel from './components/SessionsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
 import ModelSettingsPanel from './components/ModelSettingsPanel.jsx';
 import TerminalPanel from './components/TerminalOutput.jsx';
@@ -27,6 +29,8 @@ function App() {
     const [muted, setMuted] = useState(false);
     const [terminalLines, setTerminalLines] = useState([]);
     const [generationPreview, setGenerationPreview] = useState(null);
+    const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
+    const [activeSkill, setActiveSkill] = useState(null);
     // Tracks panels the user has explicitly closed; new events reopen them.
     const [closedPanels, setClosedPanels] = useState(new Set());
     const [nudgeToast, setNudgeToast] = useState(null);
@@ -68,6 +72,10 @@ function App() {
         onMemoryChanged: () => setMemoryRefreshSignal((s) => s + 1),
         onAudioPlayback: (audio) => setPendingAudio(audio),
         onNudgeSent: (text) => setNudgeToast(text || 'Nudge sent'),
+        onSkillApplied: (event) => {
+            setActiveSkill(event);
+            setSkillsRefreshSignal((s) => s + 1);
+        },
         onGenerationPreview: (event) => {
             setGenerationPreview((prev) => {
                 if (!prev || prev.gen_id !== event.gen_id) return event;
@@ -89,6 +97,7 @@ function App() {
         onMemoryChanged: (...args) => _streamCallbacksRef.current.onMemoryChanged(...args),
         onAudioPlayback: (...args) => _streamCallbacksRef.current.onAudioPlayback(...args),
         onNudgeSent: (...args) => _streamCallbacksRef.current.onNudgeSent(...args),
+        onSkillApplied: (...args) => _streamCallbacksRef.current.onSkillApplied(...args),
         onGenerationPreview: (...args) => _streamCallbacksRef.current.onGenerationPreview(...args),
     }).current;
 
@@ -97,8 +106,14 @@ function App() {
         isStreaming,
         sendMessage,
         stopGeneration,
+        loadSession,
         newSession: chatNewSession,
     } = useStreamingChat(_stableCallbacks);
+
+    // Clear active skill indicator when streaming ends
+    useEffect(() => {
+        if (!isStreaming) setActiveSkill(null);
+    }, [isStreaming]);
 
     // Auto-dismiss nudge toast after 3 seconds
     useEffect(() => {
@@ -213,6 +228,8 @@ function App() {
                     />
                     <MemoryPanel refreshSignal={memoryRefreshSignal} />
                     <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />
+                    <SkillsPanel refreshSignal={skillsRefreshSignal} />
+                    <SessionsPanel onLoadSession={loadSession} />
                 </div>
                 {hasAnyPanel && (
                     <div className={styles.browserColumn}>
@@ -235,6 +252,8 @@ function App() {
                     <ChatMessages
                         messages={messages}
                         showSubAgents={showSubAgents}
+                        activeSkill={activeSkill}
+                        isStreaming={isStreaming}
                         onPreview={(item) => {
                             setFilePreview(item);
                             setClosedPanels((prev) => { const next = new Set(prev); next.delete('file'); next.add('generation'); return next; });

@@ -15,18 +15,13 @@ from sdk import make_run_agent_as_tool_function
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.skills import apply_skill, lookup_skills
 from tools.virtual_computer import (
-    append_to_file,
     apply_text_patch,
-    copy_path,
-    exists,
+    describe_image,
     grep,
     list_dir,
-    move_path,
     read_file,
-    remove_path,
     replace_in_file,
     run_bash_cmd,
-    tail,
     write_file,
 )
 
@@ -63,9 +58,9 @@ SYSTEM_PROMPT = dedent(
     READING FILES — always read a file before editing it. read_file returns
     content with embedded line numbers (cat -n style) so you can reference
     specific lines. Use grep to locate relevant code, then
-    read_file(start=N, end=M) for targeted sections. Use tail to check the
-    end of files (logs, output). Files over 2000 lines are automatically
-    truncated; use start/end to read specific sections of large files.
+    read_file(start=N, end=M) for targeted sections. Files over 2000 lines
+    are automatically truncated; use start/end to read specific sections of
+    large files.
 
     EDITING FILES — use apply_text_patch(path, old_text, new_text) for precise
     edits: old_text must match exactly one location in the file. Copy old_text
@@ -89,22 +84,17 @@ SYSTEM_PROMPT = dedent(
 TOOLS = [
     # Reading
     read_file,
-    tail,
     grep,
     list_dir,
-    exists,
     # Writing
     write_file,
-    append_to_file,
     # Editing
     apply_text_patch,
     replace_in_file,
-    # File management
-    remove_path,
-    move_path,
-    copy_path,
     # Shell
     run_bash_cmd,
+    # Vision
+    describe_image,
     # Scratchpad
     save_to_scratchpad,
     recall_from_scratchpad,

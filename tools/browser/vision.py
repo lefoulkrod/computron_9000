@@ -334,6 +334,14 @@ async def ground_elements_by_text(description: str) -> list[GroundingResult]:
         msg = "Vision model response must be a list of bounding boxes."
         raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME)
 
+    # Handle bare bbox: model returned [x1, y1, x2, y2] instead of [{"bbox": [...]}]
+    if parsed and all(isinstance(v, (int, float)) for v in parsed):
+        if len(parsed) == 4:
+            parsed = [{"bbox": parsed}]
+        else:
+            msg = "Vision model returned a flat numeric list that is not a valid bbox (expected 4 values)."
+            raise BrowserToolError(msg, tool=_GROUNDING_TOOL_NAME)
+
     results: list[GroundingResult] = []
     for entry in parsed:
         try:

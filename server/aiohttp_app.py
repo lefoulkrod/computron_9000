@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
-from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history
+from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_session
 from sdk.providers import get_provider
 from sdk.loop import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
@@ -33,16 +33,17 @@ from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
-from tools.skills._extractor import skill_extraction_loop
-from tools.skills._registry import (
+from skills._extractor import skill_extraction_loop
+from skills._registry import (
     delete_skill as _delete_skill,
     list_skills as _list_skills,
-    toggle_skill as _toggle_skill,
 )
-from tools.conversations._store import (
+from conversations._store import (
     delete_conversation as _delete_conversation,
+    delete_turn as _delete_turn,
     list_conversations as _list_conversations,
-    load_conversation as _load_conversation,
+    list_turns as _list_turns,
+    load_turn as _load_turn,
 )
 
 logger = logging.getLogger(__name__)
@@ -288,20 +289,15 @@ async def delete_memory_handler(request: Request) -> Response:
 
 async def list_skills_handler(_request: Request) -> Response:
     """Return all skill definitions as JSON."""
-    skills = _list_skills(active_only=False)
+    skills = _list_skills()
     data = [
         {
             "id": s.id,
             "name": s.name,
             "description": s.description,
             "agent_scope": s.agent_scope,
-            "category": s.category,
-            "confidence": s.confidence,
             "usage_count": s.usage_count,
-            "success_count": s.success_count,
-            "failure_count": s.failure_count,
-            "active": s.active,
-            "steps": len(s.steps),
+            "steps": [{"tool": st.tool, "description": st.description} for st in s.steps],
             "created_at": s.created_at,
             "last_used_at": s.last_used_at,
         }
@@ -319,48 +315,58 @@ async def delete_skill_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def patch_skill_handler(request: Request) -> Response:
-    """Toggle a skill's active state."""
-    name = request.match_info["name"]
-    try:
-        body = await request.json()
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return web.json_response({"error": "Invalid JSON body"}, status=400)
-    active = body.get("active")
-    if active is None:
-        return web.json_response({"error": "Missing 'active' field"}, status=400)
-    found = _toggle_skill(name, active=bool(active))
-    if not found:
-        return web.json_response({"error": f"Skill '{name}' not found"}, status=404)
-    return web.Response(status=204)
 
-
-async def list_conversations_handler(request: Request) -> Response:
-    """Return conversation index entries (paginated)."""
+async def list_turns_handler(request: Request) -> Response:
+    """Return turn index entries (paginated)."""
     limit = int(request.query.get("limit", "50"))
     offset = int(request.query.get("offset", "0"))
     outcome = request.query.get("outcome")
-    entries = _list_conversations(limit=limit, offset=offset, outcome=outcome)
+    entries = _list_turns(limit=limit, offset=offset, outcome=outcome)
     data = [e.model_dump() for e in entries]
     return web.json_response(data)
 
 
-async def get_conversation_handler(request: Request) -> Response:
-    """Return a full conversation transcript."""
-    conv_id = request.match_info["id"]
-    record = _load_conversation(conv_id)
+async def get_turn_handler(request: Request) -> Response:
+    """Return a full turn transcript."""
+    turn_id = request.match_info["id"]
+    record = _load_turn(turn_id)
     if record is None:
-        return web.json_response({"error": "Conversation not found"}, status=404)
+        return web.json_response({"error": "Turn not found"}, status=404)
     return web.json_response(record.model_dump())
 
 
-async def delete_conversation_handler(request: Request) -> Response:
-    """Delete a conversation by ID."""
-    conv_id = request.match_info["id"]
-    found = _delete_conversation(conv_id)
+async def delete_turn_handler(request: Request) -> Response:
+    """Delete a turn by ID."""
+    turn_id = request.match_info["id"]
+    found = _delete_turn(turn_id)
+    if not found:
+        return web.json_response({"error": "Turn not found"}, status=404)
+    return web.Response(status=204)
+
+
+async def list_sessions_handler(_request: Request) -> Response:
+    """Return past conversation summaries for the sessions panel."""
+    summaries = _list_conversations()
+    data = [s.model_dump() for s in summaries]
+    return web.json_response(data)
+
+
+async def delete_session_handler(request: Request) -> Response:
+    """Delete a conversation and all its turns/history."""
+    conversation_id = request.match_info["conversation_id"]
+    found = _delete_conversation(conversation_id)
     if not found:
         return web.json_response({"error": "Conversation not found"}, status=404)
     return web.Response(status=204)
+
+
+async def resume_session_handler(request: Request) -> Response:
+    """Resume a past conversation by loading its full-fidelity history."""
+    conversation_id = request.match_info["conversation_id"]
+    messages = resume_session(conversation_id)
+    if messages is None:
+        return web.json_response({"error": "Conversation not found"}, status=404)
+    return web.json_response({"conversation_id": conversation_id, "messages": messages})
 
 
 async def set_memory_hidden_handler(request: Request) -> Response:
@@ -407,12 +413,16 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Skills API
     app.router.add_route("GET", "/api/skills", list_skills_handler)
     app.router.add_route("DELETE", "/api/skills/{name}", delete_skill_handler)
-    app.router.add_route("PATCH", "/api/skills/{name}", patch_skill_handler)
 
-    # Conversations API
-    app.router.add_route("GET", "/api/conversations", list_conversations_handler)
-    app.router.add_route("GET", "/api/conversations/{id}", get_conversation_handler)
-    app.router.add_route("DELETE", "/api/conversations/{id}", delete_conversation_handler)
+    # Sessions API (conversation resume) — must be before {id} wildcard routes
+    app.router.add_route("GET", "/api/conversations/sessions", list_sessions_handler)
+    app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_session_handler)
+    app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_session_handler)
+
+    # Turns API (formerly conversations)
+    app.router.add_route("GET", "/api/conversations", list_turns_handler)
+    app.router.add_route("GET", "/api/conversations/{id}", get_turn_handler)
+    app.router.add_route("DELETE", "/api/conversations/{id}", delete_turn_handler)
 
     # Start background skill extraction loop
     async def _start_extraction(app: web.Application) -> None:

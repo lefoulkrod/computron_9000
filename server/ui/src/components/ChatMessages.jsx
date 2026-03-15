@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Message from './Message.jsx';
 import styles from './ChatMessages.module.css';
 
-export default function ChatMessages({ messages, showSubAgents = true, onPreview }) {
+export default function ChatMessages({ messages, showSubAgents = true, activeSkill, isStreaming, onPreview }) {
     const containerRef = useRef(null);
     const endRef = useRef(null);
 
@@ -28,6 +28,15 @@ export default function ChatMessages({ messages, showSubAgents = true, onPreview
             {visibleMessages.map((msg, idx) => (
                 <Message key={msg.id || idx} {...msg} showSubAgents={showSubAgents} onPreview={onPreview} />
             ))}
+            {activeSkill && isStreaming && (
+                <div className={styles.skillIndicator}>
+                    <span className={styles.skillBolt}>&#9889;</span>
+                    {' '}Using skill: <span className={styles.skillName}>{activeSkill.name}</span>
+                    {activeSkill.confidence != null && (
+                        <span className={styles.skillConfidence}> ({Math.round(activeSkill.confidence * 100)}%)</span>
+                    )}
+                </div>
+            )}
             <div ref={endRef} />
         </div>
     );

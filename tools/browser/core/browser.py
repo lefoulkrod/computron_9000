@@ -909,7 +909,15 @@ class Browser:
         page = await self.current_page()
 
         async def _back() -> None:
-            await page.go_back(wait_until="domcontentloaded")
+            try:
+                await asyncio.wait_for(
+                    page.go_back(wait_until="domcontentloaded"),
+                    timeout=10.0,
+                )
+            except (asyncio.TimeoutError, PlaywrightError):
+                # SPA may handle back navigation client-side without firing
+                # domcontentloaded. Fall through to settle/snapshot.
+                logger.debug("go_back timed out (SPA likely handled navigation client-side)")
 
         return await self.perform_interaction(_back)
 
