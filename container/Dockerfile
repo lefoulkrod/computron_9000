@@ -100,10 +100,21 @@ RUN mkdir -p /opt/kokoro && \
       https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin && \
     chmod -R 755 /opt/kokoro
 
+# Desktop environment for computer use (on-demand, started via start-desktop.sh)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xfce4 xfce4-terminal dbus-x11 \
+    xvfb x11vnc websockify novnc \
+    xdotool xclip scrot \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Inference server scripts — baked into the image so the container is self-contained.
 # Placed outside the agent's home directory so agents can't read or modify them.
 COPY container/inference_server.py container/inference_client.py /opt/inference/
 RUN chmod -R 755 /opt/inference
+
+# Desktop startup script
+COPY container/start-desktop.sh /opt/desktop/start-desktop.sh
+RUN chmod +x /opt/desktop/start-desktop.sh
 
 # Switch to non-root user (safer sandbox)
 USER computron

@@ -64,6 +64,10 @@ function _handleStreamEvent(data, callbacks) {
         });
     }
 
+    if (type === 'desktop_active') {
+        callbacks.onDesktopActive();
+    }
+
     if (type === 'generation_preview') {
         callbacks.onGenerationPreview(data.event);
     }

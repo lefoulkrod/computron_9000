@@ -7,6 +7,7 @@ from textwrap import dedent
 
 from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
+from agents.desktop import desktop_agent_tool
 from agents.sub_agent import run_sub_agent
 from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
@@ -68,6 +69,9 @@ SYSTEM_PROMPT = dedent(
           and searches codebases. Use for any work that involves creating or modifying files.
         - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
           Use ONLY for web browsing — never for creating files or assets.
+        - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.
+          Use for GUI applications like LibreOffice, GIMP, file managers, or anything
+          that needs a graphical interface beyond the web browser.
         - run_sub_agent(instructions, agent_name) — general tasks, data processing, working
           with files in /home/computron/. Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
           Sub-agents share /home/computron/.
@@ -101,6 +105,7 @@ TOOLS = [
     run_bash_cmd,
     computer_agent_tool,
     browser_agent_tool,
+    desktop_agent_tool,
     generate_media,
     create_custom_tool,
     lookup_custom_tools,

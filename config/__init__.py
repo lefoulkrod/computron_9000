@@ -148,6 +148,16 @@ class RedditConfig(BaseModel):
     user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
 
 
+class DesktopConfig(BaseModel):
+    """Configuration for the desktop environment (noVNC + Xfce4)."""
+
+    display: str = ":1"
+    resolution: str = "1280x720"
+    vnc_port: int = 5900
+    websocket_port: int = 6080
+    screenshot_quality: int = 70
+
+
 class VirtualComputerConfig(BaseModel):
     """Configuration for the virtual computer environment."""
 
@@ -188,6 +198,7 @@ class AppConfig(BaseModel):
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    desktop: DesktopConfig = Field(default_factory=DesktopConfig)
     vision: VisionConfig | None = None
     summary: SummaryConfig | None = None
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
