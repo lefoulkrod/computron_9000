@@ -1,32 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import shared from './CustomToolsPanel.module.css';
 import styles from './SessionsPanel.module.css';
 import TrashIcon from './icons/TrashIcon.jsx';
+import useListPanel from '../hooks/useListPanel.js';
+
+function formatTime(isoString) {
+    if (!isoString) return '';
+    try {
+        const d = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - d;
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}d ago`;
+    } catch (_) {
+        return '';
+    }
+}
 
 export default function SessionsPanel({ onLoadSession }) {
-    const [sessions, setSessions] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [collapsed, setCollapsed] = useState(true);
+    const {
+        items: sessions, loading, collapsed, setCollapsed,
+        deleting, handleDelete,
+    } = useListPanel('/api/conversations/sessions', {
+        startCollapsed: true,
+        getId: (s) => s.conversation_id,
+    });
+
     const [resuming, setResuming] = useState(null);
-    const [deleting, setDeleting] = useState(null);
-
-    const fetchSessions = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/conversations/sessions');
-            if (resp.ok) {
-                const data = await resp.json();
-                setSessions(data);
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchSessions();
-    }, [fetchSessions]);
 
     const handleResume = async (conversationId) => {
         setResuming(conversationId);
@@ -40,40 +45,15 @@ export default function SessionsPanel({ onLoadSession }) {
         }
     };
 
-    const handleDelete = async (conversationId) => {
-        setDeleting(conversationId);
-        try {
-            const resp = await fetch(`/api/conversations/sessions/${conversationId}`, { method: 'DELETE' });
-            if (resp.ok || resp.status === 404) {
-                setSessions(prev => prev.filter(s => s.conversation_id !== conversationId));
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setDeleting(null);
-        }
+    const onDelete = (conversationId) => {
+        handleDelete(
+            conversationId,
+            `/api/conversations/sessions/${conversationId}`,
+            (s) => s.conversation_id !== conversationId,
+        );
     };
 
-    const formatTime = (isoString) => {
-        if (!isoString) return '';
-        try {
-            const d = new Date(isoString);
-            const now = new Date();
-            const diffMs = now - d;
-            const diffMins = Math.floor(diffMs / 60000);
-            if (diffMins < 1) return 'just now';
-            if (diffMins < 60) return `${diffMins}m ago`;
-            const diffHours = Math.floor(diffMins / 60);
-            if (diffHours < 24) return `${diffHours}h ago`;
-            const diffDays = Math.floor(diffHours / 24);
-            return `${diffDays}d ago`;
-        } catch (_) {
-            return '';
-        }
-    };
-
-    if (loading) return null;
-    if (sessions.length === 0) return null;
+    if (loading || sessions.length === 0) return null;
 
     return (
         <div className={shared.panel}>
@@ -109,7 +89,7 @@ export default function SessionsPanel({ onLoadSession }) {
                                 </button>
                                 <button
                                     className={shared.deleteBtn}
-                                    onClick={() => handleDelete(session.conversation_id)}
+                                    onClick={() => onDelete(session.conversation_id)}
                                     disabled={deleting === session.conversation_id}
                                     title="Delete this conversation"
                                 >

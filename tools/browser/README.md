@@ -64,7 +64,7 @@ Browser automation tools powered by Playwright. These tools are used by the brow
 | `page.py` | `open_url()` — navigates to a URL |
 | `select.py` | `select_option()` — dropdown/combobox interactions |
 | `javascript.py` | `execute_javascript()` — raw JS evaluation |
-| `vision.py` | `ask_about_screenshot()`, `ground_elements_by_text()` — screenshot analysis via vision model |
+| `vision.py` | `inspect_page()`, `ground_elements_by_text()` — visual inspection and element grounding |
 | `save_content.py` | `save_page_content()` — saves page HTML as markdown |
 | `events.py` | Emits progressive browser screenshot events to the UI |
 
@@ -325,7 +325,7 @@ Two-phase approach for `<select>` elements:
 Screenshot-based analysis using a vision model (Ollama).
 
 ```
-ask_about_screenshot(prompt, mode)
+inspect_page(prompt, mode)
     |
     +-- Capture screenshot (full_page / viewport / element)
     +-- Send to vision model with prompt

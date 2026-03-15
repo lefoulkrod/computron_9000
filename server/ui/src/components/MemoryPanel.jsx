@@ -1,52 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import styles from './CustomToolsPanel.module.css';
 import TrashIcon from './icons/TrashIcon.jsx';
 import EyeIcon from './icons/EyeIcon.jsx';
+import useListPanel from '../hooks/useListPanel.js';
 
 export default function MemoryPanel({ refreshSignal }) {
-    const [entries, setEntries] = useState([]);
     const [hiddenKeys, setHiddenKeys] = useState(new Set());
-    const [loading, setLoading] = useState(true);
-    const [deleting, setDeleting] = useState(null);
-    const [collapsed, setCollapsed] = useState(false);
 
-    const fetchMemory = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/memory');
-            if (resp.ok) {
-                const data = await resp.json();
-                setEntries(Object.entries(data.entries));
-                setHiddenKeys(new Set(data.hidden));
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setLoading(false);
-        }
+    const onFetched = useCallback((data) => {
+        if (Array.isArray(data.hidden)) setHiddenKeys(new Set(data.hidden));
     }, []);
 
-    useEffect(() => { fetchMemory(); }, [fetchMemory]);
-    useEffect(() => { if (refreshSignal > 0) fetchMemory(); }, [refreshSignal, fetchMemory]);
+    const {
+        items: entries, loading, collapsed, setCollapsed,
+        deleting, handleDelete,
+    } = useListPanel('/api/memory', {
+        refreshSignal,
+        getId: ([key]) => key,
+        transform: (data) => Object.entries(data.entries),
+        onFetched,
+    });
 
-    const handleDelete = async (key) => {
-        setDeleting(key);
-        try {
-            const resp = await fetch(`/api/memory/${encodeURIComponent(key)}`, { method: 'DELETE' });
-            if (resp.ok || resp.status === 404) {
-                setEntries(prev => prev.filter(([k]) => k !== key));
-                setHiddenKeys(prev => { const next = new Set(prev); next.delete(key); return next; });
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setDeleting(null);
-        }
+    const onDelete = (key) => {
+        handleDelete(key, `/api/memory/${encodeURIComponent(key)}`, ([k]) => k !== key);
+        setHiddenKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
     };
 
     const toggleHidden = async (key) => {
         const nowHidden = !hiddenKeys.has(key);
-        // optimistic update
-        setHiddenKeys(prev => {
+        setHiddenKeys((prev) => {
             const next = new Set(prev);
             if (nowHidden) next.add(key); else next.delete(key);
             return next;
@@ -59,7 +41,7 @@ export default function MemoryPanel({ refreshSignal }) {
             });
         } catch (_) {
             // revert on error
-            setHiddenKeys(prev => {
+            setHiddenKeys((prev) => {
                 const next = new Set(prev);
                 if (nowHidden) next.delete(key); else next.add(key);
                 return next;
@@ -97,7 +79,7 @@ export default function MemoryPanel({ refreshSignal }) {
                                     </button>
                                     <button
                                         className={styles.deleteBtn}
-                                        onClick={() => handleDelete(key)}
+                                        onClick={() => onDelete(key)}
                                         disabled={deleting === key}
                                         title="Forget"
                                     >

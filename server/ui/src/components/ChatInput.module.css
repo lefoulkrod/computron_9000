@@ -91,6 +91,16 @@
   align-items: center;
 }
 
+.agentSelect {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--button);
+  background: var(--secondary);
+  color: var(--text);
+  cursor: pointer;
+}
+
 .agentButton {
   padding: 0.3rem 0.7rem;
   font-size: 0.78rem;
@@ -140,7 +150,7 @@
 .iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
 
 .stopButton {
-  background: #c0392b;
+  background: var(--color-danger);
   color: #fff;
   border-color: rgba(0,0,0,0.3);
 }
@@ -223,7 +233,7 @@
 }
 
 .fileChipName {
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78em;
   color: var(--text);
   white-space: nowrap;

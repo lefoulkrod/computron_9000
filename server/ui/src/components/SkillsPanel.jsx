@@ -1,59 +1,23 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import shared from './CustomToolsPanel.module.css';
 import styles from './SkillsPanel.module.css';
 import TrashIcon from './icons/TrashIcon.jsx';
+import useListPanel from '../hooks/useListPanel.js';
 
 export default function SkillsPanel({ refreshSignal }) {
-    const [skills, setSkills] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [deleting, setDeleting] = useState(null);
-    const [collapsed, setCollapsed] = useState(false);
-    const [newSkillIds, setNewSkillIds] = useState(new Set());
+    const {
+        items: skills, loading, collapsed, setCollapsed,
+        deleting, handleDelete, newItemIds,
+    } = useListPanel('/api/skills', {
+        refreshSignal,
+        getId: (s) => s.name,
+    });
+
     const [hoveredSkill, setHoveredSkill] = useState(null);
     const [tooltipPos, setTooltipPos] = useState(null);
-    const prevIdsRef = useRef(new Set());
 
-    const fetchSkills = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/skills');
-            if (resp.ok) {
-                const fresh = await resp.json();
-                const freshIds = new Set(fresh.map(s => s.name));
-                const added = fresh.filter(s => !prevIdsRef.current.has(s.name)).map(s => s.name);
-                prevIdsRef.current = freshIds;
-                if (added.length > 0) {
-                    setNewSkillIds(new Set(added));
-                    setTimeout(() => setNewSkillIds(new Set()), 700);
-                }
-                setSkills(fresh);
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchSkills();
-    }, [fetchSkills]);
-
-    useEffect(() => {
-        if (refreshSignal > 0) fetchSkills();
-    }, [refreshSignal, fetchSkills]);
-
-    const handleDelete = async (name) => {
-        setDeleting(name);
-        try {
-            const resp = await fetch(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
-            if (resp.ok || resp.status === 404) {
-                setSkills(prev => prev.filter(s => s.name !== name));
-            }
-        } catch (_) {
-            // ignore
-        } finally {
-            setDeleting(null);
-        }
+    const onDelete = (name) => {
+        handleDelete(name, `/api/skills/${encodeURIComponent(name)}`, (s) => s.name !== name);
     };
 
     const handleMouseEnter = (e, skill) => {
@@ -68,8 +32,7 @@ export default function SkillsPanel({ refreshSignal }) {
         setTooltipPos(null);
     };
 
-    if (loading) return null;
-    if (skills.length === 0) return null;
+    if (loading || skills.length === 0) return null;
 
     return (
         <div className={shared.panel}>
@@ -82,7 +45,7 @@ export default function SkillsPanel({ refreshSignal }) {
                     {skills.map(skill => (
                         <li
                             key={skill.name}
-                            className={`${shared.item} ${newSkillIds.has(skill.name) ? shared.itemNew : ''}`}
+                            className={`${shared.item} ${newItemIds.has(skill.name) ? shared.itemNew : ''}`}
                             onMouseEnter={(e) => handleMouseEnter(e, skill)}
                             onMouseLeave={handleMouseLeave}
                         >
@@ -97,7 +60,7 @@ export default function SkillsPanel({ refreshSignal }) {
                             )}
                             <button
                                 className={shared.deleteBtn}
-                                onClick={() => handleDelete(skill.name)}
+                                onClick={() => onDelete(skill.name)}
                                 disabled={deleting === skill.name}
                                 title="Delete skill"
                             >

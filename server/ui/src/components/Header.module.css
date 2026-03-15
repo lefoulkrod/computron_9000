@@ -87,31 +87,3 @@
   margin-left: 0.35rem;
 }
 
-/* Mobile adjustments */
-@media (max-width: 700px) {
-
-  /* Hide logos entirely on narrow screens */
-  .logo {
-    display: none;
-  }
-
-  :global(.dark-theme) .logoDark,
-  :global(.dark-theme) .logoLight {
-    display: none;
-  }
-
-  .headerInner {
-    gap: 0.5rem;
-    padding: 0.35rem 0.75rem;
-  }
-
-  .appTitle {
-    font-size: 1.1rem;
-    letter-spacing: 0.02em;
-  }
-
-  .iconButton {
-    width: 32px;
-    height: 32px;
-  }
-}

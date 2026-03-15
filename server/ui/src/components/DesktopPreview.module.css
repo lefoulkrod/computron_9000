@@ -9,8 +9,142 @@
 .expandedFrame {
   width: 80vw;
   aspect-ratio: 16 / 9;
-  max-height: 80vh;
+  max-height: calc(80vh - 44px);
   border: none;
   background: #000;
   display: block;
+}
+
+.controlBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.controlBtn:hover {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.controlBtnActive {
+  color: var(--accent, #58a6ff);
+  border-color: var(--accent, #58a6ff);
+}
+
+.expandBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.expandBtn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Desktop lightbox */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightboxPanel {
+  width: auto;
+  height: auto;
+  max-width: 90vw;
+  max-height: 90vh;
+  background: var(--card-bg, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+}
+
+.lightboxHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--header-bg, #252525);
+  border-bottom: 1px solid var(--border-color, #333);
+  flex-shrink: 0;
+}
+
+.lightboxCloseBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.lightboxCloseBtn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Light theme */
+:global(body:not(.dark-theme)) .controlBtn {
+  color: #666;
+}
+
+:global(body:not(.dark-theme)) .controlBtn:hover {
+  color: #222;
+}
+
+:global(body:not(.dark-theme)) .expandBtn {
+  color: #666;
+}
+
+:global(body:not(.dark-theme)) .expandBtn:hover {
+  color: #222;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global(body:not(.dark-theme)) .lightboxPanel {
+  background: #ffffff;
+  border-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .lightboxHeader {
+  background: #f5f5f5;
+  border-bottom-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .lightboxCloseBtn {
+  color: #666;
+}
+
+:global(body:not(.dark-theme)) .lightboxCloseBtn:hover {
+  color: #222;
+  background: rgba(0, 0, 0, 0.06);
 }

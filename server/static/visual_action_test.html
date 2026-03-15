@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Visual Action Test Fixture</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            background: #fafbfc;
+        }
+        h1 { margin-top: 0; }
+
+        .test-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        .test-section h2 { margin-top: 0; font-size: 1.1rem; }
+
+        /* Click target */
+        #click-target {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #click-target.clicked { background: #43a047; }
+        #click-status { margin-top: 8px; font-weight: bold; }
+
+        /* Double-click target */
+        #dblclick-target {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #dblclick-target.clicked { background: #43a047; }
+        #dblclick-status { margin-top: 8px; font-weight: bold; }
+
+        /* Right-click target */
+        #rightclick-target {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #8e44ad;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #rightclick-target.clicked { background: #43a047; }
+        #rightclick-status { margin-top: 8px; font-weight: bold; }
+
+        /* Type target */
+        #type-input {
+            padding: 8px 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            width: 300px;
+        }
+        #type-input:focus { border-color: #4a90e2; outline: none; }
+        #type-status { margin-top: 8px; font-weight: bold; }
+
+        /* Scroll target */
+        #scroll-container {
+            height: 150px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            padding: 8px;
+        }
+        #scroll-container .tall-content {
+            height: 800px;
+            background: linear-gradient(to bottom, #e3f2fd, #1565c0);
+            border-radius: 4px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 12px;
+            color: white;
+            font-weight: bold;
+        }
+        #scroll-status { margin-top: 8px; font-weight: bold; }
+
+        /* Drag target */
+        #drag-source {
+            width: 80px;
+            height: 80px;
+            background: #e74c3c;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            cursor: grab;
+            user-select: none;
+            position: relative;
+        }
+        #drag-dest {
+            width: 120px;
+            height: 120px;
+            border: 3px dashed #999;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 80px;
+            vertical-align: top;
+        }
+        #drag-dest.hovering { border-color: #4a90e2; background: #e3f2fd; }
+        #drag-dest.dropped { border-color: #43a047; background: #e8f5e9; border-style: solid; }
+        #drag-status { margin-top: 8px; font-weight: bold; }
+
+        /* Event log */
+        #event-log {
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 13px;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 1rem;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Visual Action Test Fixture</h1>
+    <p>Interactive elements for testing human_* browser functions.</p>
+
+    <!-- Click test -->
+    <div class="test-section" id="section-click">
+        <h2>Click Test</h2>
+        <button id="click-target">Click Me</button>
+        <div id="click-status">Not clicked</div>
+    </div>
+
+    <!-- Double-click test -->
+    <div class="test-section" id="section-dblclick">
+        <h2>Double-Click Test</h2>
+        <button id="dblclick-target">Double-Click Me</button>
+        <div id="dblclick-status">Not double-clicked</div>
+    </div>
+
+    <!-- Right-click test -->
+    <div class="test-section" id="section-rightclick">
+        <h2>Right-Click Test</h2>
+        <div id="rightclick-target">Right-Click Me</div>
+        <div id="rightclick-status">Not right-clicked</div>
+    </div>
+
+    <!-- Type test -->
+    <div class="test-section" id="section-type">
+        <h2>Type Test</h2>
+        <input id="type-input" type="text" placeholder="Type here...">
+        <div id="type-status">Empty</div>
+    </div>
+
+    <!-- Scroll test -->
+    <div class="test-section" id="section-scroll">
+        <h2>Scroll Test</h2>
+        <div id="scroll-container">
+            <div class="tall-content">Bottom reached!</div>
+        </div>
+        <div id="scroll-status">scroll: 0</div>
+    </div>
+
+    <!-- Drag test (mousedown-based, not HTML5 drag) -->
+    <div class="test-section" id="section-drag">
+        <h2>Drag Test (pointer-based)</h2>
+        <div id="drag-source">Drag</div>
+        <div id="drag-dest">Drop here</div>
+        <div id="drag-status">Not dragged</div>
+    </div>
+
+    <div id="event-log"></div>
+
+    <script>
+        const log = document.getElementById('event-log');
+        function logEvent(msg) {
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toISOString().slice(11,23)}] ${msg}`;
+            log.prepend(line);
+        }
+
+        // Click
+        const clickTarget = document.getElementById('click-target');
+        const clickStatus = document.getElementById('click-status');
+        clickTarget.addEventListener('click', () => {
+            clickTarget.classList.add('clicked');
+            clickStatus.textContent = 'Clicked!';
+            logEvent('click on #click-target');
+        });
+
+        // Double-click
+        const dblTarget = document.getElementById('dblclick-target');
+        const dblStatus = document.getElementById('dblclick-status');
+        dblTarget.addEventListener('dblclick', () => {
+            dblTarget.classList.add('clicked');
+            dblStatus.textContent = 'Double-clicked!';
+            logEvent('dblclick on #dblclick-target');
+        });
+
+        // Right-click
+        const rightTarget = document.getElementById('rightclick-target');
+        const rightStatus = document.getElementById('rightclick-status');
+        rightTarget.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            rightTarget.classList.add('clicked');
+            rightStatus.textContent = 'Right-clicked!';
+            logEvent('contextmenu on #rightclick-target');
+        });
+
+        // Type
+        const typeInput = document.getElementById('type-input');
+        const typeStatus = document.getElementById('type-status');
+        typeInput.addEventListener('input', () => {
+            typeStatus.textContent = typeInput.value ? `Value: ${typeInput.value}` : 'Empty';
+        });
+
+        // Scroll
+        const scrollContainer = document.getElementById('scroll-container');
+        const scrollStatus = document.getElementById('scroll-status');
+        scrollContainer.addEventListener('scroll', () => {
+            scrollStatus.textContent = `scroll: ${Math.round(scrollContainer.scrollTop)}`;
+        });
+
+        // Drag (pointer-based, not HTML5 DnD — works with mouse.down/move/up)
+        const dragSource = document.getElementById('drag-source');
+        const dragDest = document.getElementById('drag-dest');
+        const dragStatus = document.getElementById('drag-status');
+        let isDragging = false;
+
+        dragSource.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            dragSource.setPointerCapture(e.pointerId);
+            dragStatus.textContent = 'Dragging...';
+            logEvent('pointerdown on #drag-source');
+        });
+
+        document.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const rect = dragDest.getBoundingClientRect();
+            const over = e.clientX >= rect.left && e.clientX <= rect.right &&
+                         e.clientY >= rect.top && e.clientY <= rect.bottom;
+            dragDest.classList.toggle('hovering', over);
+        });
+
+        document.addEventListener('pointerup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            const rect = dragDest.getBoundingClientRect();
+            const over = e.clientX >= rect.left && e.clientX <= rect.right &&
+                         e.clientY >= rect.top && e.clientY <= rect.bottom;
+            dragDest.classList.remove('hovering');
+            if (over) {
+                dragDest.classList.add('dropped');
+                dragStatus.textContent = 'Dropped!';
+                logEvent('drop on #drag-dest');
+            } else {
+                dragStatus.textContent = 'Missed drop target';
+                logEvent('pointerup missed #drag-dest');
+            }
+        });
+    </script>
+</body>
+</html>

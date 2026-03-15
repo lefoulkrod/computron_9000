@@ -44,7 +44,7 @@
   background: var(--secondary) !important;
   color: var(--text);
   border-radius: var(--radius);
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-family: var(--font-mono);
   font-size: 0.98em;
   position: relative;
   border: none;
@@ -153,12 +153,6 @@
   }
 }
 
-/* Avoid enforcing a minimum on small screens */
-@media (max-width: 700px) {
-  .assistant .bubble {
-    min-width: auto;
-  }
-}
 
 .collapsibleThink {
   margin: 1em 0;
@@ -225,7 +219,7 @@
 .messageHeader {
   margin-bottom: 0.75em;
   font-size: 0.9em;
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-family: var(--font-mono);
   color: rgba(0, 0, 0, 0.45);
   line-height: 1.5;
 }
@@ -364,7 +358,7 @@
   border-radius: 999px;
   padding: 0.25em 0.7em;
   font-size: 0.82em;
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-family: var(--font-mono);
   color: var(--text);
 }
 
@@ -406,7 +400,7 @@
 }
 
 .fileOutputName {
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-family: var(--font-mono);
   font-size: 0.88em;
   color: rgba(255, 255, 255, 0.9);
   white-space: nowrap;
@@ -479,26 +473,6 @@
 
 .fileOutputThumb:hover {
   opacity: 0.85;
-}
-
-.lightboxOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: zoom-out;
-}
-
-.lightboxImg {
-  max-width: 90vw;
-  max-height: 90vh;
-  object-fit: contain;
-  border-radius: 0.5rem;
-  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
-  cursor: default;
 }
 
 /* Inline markdown images (charts, plots, etc.) */

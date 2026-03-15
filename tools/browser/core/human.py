@@ -926,13 +926,159 @@ async def human_press_and_hold_at(
         )
 
 
+async def human_double_click_at(
+    target: Page | Frame,
+    x1: float, y1: float, x2: float, y2: float,
+) -> None:
+    """Perform a human-like double-click at a random point inside a bounding box.
+
+    Args:
+        target: Playwright Page or Frame whose mouse will be used.
+        x1: Left edge of the bounding box (CSS pixels).
+        y1: Top edge of the bounding box (CSS pixels).
+        x2: Right edge of the bounding box (CSS pixels).
+        y2: Bottom edge of the bounding box (CSS pixels).
+
+    Raises:
+        BrowserToolError: If coordinates are non-finite or the page lacks a mouse.
+    """
+    coords = (x1, y1, x2, y2)
+    if not all(math.isfinite(c) for c in coords):
+        raise BrowserToolError("Coordinates must be finite numbers", tool="double_click_at")
+
+    page = _page_for(target)
+    cfg = _get_human_config()
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="double_click_at")
+
+    target_x, target_y = _random_point_in_bbox(x1, y1, x2, y2)
+
+    mouse = page.mouse
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+
+    # Use Playwright's native dblclick to guarantee the browser fires a
+    # 'dblclick' DOM event. Manual down/up pairs can miss the timing
+    # window depending on browser configuration.
+    await mouse.dblclick(target_x, target_y)
+
+    try:
+        await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
+        await asyncio.sleep(0.05)
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to finalize fake cursor overlay at double_click_at point (%s, %s) on page %s; "
+            "continuing without overlay update. Error: %s",
+            target_x, target_y, getattr(page, "url", "<unknown>"), exc,
+        )
+
+
+async def human_right_click_at(
+    target: Page | Frame,
+    x1: float, y1: float, x2: float, y2: float,
+) -> None:
+    """Perform a human-like right-click at a random point inside a bounding box.
+
+    Args:
+        target: Playwright Page or Frame whose mouse will be used.
+        x1: Left edge of the bounding box (CSS pixels).
+        y1: Top edge of the bounding box (CSS pixels).
+        x2: Right edge of the bounding box (CSS pixels).
+        y2: Bottom edge of the bounding box (CSS pixels).
+
+    Raises:
+        BrowserToolError: If coordinates are non-finite or the page lacks a mouse.
+    """
+    coords = (x1, y1, x2, y2)
+    if not all(math.isfinite(c) for c in coords):
+        raise BrowserToolError("Coordinates must be finite numbers", tool="right_click_at")
+
+    page = _page_for(target)
+    cfg = _get_human_config()
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="right_click_at")
+
+    target_x, target_y = _random_point_in_bbox(x1, y1, x2, y2)
+
+    mouse = page.mouse
+    await _mouse_move_with_fake_cursor(page, x=target_x, y=target_y)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.down(button="right")
+    await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
+    await mouse.up(button="right")
+
+    try:
+        await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [target_x, target_y])
+        await asyncio.sleep(0.05)
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to finalize fake cursor overlay at right_click_at point (%s, %s) on page %s; "
+            "continuing without overlay update. Error: %s",
+            target_x, target_y, getattr(page, "url", "<unknown>"), exc,
+        )
+
+
+async def human_drag_at(
+    target: Page | Frame,
+    sx1: float, sy1: float, sx2: float, sy2: float,
+    dx1: float, dy1: float, dx2: float, dy2: float,
+) -> None:
+    """Drag from a random point in the source bbox to a random point in the dest bbox.
+
+    Args:
+        target: Playwright Page or Frame whose mouse will be used.
+        sx1, sy1, sx2, sy2: Source bounding box (CSS pixels).
+        dx1, dy1, dx2, dy2: Destination bounding box (CSS pixels).
+
+    Raises:
+        BrowserToolError: If coordinates are non-finite or the page lacks a mouse.
+    """
+    all_coords = (sx1, sy1, sx2, sy2, dx1, dy1, dx2, dy2)
+    if not all(math.isfinite(c) for c in all_coords):
+        raise BrowserToolError("Coordinates must be finite numbers", tool="drag_at")
+
+    page = _page_for(target)
+    cfg = _get_human_config()
+
+    if not hasattr(page, "mouse") or page.mouse is None:
+        raise BrowserToolError("Provided page has no mouse available", tool="drag_at")
+
+    start_x, start_y = _random_point_in_bbox(sx1, sy1, sx2, sy2)
+    dest_x, dest_y = _random_point_in_bbox(dx1, dy1, dx2, dy2)
+
+    mouse = page.mouse
+
+    # Move to drag start, press, glide to destination, then release.
+    await _mouse_move_with_fake_cursor(page, x=start_x, y=start_y)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.down()
+    await _sleep_ms(random.randint(cfg.click_hold_min_ms, cfg.click_hold_max_ms))
+    await _mouse_move_with_fake_cursor(page, x=dest_x, y=dest_y)
+    await _sleep_ms(random.randint(cfg.hover_min_ms, cfg.hover_max_ms))
+    await mouse.up()
+
+    try:
+        await page.evaluate("(coords) => window.__llmCursorSet?.(coords[0], coords[1])", [dest_x, dest_y])
+    except PlaywrightError as exc:
+        logger.warning(
+            "Failed to update fake cursor overlay at drag_at destination (%s, %s) on page %s; "
+            "continuing without overlay update. Error: %s",
+            dest_x, dest_y, getattr(page, "url", "<unknown>"), exc,
+        )
+
+
 __all__ = [
     "human_click",
     "human_click_at",
+    "human_double_click_at",
     "human_drag",
+    "human_drag_at",
     "human_press_and_hold",
     "human_press_and_hold_at",
     "human_press_keys",
+    "human_right_click_at",
     "human_scroll",
     "human_type",
 ]

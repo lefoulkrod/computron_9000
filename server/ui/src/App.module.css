@@ -64,6 +64,11 @@
   flex: 1 1 0;
   border-left: none;
   padding-left: 0.5rem;
+  position: sticky;
+  top: calc(var(--header-height) + 0.75rem);
+  align-self: flex-start;
+  max-height: calc(100vh - var(--header-height) - 2rem);
+  overflow-y: auto;
 }
 
 /* In 2-column layout (no browser), give more space to messages */
@@ -109,32 +114,3 @@
   to   { opacity: 0; }
 }
 
-@media (max-width: 700px) {
-  .mainLayout {
-    flex-direction: column;
-    width: 100%;
-    min-height: auto;
-    min-height: 100vh;
-    gap: 1rem;
-    padding: 0.75rem;
-  }
-
-  .column {
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0;
-    border-right: none !important;
-  }
-
-  .column:last-child {
-    border-bottom: none;
-    padding-left: 0;
-  }
-
-  /* disable sticky on small screens */
-  .column:first-child {
-    position: static;
-    top: auto;
-    height: auto;
-  }
-}

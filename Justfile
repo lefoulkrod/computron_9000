@@ -573,7 +573,6 @@ container-start:
       --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
-      --device nvidia.com/gpu=all \
       -p 6080:6080 \
       $hf_token_args \
       -v "$home_dir:/home/computron:rw,z" \
@@ -652,6 +651,149 @@ container-status:
         echo "   ❌ Container does not exist"
         echo "   🚀 Create and start with: just container-start"
     fi
+
+# Build inference container image
+inference-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v podman &> /dev/null; then
+        echo "❌ Podman is not installed. Please install it first:"
+        echo "   https://podman.io/getting-started/installation"
+        exit 1
+    fi
+
+    echo "🏗️  Building inference container image..."
+    podman build --format docker -f container/Dockerfile.inference -t computron_inference:latest .
+    echo "✅ Inference container image built successfully!"
+
+# Start 'computron_inference' container with GPU
+inference-start:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v podman &> /dev/null; then
+        echo "❌ Podman is not installed. Please install it first:"
+        echo "   https://podman.io/getting-started/installation"
+        exit 1
+    fi
+
+    if ! podman image exists computron_inference:latest; then
+        echo "❌ Inference image not found. Building first..."
+        just inference-build
+    fi
+
+    if podman container exists computron_inference; then
+        if [ "$(podman container inspect computron_inference --format '{{{{.State.Status}}}}')" = "running" ]; then
+            echo "ℹ️  Container 'computron_inference' is already running"
+            exit 0
+        else
+            echo "🗑️  Removing stopped container..."
+            podman rm computron_inference
+        fi
+    fi
+
+    echo "🚀 Starting inference container..."
+    home_dir=$(awk '/^inference_container:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
+    if [ ! -d "$home_dir" ]; then
+        echo "📁 Creating home directory: $home_dir"
+        mkdir -p "$home_dir"
+    fi
+
+    # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
+    hf_token_args=""
+    if [ -n "${HF_TOKEN:-}" ]; then
+        hf_token_args="-e HF_TOKEN=$HF_TOKEN"
+        echo "🔑 HF_TOKEN detected, passing to container"
+    fi
+
+    podman run -d --rm \
+      --name computron_inference \
+      --userns=keep-id \
+      --group-add keep-groups \
+      --device nvidia.com/gpu=all \
+      $hf_token_args \
+      -v "$home_dir:/home/computron:rw,z" \
+      computron_inference:latest
+
+    echo "✅ Container 'computron_inference' started successfully!"
+
+# Stop 'computron_inference' container
+inference-stop:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v podman &> /dev/null; then
+        echo "❌ Podman is not installed"
+        exit 1
+    fi
+
+    if podman container exists computron_inference; then
+        echo "🛑 Stopping inference container..."
+        podman stop computron_inference
+        echo "✅ Inference container stopped"
+    else
+        echo "ℹ️  Container 'computron_inference' is not running"
+    fi
+
+# Open interactive shell in inference container
+inference-shell:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v podman &> /dev/null; then
+        echo "❌ Podman is not installed"
+        exit 1
+    fi
+
+    if podman container exists computron_inference; then
+        if [ -n "$(podman ps -q --filter name=^computron_inference$ --filter status=running)" ]; then
+            echo "🐚 Opening shell in inference container..."
+            podman exec -it computron_inference bash
+        else
+            echo "❌ Container 'computron_inference' exists but is not running"
+            echo "   Start it with: just inference-start"
+            exit 1
+        fi
+    else
+        echo "❌ Container 'computron_inference' does not exist"
+        echo "   Start it with: just inference-start"
+        exit 1
+    fi
+
+# Get inference container status
+inference-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v podman &> /dev/null; then
+        echo "❌ Podman is not installed"
+        exit 1
+    fi
+
+    echo "📊 Inference Container Status:"
+    if podman container exists computron_inference; then
+        echo "   Name: computron_inference"
+        if [ -n "$(podman ps -q --filter name=^computron_inference$ --filter status=running)" ]; then
+            echo "   Status: running"
+            echo "   ✅ Container is running and ready"
+            echo "   🐚 Access with: just inference-shell"
+        else
+            status=$(podman container inspect computron_inference | grep -m1 '"Status"' | sed -E 's/.*"Status"\s*:\s*"([^"]+)".*/\1/')
+            status=${status:-unknown}
+            echo "   Status: $status"
+            echo "   ⚠️  Container exists but is not running"
+            echo "   🚀 Start with: just inference-start"
+        fi
+    else
+        echo "   ❌ Container does not exist"
+        echo "   🚀 Create and start with: just inference-start"
+    fi
+
+# Start both containers (inference + virtual computer)
+start-all: inference-start container-start
+
+# Stop both containers
+stop-all: inference-stop container-stop
 
 # Podman helpers
 # Enable and start the Podman API socket for the current user

@@ -15,9 +15,9 @@ Public API:
   articles, documentation, or search results.
 - click, fill_field, press_keys, select_option, scroll_page, go_back, drag:
   Interaction tools that return a formatted page view string.
-- ask_about_screenshot: Capture the current page and answer a prompt about it.
-- ground_elements_by_text: Locate UI elements via vision model (use descriptive prompts
-  with spatial context, colors, and element types for best accuracy).
+- inspect_page: Visually inspect the current page and answer a question about it.
+- perform_visual_action: Ask a vision model to decide and execute the next GUI
+  action (click, type, scroll, drag, etc.).
 - execute_javascript: Execute arbitrary JavaScript for advanced scenarios (use sparingly;
   prefer structured tools like click, fill_field for reliability).
 - close_browser: Cleanly close the persistent Playwright browser.
@@ -28,12 +28,10 @@ from .core.exceptions import BrowserToolError
 from .core.page_view import PageView
 from .interactions import (
     click,
-    click_at,
     drag,
     fill_field,
     go_back,
     press_and_hold,
-    press_and_hold_at,
     press_keys,
     scroll_page,
 )
@@ -44,32 +42,26 @@ from .save_content import save_page_content
 from .select import select_option
 from .snapshot_tool import browse_page
 from .vision import (
-    ask_about_screenshot,
-    click_element,
-    ground_elements_by_text,
-    press_and_hold_element,
+    inspect_page,
+    perform_visual_action,
 )
 
 __all__ = [
     "Browser",
     "BrowserToolError",
     "PageView",
-    "ask_about_screenshot",
     "browse_page",
     "click",
-    "click_at",
-    "click_element",
     "close_browser",
     "drag",
     "execute_javascript",
     "fill_field",
     "get_browser",
     "go_back",
-    "ground_elements_by_text",
+    "inspect_page",
     "open_url",
+    "perform_visual_action",
     "press_and_hold",
-    "press_and_hold_at",
-    "press_and_hold_element",
     "press_keys",
     "read_page",
     "save_page_content",

@@ -1,7 +1,7 @@
 """Simple browser agent definition constants.
 
 This agent is intentionally minimal: it can open a URL, summarize textual content, and
-ask the vision model questions about a captured screenshot.
+visually inspect pages via a vision model.
 """
 
 from __future__ import annotations
@@ -11,17 +11,16 @@ from textwrap import dedent
 
 from sdk import make_run_agent_as_tool_function
 from tools.browser import (
-    ask_about_screenshot,
+    inspect_page,
     browse_page,
     click,
-    click_element,
     drag,
     execute_javascript,
     fill_field,
     go_back,
     open_url,
+    perform_visual_action,
     press_and_hold,
-    press_and_hold_element,
     press_keys,
     read_page,
     save_page_content,
@@ -85,10 +84,10 @@ SYSTEM_PROMPT = dedent(
     - When you save/download a file, mention the path in your response.
 
     VISION TOOLS — STRICT RULES:
-    click_element, press_and_hold_element, and ask_about_screenshot use
-    vision (screenshot analysis) which is 10x slower and more expensive.
-    NEVER use a vision tool unless you have ALREADY tried the ref-based
-    equivalent (click, fill_field, etc.) on the SAME page and it FAILED.
+    perform_visual_action and inspect_page use vision (screenshot + model)
+    which is 10x slower. NEVER use them unless ref-based tools have ALREADY
+    failed on the SAME page. perform_visual_action asks a vision model to
+    decide and execute the next GUI action (click, type, scroll, drag, etc.).
     browse_page() gives you ref numbers for every interactive element:
         [3] [link] Datasets       → click("3")
         [5] [button] Submit       → click("5")
@@ -99,7 +98,7 @@ SYSTEM_PROMPT = dedent(
     WHEN STUCK:
     - Ref not found → page may have changed, call browse_page() for fresh refs
     - Can't find element → scroll + browse_page, or browse_page(scope="...")
-    - Ref failed twice → THEN use click_element("describe it visually")
+    - Ref failed twice → perform_visual_action("describe what to do")
     - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
     - Ambiguous → ask user for clarification
 
@@ -113,16 +112,15 @@ TOOLS = [
     browse_page,
     read_page,
     click,
-    click_element,
     press_and_hold,
-    press_and_hold_element,
+    perform_visual_action,
     fill_field,
     press_keys,
     select_option,
     scroll_page,
     go_back,
     drag,
-    ask_about_screenshot,
+    inspect_page,
     execute_javascript,
     save_page_content,
     run_bash_cmd,

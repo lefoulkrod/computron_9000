@@ -23,7 +23,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3em;
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   color: rgba(0, 0, 0, 0.55);
   background: rgba(100, 120, 200, 0.08);

@@ -11,7 +11,7 @@ const AGENTS = [
     { id: 'desktop', label: 'Desktop' },
 ];
 
-function ChatInput({ onSend, onStop, isStreaming, attachment }) {
+function ChatInput({ onSend, onStop, isStreaming, attachment, compact }) {
     const [message, setMessage] = useState('');
     const [selectedAgent, setSelectedAgent] = useState('computron');
     const [fileData, setFileData] = useState(null);
@@ -135,19 +135,31 @@ function ChatInput({ onSend, onStop, isStreaming, attachment }) {
                     />
                 </div>
                 <div className={styles.inputAreaButtons}>
-                    <div className={styles.agentSelector}>
-                        {AGENTS.map((a) => (
-                            <button
-                                key={a.id}
-                                type="button"
-                                className={`${styles.agentButton} ${selectedAgent === a.id ? styles.agentButtonActive : ''}`}
-                                onClick={() => setSelectedAgent(a.id)}
-                                title={`Use ${a.label} agent`}
-                            >
-                                {a.label}
-                            </button>
-                        ))}
-                    </div>
+                    {compact ? (
+                        <select
+                            className={styles.agentSelect}
+                            value={selectedAgent}
+                            onChange={(e) => setSelectedAgent(e.target.value)}
+                        >
+                            {AGENTS.map((a) => (
+                                <option key={a.id} value={a.id}>{a.label}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <div className={styles.agentSelector}>
+                            {AGENTS.map((a) => (
+                                <button
+                                    key={a.id}
+                                    type="button"
+                                    className={`${styles.agentButton} ${selectedAgent === a.id ? styles.agentButtonActive : ''}`}
+                                    onClick={() => setSelectedAgent(a.id)}
+                                    title={`Use ${a.label} agent`}
+                                >
+                                    {a.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <div className={styles.actionButtons}>
                     <button
                         type="button"

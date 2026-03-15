@@ -47,8 +47,8 @@ async def generate_media(
     media_type = "image"
     gen_id = uuid.uuid4().hex[:12]
     cfg = load_config()
-    container_name = cfg.virtual_computer.container_name
-    container_user = cfg.virtual_computer.container_user
+    container_name = cfg.inference_container.container_name
+    container_user = cfg.inference_container.container_user
 
     # Construct a compact script to run inside the container
     params_json = json.dumps({"model": model, "size": size})
@@ -132,8 +132,8 @@ async def generate_media(
             return {"status": "error", "message": "No output path received"}
 
         # Read the generated file from the host volume and emit the final preview
-        container_home = cfg.virtual_computer.container_working_dir.rstrip("/") + "/"
-        host_home = cfg.virtual_computer.home_dir
+        container_home = cfg.inference_container.container_working_dir.rstrip("/") + "/"
+        host_home = cfg.inference_container.home_dir
 
         if final_path.startswith(container_home):
             relative = final_path[len(container_home):]

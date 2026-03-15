@@ -1,33 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import PreviewShell from './PreviewShell.jsx';
 import styles from './BrowserPreview.module.css';
 import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import BrowserIcon from './icons/BrowserIcon.jsx';
 import LockIcon from './icons/LockIcon.jsx';
-
-function BrowserLightbox({ src, alt, onClose }) {
-    const handleKey = useCallback((e) => {
-        if (e.key === 'Escape') onClose();
-    }, [onClose]);
-
-    useEffect(() => {
-        document.addEventListener('keydown', handleKey);
-        return () => document.removeEventListener('keydown', handleKey);
-    }, [handleKey]);
-
-    return createPortal(
-        <div className={styles.lightboxOverlay} onClick={onClose}>
-            <img
-                className={styles.lightboxImg}
-                src={src}
-                alt={alt}
-                onClick={(e) => e.stopPropagation()}
-            />
-        </div>,
-        document.body
-    );
-}
+import Lightbox from './Lightbox.jsx';
 
 export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose }) {
     const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -87,7 +64,7 @@ export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose }
                     </div>
                 )}
                 {lightboxOpen && screenshotSrc && (
-                    <BrowserLightbox
+                    <Lightbox
                         src={screenshotSrc}
                         alt="Browser screenshot"
                         onClose={() => setLightboxOpen(false)}

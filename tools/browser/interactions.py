@@ -25,10 +25,8 @@ from tools.browser.core.browser import BrowserInteractionResult
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.human import (
     human_click,
-    human_click_at,
     human_drag,
     human_press_and_hold,
-    human_press_and_hold_at,
     human_press_keys,
     human_scroll,
     human_type,
@@ -593,94 +591,12 @@ async def go_back() -> str:
     return await _format_result(browser_result, tool_name="go_back")
 
 
-@emit_screenshot_after
-async def click_at(
-    x1: float | int, y1: float | int, x2: float | int, y2: float | int,
-) -> str:
-    """Click at a random point inside a bounding box on the current page.
-
-    Low-level coordinate tool. Prefer ``click_element`` which combines
-    grounding + clicking in one step so the LLM never handles raw coordinates.
-
-    Args:
-        x1: Left edge of the bounding box (CSS pixels).
-        y1: Top edge of the bounding box (CSS pixels).
-        x2: Right edge of the bounding box (CSS pixels).
-        y2: Bottom edge of the bounding box (CSS pixels).
-
-    Returns:
-        Updated page snapshot string.
-
-    Raises:
-        BrowserToolError: If coordinates are invalid or the click fails.
-    """
-    fx1, fy1, fx2, fy2 = _validate_bbox(x1, y1, x2, y2, tool_name="click_at")
-
-    browser, view = await get_active_view("click_at")
-
-    try:
-        result = await browser.perform_interaction(lambda: human_click_at(view.frame, fx1, fy1, fx2, fy2))
-        return await _format_result(result, tool_name="click_at")
-    except BrowserToolError:
-        raise
-    except PlaywrightError as exc:  # pragma: no cover - final safety net
-        logger.exception("Failed to complete click_at at bbox (%s, %s, %s, %s)", fx1, fy1, fx2, fy2)
-        raise BrowserToolError("Failed to complete click_at operation", tool="click_at") from exc
-
-
-@emit_screenshot_after
-async def press_and_hold_at(
-    x1: float | int, y1: float | int, x2: float | int, y2: float | int,
-    duration_ms: int = 3000,
-) -> str:
-    """Press and hold at a random point inside a bounding box for a duration.
-
-    Low-level coordinate tool. Prefer ``press_and_hold_element`` which combines
-    grounding + holding in one step so the LLM never handles raw coordinates.
-
-    Args:
-        x1: Left edge of the bounding box (CSS pixels).
-        y1: Top edge of the bounding box (CSS pixels).
-        x2: Right edge of the bounding box (CSS pixels).
-        y2: Bottom edge of the bounding box (CSS pixels).
-        duration_ms: How long to hold the mouse button in milliseconds.
-            Defaults to 3000 (3 seconds). Range: 500-10000.
-
-    Returns:
-        Updated page snapshot string after the hold is released.
-
-    Raises:
-        BrowserToolError: If coordinates are invalid or the hold fails.
-    """
-    fx1, fy1, fx2, fy2 = _validate_bbox(x1, y1, x2, y2, tool_name="press_and_hold_at")
-
-    clamped_duration = max(500, min(10000, duration_ms))
-
-    browser, view = await get_active_view("press_and_hold_at")
-
-    try:
-        result = await browser.perform_interaction(
-            lambda: human_press_and_hold_at(view.frame, fx1, fy1, fx2, fy2, duration_ms=clamped_duration),
-        )
-        return await _format_result(result, tool_name="press_and_hold_at")
-    except BrowserToolError:
-        raise
-    except PlaywrightError as exc:  # pragma: no cover - final safety net
-        logger.exception("Failed to complete press_and_hold_at at bbox (%s, %s, %s, %s)", fx1, fy1, fx2, fy2)
-        raise BrowserToolError(
-            "Failed to complete press_and_hold_at operation",
-            tool="press_and_hold_at",
-        ) from exc
-
-
 __all__ = [
     "click",
-    "click_at",
     "drag",
     "fill_field",
     "go_back",
     "press_and_hold",
-    "press_and_hold_at",
     "press_keys",
     "scroll_page",
 ]

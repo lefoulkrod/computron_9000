@@ -5,6 +5,11 @@ virtual_computer:
   container_user: computron
   home_dir: /home/larry/.computron_9000/container_home
   container_working_dir: /home/computron
+inference_container:
+  container_name: computron_inference
+  container_user: computron
+  home_dir: /home/larry/.computron_9000/container_home
+  container_working_dir: /home/computron
 
 tools:
   web:
@@ -48,10 +53,12 @@ desktop:
   vision_model: qwen3.5:4b
 
 vision:
-  model: qwen3.5:35b-a3b
-  think: true
+  model: qwen3.5:4b
+  think: false
   options:
     num_ctx: 60000
+    temperature: 0.3
+    top_k: 20
 
 summary:
   model: qwen3:8b
