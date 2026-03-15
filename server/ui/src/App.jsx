@@ -4,6 +4,7 @@ import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
 import BrowserView from './components/BrowserView.jsx';
+import DesktopView from './components/DesktopView.jsx';
 import FilePreviewPanel from './components/FilePreviewPanel.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import SkillsPanel from './components/SkillsPanel.jsx';
@@ -29,6 +30,7 @@ function App() {
     const [muted, setMuted] = useState(false);
     const [terminalLines, setTerminalLines] = useState([]);
     const [generationPreview, setGenerationPreview] = useState(null);
+    const [desktopActive, setDesktopActive] = useState(false);
     const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
     const [activeSkill, setActiveSkill] = useState(null);
     // Tracks panels the user has explicitly closed; new events reopen them.
@@ -76,6 +78,10 @@ function App() {
             setActiveSkill(event);
             setSkillsRefreshSignal((s) => s + 1);
         },
+        onDesktopActive: () => {
+            setDesktopActive(true);
+            setClosedPanels((prev) => prev.has('desktop') ? (() => { const next = new Set(prev); next.delete('desktop'); return next; })() : prev);
+        },
         onGenerationPreview: (event) => {
             setGenerationPreview((prev) => {
                 if (!prev || prev.gen_id !== event.gen_id) return event;
@@ -98,6 +104,7 @@ function App() {
         onAudioPlayback: (...args) => _streamCallbacksRef.current.onAudioPlayback(...args),
         onNudgeSent: (...args) => _streamCallbacksRef.current.onNudgeSent(...args),
         onSkillApplied: (...args) => _streamCallbacksRef.current.onSkillApplied(...args),
+        onDesktopActive: (...args) => _streamCallbacksRef.current.onDesktopActive(...args),
         onGenerationPreview: (...args) => _streamCallbacksRef.current.onGenerationPreview(...args),
     }).current;
 
@@ -166,6 +173,7 @@ function App() {
         setFilePreview(null);
         setTerminalLines([]);
         setGenerationPreview(null);
+        setDesktopActive(false);
         setClosedPanels(new Set());
         setToolsPanelKey((k) => k + 1);
     }, [chatNewSession]);
@@ -174,8 +182,9 @@ function App() {
     const showGeneration = generationPreview && !closedPanels.has('generation');
     const showFile = filePreview && !closedPanels.has('file');
     const showBrowser = browserSnapshot && !closedPanels.has('browser');
+    const showDesktop = desktopActive && !closedPanels.has('desktop');
     const showTerminal = terminalLines.length > 0 && !closedPanels.has('terminal');
-    const hasAnyPanel = showGeneration || showFile || showBrowser || showTerminal;
+    const hasAnyPanel = showGeneration || showFile || showBrowser || showDesktop || showTerminal;
 
     return (
         <>
@@ -242,6 +251,9 @@ function App() {
                         )}
                         {showBrowser && (
                             <BrowserView snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels((prev) => new Set(prev).add('browser'))} />
+                        )}
+                        {showDesktop && (
+                            <DesktopView visible={showDesktop} onClose={() => setClosedPanels((prev) => new Set(prev).add('desktop'))} />
                         )}
                         {showTerminal && (
                             <TerminalPanel lines={terminalLines} onClose={() => setClosedPanels((prev) => new Set(prev).add('terminal'))} />

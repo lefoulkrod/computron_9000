@@ -146,6 +146,18 @@ class SkillAppliedPayload(BaseModel):
     confidence: float
 
 
+class DesktopActivePayload(BaseModel):
+    """Emitted when the desktop environment starts to signal the UI.
+
+    Attributes:
+        type: Discriminator; always "desktop_active".
+        resolution: Desktop resolution string (e.g. "1280x720").
+    """
+
+    type: Literal["desktop_active"]
+    resolution: str
+
+
 class ContextUsagePayload(BaseModel):
     """Emitted after each LLM call with current context window usage.
 
@@ -206,7 +218,8 @@ AssistantEventPayload = Annotated[
     | TerminalOutputPayload
     | GenerationPreviewPayload
     | ContextUsagePayload
-    | SkillAppliedPayload,
+    | SkillAppliedPayload
+    | DesktopActivePayload,
     Field(discriminator="type"),
 ]
 
@@ -246,6 +259,7 @@ __all__ = [
     "AudioPlaybackPayload",
     "BrowserScreenshotPayload",
     "ContextUsagePayload",
+    "DesktopActivePayload",
     "FileOutputPayload",
     "GenerationPreviewPayload",
     "SkillAppliedPayload",

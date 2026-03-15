@@ -574,6 +574,7 @@ container-start:
       --userns=keep-id \
       --group-add keep-groups \
       --device nvidia.com/gpu=all \
+      -p 6080:6080 \
       $hf_token_args \
       -v "$home_dir:/home/computron:rw,z" \
       computron_9000:latest sleep infinity
