@@ -6,9 +6,13 @@ export DISPLAY=:1
 Xvfb :1 -screen 0 1280x720x24 -ac &
 sleep 1
 
-# D-Bus session (needed by Xfce)
+# D-Bus session (needed by Xfce and AT-SPI accessibility)
 eval $(dbus-launch --sh-syntax)
 export DBUS_SESSION_BUS_ADDRESS
+
+# Enable accessibility for AT-SPI element detection
+export GTK_MODULES=gail:atk-bridge
+export ACCESSIBILITY_ENABLED=1
 
 # Xfce desktop
 startxfce4 &

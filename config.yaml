@@ -45,6 +45,7 @@ desktop:
   resolution: "1280x720"
   websocket_port: 6080
   screenshot_quality: 70
+  vision_model: qwen3.5:4b
 
 vision:
   model: qwen3.5:35b-a3b

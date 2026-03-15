@@ -156,6 +156,7 @@ class DesktopConfig(BaseModel):
     vnc_port: int = 5900
     websocket_port: int = 6080
     screenshot_quality: int = 70
+    vision_model: str | None = "qwen3.5:4b"
 
 
 class VirtualComputerConfig(BaseModel):

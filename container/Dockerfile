@@ -105,6 +105,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-terminal dbus-x11 \
     xvfb x11vnc websockify novnc \
     xdotool xclip scrot wmctrl tini \
+    python3-pyatspi at-spi2-core libatk-adaptor \
     # Cursor + theme packages for usable desktop appearance
     elementary-xfce-icon-theme \
     greybird-gtk-theme \
@@ -128,9 +129,11 @@ RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
       > /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
     chown -R computron:computron /home/computron/.config
 
-# Container entrypoint — starts desktop environment on boot
+# Desktop scripts
 COPY container/entrypoint.sh /opt/entrypoint.sh
+COPY container/a11y_tree.py /opt/desktop/a11y_tree.py
 RUN chmod +x /opt/entrypoint.sh && \
+    chmod 755 /opt/desktop/a11y_tree.py && \
     mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # Switch to non-root user (safer sandbox)

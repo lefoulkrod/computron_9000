@@ -138,12 +138,10 @@ class SkillAppliedPayload(BaseModel):
     Attributes:
         type: Discriminator; always "skill_applied".
         skill_name: The name of the skill being applied.
-        confidence: The skill's current confidence score (0.0–1.0).
     """
 
     type: Literal["skill_applied"]
     skill_name: str
-    confidence: float
 
 
 class DesktopActivePayload(BaseModel):

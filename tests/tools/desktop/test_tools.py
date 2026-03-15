@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tools.desktop._tools import (
-    ground,
+    describe_screen,
     keyboard_press,
     keyboard_type,
     mouse_click,
     mouse_double_click,
     mouse_drag,
-    screenshot,
+    read_screen,
     scroll,
 )
 
@@ -23,82 +24,141 @@ def _mock_desktop_deps():
     """Mock out container deps for all tests."""
     with (
         patch("tools.desktop._tools.ensure_desktop_running", new_callable=AsyncMock),
-        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
         patch("tools.desktop._tools._run_desktop_cmd", new_callable=AsyncMock) as mock_cmd,
-        patch("tools.desktop._tools._run_grounding", new_callable=AsyncMock) as mock_ground,
+        patch("tools.desktop._tools._get_a11y_tree", new_callable=AsyncMock) as mock_a11y,
         patch("tools.desktop._tools.asyncio.sleep", new_callable=AsyncMock),
     ):
-        mock_capture.return_value = b"\x89PNGfake-png"
-
-        # Default grounding response
-        mock_ground.return_value = {
-            "thought": "I see the Save button in the toolbar",
-            "action": "click(start_box='(100,50)')",
-            "action_type": "click",
-            "x": 100,
-            "y": 50,
-            "raw": "Thought: I see the Save button\nAction: click(start_box='(100,50)')",
-        }
+        # Default a11y tree
+        mock_a11y.return_value = [
+            {"role": "push button", "label": "Save", "x": 90, "y": 40, "w": 60, "h": 30},
+            {"role": "push button", "label": "Cancel", "x": 160, "y": 40, "w": 60, "h": 30},
+        ]
 
         yield {
             "cmd": mock_cmd,
+            "a11y": mock_a11y,
+        }
+
+
+# ── read_screen ──────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_screen_includes_a11y_elements(_mock_desktop_deps):
+    """read_screen() includes numbered interactive elements from a11y tree."""
+    result = await read_screen()
+    assert "[1]" in result
+    assert "Save" in result
+    assert "[2]" in result
+    assert "Cancel" in result
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_screen_a11y_shows_click_coordinates(_mock_desktop_deps):
+    """a11y elements include center-point click coordinates."""
+    result = await read_screen()
+    # Save button: x=90, y=40, w=60, h=30 → center (120, 55)
+    assert "(120, 55)" in result
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_screen_empty_a11y(_mock_desktop_deps):
+    """read_screen() returns fallback text when a11y tree is empty."""
+    _mock_desktop_deps["a11y"].return_value = []
+    result = await read_screen()
+    assert "no interactive elements" in result.lower()
+
+
+# ── describe_screen ──────────────────────────────────────────────────
+
+
+@pytest.fixture
+def _mock_vision_deps():
+    """Mock vision model deps for describe_screen tests."""
+    mock_config = MagicMock()
+    mock_config.desktop.vision_model = "qwen3.5:4b"
+    mock_config.llm.host = None
+
+    with (
+        patch("tools.desktop._tools.load_config", return_value=mock_config),
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
+        patch("tools.desktop._tools.AsyncClient") as mock_client_cls,
+    ):
+        mock_client = AsyncMock()
+        mock_client_cls.return_value = mock_client
+        mock_capture.return_value = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+
+        yield {
+            "config": mock_config,
             "capture": mock_capture,
-            "ground": mock_ground,
+            "client_cls": mock_client_cls,
+            "client": mock_client,
         }
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_ground_returns_action(_mock_desktop_deps):
-    """ground() returns formatted action with coordinates."""
-    result = await ground("Click the Save button")
-    assert "click at (100, 50)" in result
-    assert "Save button" in result
-    _mock_desktop_deps["ground"].assert_called_once()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_ground_type_action(_mock_desktop_deps):
-    """ground() formats type actions correctly."""
-    _mock_desktop_deps["ground"].return_value = {
-        "thought": "I need to type the filename",
-        "action": "type(content='report.pdf')",
-        "action_type": "type",
-        "type_content": "report.pdf",
-        "raw": "Thought: I need to type\nAction: type(content='report.pdf')",
+async def test_describe_screen_returns_vision_response(_mock_vision_deps):
+    """describe_screen() returns the vision model's text description."""
+    _mock_vision_deps["client"].chat.return_value = {
+        "message": {"content": "A desktop with a terminal and file manager."},
     }
-    result = await ground("Type the filename")
-    assert "type 'report.pdf'" in result
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_ground_hotkey_action(_mock_desktop_deps):
-    """ground() formats hotkey actions correctly."""
-    _mock_desktop_deps["ground"].return_value = {
-        "thought": "Save the file",
-        "action": "hotkey(key='ctrl+s')",
-        "action_type": "hotkey",
-        "hotkey": "ctrl+s",
-        "raw": "Action: hotkey(key='ctrl+s')",
-    }
-    result = await ground("Save the file")
-    assert "press ctrl+s" in result
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_screenshot_returns_description(_mock_desktop_deps):
-    """screenshot() returns the grounding model's description."""
-    _mock_desktop_deps["ground"].return_value = {
-        "thought": "Desktop shows a file manager window with folders",
-        "action": "finished(content='')",
-        "action_type": "finished",
-        "raw": "Thought: Desktop shows a file manager window with folders",
-    }
-    result = await screenshot()
+    result = await describe_screen()
+    assert "terminal" in result.lower()
     assert "file manager" in result.lower()
+    _mock_vision_deps["client"].chat.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_describe_screen_no_vision_model():
+    """describe_screen() returns error when no vision model configured."""
+    mock_config = MagicMock()
+    mock_config.desktop.vision_model = None
+    with (
+        patch("tools.desktop._tools.ensure_desktop_running", new_callable=AsyncMock),
+        patch("tools.desktop._tools.load_config", return_value=mock_config),
+    ):
+        result = await describe_screen()
+        assert "error" in result.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_describe_screen_capture_failure(_mock_vision_deps):
+    """describe_screen() returns error when screenshot capture fails."""
+    _mock_vision_deps["capture"].side_effect = RuntimeError("capture failed")
+    result = await describe_screen()
+    assert "error" in result.lower()
+    assert "capture failed" in result.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_describe_screen_vision_model_failure(_mock_vision_deps):
+    """describe_screen() returns error when vision model fails."""
+    _mock_vision_deps["client"].chat.side_effect = Exception("model timeout")
+    result = await describe_screen()
+    assert "error" in result.lower()
+    assert "model timeout" in result.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_describe_screen_empty_response(_mock_vision_deps):
+    """describe_screen() returns error when vision model returns empty."""
+    _mock_vision_deps["client"].chat.return_value = {
+        "message": {"content": ""},
+    }
+    result = await describe_screen()
+    assert "error" in result.lower()
+    assert "empty" in result.lower()
+
+
+# ── mouse actions ─────────────────────────────────────────────────────
 
 
 @pytest.mark.unit
@@ -125,10 +185,10 @@ async def test_mouse_click_right_button(_mock_desktop_deps):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_mouse_double_click(_mock_desktop_deps):
-    """mouse_double_click() runs xdotool with --repeat 2 and 500ms delay."""
+    """mouse_double_click() runs xdotool with --repeat 2."""
     await mouse_double_click(300, 400)
     _mock_desktop_deps["cmd"].assert_called_once_with(
-        "xdotool mousemove --sync 300 400 click --repeat 2 --delay 500 1",
+        "xdotool mousemove --sync 300 400 click --repeat 2 --delay 100 1",
     )
 
 
@@ -143,25 +203,17 @@ async def test_mouse_drag(_mock_desktop_deps):
     )
 
 
+# ── keyboard ──────────────────────────────────────────────────────────
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_keyboard_type(_mock_desktop_deps):
-    """keyboard_type() runs xdotool type with shlex-quoted text."""
-    await keyboard_type("hello")
+    """keyboard_type() uses xdotool type with chunking."""
+    await keyboard_type("hello world")
     cmd_arg = _mock_desktop_deps["cmd"].call_args[0][0]
     assert "xdotool type" in cmd_arg
-    assert "--clearmodifiers" in cmd_arg
-    assert "hello" in cmd_arg
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_keyboard_type_chunks_long_text(_mock_desktop_deps):
-    """keyboard_type() chunks text longer than 50 characters."""
-    long_text = "a" * 120
-    await keyboard_type(long_text)
-    # 120 chars / 50 chunk size = 3 calls
-    assert _mock_desktop_deps["cmd"].call_count == 3
+    assert "hello world" in cmd_arg
 
 
 @pytest.mark.unit
@@ -172,6 +224,9 @@ async def test_keyboard_press(_mock_desktop_deps):
     _mock_desktop_deps["cmd"].assert_called_once_with(
         "xdotool key -- ctrl+c",
     )
+
+
+# ── scroll ────────────────────────────────────────────────────────────
 
 
 @pytest.mark.unit

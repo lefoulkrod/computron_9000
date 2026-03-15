@@ -1,85 +1,7 @@
-.confidenceBar {
-    height: 3px;
-    background: var(--button);
-    border-radius: 2px;
-    overflow: hidden;
-    width: 100%;
-}
-
-.confidenceFill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.3s;
-}
-
-.confidenceLow {
-    background: #e74c3c;
-}
-
-.confidenceMid {
-    background: #f39c12;
-}
-
-.confidenceHigh {
-    background: #27ae60;
-}
-
-.skillMeta {
-    grid-column: 1;
-    grid-row: 3;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    margin-top: 0.15rem;
-}
-
 .stats {
     font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
     font-size: 0.72em;
     opacity: 0.4;
-}
-
-.toggle {
-    position: relative;
-    width: 28px;
-    height: 14px;
-    border-radius: 7px;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    flex-shrink: 0;
-    transition: background 0.2s;
-}
-
-.toggleActive {
-    background: #27ae60;
-}
-
-.toggleInactive {
-    background: var(--button);
-}
-
-.toggleKnob {
-    position: absolute;
-    top: 2px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #fff;
-    transition: left 0.2s;
-}
-
-.toggleActive .toggleKnob {
-    left: 16px;
-}
-
-.toggleInactive .toggleKnob {
-    left: 2px;
-}
-
-.toggle:disabled {
-    opacity: 0.5;
-    cursor: default;
 }
 
 /* Fixed tooltip for skill steps */
@@ -133,18 +55,6 @@
 .tooltipDesc {
     color: var(--text);
     opacity: 0.6;
-}
-
-:global(.dark-theme) .confidenceLow {
-    background: #e74c3c;
-}
-
-:global(.dark-theme) .confidenceMid {
-    background: #f1c40f;
-}
-
-:global(.dark-theme) .confidenceHigh {
-    background: #2ecc71;
 }
 
 :global(.dark-theme) .tooltip {
