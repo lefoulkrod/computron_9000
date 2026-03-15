@@ -1,4 +1,8 @@
-"""On-demand desktop environment lifecycle management."""
+"""Desktop environment lifecycle management.
+
+The desktop starts automatically with the container via entrypoint.sh.
+These functions verify it's running and notify the UI.
+"""
 
 import asyncio
 import logging
@@ -13,62 +17,66 @@ logger = logging.getLogger(__name__)
 _STARTUP_TIMEOUT_S = 15
 _POLL_INTERVAL_S = 0.5
 
+def _notify_ui() -> None:
+    """Emit DesktopActivePayload to show the noVNC panel in the UI."""
+    config = load_config()
+    publish_event(AssistantResponse(
+        event=DesktopActivePayload(
+            type="desktop_active",
+            resolution=config.desktop.resolution,
+        ),
+    ))
+
 
 async def is_desktop_running() -> bool:
-    """Check whether the desktop environment is running in the container."""
+    """Check whether the desktop environment is fully running."""
     try:
-        output = await _run_desktop_cmd("pgrep -x Xvfb || true")
-        return bool(output.strip())
-    except DesktopExecError:
+        output = await _run_desktop_cmd(
+            "pgrep -x Xvfb > /dev/null && pgrep -x x11vnc > /dev/null && echo ok || true",
+        )
+        result = output.strip().endswith("ok")
+        if not result:
+            logger.debug("is_desktop_running: got %r", output.strip())
+        return result
+    except DesktopExecError as exc:
+        logger.debug("is_desktop_running: exec error: %s", exc)
         return False
 
 
 async def ensure_desktop_running() -> None:
-    """Start the desktop environment if not already running.
+    """Wait for the desktop environment to be ready and notify the UI.
 
-    Idempotent — safe to call before every tool invocation.
-    On first start, emits a ``DesktopActivePayload`` event to signal
-    the UI to show the noVNC panel.
+    The desktop starts automatically with the container. This function
+    polls until it's up, then emits a DesktopActivePayload event.
     """
     if await is_desktop_running():
+        _notify_ui()
         return
 
-    logger.info("Starting desktop environment in container")
-
-    # Run start-desktop.sh in background (nohup so it survives exec detach)
-    try:
-        await _run_desktop_cmd(
-            "nohup /opt/desktop/start-desktop.sh > /tmp/desktop.log 2>&1 &",
-            user="root",
-        )
-    except DesktopExecError:
-        logger.exception("Failed to launch start-desktop.sh")
-        raise
-
-    # Poll until VNC port is listening
-    config = load_config()
+    # Desktop should be starting via entrypoint — just wait for it
+    logger.info("Waiting for desktop environment to be ready")
     elapsed = 0.0
+    last_error = None
     while elapsed < _STARTUP_TIMEOUT_S:
         await asyncio.sleep(_POLL_INTERVAL_S)
         elapsed += _POLL_INTERVAL_S
         try:
             output = await _run_desktop_cmd(
-                "ss -tln | grep :%d || true" % config.desktop.vnc_port,
+                "pgrep -x Xvfb > /dev/null && pgrep -x x11vnc > /dev/null && echo ok || echo waiting",
             )
-            if str(config.desktop.vnc_port) in output:
+            result = output.strip()
+            logger.debug("Desktop check at %.1fs: %s", elapsed, result)
+            if result.endswith("ok"):
                 logger.info("Desktop environment ready after %.1fs", elapsed)
-                # Signal the UI to show the noVNC panel
-                publish_event(AssistantResponse(
-                    event=DesktopActivePayload(
-                        type="desktop_active",
-                        resolution=config.desktop.resolution,
-                    ),
-                ))
+                _notify_ui()
                 return
-        except DesktopExecError:
-            pass
+        except DesktopExecError as exc:
+            last_error = str(exc)
+            logger.debug("Desktop check at %.1fs failed: %s", elapsed, exc)
 
-    msg = "Desktop environment did not start within %ds" % _STARTUP_TIMEOUT_S
+    msg = "Desktop environment not ready within %ds" % _STARTUP_TIMEOUT_S
+    if last_error:
+        msg += " (last error: %s)" % last_error
     logger.error(msg)
     raise DesktopExecError(msg)
 

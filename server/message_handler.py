@@ -37,6 +37,12 @@ from agents.coding import (
     SYSTEM_PROMPT as _CODER_PROMPT,
     TOOLS as _CODER_TOOLS,
 )
+from agents.desktop import (
+    DESCRIPTION as _DESKTOP_DESCRIPTION,
+    NAME as _DESKTOP_NAME,
+    SYSTEM_PROMPT as _DESKTOP_PROMPT,
+    TOOLS as _DESKTOP_TOOLS,
+)
 from conversations import save_conversation_history, save_sub_agent_histories, load_conversation_history
 from sdk import (
     TurnRecorderHook,
@@ -50,6 +56,7 @@ _AGENT_REGISTRY: dict[str, tuple[str, str, str, list]] = {
     "computron": (_COMPUTRON_NAME, _COMPUTRON_DESCRIPTION, _COMPUTRON_PROMPT, _COMPUTRON_TOOLS),
     "browser": (_BROWSER_NAME, _BROWSER_DESCRIPTION, _BROWSER_PROMPT, _BROWSER_TOOLS),
     "coder": (_CODER_NAME, _CODER_DESCRIPTION, _CODER_PROMPT, _CODER_TOOLS),
+    "desktop": (_DESKTOP_NAME, _DESKTOP_DESCRIPTION, _DESKTOP_PROMPT, _DESKTOP_TOOLS),
 }
 
 # Aliases for convenience (e.g. "computer" -> "coder")

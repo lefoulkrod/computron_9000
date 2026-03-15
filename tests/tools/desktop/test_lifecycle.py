@@ -7,17 +7,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tools.desktop._exec import DesktopExecError
+from tools.desktop import _lifecycle
 from tools.desktop._lifecycle import ensure_desktop_running, is_desktop_running
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_is_desktop_running_true():
-    """is_desktop_running() returns True when Xvfb is running."""
+    """is_desktop_running() returns True when Xvfb and x11vnc are running."""
     with patch(
         "tools.desktop._lifecycle._run_desktop_cmd",
         new_callable=AsyncMock,
-        return_value="12345\n",
+        return_value="ok\n",
     ):
         assert await is_desktop_running() is True
 
@@ -49,50 +50,45 @@ async def test_is_desktop_running_on_error():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ensure_desktop_running_already_running():
-    """ensure_desktop_running() is a no-op when desktop is already up."""
-    with patch(
-        "tools.desktop._lifecycle.is_desktop_running",
-        new_callable=AsyncMock,
-        return_value=True,
-    ) as mock_check:
-        await ensure_desktop_running()
-        mock_check.assert_awaited_once()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_ensure_desktop_running_starts_and_polls():
-    """ensure_desktop_running() launches start-desktop.sh and polls VNC port."""
+    """ensure_desktop_running() emits event and skips start when already up."""
+    _lifecycle._ui_notified = False
     mock_cfg = MagicMock()
-    mock_cfg.desktop.vnc_port = 5900
     mock_cfg.desktop.resolution = "1280x720"
-
-    call_count = 0
-
-    async def _mock_cmd(cmd, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        # First call: start-desktop.sh, second: ss check
-        if "ss -tln" in cmd:
-            return ":5900"
-        return ""
-
     with (
         patch(
             "tools.desktop._lifecycle.is_desktop_running",
             new_callable=AsyncMock,
-            return_value=False,
-        ),
+            return_value=True,
+        ) as mock_check,
+        patch("tools.desktop._lifecycle.publish_event") as mock_publish,
+        patch("tools.desktop._lifecycle.load_config", return_value=mock_cfg),
+    ):
+        await ensure_desktop_running()
+        mock_check.assert_awaited_once()
+        # Should still emit the UI event
+        mock_publish.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ensure_desktop_running_waits_and_polls():
+    """ensure_desktop_running() polls until desktop is ready, then emits event."""
+    _lifecycle._ui_notified = False
+    mock_cfg = MagicMock()
+    mock_cfg.desktop.resolution = "1280x720"
+
+    # First call returns False, second returns True (simulates startup delay)
+    with (
         patch(
-            "tools.desktop._lifecycle._run_desktop_cmd",
-            side_effect=_mock_cmd,
+            "tools.desktop._lifecycle.is_desktop_running",
+            new_callable=AsyncMock,
+            side_effect=[False, False, True],
         ),
         patch("tools.desktop._lifecycle.load_config", return_value=mock_cfg),
         patch("tools.desktop._lifecycle.publish_event") as mock_publish,
         patch("tools.desktop._lifecycle.asyncio.sleep", new_callable=AsyncMock),
     ):
         await ensure_desktop_running()
-        # Should have published DesktopActivePayload
         mock_publish.assert_called_once()
         event = mock_publish.call_args[0][0]
         assert event.event.type == "desktop_active"

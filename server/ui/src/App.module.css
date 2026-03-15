@@ -13,7 +13,13 @@
 
 /* 3-column layout when browser is active */
 .mainLayout.threeColumn {
-  max-width: 1800px;
+  max-width: 2200px;
+}
+
+/* Shrink sidebar in 3-column to give previews more room */
+.mainLayout.threeColumn .column:first-child {
+  flex: 0 0 22%;
+  max-width: 22%;
 }
 
 .column {
@@ -40,8 +46,8 @@
 
 /* In 3-column: middle column for panels */
 .browserColumn {
-  flex: 0 0 35%;
-  max-width: 35%;
+  flex: 0 0 45%;
+  max-width: 45%;
   min-width: 20rem;
   display: flex;
   flex-direction: column;
@@ -67,7 +73,7 @@
 
 /* In 3-column layout, messages column shares space */
 .mainLayout.threeColumn .column:last-child {
-  max-width: 35%;
+  max-width: 33%;
 }
 
 /* Keep the input near the top as the page scrolls */

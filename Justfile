@@ -577,7 +577,7 @@ container-start:
       -p 6080:6080 \
       $hf_token_args \
       -v "$home_dir:/home/computron:rw,z" \
-      computron_9000:latest sleep infinity
+      computron_9000:latest
 
     echo "✅ Container 'computron_virtual_computer' started successfully!"
 

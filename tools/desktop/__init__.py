@@ -10,6 +10,7 @@ Public API:
 from ._lifecycle import ensure_desktop_running, is_desktop_running, stop_desktop
 from ._screenshot import capture_screenshot
 from ._tools import (
+    ground,
     keyboard_press,
     keyboard_type,
     mouse_click,
@@ -22,6 +23,7 @@ from ._tools import (
 __all__ = [
     "capture_screenshot",
     "ensure_desktop_running",
+    "ground",
     "is_desktop_running",
     "keyboard_press",
     "keyboard_type",

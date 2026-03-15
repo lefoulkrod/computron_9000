@@ -1,0 +1,16 @@
+.vncFrame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  background: #000;
+  display: block;
+}
+
+.expandedFrame {
+  width: 80vw;
+  aspect-ratio: 16 / 9;
+  max-height: 80vh;
+  border: none;
+  background: #000;
+  display: block;
+}

@@ -104,28 +104,41 @@ RUN mkdir -p /opt/kokoro && \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-terminal dbus-x11 \
     xvfb x11vnc websockify novnc \
-    xdotool xclip scrot \
+    xdotool xclip scrot wmctrl tini \
+    # Cursor + theme packages for usable desktop appearance
+    elementary-xfce-icon-theme \
+    greybird-gtk-theme \
+    xcursor-themes dmz-cursor-theme \
+    fonts-dejavu-core \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Inference server scripts — baked into the image so the container is self-contained.
 # Placed outside the agent's home directory so agents can't read or modify them.
 COPY container/inference_server.py container/inference_client.py /opt/inference/
+COPY container/grounding_server.py container/grounding_client.py /opt/inference/
 RUN chmod -R 755 /opt/inference
 
-# Desktop startup script
-COPY container/start-desktop.sh /opt/desktop/start-desktop.sh
-RUN chmod +x /opt/desktop/start-desktop.sh
+# Xfce desktop config (theme, icons, cursor, disable power management)
+RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xsettings" version="1.0">\n  <property name="Net" type="empty">\n    <property name="ThemeName" type="string" value="Greybird"/>\n    <property name="IconThemeName" type="string" value="elementary-xfce-dark"/>\n    <property name="CursorThemeName" type="string" value="DMZ-White"/>\n    <property name="CursorSize" type="int" value="24"/>\n  </property>\n</channel>\n' \
+      > /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfwm4" version="1.0">\n  <property name="general" type="empty">\n    <property name="theme" type="string" value="Greybird"/>\n  </property>\n</channel>\n' \
+      > /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml && \
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfce4-power-manager" version="1.0">\n  <property name="xfce4-power-manager" type="empty">\n    <property name="dpms-enabled" type="bool" value="false"/>\n    <property name="blank-on-ac" type="int" value="0"/>\n    <property name="dpms-on-ac-sleep" type="uint" value="0"/>\n    <property name="dpms-on-ac-off" type="uint" value="0"/>\n  </property>\n</channel>\n' \
+      > /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
+    chown -R computron:computron /home/computron/.config
+
+# Container entrypoint — starts desktop environment on boot
+COPY container/entrypoint.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh && \
+    mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # Switch to non-root user (safer sandbox)
 USER computron
 WORKDIR /home/computron
 
-# Default shell
 SHELL ["/bin/bash", "-c"]
 
-# Startup: show versions (helps debug sandbox env quickly)
-CMD echo "Python: $(python --version)" && \
-    echo "Pip: $(pip --version)" && \
-    echo "Node: $(node -v)" && \
-    echo "NPM: $(npm -v)" && \
-    bash
+# tini reaps zombie processes; entrypoint starts desktop then idles
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/opt/entrypoint.sh"]

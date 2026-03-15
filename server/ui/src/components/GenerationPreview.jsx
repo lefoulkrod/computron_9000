@@ -1,10 +1,7 @@
-import React, { useState } from 'react';
+import PreviewShell from './PreviewShell.jsx';
 import styles from './GenerationPreview.module.css';
-import ChevronIcon from './icons/ChevronIcon.jsx';
 
 export default function GenerationPreview({ preview, onClose }) {
-    const [isCollapsed, setIsCollapsed] = useState(false);
-
     if (!preview) return null;
 
     const { media_type, status, step, total_steps, message } = preview;
@@ -35,106 +32,81 @@ export default function GenerationPreview({ preview, onClose }) {
         link.click();
     };
 
+    const icon = isImage ? '\u{1F5BC}' : '\u{1F3AC}';
+    const displayTitle = isComplete
+        ? (isImage ? 'Image Generated' : 'Video Generated')
+        : title;
+
+    const expandContent = isComplete && hasOutput && outputSrc ? (
+        isVideo ? (
+            <video src={outputSrc} controls autoPlay loop className={styles.expandedMedia} />
+        ) : (
+            <img src={outputSrc} alt="Generated" className={styles.expandedMedia} />
+        )
+    ) : undefined;
+
     return (
-        <div className={styles.panel}>
-            <div className={styles.header} onClick={() => setIsCollapsed(c => !c)}>
-                <div className={styles.headerLeft}>
-                    <span className={styles.icon}>
-                        {isImage ? '🖼' : '🎬'}
-                    </span>
-                    <span className={styles.title}>
-                        {isComplete ? (isImage ? 'Image Generated' : 'Video Generated') : title}
-                    </span>
-                </div>
-                <div className={styles.headerRight}>
-                    <button className={styles.collapseBtn} aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
-                        <ChevronIcon size={12} direction={isCollapsed ? 'down' : 'up'} />
-                    </button>
-                    {onClose && (
-                        <button
-                            className={styles.closeBtn}
-                            onClick={(e) => { e.stopPropagation(); onClose(); }}
-                            aria-label="Close"
-                        >
-                            ✕
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {!isCollapsed && (
-                <div className={styles.content}>
-                    {/* Progress bar */}
-                    {!isComplete && !isFailed && (
-                        <div className={styles.progressSection}>
-                            <div className={styles.progressBar}>
-                                <div
-                                    className={styles.progressFill}
-                                    style={{ width: `${progressPct}%` }}
-                                />
-                            </div>
-                            <div className={styles.statusText}>
-                                {message || (status === 'loading' ? 'Loading model...' : `Step ${step || 0}/${total_steps || '?'}`)}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Failed state */}
-                    {isFailed && (
-                        <div className={styles.errorMessage}>
-                            {message || 'Generation failed'}
-                        </div>
-                    )}
-
-                    {/* Preview image (during generation) */}
-                    {!isComplete && previewImage && (
-                        <div className={styles.previewContainer}>
-                            <img
-                                src={`data:image/jpeg;base64,${previewImage}`}
-                                alt="Generation preview"
-                                className={styles.previewImage}
+        <PreviewShell
+            icon={icon}
+            title={displayTitle}
+            onClose={onClose}
+            expandContent={expandContent}
+        >
+            <div className={styles.content}>
+                {!isComplete && !isFailed && (
+                    <div className={styles.progressSection}>
+                        <div className={styles.progressBar}>
+                            <div
+                                className={styles.progressFill}
+                                style={{ width: `${progressPct}%` }}
                             />
                         </div>
-                    )}
-
-                    {/* Complete state — image */}
-                    {isComplete && hasOutput && !isVideo && (
-                        <div className={styles.previewContainer}>
-                            <img
-                                src={outputSrc}
-                                alt="Generated image"
-                                className={styles.previewImage}
-                            />
-                            <button className={styles.downloadBtn} onClick={handleDownload}>
-                                Download
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Complete state — video */}
-                    {isComplete && hasOutput && isVideo && (
-                        <div className={styles.previewContainer}>
-                            <video
-                                src={outputSrc}
-                                controls
-                                autoPlay
-                                loop
-                                className={styles.previewVideo}
-                            />
-                            <button className={styles.downloadBtn} onClick={handleDownload}>
-                                Download
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Complete without output data */}
-                    {isComplete && !hasOutput && (
                         <div className={styles.statusText}>
-                            {message || 'Generation complete'}
+                            {message || (status === 'loading' ? 'Loading model...' : `Step ${step || 0}/${total_steps || '?'}`)}
                         </div>
-                    )}
-                </div>
-            )}
-        </div>
+                    </div>
+                )}
+
+                {isFailed && (
+                    <div className={styles.errorMessage}>
+                        {message || 'Generation failed'}
+                    </div>
+                )}
+
+                {!isComplete && previewImage && (
+                    <div className={styles.previewContainer}>
+                        <img
+                            src={`data:image/jpeg;base64,${previewImage}`}
+                            alt="Generation preview"
+                            className={styles.previewImage}
+                        />
+                    </div>
+                )}
+
+                {isComplete && hasOutput && !isVideo && (
+                    <div className={styles.previewContainer}>
+                        <img src={outputSrc} alt="Generated image" className={styles.previewImage} />
+                        <button className={styles.downloadBtn} onClick={handleDownload}>
+                            Download
+                        </button>
+                    </div>
+                )}
+
+                {isComplete && hasOutput && isVideo && (
+                    <div className={styles.previewContainer}>
+                        <video src={outputSrc} controls autoPlay loop className={styles.previewVideo} />
+                        <button className={styles.downloadBtn} onClick={handleDownload}>
+                            Download
+                        </button>
+                    </div>
+                )}
+
+                {isComplete && !hasOutput && (
+                    <div className={styles.statusText}>
+                        {message || 'Generation complete'}
+                    </div>
+                )}
+            </div>
+        </PreviewShell>
     );
 }

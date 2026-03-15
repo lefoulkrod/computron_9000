@@ -29,6 +29,7 @@ def setup_logging() -> None:
     logging.getLogger("tools").setLevel(logging.WARNING)
     logging.getLogger("tools.virtual_computer").setLevel(logging.INFO)
     logging.getLogger("tools.browser").setLevel(logging.DEBUG)
+    logging.getLogger("tools.desktop").setLevel(logging.DEBUG)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
