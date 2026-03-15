@@ -8,6 +8,7 @@ const AGENTS = [
     { id: 'computron', label: 'Computron' },
     { id: 'browser', label: 'Browser' },
     { id: 'coder', label: 'Coder' },
+    { id: 'desktop', label: 'Desktop' },
 ];
 
 function ChatInput({ onSend, onStop, isStreaming, attachment }) {

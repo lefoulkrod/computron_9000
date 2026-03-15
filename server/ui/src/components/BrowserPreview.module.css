@@ -1,0 +1,119 @@
+.content {
+  padding: 10px;
+}
+
+.urlBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--input-bg, #2a2a2a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.lockIcon {
+  color: var(--text-secondary, #999);
+  flex-shrink: 0;
+}
+
+.url {
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #e0e0e0);
+  margin-bottom: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screenshotContainer {
+  max-height: calc(100vh - 10rem);
+  overflow-y: auto;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  background: #000;
+  position: relative;
+  cursor: zoom-in;
+}
+
+.screenshot {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.attachButton {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.attachButton:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.expandedImg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.lightboxOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.lightboxImg {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+/* Light theme */
+:global(body:not(.dark-theme)) .urlBar {
+  background: #f9f9f9;
+  border-color: #ccc;
+}
+
+:global(body:not(.dark-theme)) .lockIcon {
+  color: #666;
+}
+
+:global(body:not(.dark-theme)) .url {
+  color: #555;
+}
+
+:global(body:not(.dark-theme)) .pageTitle {
+  color: #222;
+}
+
+:global(body:not(.dark-theme)) .screenshotContainer {
+  border-color: #ddd;
+}

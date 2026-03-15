@@ -3,9 +3,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
-import BrowserView from './components/BrowserView.jsx';
-import DesktopView from './components/DesktopView.jsx';
-import FilePreviewPanel from './components/FilePreviewPanel.jsx';
+import BrowserPreview from './components/BrowserPreview.jsx';
+import DesktopPreview from './components/DesktopPreview.jsx';
+import FilePreview from './components/FilePreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import SkillsPanel from './components/SkillsPanel.jsx';
 import SessionsPanel from './components/SessionsPanel.jsx';
@@ -247,13 +247,13 @@ function App() {
                             <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels((prev) => new Set(prev).add('generation'))} />
                         )}
                         {showFile && (
-                            <FilePreviewPanel item={filePreview} onClose={() => setClosedPanels((prev) => new Set(prev).add('file'))} />
+                            <FilePreview item={filePreview} onClose={() => setClosedPanels((prev) => new Set(prev).add('file'))} />
                         )}
                         {showBrowser && (
-                            <BrowserView snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels((prev) => new Set(prev).add('browser'))} />
+                            <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels((prev) => new Set(prev).add('browser'))} />
                         )}
                         {showDesktop && (
-                            <DesktopView visible={showDesktop} onClose={() => setClosedPanels((prev) => new Set(prev).add('desktop'))} />
+                            <DesktopPreview visible={showDesktop} onClose={() => setClosedPanels((prev) => new Set(prev).add('desktop'))} />
                         )}
                         {showTerminal && (
                             <TerminalPanel lines={terminalLines} onClose={() => setClosedPanels((prev) => new Set(prev).add('terminal'))} />
