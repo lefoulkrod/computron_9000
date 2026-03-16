@@ -13,7 +13,7 @@ from agents.types import Agent
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import agent_span, collect_sub_agent_history, get_model_options
 from sdk.hooks import default_hooks
-from sdk.loop import run_tool_call_loop
+from sdk.loop import StopRequestedError, run_tool_call_loop
 
 
 class AgentToolMarker:
@@ -190,6 +190,9 @@ async def _run_tool_loop_once(
         async for content, _ in gen:
             if content:
                 result_text = content
+    except StopRequestedError:
+        logger.info("Agent tool '%s' stopped by user request", agent.name)
+        raise
     except Exception:
         logger.exception(
             "Unexpected error running agent tool loop for agent '%s'",

@@ -15,6 +15,7 @@ from sdk import (
     default_hooks,
     run_tool_call_loop,
 )
+from sdk.loop import StopRequestedError
 from agents.browser import browser_agent_tool
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import agent_span, get_model_options
@@ -147,6 +148,9 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
             ):
                 if content:
                     result_text = content
+        except StopRequestedError:
+            logger.info("Sub-agent '%s' stopped by user request", agent_name)
+            raise
         except Exception:
             logger.exception("Unexpected error in sub-agent '%s'", agent_name)
             raise

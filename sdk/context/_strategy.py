@@ -22,30 +22,56 @@ from ._models import ContextStats
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
 
+# Maximum chars per tool result in the serialized summarization input.
+# Normal page snapshots are ~4-8k; this cap only triggers for outliers
+# like huge terminal logs. Head + tail are kept so context and final
+# output are both visible to the summarizer.
+_TOOL_RESULT_CAP = 10_000
+
+# Target budget for the total serialized conversation text (chars).
+# ~10k tokens at ~4 chars/token. Keeps summarization fast (<10s).
+_TOTAL_CHAR_BUDGET = 40_000
+
 _SUMMARIZE_PROMPT = (
-    "Condense the following conversation into a factual reference document that "
-    "the assistant can use to continue working.\n"
+    "You are a summarizer. Condense the following conversation into a factual "
+    "reference document that the assistant can use to continue working.\n"
     "\n"
-    "Use EXACTLY this structure (replace the instructions with actual content):\n"
-    "\n"
-    "## User's Request\n"
-    "State the user's full original request in one or two sentences.\n"
+    "You MUST use EXACTLY this structure with these exact headings. Do not use "
+    "any other format. Do not write prose or commentary. Start your response "
+    "with '## Completed Work'.\n"
     "\n"
     "## Completed Work\n"
     "List every fact, finding, and result produced so far as bullet points.\n"
-    "Include: specific data (names, dates, numbers), URLs visited, file paths "
-    "created/modified, key content retrieved.\n"
+    "Focus on RESULTS and FINDINGS, not the steps taken to get them.\n"
+    "\n"
+    "## Key Data\n"
+    "List all specific reference data the user needs to act on the results:\n"
+    "URLs/links, prices, ratings, dates, addresses, phone numbers, file paths,\n"
+    "code snippets, error messages, version numbers, etc.\n"
+    "Format as a structured list. If no key data was gathered, write \"None\".\n"
     "\n"
     "## Remaining Work\n"
     "List what still needs to be done, or write \"None\" if the task is complete.\n"
     "\n"
     "RULES:\n"
-    "- Preserve FACTS, not process. Write 'Python was created by Guido van Rossum "
-    "in 1991', NOT 'The assistant looked up information about Python'.\n"
-    "- If the input contains a prior summary, merge all its facts into yours — "
-    "do not summarize the summary, expand it with new facts from the conversation.\n"
+    "- Your output MUST start with '## Completed Work' and contain all three "
+    "sections above. No other format is acceptable.\n"
+    "- Preserve FACTS and DATA, not process. Omit HOW results were obtained "
+    "(clicks, navigation, scrolling, filter adjustments, retries, error recovery). "
+    "Do not describe tool calls, UI interactions, or troubleshooting steps.\n"
+    "  WRONG: 'Navigated to Google Flights, set origin to AUS, applied nonstop "
+    "filter, clicked search'\n"
+    "  RIGHT: 'Searched Google Flights for nonstop AUS→ORD Apr 10-12. Best "
+    "options: American $634, United $714, Delta $558'\n"
+    "- MUST INCLUDE every URL visited or discovered. The user needs these to "
+    "revisit pages. Use markdown links where a title is available.\n"
+    "- MUST INCLUDE all prices, ratings, quantities, dates, and numerical data "
+    "found. These are the primary value of the research.\n"
+    "- If the input contains a prior summary, merge ALL its facts into yours — "
+    "every URL, price, name, date, and detail from the prior summary MUST appear "
+    "in your output. Do not summarize the summary; expand it with new facts.\n"
     "- Never drop specific details (numbers, names, URLs, paths, code) in favor of "
-    "vague descriptions.\n"
+    "vague descriptions like 'highly-rated' or 'well-known'.\n"
     "- Be concise but exhaustive in facts.\n"
     "- Do NOT echo these instructions — replace them with actual content."
 )
@@ -251,8 +277,23 @@ def _extract_prior_summary(messages: list[dict]) -> str | None:
 
 
 def _serialize_messages(messages: list[dict]) -> str:
-    """Serialize a list of messages into readable text for summarization."""
-    lines: list[str] = []
+    """Serialize a list of messages into readable text for summarization.
+
+    Produces a text representation that fits within ``_TOTAL_CHAR_BUDGET``.
+    Browser tool results that return page snapshots are deduplicated — only
+    the last snapshot per URL is kept in full, earlier ones are replaced with
+    a short note. When the total still exceeds the budget, tool results are
+    progressively truncated from oldest to newest.
+    """
+    # ---- Phase 0: deduplicate page snapshots ----
+    # Many browser tools (click, scroll, fill_field, etc.) return the full
+    # page state each time. Only the *last* snapshot per base URL matters.
+    _dedup_page_snapshots(messages)
+
+    # ---- Phase 1: serialize everything ----
+    entries: list[str] = []
+    tool_indices: list[int] = []
+
     for msg in messages:
         role = msg.get("role", "unknown")
         content = msg.get("content") or ""
@@ -260,7 +301,6 @@ def _serialize_messages(messages: list[dict]) -> str:
         if role == "assistant":
             tool_calls = msg.get("tool_calls")
             if tool_calls:
-                # Summarize tool calls compactly
                 tool_names = []
                 for tc in tool_calls:
                     fn = getattr(tc, "function", None) or tc.get("function", {})
@@ -268,24 +308,94 @@ def _serialize_messages(messages: list[dict]) -> str:
                     tool_names.append(name)
                 tools_str = ", ".join(tool_names)
                 if content:
-                    lines.append(f"Assistant: {content}\n  [Called tools: {tools_str}]")
+                    entries.append(f"Assistant: {content}\n  [Called tools: {tools_str}]")
                 else:
-                    lines.append(f"Assistant: [Called tools: {tools_str}]")
+                    entries.append(f"Assistant: [Called tools: {tools_str}]")
             elif content:
-                lines.append(f"Assistant: {content}")
+                entries.append(f"Assistant: {content}")
 
         elif role == "tool":
             tool_name = msg.get("tool_name", "unknown")
-            # Truncate long tool results for the summary prompt
-            preview = content[:500] if len(content) > 500 else content
-            suffix = f"... [{len(content)} chars total]" if len(content) > 500 else ""
-            lines.append(f"Tool ({tool_name}): {preview}{suffix}")
+            # Cap individual outliers (e.g. huge terminal logs).
+            if len(content) > _TOOL_RESULT_CAP:
+                half = _TOOL_RESULT_CAP // 2
+                content = (
+                    content[:half]
+                    + f"\n\n... [{len(content):,} chars, middle truncated] ...\n\n"
+                    + content[-half:]
+                )
+            tool_indices.append(len(entries))
+            entries.append(f"Tool ({tool_name}): {content}")
 
         elif role == "user":
-            # Skip prior summary messages — handled separately via
-            # _extract_prior_summary so the LLM merges facts explicitly.
             if content.startswith(_SUMMARY_PREFIX):
                 continue
-            lines.append(f"User: {content}")
+            entries.append(f"User: {content}")
 
-    return "\n\n".join(lines)
+    # ---- Phase 2: shrink if still over budget ----
+    total = sum(len(e) for e in entries)
+    if total > _TOTAL_CHAR_BUDGET and tool_indices:
+        _shrink_tool_results(entries, tool_indices, total)
+
+    return "\n\n".join(entries)
+
+
+def _dedup_page_snapshots(messages: list[dict]) -> None:
+    """Replace earlier page snapshots for the same URL with a short note.
+
+    Mutates *messages* in place. Only the last tool result containing a
+    given base URL is kept in full; earlier duplicates are collapsed to
+    ``[page snapshot — superseded by later snapshot]``.
+    """
+    import re
+
+    # Build a map of base_url → index of last message with that URL.
+    _PAGE_PREFIX_RE = re.compile(r"^\[Page: .+? \| (https?://[^\s|]+)")
+    last_seen: dict[str, int] = {}
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "tool":
+            continue
+        content = msg.get("content") or ""
+        m = _PAGE_PREFIX_RE.match(content)
+        if m:
+            # Strip query params for dedup — same page, different scroll/state.
+            base_url = m.group(1).split("?")[0]
+            last_seen[base_url] = i
+
+    # Replace earlier duplicates.
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "tool":
+            continue
+        content = msg.get("content") or ""
+        m = _PAGE_PREFIX_RE.match(content)
+        if m:
+            base_url = m.group(1).split("?")[0]
+            if last_seen.get(base_url) != i:
+                msg["content"] = "[page snapshot — superseded by later snapshot]"
+
+
+def _shrink_tool_results(
+    entries: list[str],
+    tool_indices: list[int],
+    total: int,
+) -> None:
+    """Progressively truncate tool results oldest-first until under budget."""
+    caps = [2000, 500, 0]
+    for cap in caps:
+        if total <= _TOTAL_CHAR_BUDGET:
+            return
+        for idx in tool_indices:
+            if total <= _TOTAL_CHAR_BUDGET:
+                return
+            entry = entries[idx]
+            if len(entry) <= cap + 50:
+                continue
+            prefix_end = entry.index(": ") + 2
+            prefix = entry[:prefix_end]
+            body = entry[prefix_end:]
+            old_len = len(entry)
+            if cap == 0:
+                entries[idx] = prefix + f"[{len(body):,} chars omitted]"
+            else:
+                entries[idx] = prefix + body[:cap] + f"... [{len(body):,} chars total]"
+            total -= old_len - len(entries[idx])

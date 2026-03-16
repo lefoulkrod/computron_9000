@@ -53,6 +53,14 @@
     opacity: 0.4;
 }
 
+.empty {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.78em;
+    color: var(--text);
+    opacity: 0.4;
+}
+
 .list {
     list-style: none;
     margin: 0;

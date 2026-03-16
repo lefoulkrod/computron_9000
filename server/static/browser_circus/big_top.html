@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Big Top - Browser Circus</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: linear-gradient(180deg, #2d0a0a 0%, #1a0505 100%);
+    color: #f5e6d3;
+    min-height: 100vh;
+  }
+
+  /* --- Circus Nav Bar --- */
+  nav.playbill {
+    background: linear-gradient(90deg, #1a1a3e 0%, #2d0a0a 50%, #1a1a3e 100%);
+    border-bottom: 4px solid #d4a843;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    font-size: 1.1rem;
+  }
+  nav.playbill a {
+    color: #f0c75e;
+    text-decoration: none;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  nav.playbill a:hover, nav.playbill a.current {
+    border-color: #f0c75e;
+  }
+
+  /* --- Show Program (LLM Instructions) --- */
+  .show-program {
+    max-width: 900px;
+    margin: 24px auto;
+    background: #1a1a3e;
+    border: 3px solid #d4a843;
+    border-radius: 12px;
+    padding: 24px 32px;
+  }
+  .show-program h2 {
+    color: #f0c75e;
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+  }
+  .show-program ol {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+  }
+  .show-program li {
+    counter-increment: step;
+    padding: 8px 0 8px 40px;
+    position: relative;
+    border-bottom: 1px solid #2d2d5e;
+    line-height: 1.5;
+  }
+  .show-program li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 28px;
+    height: 28px;
+    background: #c0392b;
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-size: 0.85rem;
+    font-weight: bold;
+  }
+  .show-program li.completed::before {
+    background: #27ae60;
+    content: "\2713";
+  }
+  .show-program li.failed::before {
+    background: #e74c3c;
+    content: "\2717";
+  }
+  .step-status {
+    float: right;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .step-status.pending { color: #888; }
+  .step-status.pass { color: #27ae60; }
+  .step-status.fail { color: #e74c3c; }
+  .show-program .agent-instructions {
+    background: rgba(240,199,94,0.1);
+    border: 2px solid #d4a843;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #f0c75e;
+  }
+
+  /* --- Section / Ring Styling --- */
+  .ring {
+    max-width: 900px;
+    margin: 32px auto;
+    border: 3px solid #d4a843;
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(45, 10, 10, 0.8);
+  }
+  .ring-header {
+    background: linear-gradient(90deg, #c0392b, #e74c3c, #c0392b);
+    padding: 16px 24px;
+    text-align: center;
+    border-bottom: 3px solid #d4a843;
+  }
+  .ring-header h2 {
+    color: #fffff0;
+    font-size: 1.6rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .ring-header .subtitle {
+    color: #f0c75e;
+    font-style: italic;
+    margin-top: 4px;
+  }
+  .ring-body {
+    padding: 24px;
+  }
+
+  /* --- Buttons --- */
+  .circus-btn {
+    display: inline-block;
+    padding: 12px 28px;
+    font-family: Georgia, serif;
+    font-size: 1rem;
+    font-weight: bold;
+    border: 3px solid #d4a843;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 6px;
+  }
+  .circus-btn.primary {
+    background: linear-gradient(180deg, #e74c3c, #c0392b);
+    color: #fffff0;
+  }
+  .circus-btn.secondary {
+    background: linear-gradient(180deg, #1a1a3e, #0d0d2b);
+    color: #f0c75e;
+  }
+  .circus-btn.gold {
+    background: linear-gradient(180deg, #f0c75e, #d4a843);
+    color: #1a1a3e;
+  }
+  .circus-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(240,199,94,0.3); }
+  .circus-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* --- Links --- */
+  .ring a:not(.circus-btn) {
+    color: #f0c75e;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+  }
+  .ring a:not(.circus-btn):hover { color: #fffff0; }
+
+  /* --- Form styling --- */
+  .circus-form label {
+    display: block;
+    margin-top: 12px;
+    color: #f0c75e;
+    font-weight: bold;
+  }
+  .circus-form input[type="text"],
+  .circus-form input[type="email"],
+  .circus-form input[type="search"],
+  .circus-form select,
+  .circus-form textarea {
+    width: 100%;
+    padding: 10px 14px;
+    margin-top: 4px;
+    background: #1a1a3e;
+    border: 2px solid #d4a843;
+    border-radius: 6px;
+    color: #f5e6d3;
+    font-family: Georgia, serif;
+    font-size: 0.95rem;
+  }
+  .circus-form .inline-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .circus-form .inline-group label {
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: normal;
+  }
+
+  /* --- Table --- */
+  .circus-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+  }
+  .circus-table th, .circus-table td {
+    padding: 10px 14px;
+    border: 2px solid #d4a843;
+    text-align: left;
+  }
+  .circus-table th {
+    background: #c0392b;
+    color: #fffff0;
+  }
+  .circus-table tr:nth-child(even) { background: rgba(26, 26, 62, 0.4); }
+
+  /* --- Announcer's Scroll (Log) --- */
+  .announcer-scroll {
+    background: #0d0d2b;
+    border: 2px solid #d4a843;
+    border-radius: 8px;
+    padding: 12px 16px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: #f0c75e;
+    margin-top: 16px;
+  }
+  .announcer-scroll .entry {
+    padding: 4px 0;
+    border-bottom: 1px solid #1a1a3e;
+  }
+
+  /* --- Spotlight (status indicators) --- */
+  .spotlight {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 20px;
+    background: #1a1a3e;
+    border: 2px solid #555;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+  }
+  .spotlight.on {
+    border-color: #f0c75e;
+    background: radial-gradient(ellipse at center, rgba(240,199,94,0.3), transparent);
+    box-shadow: 0 0 16px rgba(240,199,94,0.4);
+    color: #f0c75e;
+  }
+
+  /* --- Star Divider --- */
+  .star-divider {
+    text-align: center;
+    color: #d4a843;
+    font-size: 1.2rem;
+    margin: 16px 0;
+    letter-spacing: 8px;
+  }
+
+  /* --- Scope Rings (Act 7) --- */
+  .scope-ring {
+    border: 3px solid;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 12px 0;
+  }
+  .scope-ring.red { border-color: #e74c3c; background: rgba(231, 76, 60, 0.1); }
+  .scope-ring.gold { border-color: #f0c75e; background: rgba(240, 199, 94, 0.1); }
+  .scope-ring.blue { border-color: #3498db; background: rgba(52, 152, 219, 0.1); }
+  .scope-ring h3 { margin-bottom: 8px; }
+  .scope-ring.red h3 { color: #e74c3c; }
+  .scope-ring.gold h3 { color: #f0c75e; }
+  .scope-ring.blue h3 { color: #3498db; }
+
+  /* --- Grand Parade (tall scroll sections) --- */
+  .parade-section {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-top: 4px solid #d4a843;
+    text-align: center;
+  }
+  .parade-section h2 { font-size: 3rem; letter-spacing: 6px; margin-bottom: 16px; }
+  .parade-section .marker { font-size: 1.2rem; color: #f0c75e; }
+  .parade-section:nth-child(1) { background: linear-gradient(180deg, #2d0a0a, #1a1a3e); }
+  .parade-section:nth-child(2) { background: linear-gradient(180deg, #1a1a3e, #0d2a0d); }
+  .parade-section:nth-child(3) { background: linear-gradient(180deg, #0d2a0d, #3d1a0a); }
+  .parade-section:nth-child(4) { background: linear-gradient(180deg, #3d1a0a, #1a1a3e); }
+  .parade-section:nth-child(5) { background: linear-gradient(180deg, #1a1a3e, #2d0a0a); }
+
+  /* --- Details / Summary --- */
+  details {
+    border: 2px solid #d4a843;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+  }
+  summary {
+    cursor: pointer;
+    color: #f0c75e;
+    font-weight: bold;
+  }
+
+  /* --- Contenteditable --- */
+  [contenteditable] {
+    border: 2px dashed #d4a843;
+    padding: 12px;
+    border-radius: 8px;
+    min-height: 60px;
+    margin: 8px 0;
+  }
+  [contenteditable]:focus {
+    border-color: #f0c75e;
+    outline: none;
+    box-shadow: 0 0 8px rgba(240,199,94,0.3);
+  }
+</style>
+</head>
+<body>
+
+<!-- ======== NAV BAR (Playbill) ======== -->
+<nav class="playbill">
+  <a href="big_top.html" class="current">The Big Top</a>
+  <a href="daredevil_show.html">Daredevil Show</a>
+  <a href="shadow_tent.html">Shadow Tent</a>
+</nav>
+
+<!-- ======== SHOW PROGRAM (LLM Instructions) ======== -->
+<section class="show-program" id="show-program">
+  <h2>Ringmaster's Script - The Big Top</h2>
+  <div class="agent-instructions">
+    <strong>AGENT:</strong> Complete each step below in order. After each step, read this program panel to check the status indicator on the right.
+    Each step shows <strong>[PENDING]</strong>, <strong>[PASS]</strong>, or <strong>[FAIL]</strong>.
+    A step turns [PASS] automatically when the expected action is detected.
+    If a step stays [PENDING] after your action, try again or investigate.
+    After all steps pass, click the link in the final step to continue to the next page.
+  </div>
+  <ol id="program-steps">
+    <li data-step="1">Click the "Continue to Dashboard" button. Verify the Announcer's Scroll logs the click. <span class="step-status pending" id="status-1">[PENDING]</span></li>
+    <li data-step="2">Click the "Maybe Later" button. Verify the log entry appears. <span class="step-status pending" id="status-2">[PENDING]</span></li>
+    <li data-step="3">Click the "View Pricing" link. Verify the page scrolls to the pricing anchor. <span class="step-status pending" id="status-3">[PENDING]</span></li>
+    <li data-step="4">Fill in the Ticket Booth name field with "Ada Lovelace". <span class="step-status pending" id="status-4">[PENDING]</span></li>
+    <li data-step="5">Fill in the email field with "ada@circus.com". <span class="step-status pending" id="status-5">[PENDING]</span></li>
+    <li data-step="6">Select "Performer" from the Role dropdown. <span class="step-status pending" id="status-6">[PENDING]</span></li>
+    <li data-step="7">Check the "Receive Updates" checkbox. <span class="step-status pending" id="status-7">[PENDING]</span></li>
+    <li data-step="8">Select the "Carrier Pigeon" radio button. <span class="step-status pending" id="status-8">[PENDING]</span></li>
+    <li data-step="9">Type "Tightrope specialist and mathematician" in the Bio textarea. <span class="step-status pending" id="status-9">[PENDING]</span></li>
+    <li data-step="10">Click "Buy Tickets!" and verify the form status updates. <span class="step-status pending" id="status-10">[PENDING]</span></li>
+    <li data-step="11">Read the Performers Roster table. Identify all performers and their roles. <span class="step-status pending" id="status-11">[PENDING]</span></li>
+    <li data-step="12">Click the "Edit" button next to Alice Smith. <span class="step-status pending" id="status-12">[PENDING]</span></li>
+    <li data-step="13">In the Selector Sideshow, locate the element with data-testid="primary-cta". <span class="step-status pending" id="status-13">[PENDING]</span></li>
+    <li data-step="14">Open the "Bearded Lady's Bio" details element. Read the hidden content. <span class="step-status pending" id="status-14">[PENDING]</span></li>
+    <li data-step="15">Type something in the contenteditable "Guest Book" area. <span class="step-status pending" id="status-15">[PENDING]</span></li>
+    <li data-step="16">In The Three Rings, click "Red Spotlight" inside the Red Ring scope only. <span class="step-status pending" id="status-16">[PENDING]</span></li>
+    <li data-step="17">Scroll down through The Grand Parade. Read each section marker from top to bottom. <span class="step-status pending" id="status-17">[PENDING]</span></li>
+    <li data-step="18">All steps complete! Click to continue to the <a href="daredevil_show.html">Daredevil Show</a>. <span class="step-status pending" id="status-18">[PENDING]</span></li>
+  </ol>
+</section>
+
+<div class="star-divider">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+
+<!-- ======== ACT 1: THE RINGMASTER'S BUTTONS ======== -->
+<section class="ring" id="act-1">
+  <div class="ring-header">
+    <h2>Act 1: The Ringmaster's Buttons</h2>
+    <div class="subtitle">Click the commands and hear the crowd roar!</div>
+  </div>
+  <div class="ring-body">
+    <div style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+      <button class="circus-btn primary" id="primary-cta" data-testid="primary-cta"
+              onclick="logAction('Clicked: Continue to Dashboard'); markStep(1)">Continue to Dashboard</button>
+      <button class="circus-btn secondary" id="secondary-cta"
+              onclick="logAction('Clicked: Maybe Later'); markStep(2)">Maybe Later</button>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <div role="button" tabindex="0" class="circus-btn gold"
+           onclick="logAction('Clicked: ARIA Applause Button')"
+           onkeydown="if(event.key==='Enter')this.click()">Applause! (ARIA role=button)</div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <button class="circus-btn primary" onclick="logAction('Clicked: Encore (1)')">Encore</button>
+      <button class="circus-btn primary" onclick="logAction('Clicked: Encore (2)')">Encore</button>
+    </div>
+
+    <div class="star-divider">&#9733; &#9733; &#9733;</div>
+
+    <h3 style="color:#f0c75e;">Announcer's Scroll</h3>
+    <div class="announcer-scroll" id="interaction-log" aria-live="polite">
+      <div id="log-entries"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ACT 2: THE TRAPEZE LINKS ======== -->
+<section class="ring" id="act-2">
+  <div class="ring-header">
+    <h2>Act 2: The Trapeze Links</h2>
+    <div class="subtitle">Swing from link to link across the big top!</div>
+  </div>
+  <div class="ring-body" id="links">
+    <div style="display:flex; flex-wrap:wrap; gap:20px; font-size:1.1rem;">
+      <a href="#pricing" id="pricing-link" onclick="logAction('Link: View Pricing'); markStep(3)">View Pricing</a>
+      <a href="#contact" id="contact-link" onclick="logAction('Link: Contact Us')">Contact Us</a>
+      <a href="#about" id="about-link" onclick="logAction('Link: About the Show')">About the Show</a>
+      <a href="https://example.com" id="docs-link" onclick="logAction('Link: External Docs')">External Docs</a>
+      <a href="mailto:ringmaster@circus.com" onclick="logAction('Link: Email Ringmaster')">Email Ringmaster</a>
+    </div>
+    <div id="pricing" style="margin-top:24px; padding:16px; background:#1a1a3e; border-radius:8px;">
+      <h3 style="color:#f0c75e;">Pricing</h3>
+      <p>Front Row: $50 | Balcony: $30 | Standing: $15</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ACT 3: THE TICKET BOOTH ======== -->
+<section class="ring" id="act-3">
+  <div class="ring-header">
+    <h2>Act 3: The Ticket Booth</h2>
+    <div class="subtitle">Buy your tickets here! Fill in every field to secure your seat.</div>
+  </div>
+  <div class="ring-body">
+    <form class="circus-form" id="ticket-form" onsubmit="handleTicketSubmit(event)">
+      <label for="person-name">Full Name</label>
+      <input type="text" id="person-name" name="full_name" placeholder="Your circus name...">
+
+      <label for="person-email">Email</label>
+      <input type="email" id="person-email" name="email" placeholder="you@bigtop.com">
+
+      <label for="person-role">Role</label>
+      <select id="person-role" name="role">
+        <option value="">-- Choose your act --</option>
+        <option value="audience">Audience Member</option>
+        <option value="performer">Performer</option>
+        <option value="crew">Crew</option>
+        <option value="ringmaster">Ringmaster</option>
+      </select>
+
+      <div class="inline-group" style="margin-top:12px;">
+        <label><input type="checkbox" id="form-updates" name="updates" value="yes"> Receive Updates</label>
+        <label><input type="checkbox" id="form-availability" name="available" value="yes"> Available for Rehearsal</label>
+      </div>
+
+      <label style="margin-top:12px; display:block;">Preferred Contact Method</label>
+      <div class="inline-group">
+        <label><input type="radio" name="contact_pref" id="form-contact-email" value="email"> Email</label>
+        <label><input type="radio" name="contact_pref" id="form-contact-phone" value="phone"> Phone</label>
+        <label><input type="radio" name="contact_pref" id="form-contact-pigeon" value="pigeon"> Carrier Pigeon</label>
+      </div>
+
+      <label for="person-bio">Bio</label>
+      <textarea id="person-bio" name="bio" rows="3" placeholder="Tell us about your act..."></textarea>
+
+      <label for="search-input">Search Acts</label>
+      <input type="search" id="search-input" name="search" placeholder="Search...">
+
+      <div style="margin-top:16px; display:flex; align-items:center; gap:16px;">
+        <button type="submit" class="circus-btn gold" id="form-submit">Buy Tickets!</button>
+        <span class="spotlight" id="form-status">Awaiting purchase...</span>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- ======== ACT 4: THE PERFORMERS ROSTER ======== -->
+<section class="ring" id="act-4">
+  <div class="ring-header">
+    <h2>Act 4: The Performers Roster</h2>
+    <div class="subtitle">Meet the stars of the show!</div>
+  </div>
+  <div class="ring-body" id="tables-section">
+    <table class="circus-table" id="performers-table">
+      <thead>
+        <tr><th>Name</th><th>Role</th><th>Act</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Alice Smith</td><td>Trapeze Artist</td><td>Aerial Silk</td>
+          <td><button class="circus-btn primary" style="padding:6px 14px; font-size:0.85rem;"
+                      onclick="logAction('Edit: Alice Smith'); markStep(12)">Edit</button></td>
+        </tr>
+        <tr>
+          <td>Bob Johnson</td><td>Strongman</td><td>Iron Jaw</td>
+          <td><button class="circus-btn primary" style="padding:6px 14px; font-size:0.85rem;"
+                      onclick="logAction('Edit: Bob Johnson')">Edit</button></td>
+        </tr>
+        <tr>
+          <td>Clara Nightingale</td><td>Contortionist</td><td>Rubber Bones</td>
+          <td><button class="circus-btn primary" style="padding:6px 14px; font-size:0.85rem;"
+                      onclick="logAction('Edit: Clara Nightingale')">Edit</button></td>
+        </tr>
+        <tr>
+          <td>Django Flametti</td><td>Fire Breather</td><td>Inferno</td>
+          <td><button class="circus-btn primary" style="padding:6px 14px; font-size:0.85rem;"
+                      onclick="logAction('Edit: Django Flametti')">Edit</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======== ACT 5: THE SELECTOR SIDESHOW ======== -->
+<section class="ring" id="act-5">
+  <div class="ring-header">
+    <h2>Act 5: The Selector Sideshow</h2>
+    <div class="subtitle">Step right up and find these elements!</div>
+  </div>
+  <div class="ring-body">
+    <!-- Unique ID target -->
+    <div style="margin-bottom:16px;">
+      <strong style="color:#f0c75e;">Unique ID:</strong>
+      <button class="circus-btn primary" id="unique-id-target" onclick="logAction('Clicked unique-id-target')">Unique Attraction</button>
+    </div>
+
+    <!-- data-testid target + duplicates -->
+    <div style="margin-bottom:16px;">
+      <strong style="color:#f0c75e;">Data Attributes:</strong>
+      <button class="circus-btn secondary" data-testid="dedup-data-target" onclick="logAction('Clicked dedup-data-target')">Data Testid Target</button>
+      <button class="circus-btn secondary" data-qa="dup-button" onclick="logAction('Clicked dup-button 1')">Dup Attr 1</button>
+      <button class="circus-btn secondary" data-qa="dup-button" onclick="logAction('Clicked dup-button 2')">Dup Attr 2</button>
+    </div>
+
+    <!-- Shared name inputs -->
+    <div style="margin-bottom:16px;">
+      <strong style="color:#f0c75e;">Shared Name Inputs:</strong>
+      <form id="shared-name-form" onsubmit="event.preventDefault()">
+        <div class="inline-group" id="shared-name-inputs" style="margin-top:8px;">
+          <input type="text" name="signup_email" placeholder="First signup email" style="width:auto;flex:1;">
+          <input type="text" name="signup_email" placeholder="Second signup email" style="width:auto;flex:1;">
+        </div>
+      </form>
+    </div>
+
+    <!-- ARIA label -->
+    <div style="margin-bottom:16px;">
+      <strong style="color:#f0c75e;">ARIA Label:</strong>
+      <button class="circus-btn gold" aria-label="Close popup" onclick="logAction('Clicked ARIA close-popup')">X</button>
+    </div>
+
+    <!-- Duplicate text -->
+    <div style="margin-bottom:16px;">
+      <strong style="color:#f0c75e;">Duplicate Text Buttons:</strong>
+      <button class="circus-btn primary" onclick="logAction('Clicked Submit 1')">Submit</button>
+      <button class="circus-btn primary" onclick="logAction('Clicked Submit 2')">Submit</button>
+    </div>
+
+    <!-- Deep DOM structure -->
+    <div style="margin-bottom:16px;" id="deep-dom-structure">
+      <strong style="color:#f0c75e;">Deep DOM:</strong>
+      <div class="wrapper">
+        <div class="inner">
+          <div class="deep">
+            <button class="circus-btn secondary" onclick="logAction('Clicked deep DOM button')">Hidden Gem</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ACT 6: THE CURIOSITY CABINET ======== -->
+<section class="ring" id="act-6">
+  <div class="ring-header">
+    <h2>Act 6: The Curiosity Cabinet</h2>
+    <div class="subtitle">Oddities and wonders from around the world!</div>
+  </div>
+  <div class="ring-body">
+    <!-- Details/Summary -->
+    <details id="details-widget">
+      <summary>Bearded Lady's Bio</summary>
+      <p style="padding:8px 0;">Born in the mountains of Bavaria, the Bearded Lady has been a circus staple since 1887.
+      Her beard measures 18 inches and she can juggle while reciting Shakespeare.</p>
+    </details>
+
+    <!-- Contenteditable -->
+    <div style="margin-top:16px;">
+      <h3 style="color:#f0c75e;">Guest Book</h3>
+      <div contenteditable="true" id="guestbook"
+           style="margin-top:8px;"
+           oninput="logAction('Guest Book edited')">Sign the guest book here...</div>
+    </div>
+
+    <!-- SVG image -->
+    <div style="margin-top:16px;">
+      <h3 style="color:#f0c75e;">Circus Emblem</h3>
+      <svg width="80" height="80" viewBox="0 0 80 80" id="test-image" role="img" aria-label="Circus star emblem">
+        <polygon points="40,5 50,30 78,30 55,48 63,75 40,58 17,75 25,48 2,30 30,30"
+                 fill="#f0c75e" stroke="#d4a843" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <!-- Disabled button -->
+    <div style="margin-top:16px;">
+      <button class="circus-btn primary" disabled id="sold-out-btn">Sold Out!</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ACT 7: THE THREE RINGS ======== -->
+<section class="ring" id="act-7">
+  <div class="ring-header">
+    <h2>Act 7: The Three Rings</h2>
+    <div class="subtitle">Each ring has its own spotlight - scope your actions!</div>
+  </div>
+  <div class="ring-body">
+    <div class="scope-ring red" id="section-a">
+      <h3>Red Ring</h3>
+      <button class="circus-btn primary" id="btn-a1" onclick="logAction('Red: Spotlight'); markStep(16)">Red Spotlight</button>
+      <button class="circus-btn primary" id="btn-a2" onclick="logAction('Red: Curtain Call')">Curtain Call</button>
+      <button class="circus-btn primary" id="btn-a3" onclick="logAction('Red: Encore')">Encore</button>
+      <div style="margin-top:8px;">
+        <a href="#red-1" id="link-a1" onclick="logAction('Red: Link 1')">Red Link 1</a>
+        <a href="#red-2" id="link-a2" onclick="logAction('Red: Link 2')" style="margin-left:16px;">Red Link 2</a>
+      </div>
+    </div>
+
+    <div class="scope-ring gold" id="section-b">
+      <h3>Gold Ring</h3>
+      <button class="circus-btn gold" id="btn-b1" onclick="logAction('Gold: Spotlight')">Gold Spotlight</button>
+      <button class="circus-btn gold" id="btn-b2" onclick="logAction('Gold: Curtain Call')">Curtain Call</button>
+      <div style="margin-top:8px;">
+        <a href="#gold-1" id="link-b1" onclick="logAction('Gold: Link 1')">Gold Link 1</a>
+        <a href="#gold-2" id="link-b2" onclick="logAction('Gold: Link 2')" style="margin-left:16px;">Gold Link 2</a>
+        <a href="#gold-3" id="link-b3" onclick="logAction('Gold: Link 3')" style="margin-left:16px;">Gold Link 3</a>
+      </div>
+    </div>
+
+    <div class="scope-ring blue" id="section-c">
+      <h3>Blue Ring</h3>
+      <button class="circus-btn secondary" id="btn-c1" onclick="logAction('Blue: Spotlight')">Blue Spotlight</button>
+      <div style="margin-top:8px;">
+        <a href="#blue-1" id="link-c1" onclick="logAction('Blue: Link 1')">Blue Link 1</a>
+        <a href="#blue-2" id="link-c2" onclick="logAction('Blue: Link 2')" style="margin-left:16px;">Blue Link 2</a>
+        <a href="#blue-3" id="link-c3" onclick="logAction('Blue: Link 3')" style="margin-left:16px;">Blue Link 3</a>
+        <a href="#blue-4" id="link-c4" onclick="logAction('Blue: Link 4')" style="margin-left:16px;">Blue Link 4</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="star-divider">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+
+<!-- ======== ACTS 8-12: THE GRAND PARADE (Scroll Sections) ======== -->
+<div id="grand-parade">
+  <div class="parade-section" id="section-top">
+    <h2>TOP OF THE TENT</h2>
+    <p class="marker">Welcome to the Greatest Show on Earth!</p>
+    <p class="marker" style="margin-top:8px;">Section 1 of 5</p>
+  </div>
+  <div class="parade-section" id="section-middle-1">
+    <h2>CENTER RING</h2>
+    <p class="marker">The main attraction is right here!</p>
+    <p class="marker" style="margin-top:8px;">Section 2 of 5</p>
+  </div>
+  <div class="parade-section" id="section-middle-2">
+    <h2>THE MIDWAY</h2>
+    <p class="marker">Cotton candy, popcorn, and games!</p>
+    <p class="marker" style="margin-top:8px;">Section 3 of 5</p>
+  </div>
+  <div class="parade-section" id="section-middle-3">
+    <h2>BACK OF THE HOUSE</h2>
+    <p class="marker">Where the performers prepare for the show.</p>
+    <p class="marker" style="margin-top:8px;">Section 4 of 5</p>
+  </div>
+  <div class="parade-section" id="section-bottom">
+    <h2>THE GRAND FINALE</h2>
+    <p class="marker">End of the parade! Take a bow!</p>
+    <p class="marker" style="margin-top:8px;">Section 5 of 5</p>
+    <p class="marker" style="margin-top:16px; font-size:1.5rem; color:#f0c75e;">&#127919; END OF PAGE</p>
+  </div>
+</div>
+
+<script>
+  // --- Logging ---
+  function logAction(message) {
+    var log = document.getElementById('log-entries');
+    var entry = document.createElement('div');
+    entry.className = 'entry';
+    var ts = new Date().toLocaleTimeString();
+    entry.textContent = '[' + ts + '] ' + message;
+    log.insertBefore(entry, log.firstChild);
+  }
+
+  // --- Step completion ---
+  function markStep(n) {
+    var li = document.querySelector('[data-step="' + n + '"]');
+    if (li && !li.classList.contains('completed')) {
+      li.classList.remove('failed');
+      li.classList.add('completed');
+      var s = document.getElementById('status-' + n);
+      if (s) { s.textContent = '[PASS]'; s.className = 'step-status pass'; }
+      checkAllDone();
+    }
+  }
+  function failStep(n) {
+    var li = document.querySelector('[data-step="' + n + '"]');
+    if (li && !li.classList.contains('completed')) {
+      li.classList.add('failed');
+      var s = document.getElementById('status-' + n);
+      if (s) { s.textContent = '[FAIL]'; s.className = 'step-status fail'; }
+    }
+  }
+  function checkAllDone() {
+    var total = 17;
+    var passed = document.querySelectorAll('.show-program li.completed').length;
+    if (passed >= total) markStep(18);
+  }
+
+  // --- Ticket form submission ---
+  function handleTicketSubmit(event) {
+    event.preventDefault();
+    var status = document.getElementById('form-status');
+    status.textContent = 'Tickets purchased!';
+    status.classList.add('on');
+    logAction('Form submitted: Ticket purchased!');
+    markStep(10);
+  }
+
+  // --- Wire up step markers for form fields (require actual content) ---
+  document.getElementById('person-name').addEventListener('input', function() { if(this.value.trim()) markStep(4); });
+  document.getElementById('person-email').addEventListener('input', function() { if(this.value.trim()) markStep(5); });
+  document.getElementById('person-role').addEventListener('change', function() { if(this.value) markStep(6); });
+  document.getElementById('form-updates').addEventListener('change', function() { if(this.checked) markStep(7); });
+  document.getElementById('form-contact-pigeon').addEventListener('change', function() { if(this.checked) markStep(8); });
+  document.getElementById('person-bio').addEventListener('input', function() { if(this.value.trim()) markStep(9); });
+  document.getElementById('details-widget').addEventListener('toggle', function() { if(this.open) markStep(14); });
+  document.getElementById('guestbook').addEventListener('input', function() { if(this.textContent.trim() && this.textContent.trim() !== 'Sign the guest book here...') markStep(15); });
+
+  // --- Auto-pass read-only steps when their sections become visible ---
+  // Step 11: Read the table (passes when table is scrolled into view)
+  // Step 13: Locate element (passes when sideshow section is viewed)
+  // Step 17: Scroll grand parade (passes when bottom section is reached)
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        var id = entry.target.id;
+        if (id === 'tables-section') markStep(11);
+        if (id === 'act-5') markStep(13);
+        if (id === 'section-bottom') markStep(17);
+      }
+    });
+  }, { threshold: 0.3 });
+  observer.observe(document.getElementById('tables-section'));
+  observer.observe(document.getElementById('act-5'));
+  observer.observe(document.getElementById('section-bottom'));
+</script>
+
+</body>
+</html>

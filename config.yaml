@@ -31,8 +31,8 @@ tools:
         extra_pause_every_chars: 6
         extra_pause_min_ms: 160
         extra_pause_max_ms: 320
-    scroll_warn_threshold: 5
-    scroll_hard_limit: 10
+    scroll_warn_threshold: 10
+    scroll_hard_limit: 15
     waits:
       network_idle_timeout_ms: 3000
       font_timeout_ms: 1000
