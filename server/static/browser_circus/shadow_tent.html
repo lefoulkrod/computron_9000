@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shadow Tent - Browser Circus</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: linear-gradient(180deg, #2d0a0a 0%, #1a0505 100%);
+    color: #f5e6d3;
+    min-height: 100vh;
+  }
+
+  nav.playbill {
+    background: linear-gradient(90deg, #1a1a3e 0%, #2d0a0a 50%, #1a1a3e 100%);
+    border-bottom: 4px solid #d4a843;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    font-size: 1.1rem;
+  }
+  nav.playbill a {
+    color: #f0c75e;
+    text-decoration: none;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  nav.playbill a:hover, nav.playbill a.current { border-color: #f0c75e; }
+
+  .show-program {
+    max-width: 900px;
+    margin: 24px auto;
+    background: #1a1a3e;
+    border: 3px solid #d4a843;
+    border-radius: 12px;
+    padding: 24px 32px;
+  }
+  .show-program h2 {
+    color: #f0c75e;
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+  }
+  .show-program ol {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+  }
+  .show-program li {
+    counter-increment: step;
+    padding: 8px 0 8px 40px;
+    position: relative;
+    border-bottom: 1px solid #2d2d5e;
+    line-height: 1.5;
+  }
+  .show-program li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 8px;
+    width: 28px; height: 28px;
+    background: #c0392b;
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-size: 0.85rem;
+    font-weight: bold;
+  }
+  .show-program li.completed::before {
+    background: #27ae60;
+    content: "\2713";
+  }
+  .show-program li.failed::before {
+    background: #e74c3c;
+    content: "\2717";
+  }
+  .step-status {
+    float: right;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .step-status.pending { color: #888; }
+  .step-status.pass { color: #27ae60; }
+  .step-status.fail { color: #e74c3c; }
+  .show-program .agent-instructions {
+    background: rgba(240,199,94,0.1);
+    border: 2px solid #d4a843;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #f0c75e;
+  }
+
+  .ring {
+    max-width: 900px;
+    margin: 32px auto;
+    border: 3px solid #d4a843;
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(45, 10, 10, 0.8);
+  }
+  .ring-header {
+    background: linear-gradient(90deg, #8e44ad, #9b59b6, #8e44ad);
+    padding: 16px 24px;
+    text-align: center;
+    border-bottom: 3px solid #d4a843;
+  }
+  .ring-header h2 { color: #fffff0; font-size: 1.6rem; letter-spacing: 3px; text-transform: uppercase; }
+  .ring-header .subtitle { color: #f0c75e; font-style: italic; margin-top: 4px; }
+  .ring-body { padding: 24px; }
+
+  .star-divider { text-align: center; color: #d4a843; font-size: 1.2rem; margin: 16px 0; letter-spacing: 8px; }
+
+  .spotlight {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 20px;
+    background: #1a1a3e;
+    border: 2px solid #555;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+  }
+  .spotlight.on {
+    border-color: #f0c75e;
+    background: radial-gradient(ellipse at center, rgba(240,199,94,0.3), transparent);
+    box-shadow: 0 0 16px rgba(240,199,94,0.4);
+    color: #f0c75e;
+  }
+
+  /* Event log */
+  .event-log {
+    max-width: 900px;
+    margin: 24px auto;
+    background: #0d0d2b;
+    border: 2px solid #d4a843;
+    border-radius: 8px;
+    padding: 12px 16px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: #f0c75e;
+  }
+  .event-log .entry { padding: 2px 0; border-bottom: 1px solid #1a1a3e; }
+</style>
+</head>
+<body>
+
+<nav class="playbill">
+  <a href="big_top.html">The Big Top</a>
+  <a href="daredevil_show.html">Daredevil Show</a>
+  <a href="shadow_tent.html" class="current">Shadow Tent</a>
+</nav>
+
+<!-- ======== SHOW PROGRAM ======== -->
+<section class="show-program" id="show-program">
+  <h2>Ringmaster's Script - Shadow Tent</h2>
+  <div class="agent-instructions">
+    <strong>AGENT:</strong> Complete each step below in order. After each step, read this program panel to check the status indicator on the right.
+    Each step shows <strong>[PENDING]</strong>, <strong>[PASS]</strong>, or <strong>[FAIL]</strong>.
+    A step turns [PASS] automatically when the expected action is detected.
+    If a step stays [PENDING] after your action, try again or investigate.
+    This is the final page — complete all steps to finish the tour!
+  </div>
+  <ol id="program-steps">
+    <li data-step="1">In The Visible Volunteer, click the "Shadow Button" inside the open shadow root. Verify the log. <span class="step-status pending" id="status-1">[PENDING]</span></li>
+    <li data-step="2">Read the text and link inside the open shadow root. <span class="step-status pending" id="status-2">[PENDING]</span></li>
+    <li data-step="3">In Box Within a Box, click the deeply nested "Inner Button". Verify it works through two shadow boundaries. <span class="step-status pending" id="status-3">[PENDING]</span></li>
+    <li data-step="4">In The Slot Machine, read the slotted title and subtitle content. <span class="step-status pending" id="status-4">[PENDING]</span></li>
+    <li data-step="5">In The Shadow Form, fill in the name input inside the shadow root with "Houdini". <span class="step-status pending" id="status-5">[PENDING]</span></li>
+    <li data-step="6">Select "Silk Scarves" from the shadow form's dropdown. <span class="step-status pending" id="status-6">[PENDING]</span></li>
+    <li data-step="7">Check the checkbox inside the shadow form. <span class="step-status pending" id="status-7">[PENDING]</span></li>
+    <li data-step="8">In Half and Half, click both the light DOM button and the shadow DOM button. <span class="step-status pending" id="status-8">[PENDING]</span></li>
+    <li data-step="9">In The Sealed Vault, attempt to read content inside the closed shadow root. Observe limitations. <span class="step-status pending" id="status-9">[PENDING]</span></li>
+    <li data-step="10">Click the fancy-button custom element. Verify it responds. <span class="step-status pending" id="status-10">[PENDING]</span></li>
+    <li data-step="11">In The Russian Dolls, read the slotted content that passes through two levels of shadow DOM. <span class="step-status pending" id="status-11">[PENDING]</span></li>
+    <li data-step="12">In The Invisible Box, verify the shadow content is visible despite the host having display:contents. <span class="step-status pending" id="status-12">[PENDING]</span></li>
+    <li data-step="13">In Triple Trapdoor, click the button nested three shadow levels deep. <span class="step-status pending" id="status-13">[PENDING]</span></li>
+    <li data-step="14">In Named Curtains, read the content projected through named slots across boundaries. <span class="step-status pending" id="status-14">[PENDING]</span></li>
+    <li data-step="15">All steps complete! The tour is finished. Take a bow! <span class="step-status pending" id="status-15">[PENDING]</span></li>
+  </ol>
+</section>
+
+<div class="star-divider">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+
+<!-- ======== ILLUSION 1: THE VISIBLE VOLUNTEER ======== -->
+<section class="ring" id="illusion-1">
+  <div class="ring-header">
+    <h2>Illusion 1: The Visible Volunteer</h2>
+    <div class="subtitle">An open shadow root - nothing to hide!</div>
+  </div>
+  <div class="ring-body">
+    <div id="open-host"></div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 2: BOX WITHIN A BOX ======== -->
+<section class="ring" id="illusion-2">
+  <div class="ring-header">
+    <h2>Illusion 2: Box Within a Box</h2>
+    <div class="subtitle">Nested shadow roots - how deep can you go?</div>
+  </div>
+  <div class="ring-body">
+    <div id="nested-host"></div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 3: THE SLOT MACHINE ======== -->
+<section class="ring" id="illusion-3">
+  <div class="ring-header">
+    <h2>Illusion 3: The Slot Machine</h2>
+    <div class="subtitle">Light DOM content projected through shadow slots!</div>
+  </div>
+  <div class="ring-body">
+    <div id="slot-host">
+      <span slot="title" style="font-size:1.3rem; font-weight:bold; color:#f0c75e;">The Amazing Slotini</span>
+      <span slot="subtitle" style="color:#f5e6d3;">Master of Projection</span>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 4: THE SHADOW FORM ======== -->
+<section class="ring" id="illusion-4">
+  <div class="ring-header">
+    <h2>Illusion 4: The Shadow Form</h2>
+    <div class="subtitle">Fill out forms behind the curtain!</div>
+  </div>
+  <div class="ring-body">
+    <div id="form-host"></div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 5: HALF AND HALF ======== -->
+<section class="ring" id="illusion-5">
+  <div class="ring-header">
+    <h2>Illusion 5: Half and Half</h2>
+    <div class="subtitle">Light DOM and shadow DOM, side by side!</div>
+  </div>
+  <div class="ring-body" id="mixed-section">
+    <div style="display:flex; gap:24px; align-items:center; flex-wrap:wrap;">
+      <button id="light-button" style="padding:12px 24px; background:#e74c3c; color:#fff; border:3px solid #d4a843;
+              border-radius:8px; font-family:Georgia,serif; font-size:1rem; font-weight:bold; cursor:pointer;"
+              onclick="logEvent('Light DOM button clicked'); markStep(8)">Light Button</button>
+      <div id="mixed-host"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 6: THE SEALED VAULT ======== -->
+<section class="ring" id="illusion-6">
+  <div class="ring-header">
+    <h2>Illusion 6: The Sealed Vault</h2>
+    <div class="subtitle">A closed shadow root - the ultimate secret!</div>
+  </div>
+  <div class="ring-body">
+    <div id="closed-host"></div>
+    <p style="margin-top:12px; color:#888; font-style:italic;">
+      (This shadow root is mode:'closed' - external scripts cannot access its internals)
+    </p>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 7: THE FANCY VOLUNTEER ======== -->
+<section class="ring" id="illusion-7">
+  <div class="ring-header">
+    <h2>Illusion 7: The Fancy Volunteer</h2>
+    <div class="subtitle">A custom element with shadow internals!</div>
+  </div>
+  <div class="ring-body">
+    <fancy-button label="Abracadabra!" id="fancy-btn"></fancy-button>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 8: THE RUSSIAN DOLLS ======== -->
+<section class="ring" id="illusion-8">
+  <div class="ring-header">
+    <h2>Illusion 8: The Russian Dolls</h2>
+    <div class="subtitle">Two-level slot delegation - content passes through!</div>
+  </div>
+  <div class="ring-body">
+    <app-shell id="app-shell">
+      <nav slot="nav" id="app-nav" style="color:#f0c75e; font-weight:bold;">Circus Navigation Bar</nav>
+      <input slot="search" id="app-search" type="text" placeholder="Search the tent..."
+             style="padding:8px 12px; background:#1a1a3e; border:2px solid #d4a843; border-radius:6px; color:#f5e6d3; font-family:Georgia,serif;">
+      <main slot="main" id="app-main">
+        <p>Main Content Area - The show goes on!</p>
+        <button id="upvote-btn" style="padding:8px 16px; background:#e74c3c; color:#fff; border:2px solid #d4a843;
+                border-radius:6px; font-family:Georgia,serif; cursor:pointer; margin-top:8px;"
+                onclick="logEvent('Upvote clicked!'); markStep(11)">Upvote</button>
+      </main>
+    </app-shell>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 9: THE INVISIBLE BOX ======== -->
+<section class="ring" id="illusion-9">
+  <div class="ring-header">
+    <h2>Illusion 9: The Invisible Box</h2>
+    <div class="subtitle">display:contents host - zero rect, visible content!</div>
+  </div>
+  <div class="ring-body">
+    <div id="zero-host" style="display:contents;"></div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 10: TRIPLE TRAPDOOR ======== -->
+<section class="ring" id="illusion-10">
+  <div class="ring-header">
+    <h2>Illusion 10: Triple Trapdoor</h2>
+    <div class="subtitle">Three levels of shadow DOM - can you reach the bottom?</div>
+  </div>
+  <div class="ring-body">
+    <div id="triple-host"></div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 11: NAMED CURTAINS ======== -->
+<section class="ring" id="illusion-11">
+  <div class="ring-header">
+    <h2>Illusion 11: Named Curtains</h2>
+    <div class="subtitle">Named slots across multiple shadow boundaries!</div>
+  </div>
+  <div class="ring-body">
+    <div id="named-host">
+      <span slot="header" style="font-size:1.2rem; font-weight:bold; color:#f0c75e;">Header: The Grand Stage</span>
+      <span slot="content" style="color:#f5e6d3;">Content: Where the magic happens</span>
+      <span slot="footer" style="color:#888; font-style:italic;">Footer: Exit through the gift shop</span>
+    </div>
+  </div>
+</section>
+
+<!-- ======== ILLUSION 12: THE GRAND ILLUSION ======== -->
+<section class="ring" id="illusion-12">
+  <div class="ring-header">
+    <h2>Illusion 12: The Grand Illusion</h2>
+    <div class="subtitle">Mixed direct shadow content and slotted light DOM!</div>
+  </div>
+  <div class="ring-body">
+    <div id="grand-host">
+      <span slot="act">The Disappearing Elephant</span>
+    </div>
+  </div>
+</section>
+
+<div class="star-divider">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+
+<!-- Event Log -->
+<div class="event-log" id="event-log"></div>
+
+<div style="height:40px;"></div>
+
+<script>
+  function logEvent(msg) {
+    var log = document.getElementById('event-log');
+    var entry = document.createElement('div');
+    entry.className = 'entry';
+    var ts = new Date().toLocaleTimeString();
+    entry.textContent = '[' + ts + '] ' + msg;
+    log.insertBefore(entry, log.firstChild);
+  }
+
+  function markStep(n) {
+    var li = document.querySelector('[data-step="' + n + '"]');
+    if (li && !li.classList.contains('completed')) {
+      li.classList.remove('failed');
+      li.classList.add('completed');
+      var s = document.getElementById('status-' + n);
+      if (s) { s.textContent = '[PASS]'; s.className = 'step-status pass'; }
+      checkAllDone();
+    }
+  }
+  function failStep(n) {
+    var li = document.querySelector('[data-step="' + n + '"]');
+    if (li && !li.classList.contains('completed')) {
+      li.classList.add('failed');
+      var s = document.getElementById('status-' + n);
+      if (s) { s.textContent = '[FAIL]'; s.className = 'step-status fail'; }
+    }
+  }
+  function checkAllDone() {
+    var total = 14;
+    var passed = document.querySelectorAll('.show-program li.completed').length;
+    if (passed >= total) markStep(15);
+  }
+
+  // ---- Illusion 1: Open Shadow ----
+  (function() {
+    var host = document.getElementById('open-host');
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.2); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<button id="shadow-action-btn" style="padding:10px 24px; background:#9b59b6; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; font-size:1rem; cursor:pointer;">Shadow Button</button>' +
+      '<p style="margin-top:8px; color:#f5e6d3;">This text lives inside the shadow DOM.</p>' +
+      '<a href="#shadow-link" style="color:#f0c75e;">Shadow Link</a>' +
+      '</div>';
+    shadow.querySelector('#shadow-action-btn').addEventListener('click', function() {
+      logEvent('Shadow button clicked!');
+      markStep(1);
+    });
+  })();
+
+  // ---- Illusion 2: Nested Shadow ----
+  (function() {
+    var outer = document.getElementById('nested-host');
+    var outerShadow = outer.attachShadow({ mode: 'open' });
+    outerShadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #8e44ad; border-radius:8px;">' +
+      '<p style="color:#f0c75e; margin-bottom:8px;">Outer Shadow Layer</p>' +
+      '<div id="inner-host"></div></div>';
+    var inner = outerShadow.querySelector('#inner-host');
+    var innerShadow = inner.attachShadow({ mode: 'open' });
+    innerShadow.innerHTML = '<div style="padding:12px; background:rgba(155,89,182,0.2); border:2px dashed #9b59b6; border-radius:6px;">' +
+      '<p style="color:#f5e6d3; margin-bottom:8px;">Inner Shadow Layer</p>' +
+      '<button style="padding:8px 20px; background:#8e44ad; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; cursor:pointer;">Inner Button</button>' +
+      '</div>';
+    innerShadow.querySelector('button').addEventListener('click', function() {
+      logEvent('Nested inner button clicked! (2 shadow boundaries)');
+      markStep(3);
+    });
+  })();
+
+  // ---- Illusion 3: Slots ----
+  (function() {
+    var host = document.getElementById('slot-host');
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<div style="margin-bottom:8px;"><slot name="title"></slot></div>' +
+      '<div><slot name="subtitle"></slot></div>' +
+      '</div>';
+  })();
+
+  // ---- Illusion 4: Shadow Form ----
+  (function() {
+    var host = document.getElementById('form-host');
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<form style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<label style="display:block; color:#f0c75e; font-weight:bold;">Name</label>' +
+      '<input type="text" id="shadow-name" placeholder="Your stage name..." style="width:100%; padding:8px 12px; margin:4px 0 12px; background:#1a1a3e; border:2px solid #d4a843; border-radius:6px; color:#f5e6d3; font-family:Georgia,serif;">' +
+      '<label style="display:block; color:#f0c75e; font-weight:bold;">Prop</label>' +
+      '<select id="shadow-color" style="width:100%; padding:8px 12px; margin:4px 0 12px; background:#1a1a3e; border:2px solid #d4a843; border-radius:6px; color:#f5e6d3; font-family:Georgia,serif;">' +
+      '<option value="">-- Choose a prop --</option><option value="scarves">Silk Scarves</option><option value="cards">Playing Cards</option><option value="doves">White Doves</option></select>' +
+      '<label style="display:flex; align-items:center; gap:8px; color:#f5e6d3;"><input type="checkbox" id="shadow-agree"> I volunteer to be sawed in half</label>' +
+      '<button type="submit" style="margin-top:12px; padding:10px 24px; background:#9b59b6; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; font-size:1rem; cursor:pointer;">Submit</button>' +
+      '</form>';
+    shadow.querySelector('#shadow-name').addEventListener('input', function() { markStep(5); });
+    shadow.querySelector('#shadow-color').addEventListener('change', function() { markStep(6); });
+    shadow.querySelector('#shadow-agree').addEventListener('change', function() { markStep(7); });
+    shadow.querySelector('form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      logEvent('Shadow form submitted!');
+    });
+  })();
+
+  // ---- Illusion 5: Mixed ----
+  (function() {
+    var host = document.getElementById('mixed-host');
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<button style="padding:12px 24px; background:#9b59b6; color:#fff; border:3px solid #d4a843; border-radius:8px; font-family:Georgia,serif; font-size:1rem; font-weight:bold; cursor:pointer;">Shadow Button</button>';
+    shadow.querySelector('button').addEventListener('click', function() {
+      logEvent('Mixed: Shadow button clicked');
+      markStep(8);
+    });
+  })();
+
+  // ---- Illusion 6: Closed Shadow ----
+  (function() {
+    var host = document.getElementById('closed-host');
+    var shadow = host.attachShadow({ mode: 'closed' });
+    shadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<p style="color:#f5e6d3;">This content is sealed inside a closed shadow root.</p>' +
+      '<button style="padding:8px 20px; background:#8e44ad; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; cursor:pointer;">Sealed Button</button>' +
+      '</div>';
+    shadow.querySelector('button').addEventListener('click', function() {
+      logEvent('Closed shadow button clicked (but you shouldn\'t be able to see this!)');
+      markStep(9);
+    });
+  })();
+
+  // ---- Illusion 7: Custom Element ----
+  class FancyButton extends HTMLElement {
+    constructor() {
+      super();
+      var shadow = this.attachShadow({ mode: 'open' });
+      var label = this.getAttribute('label') || 'Click Me';
+      shadow.innerHTML = '<button style="padding:14px 32px; background:linear-gradient(135deg, #f0c75e, #d4a843); color:#1a1a3e; border:3px solid #c0392b; border-radius:12px; font-family:Georgia,serif; font-size:1.1rem; font-weight:bold; cursor:pointer; letter-spacing:1px;">' + label + '</button>';
+      shadow.querySelector('button').addEventListener('click', function() {
+        logEvent('Fancy button: ' + label);
+        markStep(10);
+      });
+    }
+  }
+  customElements.define('fancy-button', FancyButton);
+
+  // ---- Illusion 8: Russian Dolls (app-shell > app-wrapper) ----
+  class AppWrapper extends HTMLElement {
+    constructor() {
+      super();
+      var shadow = this.attachShadow({ mode: 'open' });
+      shadow.innerHTML = '<div style="padding:12px; background:rgba(142,68,173,0.1); border:2px solid #8e44ad; border-radius:8px;">' +
+        '<div style="margin-bottom:8px;"><slot name="nav"></slot></div>' +
+        '<div style="margin-bottom:8px;"><slot name="search"></slot></div>' +
+        '<div><slot name="main"></slot></div>' +
+        '</div>';
+    }
+  }
+  customElements.define('app-wrapper', AppWrapper);
+
+  class AppShell extends HTMLElement {
+    constructor() {
+      super();
+      var shadow = this.attachShadow({ mode: 'open' });
+      shadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+        '<h3 style="color:#f0c75e; margin-bottom:12px;">App Shell</h3>' +
+        '<app-wrapper>' +
+        '<slot name="nav" slot="nav"></slot>' +
+        '<slot name="search" slot="search"></slot>' +
+        '<slot name="main" slot="main"></slot>' +
+        '</app-wrapper></div>';
+    }
+  }
+  customElements.define('app-shell', AppShell);
+
+  // ---- Illusion 9: Zero-rect host ----
+  (function() {
+    var host = document.getElementById('zero-host');
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<p style="color:#f5e6d3;">I am visible despite my host having display:contents (zero bounding rect)!</p>' +
+      '<button style="padding:8px 20px; background:#9b59b6; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; cursor:pointer;">Invisible Box Button</button>' +
+      '</div>';
+    shadow.querySelector('button').addEventListener('click', function() {
+      logEvent('Zero-rect host button clicked!');
+      markStep(12);
+    });
+  })();
+
+  // ---- Illusion 10: Triple Trapdoor ----
+  (function() {
+    var host = document.getElementById('triple-host');
+    var l1 = host.attachShadow({ mode: 'open' });
+    l1.innerHTML = '<div id="level-one" style="padding:12px; background:rgba(142,68,173,0.1); border:2px solid #8e44ad; border-radius:8px;">' +
+      '<p style="color:#f0c75e;">Level 1</p><div id="l2-host"></div></div>';
+    var l2 = l1.querySelector('#l2-host').attachShadow({ mode: 'open' });
+    l2.innerHTML = '<div id="level-two" style="padding:12px; margin-top:8px; background:rgba(155,89,182,0.15); border:2px dashed #9b59b6; border-radius:6px;">' +
+      '<p style="color:#f5e6d3;">Level 2</p><div id="l3-host"></div></div>';
+    var l3 = l2.querySelector('#l3-host').attachShadow({ mode: 'open' });
+    l3.innerHTML = '<div id="level-three" style="padding:12px; margin-top:8px; background:rgba(155,89,182,0.25); border:2px dotted #d4a843; border-radius:6px;">' +
+      '<p style="color:#f0c75e;">Level 3 - The Bottom!</p>' +
+      '<button style="padding:8px 20px; background:#8e44ad; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; cursor:pointer;">Trapdoor Button</button></div>';
+    l3.querySelector('button').addEventListener('click', function() {
+      logEvent('Triple trapdoor button clicked! (3 shadow levels)');
+      markStep(13);
+    });
+  })();
+
+  // ---- Illusion 11: Named Curtains ----
+  (function() {
+    var host = document.getElementById('named-host');
+    var outerShadow = host.attachShadow({ mode: 'open' });
+    outerShadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<div id="inner-panel"></div></div>';
+    var inner = outerShadow.querySelector('#inner-panel');
+    var innerShadow = inner.attachShadow({ mode: 'open' });
+    innerShadow.innerHTML = '<div style="padding:12px; background:rgba(155,89,182,0.1); border:2px dashed #8e44ad; border-radius:6px;">' +
+      '<div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #9b59b6;"><slot name="header"></slot></div>' +
+      '<div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #9b59b6;"><slot name="content"></slot></div>' +
+      '<div><slot name="footer"></slot></div></div>';
+    // Re-project slots from outer to inner
+    outerShadow.querySelector('#inner-panel').innerHTML = '';
+    // Actually need to use slot delegation properly
+    var outerDiv = outerShadow.querySelector('div');
+    outerDiv.innerHTML = '<div id="inner-panel-host"></div>';
+    var innerHost = outerDiv.querySelector('#inner-panel-host');
+    var innerSh = innerHost.attachShadow({ mode: 'open' });
+    innerSh.innerHTML = '<div style="padding:12px; background:rgba(155,89,182,0.1); border:2px dashed #8e44ad; border-radius:6px;">' +
+      '<div style="margin-bottom:8px;"><slot name="header"></slot></div>' +
+      '<div style="margin-bottom:8px;"><slot name="content"></slot></div>' +
+      '<div><slot name="footer"></slot></div></div>';
+    // Slot re-projection: outer slots delegate to inner slots
+    innerHost.innerHTML = '<slot name="header" slot="header"></slot><slot name="content" slot="content"></slot><slot name="footer" slot="footer"></slot>';
+    // Actually fix this: put slot elements in the outer shadow that delegate to the inner
+    outerDiv.innerHTML = '';
+    outerDiv.style.padding = '16px';
+    outerDiv.style.background = 'rgba(142,68,173,0.15)';
+    outerDiv.style.border = '2px solid #9b59b6';
+    outerDiv.style.borderRadius = '8px';
+    var p = document.createElement('p');
+    p.style.color = '#f0c75e';
+    p.style.marginBottom = '8px';
+    p.textContent = 'Named slot re-projection:';
+    outerDiv.appendChild(p);
+    var headerSlot = document.createElement('div');
+    headerSlot.style.marginBottom = '8px';
+    headerSlot.innerHTML = '<slot name="header"></slot>';
+    outerDiv.appendChild(headerSlot);
+    var contentSlot = document.createElement('div');
+    contentSlot.style.marginBottom = '8px';
+    contentSlot.innerHTML = '<slot name="content"></slot>';
+    outerDiv.appendChild(contentSlot);
+    var footerSlot = document.createElement('div');
+    footerSlot.innerHTML = '<slot name="footer"></slot>';
+    outerDiv.appendChild(footerSlot);
+  })();
+
+  // ---- Illusion 12: Grand Illusion ----
+  (function() {
+    var host = document.getElementById('grand-host');
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<div style="padding:16px; background:rgba(142,68,173,0.15); border:2px solid #9b59b6; border-radius:8px;">' +
+      '<p style="color:#f0c75e; margin-bottom:8px;">Direct shadow content: The stage is set!</p>' +
+      '<div style="padding:8px; background:rgba(155,89,182,0.2); border-radius:6px; margin-bottom:8px;"><slot name="act"></slot></div>' +
+      '<p style="color:#f5e6d3;">More direct shadow content below the slot.</p>' +
+      '<button style="margin-top:8px; padding:8px 20px; background:#9b59b6; color:#fff; border:2px solid #d4a843; border-radius:6px; font-family:Georgia,serif; cursor:pointer;">Final Bow</button>' +
+      '</div>';
+    shadow.querySelector('button').addEventListener('click', function() {
+      logEvent('Grand Illusion: Final bow!');
+    });
+  })();
+
+  // --- Auto-pass read-only steps when their sections become visible ---
+  // Step 2: Read open shadow text (view illusion-1)
+  // Step 4: Read slotted content (view illusion-3)
+  // Step 9: Observe closed shadow (view illusion-6)
+  // Step 11: Read Russian Dolls content (view illusion-8)
+  // Step 12: Verify invisible box content (view illusion-9)
+  // Step 14: Read named curtains content (view illusion-11)
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        var id = entry.target.id;
+        if (id === 'illusion-1') markStep(2);
+        if (id === 'illusion-3') markStep(4);
+        if (id === 'illusion-6') markStep(9);
+        if (id === 'illusion-8') markStep(11);
+        if (id === 'illusion-9') markStep(12);
+        if (id === 'illusion-11') markStep(14);
+      }
+    });
+  }, { threshold: 0.3 });
+  observer.observe(document.getElementById('illusion-1'));
+  observer.observe(document.getElementById('illusion-3'));
+  observer.observe(document.getElementById('illusion-6'));
+  observer.observe(document.getElementById('illusion-8'));
+  observer.observe(document.getElementById('illusion-9'));
+  observer.observe(document.getElementById('illusion-11'));
+</script>
+
+</body>
+</html>

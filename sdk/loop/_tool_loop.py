@@ -162,6 +162,8 @@ async def _execute_tool_call(
             result = tool_func(**validated_args)
         normalized = _normalize_tool_result(result)
         return str(normalized) if not isinstance(normalized, str) else normalized
+    except StopRequestedError:
+        raise
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         logger.exception("Argument validation failed for tool '%s'", tool_name)
         return f"Argument validation failed: {exc}"
@@ -197,13 +199,13 @@ async def run_tool_call_loop(
     while True:
         iteration += 1
 
-        # ── before_model hooks ───────────────────────────────────────
-        for hook in hooks:
-            fn = getattr(hook, "before_model", None)
-            if fn:
-                await fn(history, iteration, agent.name)
-
         try:
+            # ── before_model hooks ───────────────────────────────────────
+            for hook in hooks:
+                fn = getattr(hook, "before_model", None)
+                if fn:
+                    await fn(history, iteration, agent.name)
+
             # Call model with internal retry handling
             response = await _chat_with_retries(
                 provider,
@@ -277,7 +279,7 @@ async def run_tool_call_loop(
                 })
 
         except StopRequestedError:
-            logger.info("Tool loop stopped by user request")
+            logger.info("Agent '%s' tool loop stopped by user request", agent.name)
             _publish_final()
             return
         except Exception as exc:
