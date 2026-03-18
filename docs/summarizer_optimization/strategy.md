@@ -93,7 +93,17 @@ Secondary metrics (tracked, not asserted):
 
 Priority when evaluating changes: **continuity > time > length**.
 
-Because model output is non-deterministic, run each scenario **3 times** per configuration and report min/median/max.
+### What constitutes a full run
+
+A **full run** is the minimum required to evaluate an experiment:
+- Run **all scenarios** (not just the one the experiment targets)
+- Run each scenario **at least 3 times** to account for non-determinism
+- Use `--save` to capture summaries and probe responses for review
+- Report min/median/max across runs for each metric
+
+An experiment cannot be accepted or rejected based on less than a full run. Targeted runs on individual scenarios are useful for debugging probes but not for evaluating experiments.
+
+Command: `PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 3 --save`
 
 ### Anti-regression
 

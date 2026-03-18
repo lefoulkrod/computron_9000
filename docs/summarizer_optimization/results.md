@@ -162,3 +162,51 @@
 **Confirmed**: Progressive shrink was dead code. Removing it simplifies `_serialize_messages` with zero impact on output.
 
 **Verdict**: Keep — code cleanup, no functional change
+
+### Experiment 11: Fix "Remaining Work: None" on incomplete tasks (2026-03-17)
+
+**What changed**: Added explicit instructions to the Remaining Work section: "Only write 'None' if EVERY part of the user's request has been fully addressed. If any comparison is incomplete, any item was mentioned but not investigated, or any step was planned but not executed, list it here."
+
+1 full run (11 scenarios) + 2 targeted runs on scenario 01.
+
+| Scenario | Probes | Time | Length |
+|----------|--------|------|--------|
+| 01_merge | 3/3, 1/1, 1/1 (flaky) | 9.3s | 2,237 |
+| All others | Same as baseline | — | — |
+
+**Finding**: The prompt change did NOT fix the root cause. The model still writes "Remaining Work: None" for scenario 01. It genuinely believes the task is complete because the Completed Work section mentions comfort feedback for Sony and Sennheiser — the model doesn't realize Bose comfort was never checked.
+
+The probe passed on some runs anyway because the probe model (kimi-k2.5) sometimes infers from the summary content that Bose wasn't fully investigated. This is probe non-determinism, not a fix.
+
+**Root cause**: The summarizer doesn't track what was *requested* vs what was *done*. It sees three headphones discussed with comfort info and concludes the task is complete. This is a semantic understanding problem, not a prompt engineering problem.
+
+**Verdict**: Discard — reverted. The prompt change had no effect on the actual failure.
+
+### Experiment 13: Include original request as summarizer context (2026-03-17)
+
+**What changed**: Pass the pinned first user message to the summarizer as "ORIGINAL USER REQUEST (for reference — do not summarize this, use it to determine what work remains)" so it can compare request vs completed work.
+
+1 full run + 2 targeted runs on scenario 01.
+
+| Scenario | Probes | Time | Length | vs baseline |
+|----------|--------|------|--------|-------------|
+| 01_merge | 3/3 | 8.3s | 1,767 | same |
+| 08_multi_compact | 3/4 | 11.2s | 2,442 | **regression** |
+| All others | similar | similar | similar | — |
+
+**Probe rate**: 34/40 (85%) — down from 36/40 (90%) baseline. Scenario 08 regressed.
+
+**Full run (3 runs, all 11 scenarios):**
+
+| | Baseline | Experiment 13 |
+|---|---------|--------------|
+| **Total probes** | 108/118 (92%) | 106/120 (88%) |
+| 01_merge | 8/9 | 8/9 (unchanged) |
+| 02_desktop | 12/12 | 10/12 (regression) |
+| 03_fail | 9/9 | 7/9 (regression) |
+| 06_nav | 10/12 | 12/12 (improvement) |
+| 08_multi | 11/12 | 10/12 (regression) |
+
+**Finding**: The original request context didn't fix the remaining work problem (01_merge still says "None") and caused regressions on 02, 03, and 08. The model gets confused by having two contexts (original request + conversation) and produces worse summaries overall.
+
+**Verdict**: Discard — 4% regression, no improvement on target.
