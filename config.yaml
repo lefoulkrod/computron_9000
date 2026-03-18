@@ -19,6 +19,7 @@ tools:
       timeout: 6000
   browser:
     channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
+    headless: true  # true = no GUI, false = visible browser window
     human:
       pointer:
         hover_min_ms: 90
