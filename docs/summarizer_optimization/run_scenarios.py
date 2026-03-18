@@ -403,6 +403,7 @@ async def run_scenario(
     probe_pass = 0
     probe_total = 0
     probe_failures: list[str] = []
+    probe_details: list[dict] = []
 
     if scenario.probes:
         print(f"\nContinuity probes:")
@@ -416,6 +417,11 @@ async def run_scenario(
             except asyncio.TimeoutError:
                 print(f"  TIMEOUT Q: {probe.question}")
                 probe_failures.append(f"'{probe.question}': probe timed out")
+                probe_details.append({
+                    "question": probe.question,
+                    "passed": False,
+                    "response": "TIMEOUT",
+                })
                 continue
 
             _flags = re.IGNORECASE | re.DOTALL
@@ -429,6 +435,12 @@ async def run_scenario(
             status = "✓" if passed else "✗"
             if passed:
                 probe_pass += 1
+
+            probe_details.append({
+                "question": probe.question,
+                "passed": passed,
+                "response": response,
+            })
 
             print(f"  {status} Q: {probe.question}")
             print(f"    A: {response}")
@@ -449,6 +461,8 @@ async def run_scenario(
         "length": len(summary_text),
         "fact_retention": f"{facts_found}/{len(scenario.required_facts)} ({retention:.0%})",
         "failures": probe_failures,
+        "summary_text": summary_text,
+        "probe_details": probe_details,
     }
 
 
@@ -468,6 +482,7 @@ async def main() -> None:
     parser.add_argument("--model", default=None, help="Summary model override")
     parser.add_argument("--scenario", default=None, help="Run only scenarios matching this substring")
     parser.add_argument("--runs", type=int, default=1, help="Number of runs")
+    parser.add_argument("--save", action="store_true", help="Save results to runs/ directory")
     args = parser.parse_args()
 
     scenarios = sorted(_SCENARIOS_DIR.glob("*.md"))
@@ -508,6 +523,46 @@ async def main() -> None:
                     f"time={r['time']}s  length={r['length']:,}  "
                     f"facts={r['fact_retention']}  {r['status']}"
                 )
+
+    # Save results to markdown file
+    if args.save:
+        from datetime import datetime
+        runs_dir = Path(__file__).resolve().parent / "runs"
+        runs_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = runs_dir / f"run_{timestamp}.md"
+
+        lines = [
+            f"# Run {timestamp}\n",
+            f"**Model**: {model_label}\n",
+            f"**Scenarios**: {len(scenarios)}\n",
+            "",
+        ]
+
+        for r in results:
+            if r["status"] == "TIMEOUT":
+                lines.append(f"## {r['name']} — TIMEOUT\n")
+                continue
+
+            status_emoji = "✓" if r["status"] == "PASS" else "✗"
+            lines.append(f"## {r['name']} — {status_emoji} {r['status']}\n")
+            lines.append(
+                f"Probes: {r['probes']} | Time: {r['time']}s"
+                f" | Length: {r['length']:,} chars"
+                f" | Facts: {r['fact_retention']}\n",
+            )
+            lines.append("### Summary\n")
+            lines.append(f"```\n{r['summary_text']}\n```\n")
+            lines.append("### Probes\n")
+            for pd in r.get("probe_details", []):
+                status = "✓" if pd["passed"] else "✗"
+                lines.append(f"**{status} Q: {pd['question']}**\n")
+                lines.append(f"{pd['response']}\n")
+                lines.append("---\n")
+            lines.append("")
+
+        save_path.write_text("\n".join(lines))
+        print(f"\nResults saved to: {save_path}")
 
     # Unload the summary model after testing
     if args.model:
