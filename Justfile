@@ -569,12 +569,23 @@ container-start:
         echo "🔑 HF_TOKEN detected, passing to container"
     fi
 
+    # Pass GITHUB_TOKEN and GITHUB_USER if set (for publishing repos / GitHub Pages)
+    github_args=""
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        github_args="-e GITHUB_TOKEN=$GITHUB_TOKEN"
+        if [ -n "${GITHUB_USER:-}" ]; then
+            github_args="$github_args -e GITHUB_USER=$GITHUB_USER"
+        fi
+        echo "🔑 GITHUB_TOKEN detected, passing to container"
+    fi
+
     podman run -d --rm \
       --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
       -p 6080:6080 \
       $hf_token_args \
+      $github_args \
       -v "$home_dir:/home/computron:rw,z" \
       computron_9000:latest
 

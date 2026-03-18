@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
@@ -6,6 +6,7 @@ import ChatMessages from './components/ChatMessages.jsx';
 import MobileSettingsDrawer from './components/MobileSettingsDrawer.jsx';
 import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
+import { useToast } from './components/ToastProvider.jsx';
 import styles from './MobileApp.module.css';
 
 // No-op callbacks — events still fire from the stream but we don't track
@@ -14,9 +15,9 @@ const _noop = () => {};
 
 export default function MobileApp({ dark, onToggleTheme }) {
     const [drawerOpen, setDrawerOpen] = useState(false);
-    const [activeSkill, setActiveSkill] = useState(null);
 
     const modelSettings = useModelSettings();
+    const { addToast } = useToast();
 
     const _stableCallbacks = useRef({
         onBrowserSnapshot: _noop,
@@ -25,7 +26,7 @@ export default function MobileApp({ dark, onToggleTheme }) {
         onMemoryChanged: _noop,
         onAudioPlayback: _noop,
         onNudgeSent: _noop,
-        onSkillApplied: (event) => setActiveSkill(event),
+        onSkillApplied: (event) => addToast(`Using skill: ${event.skill_name}`, { type: 'info', duration: 4000 }),
         onDesktopActive: _noop,
         onGenerationPreview: _noop,
     }).current;
@@ -38,10 +39,6 @@ export default function MobileApp({ dark, onToggleTheme }) {
         loadSession,
         newSession: chatNewSession,
     } = useStreamingChat(_stableCallbacks);
-
-    useEffect(() => {
-        if (!isStreaming) setActiveSkill(null);
-    }, [isStreaming]);
 
     const handleSend = useCallback((message, fileData, agent) => {
         sendMessage(message, fileData, modelSettings, agent);
@@ -64,8 +61,6 @@ export default function MobileApp({ dark, onToggleTheme }) {
                 <ChatMessages
                     messages={messages}
                     showSubAgents={true}
-                    activeSkill={activeSkill}
-                    isStreaming={isStreaming}
                 />
             </div>
             <div className={styles.inputBar}>

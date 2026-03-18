@@ -1,5 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 
+function _uuid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return _uuid();
+    return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) =>
+        (+c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))).toString(16),
+    );
+}
+
 /**
  * Build the request body for /api/chat including model options.
  */
@@ -118,7 +125,7 @@ export default function useStreamingChat(callbacks) {
         _setIsStreaming(val);
     }, []);
     const abortControllerRef = useRef(null);
-    const sessionIdRef = useRef(crypto.randomUUID());
+    const sessionIdRef = useRef(_uuid());
 
     const sendMessage = useCallback(async (message, fileData, modelSettings, agent) => {
         if (!message && !fileData) return;
@@ -381,7 +388,7 @@ export default function useStreamingChat(callbacks) {
         setIsStreaming(false);
         setMessages([]);
         // Generate a fresh session ID for the new session
-        sessionIdRef.current = crypto.randomUUID();
+        sessionIdRef.current = _uuid();
         try {
             await fetch(`/api/chat/history?session_id=${oldSessionId}`, { method: 'DELETE' });
         } catch (err) {

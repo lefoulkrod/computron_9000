@@ -208,8 +208,14 @@ A: Sennheiser Momentum 4 comfort feedback:
 
 ## Probes
 
+The agent's biggest autonomy risks after this merge compaction: re-searching Amazon (huge waste), re-checking Sony reviews (already done in Phase 2), or not knowing Bose reviews are still needed.
+
+- **Probe 1** (forward action): The agent hasn't checked Bose comfort reviews yet. If it thinks the task is done, the merge lost track of remaining work.
+- **Probe 2** (anti-loop): The agent searched Amazon and found 3 products in Phase 1. If the merge dropped this, the agent would re-search from scratch.
+- **Probe 3** (anti-loop): The agent checked Sony comfort reviews in Phase 2. If the merge dropped this, the agent would re-check the same reviews.
+
 | Question | Pass pattern | Fail pattern |
 |----------|-------------|-------------|
-| What noise-cancelling headphones did you find and at what prices? | `r"Sony.*\$?278|\$?278.*Sony"` | — |
-| Were there any comfort concerns with the Sony headphones? | `r"glasses|tight"` | — |
-| What should you do next? | `r"Bose.*review|Bose.*comfort|compare|recommend"` | `r"start.*over|start.*from scratch"` |
+| What should you do next? | `r"Bose.*review|Bose.*comfort|compare"` | `r"search.*Amazon|find.*headphone|start over"` |
+| Have you already searched for headphones, or do you need to search? | `r"already|found|Sony|Bose|Sennheiser"` | `r"need to search|should search|haven.t"` |
+| Have you already checked Sony comfort reviews? | `r"already|checked|glasses|tight|comfort"` | `r"need to check|should check|haven.t.*review"` |

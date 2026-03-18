@@ -15,6 +15,7 @@ import TerminalPanel from './components/TerminalOutput.jsx';
 import GenerationPreview from './components/GenerationPreview.jsx';
 import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
+import { useToast } from './components/ToastProvider.jsx';
 import styles from './App.module.css';
 
 function _reopenPanel(name) {
@@ -44,11 +45,11 @@ export default function DesktopApp({ dark, onToggleTheme }) {
     const [generationPreview, setGenerationPreview] = useState(null);
     const [desktopActive, setDesktopActive] = useState(false);
     const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
-    const [activeSkill, setActiveSkill] = useState(null);
     const [closedPanels, setClosedPanels] = useState(new Set());
     const [nudgeToast, setNudgeToast] = useState(null);
 
     const modelSettings = useModelSettings();
+    const { addToast } = useToast();
 
     const _streamCallbacksRef = useRef(null);
     _streamCallbacksRef.current = {
@@ -83,7 +84,7 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         onAudioPlayback: (audio) => setPendingAudio(audio),
         onNudgeSent: (text) => setNudgeToast(text || 'Nudge sent'),
         onSkillApplied: (event) => {
-            setActiveSkill(event);
+            addToast(`Using skill: ${event.skill_name}`, { type: 'info', duration: 4000 });
             setSkillsRefreshSignal((s) => s + 1);
         },
         onDesktopActive: () => {
@@ -124,10 +125,6 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         loadSession,
         newSession: chatNewSession,
     } = useStreamingChat(_stableCallbacks);
-
-    useEffect(() => {
-        if (!isStreaming) setActiveSkill(null);
-    }, [isStreaming]);
 
     useEffect(() => {
         if (!nudgeToast) return;
@@ -216,8 +213,6 @@ export default function DesktopApp({ dark, onToggleTheme }) {
                     <ChatMessages
                         messages={messages}
                         showSubAgents={showSubAgents}
-                        activeSkill={activeSkill}
-                        isStreaming={isStreaming}
                         onPreview={(item) => {
                             setFilePreview(item);
                             setClosedPanels((prev) => {

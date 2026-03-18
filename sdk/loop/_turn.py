@@ -83,6 +83,11 @@ def is_turn_active(session_id: str | None = None) -> bool:
     return sid in _active_sessions
 
 
+def any_turn_active() -> bool:
+    """Return True if any session has an active turn."""
+    return bool(_active_sessions)
+
+
 def queue_nudge(session_id: str, message: str) -> None:
     """Append a nudge message to the session's queue."""
     q = _nudge_queues.get(session_id)

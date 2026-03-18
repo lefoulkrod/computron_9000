@@ -112,6 +112,11 @@ RUN chmod +x /opt/entrypoint.sh && \
 USER computron
 WORKDIR /home/computron
 
+# Git config: use GITHUB_TOKEN for authentication when available
+RUN git config --global user.name "larry foulkrod" && \
+    git config --global user.email "lefoulkrod@gmail.com" && \
+    git config --global credential.helper '!f() { test -n "$GITHUB_TOKEN" && echo "password=$GITHUB_TOKEN"; }; f'
+
 SHELL ["/bin/bash", "-c"]
 
 # tini reaps zombie processes; entrypoint starts desktop then idles

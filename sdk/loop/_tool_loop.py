@@ -1,5 +1,6 @@
 """Tool loop utilities for executing chat-based LLM interactions with tool calls."""
 
+import asyncio
 import inspect
 import json
 import logging
@@ -78,16 +79,19 @@ async def _chat_with_retries(
                     agent.model,
                 )
                 raise
+            delay = min(2 ** attempt, 32)
             logger.warning(
-                "provider.chat failed (attempt %s/%s, retryable): %s | model=%s msgs=%d",
+                "provider.chat failed (attempt %s/%s, retryable, backoff %ds): %s | model=%s msgs=%d",
                 attempt,
                 total_attempts,
+                delay,
                 exc,
                 agent.model,
                 len(messages),
             )
             if attempt >= total_attempts:
                 raise
+            await asyncio.sleep(delay)
         except Exception as exc:
             # Unknown exceptions are not retried
             logger.error(

@@ -28,9 +28,14 @@ _console = Console(stderr=True)
 # output are both visible to the summarizer.
 _TOOL_RESULT_CAP = 10_000
 
-# Target budget for the total serialized conversation text (chars).
-# ~10k tokens at ~4 chars/token. Keeps summarization fast (<10s).
-_TOTAL_CHAR_BUDGET = 40_000
+
+# When serialized conversation exceeds this threshold, switch to chunked
+# summarization (split → summarize each chunk → merge).
+_CHUNK_THRESHOLD = 20_000
+
+# Target size per chunk in characters. Each chunk gets its own summarizer
+# call, so this controls the input size per call.
+_CHUNK_TARGET_SIZE = 10_000
 
 _SUMMARIZE_PROMPT = (
     "You are a summarizer. Condense the following conversation into a factual "
@@ -50,11 +55,18 @@ _SUMMARIZE_PROMPT = (
     "code snippets, error messages, version numbers, etc.\n"
     "Format as a structured list. If no key data was gathered, write \"None\".\n"
     "\n"
+    "## Current State\n"
+    "Describe the current state of the task so the assistant can pick up exactly\n"
+    "where it left off: which application or page is open, what files have been\n"
+    "modified, which form fields are filled vs pending, what errors are unresolved,\n"
+    "cell/row references, coordinates, or other positional details needed to act.\n"
+    "If not applicable, write \"None\".\n"
+    "\n"
     "## Remaining Work\n"
     "List what still needs to be done, or write \"None\" if the task is complete.\n"
     "\n"
     "RULES:\n"
-    "- Your output MUST start with '## Completed Work' and contain all three "
+    "- Your output MUST start with '## Completed Work' and contain all four "
     "sections above. No other format is acceptable.\n"
     "- Preserve FACTS and DATA, not process. Omit HOW results were obtained "
     "(clicks, navigation, scrolling, filter adjustments, retries, error recovery). "
@@ -63,8 +75,9 @@ _SUMMARIZE_PROMPT = (
     "filter, clicked search'\n"
     "  RIGHT: 'Searched Google Flights for nonstop AUS→ORD Apr 10-12. Best "
     "options: American $634, United $714, Delta $558'\n"
-    "- MUST INCLUDE every URL visited or discovered. The user needs these to "
-    "revisit pages. Use markdown links where a title is available.\n"
+    "- MUST INCLUDE URLs needed to revisit results or continue work (product pages, "
+    "booking pages, data sources, file paths). Omit intermediate navigation URLs "
+    "(search engines, category listings, filter pages).\n"
     "- MUST INCLUDE all prices, ratings, quantities, dates, and numerical data "
     "found. These are the primary value of the research.\n"
     "- If the input contains a prior summary, merge ALL its facts into yours — "
@@ -152,12 +165,9 @@ class SummarizeStrategy:
         # Extract any prior summary so we can merge facts forward.
         prior_summary = _extract_prior_summary(compactable)
 
-        # Serialize compactable messages for the summarization prompt.
-        conversation_text = _serialize_messages(compactable)
-
         try:
-            summary, model_name = await self._call_summarizer(
-                conversation_text, prior_summary,
+            summary, model_name = await self._summarize(
+                compactable, prior_summary,
             )
         except Exception:
             logger.exception("SummarizeStrategy: LLM call failed, skipping compaction")
@@ -169,7 +179,7 @@ class SummarizeStrategy:
             created_at=datetime.now(UTC).isoformat(),
             model=model_name,
             input_messages=compactable,
-            input_char_count=len(conversation_text),
+            input_char_count=sum(len(m.get("content") or "") for m in compactable),
             prior_summary=prior_summary,
             summary_text=summary,
             summary_char_count=len(summary),
@@ -191,6 +201,50 @@ class SummarizeStrategy:
             "role": "user",
             "content": _SUMMARY_PREFIX + summary,
         })
+
+    async def _summarize(
+        self,
+        messages: list[dict],
+        prior_summary: str | None = None,
+    ) -> tuple[str, str]:
+        """Summarize messages, chunking if necessary.
+
+        For short conversations, serializes and summarizes in a single call.
+        For long conversations, splits into chunks, summarizes each, then
+        merges the chunk summaries.
+        """
+        import copy
+
+        # Serialize to check total size.
+        serialized = _serialize_messages(copy.deepcopy(messages))
+        if len(serialized) <= _CHUNK_THRESHOLD:
+            return await self._call_summarizer(serialized, prior_summary)
+
+        # Split messages into chunks and summarize each independently.
+        chunks = _split_into_chunks(messages)
+        logger.info(
+            "Chunked summarization: %d messages → %d chunks",
+            len(messages), len(chunks),
+        )
+
+        chunk_summaries: list[str] = []
+        model_name = ""
+        for i, chunk in enumerate(chunks):
+            chunk_text = _serialize_messages(copy.deepcopy(chunk))
+            # Include prior summary context only in the first chunk.
+            ps = prior_summary if i == 0 else None
+            summary, model_name = await self._call_summarizer(chunk_text, ps)
+            chunk_summaries.append(summary)
+
+        # Merge chunk summaries in a final pass.
+        merged_input = "\n\n---\n\n".join(
+            f"[Summary of part {i + 1}/{len(chunk_summaries)}]\n{s}"
+            for i, s in enumerate(chunk_summaries)
+        )
+        final_summary, model_name = await self._call_summarizer(
+            merged_input, prior_summary=None,
+        )
+        return final_summary, model_name
 
     async def _call_summarizer(
         self, conversation_text: str, prior_summary: str | None = None,
@@ -276,23 +330,47 @@ def _extract_prior_summary(messages: list[dict]) -> str | None:
     return None
 
 
+def _split_into_chunks(messages: list[dict]) -> list[list[dict]]:
+    """Split messages into chunks that each fit within ``_CHUNK_TARGET_SIZE``.
+
+    Keeps assistant + tool-call pairs together so a tool call and its
+    result are never separated across chunks.
+    """
+    chunks: list[list[dict]] = []
+    current_chunk: list[dict] = []
+    current_size = 0
+
+    for msg in messages:
+        content = msg.get("content") or ""
+        msg_size = len(content)
+
+        # If adding this message would exceed the target and the chunk
+        # already has content, start a new chunk.
+        if current_size + msg_size > _CHUNK_TARGET_SIZE and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_size = 0
+
+        current_chunk.append(msg)
+        current_size += msg_size
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
 def _serialize_messages(messages: list[dict]) -> str:
     """Serialize a list of messages into readable text for summarization.
 
-    Produces a text representation that fits within ``_TOTAL_CHAR_BUDGET``.
     Browser tool results that return page snapshots are deduplicated — only
     the last snapshot per URL is kept in full, earlier ones are replaced with
-    a short note. When the total still exceeds the budget, tool results are
-    progressively truncated from oldest to newest.
+    a short note. Individual tool results over ``_TOOL_RESULT_CAP`` are
+    truncated with head+tail.
     """
-    # ---- Phase 0: deduplicate page snapshots ----
-    # Many browser tools (click, scroll, fill_field, etc.) return the full
-    # page state each time. Only the *last* snapshot per base URL matters.
     _dedup_page_snapshots(messages)
 
-    # ---- Phase 1: serialize everything ----
     entries: list[str] = []
-    tool_indices: list[int] = []
 
     for msg in messages:
         role = msg.get("role", "unknown")
@@ -316,7 +394,6 @@ def _serialize_messages(messages: list[dict]) -> str:
 
         elif role == "tool":
             tool_name = msg.get("tool_name", "unknown")
-            # Cap individual outliers (e.g. huge terminal logs).
             if len(content) > _TOOL_RESULT_CAP:
                 half = _TOOL_RESULT_CAP // 2
                 content = (
@@ -324,18 +401,12 @@ def _serialize_messages(messages: list[dict]) -> str:
                     + f"\n\n... [{len(content):,} chars, middle truncated] ...\n\n"
                     + content[-half:]
                 )
-            tool_indices.append(len(entries))
             entries.append(f"Tool ({tool_name}): {content}")
 
         elif role == "user":
             if content.startswith(_SUMMARY_PREFIX):
                 continue
             entries.append(f"User: {content}")
-
-    # ---- Phase 2: shrink if still over budget ----
-    total = sum(len(e) for e in entries)
-    if total > _TOTAL_CHAR_BUDGET and tool_indices:
-        _shrink_tool_results(entries, tool_indices, total)
 
     return "\n\n".join(entries)
 
@@ -374,28 +445,3 @@ def _dedup_page_snapshots(messages: list[dict]) -> None:
                 msg["content"] = "[page snapshot — superseded by later snapshot]"
 
 
-def _shrink_tool_results(
-    entries: list[str],
-    tool_indices: list[int],
-    total: int,
-) -> None:
-    """Progressively truncate tool results oldest-first until under budget."""
-    caps = [2000, 500, 0]
-    for cap in caps:
-        if total <= _TOTAL_CHAR_BUDGET:
-            return
-        for idx in tool_indices:
-            if total <= _TOTAL_CHAR_BUDGET:
-                return
-            entry = entries[idx]
-            if len(entry) <= cap + 50:
-                continue
-            prefix_end = entry.index(": ") + 2
-            prefix = entry[:prefix_end]
-            body = entry[prefix_end:]
-            old_len = len(entry)
-            if cap == 0:
-                entries[idx] = prefix + f"[{len(body):,} chars omitted]"
-            else:
-                entries[idx] = prefix + body[:cap] + f"... [{len(body):,} chars total]"
-            total -= old_len - len(entries[idx])
