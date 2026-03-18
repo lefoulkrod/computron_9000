@@ -86,6 +86,10 @@ def _ensure_server():
             time.sleep(1)
             if _health_check():
                 return
+            if not _server_process_alive():
+                raise RuntimeError(
+                    "Grounding server process died during startup (possible OOM)"
+                )
         raise RuntimeError(
             f"Grounding server did not become healthy within {STARTUP_TIMEOUT}s"
         )
@@ -96,6 +100,10 @@ def _ensure_server():
         time.sleep(1)
         if _health_check():
             return
+        if not _server_process_alive():
+            raise RuntimeError(
+                "Grounding server process died during startup (possible OOM)"
+            )
     raise RuntimeError(
         f"Grounding server did not start within {STARTUP_TIMEOUT}s"
     )
