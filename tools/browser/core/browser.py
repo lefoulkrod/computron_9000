@@ -1173,7 +1173,8 @@ async def get_browser() -> Browser:
         # so the agent can access downloaded files via run_bash_cmd.
         downloads_path = config.virtual_computer.home_dir
         channel = config.tools.browser.channel
-        _browser = await Browser.start(str(profile_path), channel=channel, headless=True, downloads_path=downloads_path)
+        headless = config.tools.browser.headless
+        _browser = await Browser.start(str(profile_path), channel=channel, headless=headless, downloads_path=downloads_path)
         _browser._downloads_dir = downloads_path
         _browser._container_dir = config.virtual_computer.container_working_dir
         atexit.register(_atexit_kill_browser)

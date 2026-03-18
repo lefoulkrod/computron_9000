@@ -92,6 +92,7 @@ class BrowserToolsConfig(BaseModel):
     """Settings for browser tools."""
 
     channel: str | None = None  # None = bundled Chromium, "chrome" = system Chrome
+    headless: bool = False  # False = visible window, True = no GUI
     human: BrowserHumanConfig = Field(default_factory=BrowserHumanConfig)
     waits: "BrowserWaitConfig" = Field(default_factory=lambda: BrowserWaitConfig())
     scroll_warn_threshold: int = 5
