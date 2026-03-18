@@ -266,8 +266,16 @@ If these are dropped as "process narration," the agent has no way to know WHY th
 
 ## Probes
 
+The agent's biggest autonomy risks: retrying Fix A with "default" fallback (test expects "N/A"), retrying Fix B without timezone column (test expects it), or re-investigating a bug that's already fixed. All three cause loops.
+
+- **Probe 1** (forward action): The bug is fixed, user asked to run full test suite. If the agent wants to re-investigate, it lost track.
+- **Probe 2** (anti-loop — critical): Fix A used "default" and failed. If the agent suggests this approach for a new issue, it's regressing.
+- **Probe 3** (anti-loop — critical): Fix B missed the timezone column. Same regression risk.
+- **Probe 4** (context): The agent needs to know what file it changed and what the final fix was, in case the full test suite reveals a related failure.
+
 | Question | Pass pattern | Fail pattern |
 |----------|-------------|-------------|
 | What should you do next? | `r"full.*test|test.*suite|pytest"` | `r"read.*file|look.*code|investigate"` |
-| What fixes were tried that didn't work and why? | `r"default|timezone"` | — |
-| What file was modified? | `r"export_handler"` | — |
+| What happened when you tried using "default" as the fallback value? | `r"fail|didn.t work|wrong|expected.*N/A|test.*expect"` | — |
+| What happened when you tried the fix without the timezone column? | `r"fail|missing|didn.t work|test.*expect|csv.*header"` | — |
+| What file was modified and what was the final fix? | `r"export_handler.*(N/A|timezone)|export_handler.*null"` | — |

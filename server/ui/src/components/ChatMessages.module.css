@@ -19,35 +19,3 @@
   width: 100%;
 }
 
-.skillIndicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: rgba(0, 0, 0, 0.55);
-  background: rgba(100, 120, 200, 0.08);
-  border: 1px solid rgba(100, 120, 200, 0.2);
-  border-radius: 4px;
-  padding: 0.25em 0.6em;
-  margin: 0.25rem 0;
-  align-self: flex-start;
-}
-
-:global(.dark-theme) .skillIndicator {
-  color: rgba(255, 255, 255, 0.65);
-  background: rgba(100, 120, 200, 0.12);
-  border-color: rgba(100, 120, 200, 0.25);
-}
-
-.skillBolt {
-  font-size: 1em;
-}
-
-.skillName {
-  font-weight: 600;
-}
-
-.skillConfidence {
-  opacity: 0.7;
-}

@@ -160,8 +160,14 @@ The stale ref error and timeout error are in the compacted region. If the summar
 
 ## Probes
 
+The agent's biggest autonomy risks: retrying the interactive seat map (30s timeout each time — could loop), re-searching StubHub for tickets (huge waste), or not knowing the user already confirmed Section 118.
+
+- **Probe 1** (forward action): User confirmed Section 118. Agent should proceed to select, not re-research.
+- **Probe 2** (anti-loop — critical): The interactive seat map timed out. If the agent retries it, it wastes 30s and might retry repeatedly. This is the main loop risk.
+- **Probe 3** (anti-loop): The agent already found tickets and compared options. Re-searching StubHub would redo all that work.
+
 | Question | Pass pattern | Fail pattern |
 |----------|-------------|-------------|
-| What should you do next? | `r"[Ss]ection\s*118|select.*ticket|proceed|purchase"` | `r"seat\s*map|interactive"` |
-| Why did you recommend Section 118 over Section 226? | `r"behind.*stage|limited.*view"` | — |
-| What dates are available for the Radiohead concert? | `r"Jun.*14|Jun.*15|Jun.*17"` | — |
+| What should you do next? | `r"[Ss]ection\s*118|select.*ticket|proceed|purchase"` | `r"search.*ticket|find.*ticket"` |
+| What happened when you tried to open the interactive seat map? | `r"timeout|timed out|didn.t load|failed|slow|error"` | — |
+| Have you already found ticket options, or do you need to search? | `r"already|found|Section.*118|Section.*226|\$124"` | `r"need to search|should search|haven.t"` |

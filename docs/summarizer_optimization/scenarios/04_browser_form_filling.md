@@ -208,8 +208,14 @@ Without the summary, the agent might re-fill all fields from scratch or try to u
 
 ## Probes
 
+The agent's biggest autonomy risks: re-filling completed fields (might clear valid data), trying another free email like Yahoo (same rejection), or re-uploading the original 8.2MB resume (same failure). All three would cause loops.
+
+- **Probe 1** (state awareness): Only email and LinkedIn need fixing. If the agent suggests re-entering completed fields, it would overwrite valid data.
+- **Probe 2** (anti-loop — critical): Free emails are rejected. If the agent tries Yahoo or Hotmail, it hits the same error and loops.
+- **Probe 3** (anti-loop — critical): The original resume was 8.2MB (max 5MB). If the agent re-uploads it, it fails again. It needs to know the compressed version is already uploaded.
+
 | Question | Pass pattern | Fail pattern |
 |----------|-------------|-------------|
-| What fields still need to be fixed on the application form? | `r"email|LinkedIn"` | `r"fix.*(first name|phone|country)|enter.*(first name|phone)"` |
-| Why was the original email rejected? | `r"[Gg]mail|professional|company"` | — |
-| What happened with the resume upload? | `r"compress|3\.1|too large|8\.2"` | — |
+| What fields still need to be fixed on the application form? | `r"email|LinkedIn"` | `r"need.*(fill|enter|fix).*(first name|phone)|missing.*(first name|phone)"` |
+| What happened when you submitted with the Gmail address? | `r"reject|not accept|free email|professional|company|error|invalid"` | — |
+| What is the current status of the resume upload? | `r"compress|3\.1|upload|sarah_resume"` | — |

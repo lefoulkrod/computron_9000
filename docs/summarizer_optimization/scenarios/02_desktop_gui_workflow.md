@@ -274,8 +274,16 @@ All of this information is ONLY in the compacted messages. The summary must pres
 
 ## Probes
 
+The agent's biggest autonomy risks: re-opening LibreOffice (second instance), re-entering all the budget data (overwrites existing work), or saving under a different name (creating duplicates).
+
+- **Probe 1** (forward action): The user asked to bold headers. If the agent suggests creating the spreadsheet or entering data, it lost all state.
+- **Probe 2** (anti-loop): The agent already entered all budget data. Re-entering would overwrite formulas and waste time.
+- **Probe 3** (state awareness): The agent saved the file as monthly_budget.ods. Without this, it might create a duplicate or lose track of the file.
+- **Probe 4** (positional state): The agent needs to know which rows have headers/totals to bold them. Without this, it must re-read the screen — one wasted tool call.
+
 | Question | Pass pattern | Fail pattern |
 |----------|-------------|-------------|
 | What should you do next? | `r"bold|format"` | `r"open.*Calc|create.*spreadsheet|enter.*data"` |
-| What is the net balance in the spreadsheet? | `r"3.?370"` | — |
+| What data is currently in the spreadsheet? | `r"[Ss]alary|[Rr]ent|[Ii]ncome|[Ee]xpense"` | — |
 | What file are you working on and where is it saved? | `r"monthly_budget"` | — |
+| Which cells or rows contain the headers and totals that need bolding? | `r"[Cc]ategory|[Aa]mount|[Tt]otal|[Nn]et|[Hh]eader|row\s*[137]"` | — |

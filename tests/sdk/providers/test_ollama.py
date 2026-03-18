@@ -96,19 +96,28 @@ class TestNormalizeResponse:
         assert result.usage.completion_tokens == 0
 
 
+async def _async_iter(items):
+    """Wrap items into an async iterator, mimicking Ollama's streaming response."""
+    for item in items:
+        yield item
+
+
 @pytest.mark.unit
 class TestOllamaProviderChat:
     @pytest.mark.asyncio
     async def test_chat_delegates_to_client(self):
         """Provider.chat calls the underlying AsyncClient.chat and normalizes."""
-        fake_raw = _FakeOllamaResponse(
-            message=_FakeMessage(content="response text"),
+        # Streaming distributes content across chunks; final chunk has stats only.
+        chunk1 = _FakeOllamaResponse(message=_FakeMessage(content="response "))
+        chunk2 = _FakeOllamaResponse(message=_FakeMessage(content="text"))
+        final = _FakeOllamaResponse(
+            message=_FakeMessage(content=""),
             prompt_eval_count=200,
             eval_count=80,
         )
         provider = OllamaProvider.__new__(OllamaProvider)
         provider._client = AsyncMock()
-        provider._client.chat.return_value = fake_raw
+        provider._client.chat.return_value = _async_iter([chunk1, chunk2, final])
 
         result = await provider.chat(
             model="test-model",
@@ -118,7 +127,7 @@ class TestOllamaProviderChat:
         provider._client.chat.assert_called_once()
         call_kwargs = provider._client.chat.call_args.kwargs
         assert call_kwargs["model"] == "test-model"
-        assert call_kwargs["stream"] is False
+        assert call_kwargs["stream"] is True
         assert result.message.content == "response text"
         assert result.usage.prompt_tokens == 200
 

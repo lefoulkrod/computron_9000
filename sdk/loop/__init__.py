@@ -9,6 +9,7 @@ This package provides:
 from ._tool_loop import ToolLoopError, run_tool_call_loop
 from ._turn import (
     StopRequestedError,
+    any_turn_active,
     check_stop,
     drain_nudges,
     is_turn_active,
@@ -20,6 +21,7 @@ from ._turn import (
 __all__ = [
     "StopRequestedError",
     "ToolLoopError",
+    "any_turn_active",
     "check_stop",
     "drain_nudges",
     "is_turn_active",

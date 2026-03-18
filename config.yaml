@@ -61,7 +61,7 @@ vision:
     top_k: 20
 
 summary:
-  model: qwen3:8b
+  model: mistral:7b
   think: false
   options:
     num_ctx: 60000
@@ -69,7 +69,7 @@ summary:
     top_k: 20
 
 skills:
-  enabled: true
+  enabled: false
   extraction_interval_seconds: 300
   extraction_model: qwen3.5:cloud
   extraction_options:
