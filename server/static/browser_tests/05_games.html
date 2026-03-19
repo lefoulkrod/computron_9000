@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test 5: Games & Puzzles - Browser Agent Tests</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* --- Tic Tac Toe --- */
+  .ttt-board {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    grid-template-rows: repeat(3, 100px);
+    gap: 4px;
+    margin: 16px auto;
+    width: fit-content;
+    background: #1a1a2e;
+    padding: 4px;
+    border-radius: 8px;
+  }
+  .ttt-cell {
+    width: 100px;
+    height: 100px;
+    background: #fff;
+    border: none;
+    font-size: 2.5rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    font-family: inherit;
+  }
+  .ttt-cell:hover:not(.taken) { background: #f0f0f0; }
+  .ttt-cell.taken { cursor: default; }
+  .ttt-cell.x { color: #e94560; }
+  .ttt-cell.o { color: #1a1a2e; }
+  .ttt-cell.win-cell { background: #d4edda; }
+  .ttt-status {
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 12px 0;
+    min-height: 28px;
+  }
+
+  /* --- Number Sequence --- */
+  .number-field {
+    position: relative;
+    width: 100%;
+    height: 320px;
+    background: #fafafa;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  .seq-num {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: 3px solid #1a1a2e;
+    background: #fff;
+    color: #1a1a2e;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .seq-num:hover { background: #eef; }
+  .seq-num.clicked { background: #27ae60; color: #fff; border-color: #27ae60; cursor: default; }
+  .seq-num.wrong { background: #e94560; color: #fff; border-color: #e94560; }
+
+  /* --- Memory Grid --- */
+  .memory-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 90px);
+    gap: 8px;
+    margin: 16px auto;
+    width: fit-content;
+  }
+  .memory-card {
+    width: 90px;
+    height: 90px;
+    border-radius: 8px;
+    border: 2px solid #ddd;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    background: #1a1a2e;
+    color: #1a1a2e;
+    transition: all 0.3s;
+    user-select: none;
+  }
+  .memory-card.flipped { background: #fff; color: #333; border-color: #999; }
+  .memory-card.matched { background: #d4edda; border-color: #27ae60; color: #333; cursor: default; }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html">Dashboard</a>
+  <a href="01_clicks_and_forms.html">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html">2. Navigation</a>
+  <a href="03_keyboard_and_text.html">3. Keyboard</a>
+  <a href="04_advanced.html">4. Advanced</a>
+  <a href="05_games.html" class="current">5. Games</a>
+  <a href="06_captcha_and_drag.html">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Test 5: Games & Puzzles</h1>
+  <p>Tests strategic interaction, sequential clicking, and visual pattern matching.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> These tasks require strategic thinking and precise interaction.
+  Play tic-tac-toe, complete a number sequence, solve a memory game, and spot differences.
+</div>
+
+<div class="page-layout">
+  <div class="sidebar">
+    <div class="score-bar">
+      <div class="score-row">
+        <span class="score-label">Score</span>
+        <div class="progress-track"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <span class="score-value" id="page-score">0 / 5</span>
+      </div>
+      <span class="next-link"><a href="06_captcha_and_drag.html">Next: Captcha &rarr;</a></span>
+    </div>
+    <ol class="task-list" id="task-list">
+      <li data-task="1"><span class="task-num">1</span><span class="task-text">Tic-Tac-Toe: You are <strong>X</strong>. Make your opening move.</span><span class="status pending">PENDING</span></li>
+      <li data-task="2"><span class="task-num">2</span><span class="task-text">Tic-Tac-Toe: Win or draw the game (do not lose).</span><span class="status pending">PENDING</span></li>
+      <li data-task="3"><span class="task-num">3</span><span class="task-text">Number Sequence: Activate the numbers <strong>1 through 8</strong> in ascending order.</span><span class="status pending">PENDING</span></li>
+      <li data-task="4"><span class="task-num">4</span><span class="task-text">Memory Match: Find all 4 matching pairs.</span><span class="status pending">PENDING</span></li>
+      <li data-task="5"><span class="task-num">5</span><span class="task-text">Spot the Odd One: Find and select the item that is <strong>different</strong> from the rest.</span><span class="status pending">PENDING</span></li>
+    </ol>
+  </div>
+  <div class="test-section">
+
+  <!-- ======== Tic Tac Toe ======== -->
+  <div class="test-card">
+    <div class="test-card-header">1-2. Tic-Tac-Toe</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">You are <strong>X</strong> (first move). Click a cell to place your mark. The AI plays O.</p>
+      <div class="ttt-status" id="ttt-status">Your turn (X)</div>
+      <div class="ttt-board" id="ttt-board"></div>
+      <div style="text-align:center; margin-top:8px;">
+        <button class="btn btn-outline" onclick="tttReset()">Reset Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Number Sequence ======== -->
+  <div class="test-card">
+    <div class="test-card-header">3. Number Sequence</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Click the numbers 1 through 8 in ascending order.</p>
+      <div class="number-field" id="number-field"></div>
+      <div style="text-align:center;">
+        <span id="seq-feedback" style="font-weight:600; color:#666;">Next: click 1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Memory Match ======== -->
+  <div class="test-card">
+    <div class="test-card-header">4. Memory Match</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Flip cards two at a time to find matching pairs. All cards start face-down.</p>
+      <div class="memory-grid" id="memory-grid"></div>
+      <div style="text-align:center;">
+        <span id="memory-feedback" style="font-weight:600; color:#666;">Pairs found: 0 / 4</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Spot the Odd One ======== -->
+  <div class="test-card">
+    <div class="test-card-header">5. Spot the Odd One</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">All items below look similar, but one is different. Click the odd one out.</p>
+      <div style="display:grid; grid-template-columns:repeat(5,80px); gap:10px; margin:16px auto; width:fit-content;" id="odd-grid"></div>
+      <div style="text-align:center;">
+        <span id="odd-feedback" style="font-weight:600; color:#666;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Complete ======== -->
+  <!-- ======== Event Log ======== -->
+  <div class="test-card">
+    <div class="test-card-header">Event Log</div>
+    <div class="test-card-body">
+      <div class="event-log" id="event-log"></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  var T = new TaskTracker("games", 5);
+
+  // ============================================================
+  // TIC TAC TOE
+  // ============================================================
+  var tttBoard = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // 0=empty, 1=X, 2=O
+  var tttOver = false;
+  var tttMoveCount = 0;
+  var WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+  function tttRender() {
+    var container = document.getElementById("ttt-board");
+    container.innerHTML = "";
+    for (var i = 0; i < 9; i++) {
+      var cell = document.createElement("button");
+      cell.className = "ttt-cell";
+      cell.dataset.idx = i;
+      var row = Math.floor(i / 3) + 1;
+      var col = (i % 3) + 1;
+      var posLabel = "row " + row + " col " + col;
+      if (tttBoard[i] === 1) { cell.textContent = "X"; cell.classList.add("taken", "x"); cell.setAttribute("aria-label", "X at " + posLabel); }
+      else if (tttBoard[i] === 2) { cell.textContent = "O"; cell.classList.add("taken", "o"); cell.setAttribute("aria-label", "O at " + posLabel); }
+      else { cell.setAttribute("aria-label", "empty " + posLabel); }
+      cell.addEventListener("click", tttClick);
+      container.appendChild(cell);
+    }
+  }
+
+  function tttClick(e) {
+    if (tttOver) return;
+    var idx = parseInt(e.target.dataset.idx);
+    if (tttBoard[idx] !== 0) return;
+
+    // Player X
+    tttBoard[idx] = 1;
+    tttMoveCount++;
+    T.log("X placed at cell " + idx);
+    if (tttMoveCount === 1) T.pass(1);
+
+    var w = tttCheckWin();
+    if (w) { tttEnd(w); return; }
+    if (tttMoveCount >= 9) { tttEnd(0); return; }
+
+    // AI O - uses simple strategy
+    var aiMove = tttAI();
+    tttBoard[aiMove] = 2;
+    tttMoveCount++;
+    T.log("O placed at cell " + aiMove);
+
+    w = tttCheckWin();
+    if (w) { tttEnd(w); return; }
+    if (tttMoveCount >= 9) { tttEnd(0); return; }
+
+    tttRender();
+    document.getElementById("ttt-status").textContent = "Your turn (X)";
+  }
+
+  function tttCheckWin() {
+    for (var i = 0; i < WINS.length; i++) {
+      var a = WINS[i][0], b = WINS[i][1], c = WINS[i][2];
+      if (tttBoard[a] && tttBoard[a] === tttBoard[b] && tttBoard[b] === tttBoard[c]) {
+        return tttBoard[a]; // 1=X wins, 2=O wins
+      }
+    }
+    return 0;
+  }
+
+  function tttEnd(winner) {
+    tttOver = true;
+    tttRender();
+    // Highlight winning cells
+    if (winner) {
+      for (var i = 0; i < WINS.length; i++) {
+        var a = WINS[i][0], b = WINS[i][1], c = WINS[i][2];
+        if (tttBoard[a] === winner && tttBoard[b] === winner && tttBoard[c] === winner) {
+          var cells = document.querySelectorAll(".ttt-cell");
+          cells[a].classList.add("win-cell");
+          cells[b].classList.add("win-cell");
+          cells[c].classList.add("win-cell");
+        }
+      }
+    }
+    var status = document.getElementById("ttt-status");
+    if (winner === 1) {
+      status.textContent = "X wins! Well played.";
+      status.style.color = "#27ae60";
+      T.pass(2);
+      T.log("Tic-tac-toe: X wins");
+    } else if (winner === 2) {
+      status.textContent = "O wins. You lost.";
+      status.style.color = "#e94560";
+      T.log("Tic-tac-toe: O wins (agent lost)");
+    } else {
+      status.textContent = "Draw!";
+      status.style.color = "#f39c12";
+      T.pass(2);
+      T.log("Tic-tac-toe: Draw");
+    }
+  }
+
+  // Simple AI: win if can, block if must, else take center, else corner, else any
+  function tttAI() {
+    // Try to win
+    var m = tttFindWinMove(2);
+    if (m !== -1) return m;
+    // Block player
+    m = tttFindWinMove(1);
+    if (m !== -1) return m;
+    // Center
+    if (tttBoard[4] === 0) return 4;
+    // Corners
+    var corners = [0, 2, 6, 8];
+    for (var i = 0; i < corners.length; i++) {
+      if (tttBoard[corners[i]] === 0) return corners[i];
+    }
+    // Any
+    for (var i = 0; i < 9; i++) {
+      if (tttBoard[i] === 0) return i;
+    }
+    return -1;
+  }
+
+  function tttFindWinMove(player) {
+    for (var i = 0; i < WINS.length; i++) {
+      var cells = WINS[i];
+      var vals = [tttBoard[cells[0]], tttBoard[cells[1]], tttBoard[cells[2]]];
+      var countP = 0, countEmpty = 0, emptyIdx = -1;
+      for (var j = 0; j < 3; j++) {
+        if (vals[j] === player) countP++;
+        else if (vals[j] === 0) { countEmpty++; emptyIdx = cells[j]; }
+      }
+      if (countP === 2 && countEmpty === 1) return emptyIdx;
+    }
+    return -1;
+  }
+
+  function tttReset() {
+    tttBoard = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    tttOver = false;
+    tttMoveCount = 0;
+    document.getElementById("ttt-status").textContent = "Your turn (X)";
+    document.getElementById("ttt-status").style.color = "";
+    tttRender();
+    T.log("Tic-tac-toe reset");
+  }
+
+  tttRender();
+
+  // ============================================================
+  // NUMBER SEQUENCE
+  // ============================================================
+  (function() {
+    var field = document.getElementById("number-field");
+    var nextExpected = 1;
+    var total = 8;
+    // Place numbers at predetermined positions that don't overlap
+    var positions = [
+      { n: 1, x: 60, y: 30 },
+      { n: 2, x: 350, y: 200 },
+      { n: 3, x: 180, y: 100 },
+      { n: 4, x: 500, y: 40 },
+      { n: 5, x: 40, y: 220 },
+      { n: 6, x: 620, y: 150 },
+      { n: 7, x: 280, y: 250 },
+      { n: 8, x: 450, y: 120 }
+    ];
+
+    for (var i = 0; i < positions.length; i++) {
+      var p = positions[i];
+      var el = document.createElement("div");
+      el.className = "seq-num";
+      el.textContent = p.n;
+      el.style.left = p.x + "px";
+      el.style.top = p.y + "px";
+      el.dataset.num = p.n;
+      el.addEventListener("click", function() {
+        var num = parseInt(this.dataset.num);
+        if (num === nextExpected) {
+          this.classList.add("clicked");
+          T.log("Sequence: clicked " + num);
+          nextExpected++;
+          var fb = document.getElementById("seq-feedback");
+          if (nextExpected > total) {
+            fb.textContent = "Sequence complete!";
+            fb.style.color = "#27ae60";
+            T.pass(3);
+          } else {
+            fb.textContent = "Next: click " + nextExpected;
+          }
+        } else {
+          this.classList.add("wrong");
+          var self = this;
+          setTimeout(function() { self.classList.remove("wrong"); }, 500);
+          T.log("Sequence: wrong click (" + num + "), expected " + nextExpected);
+        }
+      });
+      field.appendChild(el);
+    }
+  })();
+
+  // ============================================================
+  // MEMORY MATCH
+  // ============================================================
+  (function() {
+    var symbols = ["A", "B", "C", "D", "A", "B", "C", "D"];
+    // Shuffle
+    for (var i = symbols.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = symbols[i]; symbols[i] = symbols[j]; symbols[j] = tmp;
+    }
+
+    var grid = document.getElementById("memory-grid");
+    var cards = [];
+    var flipped = [];
+    var matchedCount = 0;
+    var processing = false;
+
+    for (var i = 0; i < 8; i++) {
+      var card = document.createElement("div");
+      card.className = "memory-card";
+      card.dataset.idx = i;
+      card.dataset.symbol = symbols[i];
+      card.textContent = "?";
+      card.setAttribute("aria-label", "card " + (i + 1) + " face down");
+      card.addEventListener("click", handleCardClick);
+      grid.appendChild(card);
+      cards.push(card);
+    }
+
+    function handleCardClick() {
+      if (processing) return;
+      if (this.classList.contains("matched") || this.classList.contains("flipped")) return;
+
+      this.classList.add("flipped");
+      this.textContent = this.dataset.symbol;
+      this.setAttribute("aria-label", "card " + (parseInt(this.dataset.idx) + 1) + " showing " + this.dataset.symbol);
+      flipped.push(this);
+      T.log("Flipped card " + this.dataset.idx + " = " + this.dataset.symbol);
+
+      if (flipped.length === 2) {
+        processing = true;
+        var c1 = flipped[0], c2 = flipped[1];
+
+        if (c1.dataset.symbol === c2.dataset.symbol) {
+          // Match
+          setTimeout(function() {
+            c1.classList.remove("flipped");
+            c2.classList.remove("flipped");
+            c1.classList.add("matched");
+            c2.classList.add("matched");
+            c1.setAttribute("aria-label", "card " + (parseInt(c1.dataset.idx) + 1) + " matched " + c1.dataset.symbol);
+            c2.setAttribute("aria-label", "card " + (parseInt(c2.dataset.idx) + 1) + " matched " + c2.dataset.symbol);
+            matchedCount++;
+            document.getElementById("memory-feedback").textContent = "Pairs found: " + matchedCount + " / 4";
+            T.log("Match found: " + c1.dataset.symbol);
+            if (matchedCount === 4) {
+              T.pass(4);
+              document.getElementById("memory-feedback").style.color = "#27ae60";
+            }
+            flipped = [];
+            processing = false;
+          }, 400);
+        } else {
+          // No match — flip back to face down
+          setTimeout(function() {
+            c1.classList.remove("flipped");
+            c2.classList.remove("flipped");
+            c1.textContent = "?";
+            c2.textContent = "?";
+            c1.setAttribute("aria-label", "card " + (parseInt(c1.dataset.idx) + 1) + " face down");
+            c2.setAttribute("aria-label", "card " + (parseInt(c2.dataset.idx) + 1) + " face down");
+            flipped = [];
+            processing = false;
+          }, 1000);
+        }
+      }
+    }
+  })();
+
+  // ============================================================
+  // SPOT THE ODD ONE
+  // ============================================================
+  (function() {
+    var grid = document.getElementById("odd-grid");
+    var oddIndex = Math.floor(Math.random() * 10);
+    var normalColor = "#3498db";
+    var oddColor = "#2e86c1"; // subtly different shade
+
+    for (var i = 0; i < 10; i++) {
+      var item = document.createElement("div");
+      item.style.width = "80px";
+      item.style.height = "80px";
+      item.style.borderRadius = "8px";
+      item.style.cursor = "pointer";
+      item.style.border = "2px solid #ddd";
+      item.style.display = "flex";
+      item.style.alignItems = "center";
+      item.style.justifyContent = "center";
+      item.style.fontSize = "2rem";
+      item.style.transition = "border-color 0.2s";
+
+      if (i === oddIndex) {
+        // The odd one: different symbol
+        item.style.background = normalColor;
+        item.textContent = "\u2666"; // diamond
+        item.dataset.odd = "true";
+      } else {
+        item.style.background = normalColor;
+        item.textContent = "\u2665"; // heart
+      }
+
+      item.addEventListener("click", function() {
+        if (this.dataset.odd === "true") {
+          this.style.borderColor = "#27ae60";
+          document.getElementById("odd-feedback").textContent = "Correct! You found the odd one.";
+          document.getElementById("odd-feedback").style.color = "#27ae60";
+          T.pass(5);
+          T.log("Spot the odd one: correct");
+        } else {
+          this.style.borderColor = "#e94560";
+          document.getElementById("odd-feedback").textContent = "Wrong. Try again.";
+          document.getElementById("odd-feedback").style.color = "#e94560";
+          T.log("Spot the odd one: wrong");
+          var self = this;
+          setTimeout(function() { self.style.borderColor = "#ddd"; }, 800);
+        }
+      });
+
+      grid.appendChild(item);
+    }
+  })();
+</script>
+
+</body>
+</html>

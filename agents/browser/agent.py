@@ -83,22 +83,25 @@ SYSTEM_PROMPT = dedent(
       ONLY for direct file downloads (PDFs, CSVs, ZIPs) when you have the URL.
     - When you save/download a file, mention the path in your response.
 
-    VISION TOOLS — STRICT RULES:
-    perform_visual_action and inspect_page use vision (screenshot + model)
-    which is 10x slower. NEVER use them unless ref-based tools have ALREADY
-    failed on the SAME page. perform_visual_action asks a vision model to
-    decide and execute the next GUI action (click, type, scroll, drag, etc.).
+    VISION vs REF-BASED TOOLS:
     browse_page() gives you ref numbers for every interactive element:
         [3] [link] Datasets       → click("3")
         [5] [button] Submit       → click("5")
         [8] [menuitem] Search     → click("8")
-    Vision is ONLY for elements that have no ref (e.g. canvas, images,
-    CAPTCHAs) or after a ref-based click has failed twice.
+    Prefer ref-based tools (click, fill_field, drag, select_option) when
+    elements have clear refs. Use vision tools (perform_visual_action,
+    inspect_page) when:
+    - Elements have no ref (canvas, images, CAPTCHAs, custom widgets)
+    - You need to interact based on visual appearance (colors, shapes, layout)
+    - A ref-based action failed
+    - You need to answer a question about what the page looks like
+
+    SLIDERS: Drag sliders to the far end of the track unless a specific value is requested.
 
     WHEN STUCK:
     - Ref not found → page may have changed, call browse_page() for fresh refs
     - Can't find element → scroll + browse_page, or browse_page(scope="...")
-    - Ref failed twice → perform_visual_action("describe what to do")
+    - Ref failed → try perform_visual_action("describe what to do")
     - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
     - Ambiguous → ask user for clarification
 

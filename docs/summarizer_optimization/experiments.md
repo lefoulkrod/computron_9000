@@ -12,6 +12,7 @@ Each experiment is tested in isolation against the current baseline. One change 
 | 6 | Model size comparison | **Keep mistral:7b** | Tested 12 models. mistral:7b: 92% probes, 31s. Switched from qwen3:8b. |
 | 9 | Chunked summarization | **Keep** | Split → summarize → merge for long conversations. 2x faster. |
 | 10 | Remove progressive shrink | **Keep** | Dead code with chunking in place. Simplified serialization. |
+| 14 | Fix num_ctx, add num_predict cap, timeout | **Keep** | Bug fix: num_ctx was 60k (model native is 32k), no generation cap, no timeout. Caused 20+ min hangs. |
 
 ## Removed (not needed)
 
@@ -44,12 +45,39 @@ Each experiment is tested in isolation against the current baseline. One change 
 
 **Risk**: Very low. Adds ~50 tokens. The model might echo the request in the summary, but the "Do NOT echo" rule should handle that.
 
-### Experiment 12: Content-type filtering for low-value tool outputs
+**Status**: Previously discarded (experiment ran 2026-03-17, 4% regression). But the test suite at the time had no false completion scenario. Re-test on real compaction 9 data (2026-03-18) showed it drops mistral:7b false completions from 100% to 40%. Should re-run with scenario 12 included in the suite.
 
-**What**: Detect and aggressively cap tool outputs that are filesystem dumps — `ls`, `find`, directory listings, file trees. These are low-information-density outputs that can dominate the summary when they're large.
+### Experiment 15: Larger summarizer model to fix false completion
 
-**Discovered via**: Scenario 07 (real game creation). A `find *.html` output listed every HTML file on the filesystem (including pygame docs), and an `ls -la` listed every file in the home directory. These dominated the summary, drowning out the actual game creation work.
+**What**: Switch from mistral:7b to a larger model (glm-4.7-flash:Q8_0, ~30B params) for summarization. The 7B model lacks the reasoning to notice when a multi-step task is partially complete — it consistently writes "Remaining Work: None" even when only 4 of 6 tests have been completed.
 
-**Proposed change**: In `_serialize_messages`, detect tool results that look like directory listings (lines matching `drwx`, `-rw-`, or simple file-per-line patterns) and cap them at 2,000 chars instead of 10,000. The summarizer can still see the first ~50 files, but won't be overwhelmed by 500-line listings.
+**Discovered via**: Production compaction 9 — 208 messages from browser test suite. Tests 1-4 completed, Tests 5-6 pending. Dashboard listing all 6 tests was present in the input, but mistral:7b ignored it. 100% false completion rate (5/5 runs say "None"). The dashboard was mentioned only once vs 16-39 mentions of the completed tests — the 7B model can't pick the signal out of the noise.
 
-**Risk**: Medium. Might over-filter tool results that happen to look like directory listings but contain important data. Need careful pattern matching.
+**Initial results** (compaction 9 real data, 5 runs each):
+
+| Model | False completions | Avg time | Notes |
+|-------|-------------------|----------|-------|
+| mistral:7b (baseline) | 5/5 (100%) | 36s | Always says "None" |
+| mistral:7b + request | 2/5 (40%) | 35s | Helps, but vague requests don't add signal |
+| glm-4.7-flash:Q8_0 | 0/5 (0%) | 85s | Zero false completions, 2/5 explicitly mention Tests 5-6 |
+| glm-4.7-flash:Q8_0 + request | 0/5 (0%) | 86s | Also zero, but request context didn't improve GOOD rate |
+
+**Remaining work to do**:
+- Run full scenario suite with glm-4.7-flash:Q8_0 to check for regressions
+- Measure quality vs speed tradeoff (85s avg vs 3s for mistral:7b)
+- Test whether a smaller-but-better model (qwen3.5:4b, qwen3:8b) can also fix this
+- Consider using the larger model only for the merge pass (not per-chunk), which would be ~1 call at 10-15s
+
+**Risk**: Medium. 85s is within the 2-minute budget but 30x slower than mistral:7b. If the chunked path makes 12 calls at 85s each, that's 17 minutes — need to verify this is per-full-compaction, not per-chunk.
+
+### Experiment 17: Aggressive tool result capping (200 chars)
+
+**What**: Drop `_TOOL_RESULT_CAP` from 10,000 to 200 chars. The insight: assistant messages already contain the distilled findings from tool results. In production compaction 9, tool results were 96% of input (103k chars) while assistant reasoning was only 4% (4k chars). The summarizer is drowning in DOM trees and bash output when the assistant already wrote "Task 3 complete, score 5/6."
+
+**Discovered via**: Analysis of compaction 9 content ratio. Also inspired by ACON paper's separation of observation compression vs history compression — the assistant reasoning IS the compressed observation.
+
+**Proposed change**:
+- `_TOOL_RESULT_CAP = 200` (down from 10,000)
+- Simple head truncation instead of head+tail (tail is rarely useful at 200 chars)
+
+**Risk**: Low-medium. Tool results that contain data not echoed by the assistant (e.g., raw API responses, file contents the assistant didn't fully describe) would be lost. But the assistant typically summarizes what it found.

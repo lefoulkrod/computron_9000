@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test 4: Advanced Actions - Browser Agent Tests</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .vis-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .vis-card {
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border: 2px solid #ddd;
+    transition: border-color 0.2s;
+  }
+  .vis-card:hover { border-color: #1a1a2e; }
+  .vis-card.selected { border-color: #27ae60; }
+
+  .counter-box {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: center;
+    margin: 16px 0;
+  }
+  .counter-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-family: monospace;
+    min-width: 60px;
+    text-align: center;
+  }
+  .shape-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 16px 0;
+  }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html">Dashboard</a>
+  <a href="01_clicks_and_forms.html">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html">2. Navigation</a>
+  <a href="03_keyboard_and_text.html">3. Keyboard</a>
+  <a href="04_advanced.html" class="current">4. Advanced</a>
+  <a href="05_games.html">5. Games</a>
+  <a href="06_captcha_and_drag.html">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Test 4: Advanced Actions</h1>
+  <p>Tests <code>drag</code>, <code>press_and_hold</code>, <code>inspect_page</code>, <code>perform_visual_action</code>, and multi-step tasks.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> These are the most challenging tasks. They involve drag-and-drop,
+  visual identification, sustained interaction, and multi-step forms.
+</div>
+
+<div class="page-layout">
+  <div class="sidebar">
+    <div class="score-bar">
+      <div class="score-row">
+        <span class="score-label">Score</span>
+        <div class="progress-track"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <span class="score-value" id="page-score">0 / 7</span>
+      </div>
+      <span class="next-link"><a href="05_games.html">Next: Games &rarr;</a></span>
+    </div>
+    <ol class="task-list" id="task-list">
+  <li data-task="1"><span class="task-num">1</span><span class="task-text">Move the "Alpha" block into the "Target" drop zone.</span><span class="status pending">PENDING</span></li>
+  <li data-task="2"><span class="task-num">2</span><span class="task-text">Move the "Beta" block into the "Target 2" drop zone.</span><span class="status pending">PENDING</span></li>
+  <li data-task="3"><span class="task-num">3</span><span class="task-text">Activate the hold button until the ring fills completely (~2 seconds).</span><span class="status pending">PENDING</span></li>
+  <li data-task="4"><span class="task-num">4</span><span class="task-text">Set the counter to exactly <strong>7</strong>.</span><span class="status pending">PENDING</span></li>
+  <li data-task="5"><span class="task-num">5</span><span class="task-text">Count the <strong>blue</strong> cards in the grid below and enter the count.</span><span class="status pending">PENDING</span></li>
+  <li data-task="6"><span class="task-num">6</span><span class="task-text">Click the <strong>green circle</strong> (not the red or blue ones).</span><span class="status pending">PENDING</span></li>
+  <li data-task="7"><span class="task-num">7</span><span class="task-text">Execute a transfer: amount "250", method "Wire", with confirmation.</span><span class="status pending">PENDING</span></li>
+</ol>
+  </div>
+  <div class="test-section">
+  <!-- ======== Drag & Drop ======== -->
+  <div class="test-card">
+    <div class="test-card-header">1-2. Drag & Drop</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Drag each labeled block to its matching drop zone.</p>
+      <div class="drag-area" id="drag-area">
+        <div class="drag-item" id="drag-alpha" style="left:20px; top:20px; background:#e94560;"
+             data-item="alpha">Alpha</div>
+        <div class="drag-item" id="drag-beta" style="left:20px; top:110px; background:#3498db;"
+             data-item="beta">Beta</div>
+        <div class="drag-item" id="drag-gamma" style="left:20px; top:170px; background:#8e44ad;"
+             data-item="gamma">Gamma</div>
+
+        <div class="drop-zone" id="drop-target-1" style="right:20px; top:20px;" data-zone="target1">Target</div>
+        <div class="drop-zone" id="drop-target-2" style="right:20px; top:130px;" data-zone="target2">Target 2</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Press & Hold ======== -->
+  <div class="test-card">
+    <div class="test-card-header">3. Press & Hold</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Press and hold the circle below for 2 seconds.</p>
+      <div class="hold-btn" id="hold-btn" aria-label="Hold button">
+        <div class="hold-btn-inner">
+          <div id="hold-label">HOLD</div>
+          <div id="hold-timer" style="font-size:0.8rem; color:#999;">0.0s</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Counter ======== -->
+  <div class="test-card">
+    <div class="test-card-header">4. Counter (Target: 7)</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Use the + button to reach exactly 7.</p>
+      <div class="counter-box">
+        <button class="btn btn-secondary" id="counter-dec" onclick="adjustCounter(-1)">−</button>
+        <div class="counter-value" id="counter-value">0</div>
+        <button class="btn btn-primary" id="counter-inc" onclick="adjustCounter(1)">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Visual Inspection: Color Cards ======== -->
+  <div class="test-card">
+    <div class="test-card-header">5. Visual Inspection: Count the Blue Cards</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Count the blue cards in the grid, then enter the count below.</p>
+      <div class="vis-grid" id="color-cards">
+        <div class="vis-card" style="background:#e94560; color:#fff;">Red</div>
+        <div class="vis-card" style="background:#3498db; color:#fff;">Blue</div>
+        <div class="vis-card" style="background:#e94560; color:#fff;">Red</div>
+        <div class="vis-card" style="background:#3498db; color:#fff;">Blue</div>
+        <div class="vis-card" style="background:#27ae60; color:#fff;">Green</div>
+        <div class="vis-card" style="background:#3498db; color:#fff;">Blue</div>
+        <div class="vis-card" style="background:#f39c12; color:#fff;">Orange</div>
+        <div class="vis-card" style="background:#e94560; color:#fff;">Red</div>
+        <div class="vis-card" style="background:#3498db; color:#fff;">Blue</div>
+      </div>
+      <div class="form-group" style="max-width:200px;">
+        <label for="blue-count">Number of blue cards:</label>
+        <input type="number" id="blue-count" placeholder="Enter count">
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Visual Action: Click the Green Circle ======== -->
+  <div class="test-card">
+    <div class="test-card-header">6. Visual Action: Click the Green Circle</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Click the green circle (not the red or blue ones).</p>
+      <div class="shape-row" id="shapes">
+        <svg width="80" height="80" style="cursor:pointer;" onclick="handleShape('red')">
+          <circle cx="40" cy="40" r="36" fill="#e94560" stroke="#c0392b" stroke-width="2"/>
+        </svg>
+        <svg width="80" height="80" style="cursor:pointer;" onclick="handleShape('blue')">
+          <circle cx="40" cy="40" r="36" fill="#3498db" stroke="#2980b9" stroke-width="2"/>
+        </svg>
+        <svg width="80" height="80" style="cursor:pointer;" id="green-circle" onclick="handleShape('green')">
+          <circle cx="40" cy="40" r="36" fill="#27ae60" stroke="#1e8449" stroke-width="2"/>
+        </svg>
+        <svg width="80" height="80" style="cursor:pointer;" onclick="handleShape('red2')">
+          <circle cx="40" cy="40" r="36" fill="#e94560" stroke="#c0392b" stroke-width="2"/>
+        </svg>
+        <svg width="80" height="80" style="cursor:pointer;" onclick="handleShape('blue2')">
+          <circle cx="40" cy="40" r="36" fill="#3498db" stroke="#2980b9" stroke-width="2"/>
+        </svg>
+      </div>
+      <div class="key-log" id="shape-result"></div>
+    </div>
+  </div>
+
+  <!-- ======== Multi-Step Task ======== -->
+  <div class="test-card">
+    <div class="test-card-header">7. Multi-Step: Transfer Form</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Fill the amount with "250", select "Wire" method, check confirm, and click Execute.</p>
+      <form id="transfer-form" onsubmit="event.preventDefault()">
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1; min-width:150px;">
+            <label for="transfer-amount">Transfer Amount</label>
+            <input type="text" id="transfer-amount" name="amount" placeholder="Enter amount">
+          </div>
+          <div class="form-group" style="flex:1; min-width:150px;">
+            <label for="transfer-method">Method</label>
+            <select id="transfer-method" name="method">
+              <option value="">-- Select --</option>
+              <option value="ach">ACH</option>
+              <option value="wire">Wire</option>
+              <option value="check">Check</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="inline-options">
+            <label><input type="checkbox" id="transfer-confirm" name="confirm"> Confirm transfer</label>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary" id="execute-transfer">Execute Transfer</button>
+        <span id="transfer-result" style="margin-left:12px; font-weight:600;"></span>
+      </form>
+    </div>
+  </div>
+
+  <!-- ======== Event Log ======== -->
+  <div class="test-card">
+    <div class="test-card-header">Event Log</div>
+    <div class="test-card-body">
+      <div class="event-log" id="event-log"></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  var T = new TaskTracker("advanced", 7);
+
+  // --- Drag & Drop ---
+  (function() {
+    var area = document.getElementById("drag-area");
+    var items = area.querySelectorAll(".drag-item");
+    var zones = area.querySelectorAll(".drop-zone");
+    var dragging = null;
+
+    items.forEach(function(item) {
+      item.addEventListener("mousedown", function() {
+        dragging = item;
+        item.style.zIndex = 10;
+      });
+    });
+
+    document.addEventListener("mousemove", function(e) {
+      if (!dragging) return;
+      var rect = area.getBoundingClientRect();
+      var x = e.clientX - rect.left - 35;
+      var y = e.clientY - rect.top - 35;
+      dragging.style.left = Math.max(0, Math.min(x, rect.width - 70)) + "px";
+      dragging.style.top = Math.max(0, Math.min(y, rect.height - 70)) + "px";
+    });
+
+    document.addEventListener("mouseup", function() {
+      if (!dragging) return;
+      dragging.style.zIndex = 2;
+      var dRect = dragging.getBoundingClientRect();
+      var cx = dRect.left + dRect.width / 2;
+      var cy = dRect.top + dRect.height / 2;
+
+      zones.forEach(function(zone) {
+        var zRect = zone.getBoundingClientRect();
+        if (cx >= zRect.left && cx <= zRect.right && cy >= zRect.top && cy <= zRect.bottom) {
+          zone.classList.add("filled");
+          zone.textContent = dragging.dataset.item + " dropped";
+          T.log("Dropped " + dragging.dataset.item + " on " + zone.dataset.zone);
+          // Center item in zone
+          var aRect = area.getBoundingClientRect();
+          dragging.style.left = (zRect.left - aRect.left + (zRect.width - 70) / 2) + "px";
+          dragging.style.top = (zRect.top - aRect.top + (zRect.height - 70) / 2) + "px";
+
+          if (dragging.dataset.item === "alpha" && zone.dataset.zone === "target1") T.pass(1);
+          if (dragging.dataset.item === "beta" && zone.dataset.zone === "target2") T.pass(2);
+        }
+      });
+      dragging = null;
+    });
+  })();
+
+  // --- Press & Hold ---
+  (function() {
+    var btn = document.getElementById("hold-btn");
+    var label = document.getElementById("hold-label");
+    var timer = document.getElementById("hold-timer");
+    var holding = false;
+    var start = 0;
+    var done = false;
+
+    function tick() {
+      if (!holding) return;
+      var sec = (Date.now() - start) / 1000;
+      var pct = Math.min(sec / 2, 1) * 100;
+      btn.style.setProperty("--pct", pct + "%");
+      timer.textContent = sec.toFixed(1) + "s";
+      if (sec >= 2 && !done) {
+        done = true;
+        label.textContent = "DONE";
+        btn.classList.add("done");
+        T.pass(3);
+        T.log("Hold completed: " + sec.toFixed(1) + "s");
+      }
+      if (!done) requestAnimationFrame(tick);
+    }
+
+    btn.addEventListener("mousedown", function() { if (done) return; holding = true; start = Date.now(); label.textContent = "..."; tick(); });
+    btn.addEventListener("mouseup", function() { holding = false; });
+    btn.addEventListener("mouseleave", function() { holding = false; });
+  })();
+
+  // --- Counter ---
+  var counterVal = 0;
+  function adjustCounter(d) {
+    counterVal = Math.max(0, counterVal + d);
+    document.getElementById("counter-value").textContent = counterVal;
+    T.log("Counter: " + counterVal);
+    if (counterVal === 7) T.pass(4);
+  }
+
+  // --- Blue card count ---
+  document.getElementById("blue-count").addEventListener("input", function() {
+    if (parseInt(this.value, 10) === 4) {
+      T.pass(5);
+      T.log("Correct blue card count: 4");
+    }
+  });
+
+  // --- Shape click ---
+  function handleShape(color) {
+    document.getElementById("shape-result").textContent = "Clicked: " + color;
+    T.log("Shape clicked: " + color);
+    if (color === "green") T.pass(6);
+  }
+
+  // --- Transfer form ---
+  // Task 7: Transfer — must be a real click, not JS dispatch
+  document.getElementById("execute-transfer").addEventListener("click", function(e) {
+    if (!e.isTrusted) {
+      T.log("Transfer rejected: synthetic click detected");
+      return;
+    }
+    var amount = document.getElementById("transfer-amount").value.trim();
+    var method = document.getElementById("transfer-method").value;
+    var confirmed = document.getElementById("transfer-confirm").checked;
+    var result = document.getElementById("transfer-result");
+
+    if (amount === "250" && method === "wire" && confirmed) {
+      T.pass(7);
+      result.textContent = "Transfer executed!";
+      result.style.color = "#27ae60";
+      T.log("Transfer form submitted correctly");
+    } else {
+      result.textContent = "Incorrect. Check all fields.";
+      result.style.color = "#e74c3c";
+      T.log("Transfer form incorrect: amount=" + amount + " method=" + method + " confirmed=" + confirmed);
+    }
+  });
+</script>
+
+</body>
+</html>

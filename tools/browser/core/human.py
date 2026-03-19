@@ -518,27 +518,20 @@ async def human_drag(
     target: Page | Frame,
     source_locator: Locator,
     *,
-    target_locator: Locator | None = None,
-    offset: tuple[float | int, float | int] | None = None,
+    target_locator: Locator,
 ) -> None:
-    """Drag from ``source_locator`` to either ``target_locator`` or a coordinate offset.
-
-    Exactly one of ``target_locator`` or ``offset`` must be provided.
+    """Drag from ``source_locator`` to ``target_locator``.
 
     Args:
         target: Playwright Page or Frame whose mouse will be used for the drag.
         source_locator: Locator identifying the element where the drag should begin.
-        target_locator: Optional locator identifying the destination element.
-        offset: Optional ``(dx, dy)`` tuple specifying a pixel offset relative to the
-            drag start point.
+        target_locator: Locator identifying the destination element.
 
     Raises:
         BrowserToolError: On invalid inputs, detached elements, missing mouse APIs,
             or when bounding boxes cannot be computed.
     """
     page = _page_for(target)
-    if (target_locator is None and offset is None) or (target_locator is not None and offset is not None):
-        raise BrowserToolError("Provide exactly one of target_locator or offset", tool="drag")
 
     cfg = _get_human_config()
 
@@ -591,69 +584,51 @@ async def human_drag(
     start_x += random.uniform(-jitter_x, jitter_x)
     start_y += random.uniform(-jitter_y, jitter_y)
 
-    dest_x: float
-    dest_y: float
+    target_handle = await target_locator.element_handle(timeout=5000)
+    if target_handle is None:
+        raise BrowserToolError("Unable to resolve target element handle", tool="drag")
 
-    if target_locator is not None:
-        target_handle = await target_locator.element_handle(timeout=5000)
-        if target_handle is None:
-            raise BrowserToolError("Unable to resolve target element handle", tool="drag")
+    target_frame = await target_handle.owner_frame()
+    if target_frame is None:
+        raise BrowserToolError(
+            "Target element is not attached to a frame/page; cannot perform drag",
+            tool="drag",
+        )
 
-        target_frame = await target_handle.owner_frame()
-        if target_frame is None:
-            raise BrowserToolError(
-                "Target element is not attached to a frame/page; cannot perform drag",
-                tool="drag",
+    target_box = await target_handle.bounding_box()
+    if target_box is None or target_box.get("width", 0) < 4 or target_box.get("height", 0) < 4:
+        label_handle = None
+        try:
+            label_handle = await target_handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
+        except PlaywrightError as exc:
+            logger.warning(
+                "Failed to evaluate target label handle; using element's own bounding box if available. Error: %s",
+                exc,
             )
-
-        target_box = await target_handle.bounding_box()
-        if target_box is None or target_box.get("width", 0) < 4 or target_box.get("height", 0) < 4:
             label_handle = None
+        if label_handle is not None:
             try:
-                label_handle = await target_handle.evaluate_handle("(el) => el.labels?.[0] ?? null")
-            except PlaywrightError as exc:
-                logger.warning(
-                    "Failed to evaluate target label handle; using element's own bounding box if available. Error: %s",
-                    exc,
-                )
-                label_handle = None
-            if label_handle is not None:
+                label_element = label_handle.as_element()
+                if label_element is not None:
+                    label_box = await label_element.bounding_box()
+                    if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
+                        target_box = label_box
+            finally:
                 try:
-                    label_element = label_handle.as_element()
-                    if label_element is not None:
-                        label_box = await label_element.bounding_box()
-                        if label_box and label_box.get("width", 0) >= 4 and label_box.get("height", 0) >= 4:
-                            target_box = label_box
-                finally:
-                    try:
-                        await label_handle.dispose()
-                    except PlaywrightError as exc:
-                        logger.warning("Failed to dispose target label handle; continuing. Error: %s", exc)
+                    await label_handle.dispose()
+                except PlaywrightError as exc:
+                    logger.warning("Failed to dispose target label handle; continuing. Error: %s", exc)
 
-        if target_box is None or target_box.get("width", 0) <= 0 or target_box.get("height", 0) <= 0:
-            raise BrowserToolError("Target element has no bounding box to drag", tool="drag")
+    if target_box is None or target_box.get("width", 0) <= 0 or target_box.get("height", 0) <= 0:
+        raise BrowserToolError("Target element has no bounding box to drag", tool="drag")
 
-        dest_x = target_box["x"] + target_box["width"] / 2
-        dest_y = target_box["y"] + target_box["height"] / 2
+    dest_x = target_box["x"] + target_box["width"] / 2
+    dest_y = target_box["y"] + target_box["height"] / 2
 
-        jitter_x = target_box["width"] * 0.1
-        jitter_y = target_box["height"] * 0.1
-        dest_x += random.uniform(-jitter_x, jitter_x)
-        dest_y += random.uniform(-jitter_y, jitter_y)
-    else:
-        if offset is None:
-            raise BrowserToolError("offset must be provided when target_locator is None", tool="drag")
-        try:
-            dx, dy = offset
-        except (TypeError, ValueError) as exc:
-            raise BrowserToolError("offset must be a tuple of two values", tool="drag") from exc
-        try:
-            dest_x = start_x + float(dx)
-            dest_y = start_y + float(dy)
-        except (TypeError, ValueError) as exc:
-            raise BrowserToolError("offset values must be numbers", tool="drag") from exc
-        if not (math.isfinite(dest_x) and math.isfinite(dest_y)):
-            raise BrowserToolError("offset produced non-finite drag coordinates", tool="drag")
+    jitter_x = target_box["width"] * 0.1
+    jitter_y = target_box["height"] * 0.1
+    dest_x += random.uniform(-jitter_x, jitter_x)
+    dest_y += random.uniform(-jitter_y, jitter_y)
 
     mouse = page.mouse
 

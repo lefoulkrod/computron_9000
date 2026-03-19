@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test 2: Navigation & Scroll - Browser Agent Tests</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .scroll-section {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-top: 2px solid #ddd;
+    padding: 40px 20px;
+  }
+  .scroll-section h2 { font-size: 2rem; color: #1a1a2e; margin-bottom: 12px; }
+  .scroll-section .marker { font-size: 1.1rem; color: #666; }
+  .scroll-section:nth-child(odd) { background: #fff; }
+  .scroll-section:nth-child(even) { background: #f8f8f8; }
+  .answer-box {
+    margin-top: 16px;
+    max-width: 400px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .answer-box input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html">Dashboard</a>
+  <a href="01_clicks_and_forms.html">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html" class="current">2. Navigation</a>
+  <a href="03_keyboard_and_text.html">3. Keyboard</a>
+  <a href="04_advanced.html">4. Advanced</a>
+  <a href="05_games.html">5. Games</a>
+  <a href="06_captcha_and_drag.html">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Test 2: Navigation & Scroll</h1>
+  <p>Tests <code>scroll_page</code>, <code>click</code> (links), <code>read_page</code>, and reading content from different sections.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> This page has multiple full-height sections. Navigate through them,
+  read content, and enter answers to prove you found the right information.
+</div>
+
+<div class="page-layout">
+<div class="sidebar">
+  <div class="score-bar">
+    <div class="score-row">
+      <span class="score-label">Score</span>
+      <div class="progress-track"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+      <span class="score-value" id="page-score">0 / 7</span>
+    </div>
+    <span class="next-link"><a href="03_keyboard_and_text.html">Next: Keyboard &rarr;</a></span>
+  </div>
+  <ol class="task-list" id="task-list">
+    <li data-task="1"><span class="task-num">1</span><span class="task-text">Navigate to Section 3 using the jump links.</span><span class="status pending">PENDING</span></li>
+    <li data-task="2"><span class="task-num">2</span><span class="task-text">Find the hidden code in Section 5 and click the matching button.</span><span class="status pending">PENDING</span></li>
+    <li data-task="3"><span class="task-num">3</span><span class="task-text">Return to the top of the page.</span><span class="status pending">PENDING</span></li>
+    <li data-task="4"><span class="task-num">4</span><span class="task-text">Find the author's name in the Section 2 article and enter it below.</span><span class="status pending">PENDING</span></li>
+    <li data-task="5"><span class="task-num">5</span><span class="task-text">Find the server location hidden in Section 4's "Additional Info" and enter it.</span><span class="status pending">PENDING</span></li>
+    <li data-task="6"><span class="task-num">6</span><span class="task-text">Find the project lead's name in Section 4 and enter it.</span><span class="status pending">PENDING</span></li>
+    <li data-task="7"><span class="task-num">7</span><span class="task-text">Solve the riddle in Section 3 and enter the answer.</span><span class="status pending">PENDING</span></li>
+  </ol>
+</div>
+<div class="test-section">
+
+  <!-- ======== Anchor Links ======== -->
+  <div class="test-card">
+    <div class="test-card-header">1. Jump Links</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:12px;">Click a section link to jump there:</p>
+      <a href="#section-1" class="btn btn-outline" onclick="T.log('Link: Section 1')">Section 1</a>
+      <a href="#section-2" class="btn btn-outline" onclick="T.log('Link: Section 2')">Section 2</a>
+      <a href="#section-3" class="btn btn-outline" id="link-section-3"
+         onclick="T.pass(1); T.log('Link: Section 3')">Section 3</a>
+      <a href="#section-4" class="btn btn-outline" onclick="T.log('Link: Section 4')">Section 4</a>
+      <a href="#section-5" class="btn btn-outline" onclick="T.log('Link: Section 5')">Section 5</a>
+    </div>
+  </div>
+
+<!-- ======== Section 1 ======== -->
+<div class="scroll-section" id="section-1">
+  <h2>Section 1</h2>
+  <p class="marker">Welcome. This section is just a landmark.</p>
+  <p style="margin-top:12px; color:#666;">Scroll down or use the jump links above to navigate.</p>
+</div>
+
+<!-- ======== Section 2 ======== -->
+<div class="scroll-section" id="section-2">
+  <h2>Section 2</h2>
+  <p class="marker">Read the article below and find the author's name.</p>
+  <article style="max-width:600px; text-align:left; margin-top:16px; line-height:1.8;">
+    <p>The development of modern web browsers has been a long journey spanning decades of innovation.
+    From the early days of Mosaic to today's complex rendering engines, each generation has pushed
+    the boundaries of what is possible on the web.</p>
+    <p>As noted by <strong>Dr. Eleanor Whitfield</strong> in her 2024 paper on browser architecture,
+    "The shift toward headless automation has fundamentally changed how we think about testing and
+    quality assurance in web development."</p>
+    <p>This insight has driven much of the recent work in browser agent technology, enabling
+    automated systems to interact with web pages in increasingly sophisticated ways.</p>
+  </article>
+  <div class="answer-box">
+    <input type="text" id="author-answer" placeholder="Type the author's name...">
+    <button class="btn btn-primary" onclick="checkAuthor()">Check</button>
+  </div>
+  <div style="margin-top:4px; font-size:0.85rem; min-height:20px;" id="author-feedback"></div>
+</div>
+
+<!-- ======== Section 3 ======== -->
+<div class="scroll-section" id="section-3">
+  <h2>Section 3</h2>
+  <p class="marker">Solve this riddle:</p>
+  <div style="max-width:500px; margin-top:16px; background:#eef; border:1px solid #ccd; border-radius:8px; padding:20px; text-align:left;">
+    <p style="font-style:italic; font-size:1.1rem; line-height:1.6;">
+      "I have keys but no locks. I have space but no room. You can enter but can't go inside. What am I?"
+    </p>
+  </div>
+  <div class="answer-box">
+    <input type="text" id="riddle-answer" placeholder="Type your answer...">
+    <button class="btn btn-primary" onclick="checkRiddle()">Check</button>
+  </div>
+  <div style="margin-top:4px; font-size:0.85rem; min-height:20px;" id="riddle-feedback"></div>
+</div>
+
+<!-- ======== Section 4 ======== -->
+<div class="scroll-section" id="section-4">
+  <h2>Section 4</h2>
+  <p class="marker">Read the project details and the hidden info below.</p>
+
+  <div class="test-card" style="max-width:500px; margin-top:16px; text-align:left;" id="project-details">
+    <div class="test-card-header">Project Details</div>
+    <div class="test-card-body">
+      <p><strong>Project:</strong> Horizon</p>
+      <p><strong>Status:</strong> Active</p>
+      <p><strong>Lead:</strong> Maria Santos</p>
+      <p><strong>Deadline:</strong> 2026-04-15</p>
+      <p><strong>Budget:</strong> $45,000</p>
+    </div>
+  </div>
+
+  <div class="answer-box" style="margin-top:12px;">
+    <input type="text" id="lead-answer" placeholder="Who is the project lead?">
+    <button class="btn btn-primary" onclick="checkLead()">Check</button>
+  </div>
+  <div style="margin-top:4px; font-size:0.85rem; min-height:20px;" id="lead-feedback"></div>
+
+  <details id="additional-info" style="max-width:500px; margin-top:20px; text-align:left;">
+    <summary>Additional Info</summary>
+    <p style="padding:8px 0;">The project backup server is located at <strong>rack-7b-west</strong>
+    in the downtown data center. Access requires badge level 3 or higher.
+    Contact ops@example.com for emergency access.</p>
+  </details>
+
+  <div class="answer-box" style="margin-top:8px;">
+    <input type="text" id="server-answer" placeholder="Where is the backup server?">
+    <button class="btn btn-primary" onclick="checkServer()">Check</button>
+  </div>
+  <div style="margin-top:4px; font-size:0.85rem; min-height:20px;" id="server-feedback"></div>
+</div>
+
+<!-- ======== Section 5 ======== -->
+<div class="scroll-section" id="section-5">
+  <h2>Section 5</h2>
+  <p class="marker">You made it to the bottom!</p>
+  <div style="background:#eef; border:1px solid #ccd; border-radius:8px; padding:16px; max-width:500px; margin-top:16px;">
+    <p>The hidden code is: <strong id="hidden-code">DELTA-7742</strong></p>
+    <p style="margin-top:8px; font-size:0.85rem; color:#666;">Click the button that matches this code.</p>
+  </div>
+  <div style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+    <button class="btn btn-outline" onclick="T.log('Wrong code: ALPHA-1234')">ALPHA-1234</button>
+    <button class="btn btn-outline" onclick="T.log('Wrong code: BRAVO-5566')">BRAVO-5566</button>
+    <button class="btn btn-primary" id="correct-code-btn" onclick="T.pass(2); T.log('Correct code: DELTA-7742')">DELTA-7742</button>
+    <button class="btn btn-outline" onclick="T.log('Wrong code: ECHO-9901')">ECHO-9901</button>
+  </div>
+
+
+</div><!-- /section-5 -->
+
+</div><!-- /test-section -->
+</div><!-- /page-layout -->
+
+<script src="shared.js"></script>
+<script>
+  var T = new TaskTracker("navigation_and_scroll", 7);
+
+  // Task 3: detect scroll to top after having scrolled away
+  var topObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting && T.count() >= 2) {
+        T.pass(3);
+        T.log("Scrolled back to top");
+      }
+    });
+  }, { threshold: 0.5 });
+  topObserver.observe(document.querySelector(".page-header"));
+
+  // Task 4: author name
+  function checkAuthor() {
+    var val = document.getElementById("author-answer").value.trim().toLowerCase();
+    var fb = document.getElementById("author-feedback");
+    if (val.indexOf("eleanor whitfield") !== -1 || val.indexOf("dr. eleanor") !== -1) {
+      T.pass(4);
+      fb.textContent = "Correct!";
+      fb.style.color = "#27ae60";
+    } else {
+      fb.textContent = "Not quite. Read the article again.";
+      fb.style.color = "#e94560";
+    }
+  }
+
+  // Task 5: server location (from details widget)
+  document.getElementById("additional-info").addEventListener("toggle", function() {
+    if (this.open) T.log("Opened Additional Info");
+  });
+
+  function checkServer() {
+    var val = document.getElementById("server-answer").value.trim().toLowerCase();
+    var fb = document.getElementById("server-feedback");
+    if (val.indexOf("rack-7b-west") !== -1 || val.indexOf("rack 7b west") !== -1) {
+      T.pass(5);
+      fb.textContent = "Correct!";
+      fb.style.color = "#27ae60";
+    } else {
+      fb.textContent = "Not quite. Open the details widget and read carefully.";
+      fb.style.color = "#e94560";
+    }
+  }
+
+  // Task 6: project lead
+  function checkLead() {
+    var val = document.getElementById("lead-answer").value.trim().toLowerCase();
+    var fb = document.getElementById("lead-feedback");
+    if (val.indexOf("maria santos") !== -1) {
+      T.pass(6);
+      fb.textContent = "Correct!";
+      fb.style.color = "#27ae60";
+    } else {
+      fb.textContent = "Not quite. Check the Project Details card.";
+      fb.style.color = "#e94560";
+    }
+  }
+
+  // Task 7: riddle answer
+  function checkRiddle() {
+    var val = document.getElementById("riddle-answer").value.trim().toLowerCase();
+    var fb = document.getElementById("riddle-feedback");
+    if (val === "keyboard" || val === "a keyboard") {
+      T.pass(7);
+      fb.textContent = "Correct!";
+      fb.style.color = "#27ae60";
+    } else {
+      fb.textContent = "Not quite. Think about it...";
+      fb.style.color = "#e94560";
+    }
+  }
+</script>
+
+</body>
+</html>
