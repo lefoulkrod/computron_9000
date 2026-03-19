@@ -287,18 +287,13 @@ async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
 @emit_screenshot_after
 async def drag(
     source: str,
-    *,
-    target: str | None = None,
-    offset: tuple[float | int, float | int] | None = None,
+    target: str,
 ) -> str:
-    """Drag from a source element to a target element or by pixel offset.
-
-    Provide either ``target`` or ``offset``, not both.
+    """Drag from a source element to a target element.
 
     Args:
         source: Ref number from ``browse_page()`` for the drag start element.
-        target: Optional ref number for the drop destination.
-        offset: Optional ``(dx, dy)`` pixel offset from source center.
+        target: Ref number for the drop destination.
 
     Returns:
         Updated page snapshot string.
@@ -310,57 +305,32 @@ async def drag(
     if not clean_source:
         raise BrowserToolError("source must be a non-empty string", tool="drag")
 
-    has_target = target is not None
-    has_offset = offset is not None
-    if (not has_target and not has_offset) or (has_target and has_offset):
-        raise BrowserToolError("Provide either target selector or offset", tool="drag")
-
-    offset_tuple: tuple[float, float] | None = None
-    if offset is not None:
-        if isinstance(offset, tuple | list) and len(offset) == 2:
-            try:
-                offset_tuple = (float(offset[0]), float(offset[1]))
-            except (TypeError, ValueError) as exc:
-                raise BrowserToolError("offset must contain numeric values", tool="drag") from exc
-            if not all(math.isfinite(component) for component in offset_tuple):
-                raise BrowserToolError("offset values must be finite numbers", tool="drag")
-        else:
-            raise BrowserToolError("offset must be a length-2 tuple of numbers", tool="drag")
-
-    clean_target: str | None = None
-    if target is not None:
-        clean_target = target.strip()
-        if not clean_target:
-            raise BrowserToolError("target selector must be a non-empty string", tool="drag")
+    clean_target = target.strip()
+    if not clean_target:
+        raise BrowserToolError("target must be a non-empty string", tool="drag")
 
     browser, view = await get_active_view("drag")
 
     source_resolution = await _resolve_or_raise(view.frame, clean_source, tool_name="drag")
 
-    target_resolution: _LocatorResolution | None = None
-    if clean_target is not None:
-        target_resolution = await _resolve_or_raise(view.frame, clean_target, tool_name="drag")
+    target_resolution = await _resolve_or_raise(view.frame, clean_target, tool_name="drag")
 
     details: dict[str, Any] = {
         "source": {
             "selector": source_resolution.resolved_selector,
             "query": source_resolution.query,
-        }
-    }
-    if target_resolution is not None:
-        details["target"] = {
+        },
+        "target": {
             "selector": target_resolution.resolved_selector,
             "query": target_resolution.query,
-        }
-    if offset_tuple is not None:
-        details["offset"] = offset_tuple
+        },
+    }
 
     async def _perform_drag() -> None:
         await human_drag(
             view.frame,
             source_resolution.locator,
-            target_locator=target_resolution.locator if target_resolution else None,
-            offset=offset_tuple,
+            target_locator=target_resolution.locator,
         )
 
     try:

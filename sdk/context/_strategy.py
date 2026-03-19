@@ -1,5 +1,6 @@
 """Pluggable context management strategies."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -23,10 +24,11 @@ logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
 
 # Maximum chars per tool result in the serialized summarization input.
-# Normal page snapshots are ~4-8k; this cap only triggers for outliers
-# like huge terminal logs. Head + tail are kept so context and final
-# output are both visible to the summarizer.
-_TOOL_RESULT_CAP = 10_000
+# Tool results are aggressively capped because the assistant messages
+# already contain the distilled findings. In typical conversations,
+# tool outputs (page snapshots, bash output) are 96% of input chars
+# but carry little unique signal beyond what the assistant summarized.
+_TOOL_RESULT_CAP = 200
 
 
 # When serialized conversation exceeds this threshold, switch to chunked
@@ -36,6 +38,11 @@ _CHUNK_THRESHOLD = 20_000
 # Target size per chunk in characters. Each chunk gets its own summarizer
 # call, so this controls the input size per call.
 _CHUNK_TARGET_SIZE = 10_000
+
+# Maximum time (seconds) for a single summarizer LLM call. If the model
+# takes longer (e.g. runaway generation, contention), the call is cancelled
+# and compaction is skipped rather than blocking the agent indefinitely.
+_CALL_TIMEOUT = 120
 
 _SUMMARIZE_PROMPT = (
     "You are a summarizer. Condense the following conversation into a factual "
@@ -169,6 +176,12 @@ class SummarizeStrategy:
             summary, model_name = await self._summarize(
                 compactable, prior_summary,
             )
+        except TimeoutError:
+            logger.warning(
+                "SummarizeStrategy: compaction timed out after %ds, skipping",
+                _CALL_TIMEOUT,
+            )
+            return
         except Exception:
             logger.exception("SummarizeStrategy: LLM call failed, skipping compaction")
             return
@@ -265,14 +278,17 @@ class SummarizeStrategy:
             )
         user_content += conversation_text
 
-        response = await provider.chat(
-            model=model,
-            messages=[
-                {"role": "system", "content": _SUMMARIZE_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            think=False,
-            options=options,
+        response = await asyncio.wait_for(
+            provider.chat(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _SUMMARIZE_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+                think=False,
+                options=options,
+            ),
+            timeout=_CALL_TIMEOUT,
         )
         return response.message.content or "", model
 
@@ -395,12 +411,7 @@ def _serialize_messages(messages: list[dict]) -> str:
         elif role == "tool":
             tool_name = msg.get("tool_name", "unknown")
             if len(content) > _TOOL_RESULT_CAP:
-                half = _TOOL_RESULT_CAP // 2
-                content = (
-                    content[:half]
-                    + f"\n\n... [{len(content):,} chars, middle truncated] ...\n\n"
-                    + content[-half:]
-                )
+                content = content[:_TOOL_RESULT_CAP] + "..."
             entries.append(f"Tool ({tool_name}): {content}")
 
         elif role == "user":

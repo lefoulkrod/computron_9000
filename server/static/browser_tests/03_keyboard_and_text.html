@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test 3: Keyboard & Text - Browser Agent Tests</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .key-display {
+    display: inline-block;
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    margin: 2px;
+    min-width: 30px;
+    text-align: center;
+  }
+  .key-log {
+    margin-top: 8px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #666;
+    min-height: 24px;
+  }
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-box {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px 32px;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .modal-box h3 { margin-bottom: 12px; }
+  .tab-bar {
+    display: flex;
+    border-bottom: 2px solid #ddd;
+    margin-bottom: 16px;
+  }
+  .tab-bar button {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: -2px;
+  }
+  .tab-bar button.active {
+    color: #e94560;
+    border-bottom-color: #e94560;
+    font-weight: 600;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html">Dashboard</a>
+  <a href="01_clicks_and_forms.html">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html">2. Navigation</a>
+  <a href="03_keyboard_and_text.html" class="current">3. Keyboard</a>
+  <a href="04_advanced.html">4. Advanced</a>
+  <a href="05_games.html">5. Games</a>
+  <a href="06_captcha_and_drag.html">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Test 3: Keyboard & Text</h1>
+  <p>Tests <code>press_keys</code>, <code>fill_field</code> (contenteditable), <code>click</code> (tabs), and focus management.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> These tasks involve text input, keyboard interaction, and UI controls.
+  Some elements may require keyboard shortcuts or special keys to operate.
+</div>
+
+<div class="page-layout">
+  <div class="sidebar">
+    <div class="score-bar">
+      <div class="score-row">
+        <span class="score-label">Score</span>
+        <div class="progress-track"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <span class="score-value" id="page-score">0 / 7</span>
+      </div>
+      <span class="next-link"><a href="04_advanced.html">Next: Advanced &rarr;</a></span>
+    </div>
+    <ol class="task-list" id="task-list">
+      <li data-task="1"><span class="task-num">1</span><span class="task-text">Submit a search for "browser agent" using the search form below.</span><span class="status pending">PENDING</span></li>
+      <li data-task="2"><span class="task-num">2</span><span class="task-text">Close the modal dialog that appears after searching.</span><span class="status pending">PENDING</span></li>
+      <li data-task="3"><span class="task-num">3</span><span class="task-text">Switch to the "Notes" tab in the tab panel.</span><span class="status pending">PENDING</span></li>
+      <li data-task="4"><span class="task-num">4</span><span class="task-text">Enter some text in the editable notes area.</span><span class="status pending">PENDING</span></li>
+      <li data-task="5"><span class="task-num">5</span><span class="task-text">Enter a name in the Last Name field.</span><span class="status pending">PENDING</span></li>
+      <li data-task="6"><span class="task-num">6</span><span class="task-text">Click "Open Prompt" and accept the confirmation dialog.</span><span class="status pending">PENDING</span></li>
+      <li data-task="7"><span class="task-num">7</span><span class="task-text">Make the "Paste Target" field contain the exact text from the "Copy Source" field.</span><span class="status pending">PENDING</span></li>
+    </ol>
+  </div>
+  <div class="test-section">
+    <!-- ======== Search with Enter ======== -->
+    <div class="test-card">
+      <div class="test-card-header">1. Search (Enter Key)</div>
+      <div class="test-card-body">
+        <p style="margin-bottom:8px;">Type "browser agent" then press Enter.</p>
+        <form id="search-form" onsubmit="handleSearch(event)">
+          <div class="form-group" style="margin-bottom:0;">
+            <input type="search" id="search-input" name="q" placeholder="Search...">
+          </div>
+        </form>
+        <div class="key-log" id="search-result"></div>
+      </div>
+    </div>
+
+    <!-- ======== Modal (Escape Key) ======== -->
+    <div class="test-card">
+      <div class="test-card-header">2. Modal Dialog (Escape Key)</div>
+      <div class="test-card-body">
+        <p style="margin-bottom:8px;">A modal will appear after the search. Press Escape to close it.</p>
+        <button class="btn btn-outline" id="open-modal-btn" onclick="showModal()">Show Modal Manually</button>
+        <div class="key-log" id="modal-result"></div>
+      </div>
+    </div>
+
+    <!-- ======== Tab Panel ======== -->
+    <div class="test-card">
+      <div class="test-card-header">3-4. Tab Panel</div>
+      <div class="test-card-body">
+        <div class="tab-bar" id="tab-bar">
+          <button class="active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+          <button data-tab="notes" id="tab-notes" onclick="switchTab('notes')">Notes</button>
+          <button data-tab="settings" onclick="switchTab('settings')">Settings</button>
+        </div>
+        <div class="tab-panel active" id="panel-overview">
+          <p>This is the Overview panel. Click the "Notes" tab above to switch.</p>
+        </div>
+        <div class="tab-panel" id="panel-notes">
+          <p style="margin-bottom:8px;">Type something in the editable area below:</p>
+          <div contenteditable="true" id="notes-editor" role="textbox" aria-label="Notes editor"
+               style="min-height:60px;"></div>
+        </div>
+        <div class="tab-panel" id="panel-settings">
+          <p>Settings panel. Nothing to do here.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== Tab Focus (Tab Key) ======== -->
+    <div class="test-card">
+      <div class="test-card-header">5. Focus Navigation (Tab Key)</div>
+      <div class="test-card-body">
+        <p style="margin-bottom:8px;">Click on "First Name", then use Tab to move through the fields. Type a name in "Last Name".</p>
+        <div style="display:flex; gap:12px;">
+          <div class="form-group" style="flex:1;">
+            <label for="fname">First Name</label>
+            <input type="text" id="fname" name="fname" placeholder="First">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label for="mname">Middle Name</label>
+            <input type="text" id="mname" name="mname" placeholder="Middle">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label for="lname">Last Name</label>
+            <input type="text" id="lname" name="lname" placeholder="Last">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== Confirmation Prompt ======== -->
+    <div class="test-card">
+      <div class="test-card-header">6. Confirmation Prompt</div>
+      <div class="test-card-body">
+        <p style="margin-bottom:8px;">Click "Open Prompt" to show a confirmation dialog, then accept it.</p>
+        <button class="btn btn-primary" id="open-prompt-btn" onclick="showConfirmDialog()">Open Prompt</button>
+        <span id="prompt-result" style="margin-left:12px; font-weight:600;"></span>
+        <div id="confirm-dialog" style="display:none; margin-top:16px; padding:20px; background:#fff; border:2px solid #1a1a2e; border-radius:8px; max-width:360px;">
+          <p style="font-weight:600; margin-bottom:12px;">Do you confirm this action?</p>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-success" id="confirm-accept" onclick="acceptConfirm()">Accept</button>
+            <button class="btn btn-outline" id="confirm-cancel" onclick="cancelConfirm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== Copy/Paste ======== -->
+    <div class="test-card">
+      <div class="test-card-header">7. Copy & Paste (Ctrl+A, Ctrl+C, Ctrl+V)</div>
+      <div class="test-card-body">
+        <p style="margin-bottom:8px;">Select all text in the source field, copy it, and paste it into the target.</p>
+        <div class="form-group">
+          <label for="copy-source">Copy Source</label>
+          <input type="text" id="copy-source" value="transfer-this-text-2847" readonly>
+        </div>
+        <div class="form-group">
+          <label for="paste-target">Paste Target</label>
+          <input type="text" id="paste-target" placeholder="Paste here...">
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== Event Log ======== -->
+    <div class="test-card">
+      <div class="test-card-header">Event Log</div>
+      <div class="test-card-body">
+        <div class="event-log" id="event-log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Overlay ======== -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <h3>Search Complete</h3>
+    <p>Press <kbd>Escape</kbd> to close this dialog.</p>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  var T = new TaskTracker("keyboard_and_text", 7);
+
+  // Task 1: Search + Enter
+  function handleSearch(e) {
+    e.preventDefault();
+    var val = document.getElementById("search-input").value.trim().toLowerCase();
+    if (val.indexOf("browser agent") !== -1) {
+      T.pass(1);
+      document.getElementById("search-result").textContent = 'Search submitted: "' + val + '"';
+      T.log("Search submitted: " + val);
+      // Show modal for task 2
+      showModal();
+    }
+  }
+
+  // Task 2: Escape to close modal
+  function showModal() {
+    document.getElementById("modal-overlay").classList.add("visible");
+  }
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && document.getElementById("modal-overlay").classList.contains("visible")) {
+      document.getElementById("modal-overlay").classList.remove("visible");
+      T.pass(2);
+      document.getElementById("modal-result").textContent = "Modal closed with Escape.";
+      T.log("Modal closed with Escape");
+    }
+  });
+
+  // Task 3: Tab switch
+  function switchTab(name) {
+    document.querySelectorAll(".tab-bar button").forEach(function(b) { b.classList.remove("active"); });
+    document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+    document.querySelector('[data-tab="' + name + '"]').classList.add("active");
+    document.getElementById("panel-" + name).classList.add("active");
+    if (name === "notes") {
+      T.pass(3);
+      T.log("Switched to Notes tab");
+    }
+  }
+
+  // Task 4: Contenteditable
+  document.getElementById("notes-editor").addEventListener("input", function() {
+    if (this.textContent.trim().length > 0) {
+      T.pass(4);
+      T.log("Typed in contenteditable notes");
+    }
+  });
+
+  // Task 5: Tab navigation + type in last name
+  document.getElementById("lname").addEventListener("input", function() {
+    if (this.value.trim().length > 0) {
+      T.pass(5);
+      T.log("Typed in Last Name field: " + this.value);
+    }
+  });
+
+  // Task 6: Confirmation prompt (in-page dialog)
+  function showConfirmDialog() {
+    document.getElementById("confirm-dialog").style.display = "block";
+    T.log("Confirmation dialog opened");
+  }
+  function acceptConfirm() {
+    document.getElementById("confirm-dialog").style.display = "none";
+    T.pass(6);
+    document.getElementById("prompt-result").textContent = "Confirmed!";
+    document.getElementById("prompt-result").style.color = "#27ae60";
+    T.log("Confirmation accepted");
+  }
+  function cancelConfirm() {
+    document.getElementById("confirm-dialog").style.display = "none";
+    document.getElementById("prompt-result").textContent = "Cancelled.";
+    document.getElementById("prompt-result").style.color = "#e94560";
+    T.log("Confirmation cancelled");
+  }
+
+  // Task 7: Copy/paste
+  document.getElementById("paste-target").addEventListener("input", function() {
+    if (this.value === "transfer-this-text-2847") {
+      T.pass(7);
+      T.log("Text pasted correctly");
+    }
+  });
+</script>
+
+</body>
+</html>

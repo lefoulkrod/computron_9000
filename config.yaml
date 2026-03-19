@@ -19,7 +19,7 @@ tools:
       timeout: 6000
   browser:
     channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
-    headless: true  # true = no GUI, false = visible browser window
+    headless: false  # true = no GUI, false = visible browser window
     human:
       pointer:
         hover_min_ms: 90
@@ -65,7 +65,8 @@ summary:
   model: mistral:7b
   think: false
   options:
-    num_ctx: 60000
+    num_ctx: 8192
+    num_predict: 2048
     temperature: 0.3
     top_k: 20
 

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser Agent Test Suite</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html" class="current">Dashboard</a>
+  <a href="01_clicks_and_forms.html">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html">2. Navigation</a>
+  <a href="03_keyboard_and_text.html">3. Keyboard</a>
+  <a href="04_advanced.html">4. Advanced</a>
+  <a href="05_games.html">5. Games</a>
+  <a href="06_captcha_and_drag.html">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Browser Agent Test Suite</h1>
+  <p>A series of pages that test how well a browser agent can use each tool to navigate and interact with web pages.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> Start with <strong>Test 1: Clicks & Forms</strong> and work through each page in order.
+  Each page contains numbered tasks in a sidebar. Complete every task on a page, then follow the
+  link to the next page. Return here at the end to see your overall score.
+</div>
+
+<div class="test-section">
+  <div class="overall-score">
+    <div>Overall Score</div>
+    <div class="big-score" id="overall-score">— / —</div>
+    <div class="pct" id="overall-pct"></div>
+  </div>
+
+  <div class="score-grid" id="score-grid"></div>
+
+  <div style="text-align:center; margin:20px 0;">
+    <button class="btn btn-outline" onclick="BT.resetScores(); location.reload();">Reset All Scores</button>
+    <a href="01_clicks_and_forms.html" class="btn btn-primary" style="text-decoration:none;">Start Test Suite</a>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  (function() {
+    var grid = document.getElementById("score-grid");
+    var scores = BT.getScores();
+    var totals = BT.getTotals();
+
+    for (var i = 0; i < BT.PAGES.length; i++) {
+      var p = BT.PAGES[i];
+      var s = scores[p.id];
+      var passed = s ? s.passed : 0;
+      var cls = "zero";
+      if (s && s.passed === p.total) cls = "perfect";
+      else if (s && s.passed > 0) cls = "partial";
+
+      var card = document.createElement("div");
+      card.className = "score-card";
+      card.innerHTML =
+        '<h3>Test ' + (i + 1) + ': ' + p.name + '</h3>' +
+        '<div class="card-score ' + cls + '">' + passed + ' / ' + p.total + '</div>' +
+        '<div class="card-link"><a href="' + p.href + '">Go to test &rarr;</a></div>';
+      grid.appendChild(card);
+    }
+
+    document.getElementById("overall-score").textContent = totals.passed + " / " + totals.total;
+    if (totals.total > 0) {
+      var pct = Math.round(totals.passed / totals.total * 100);
+      document.getElementById("overall-pct").textContent = pct + "%";
+    }
+  })();
+</script>
+
+</body>
+</html>

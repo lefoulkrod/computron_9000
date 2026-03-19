@@ -19,6 +19,7 @@ from config import load_config
 from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
+from tools.browser.events import emit_screenshot_after
 
 logger = logging.getLogger(__name__)
 
@@ -111,16 +112,20 @@ async def inspect_page(
     return answer
 
 
+@emit_screenshot_after
 async def perform_visual_action(task: str) -> str:
     """Ask a vision model to decide and execute the next GUI action.
 
-    Captures a viewport screenshot, sends it with the task to the UI-TARS
-    action prediction model, and executes the predicted action (click, type,
-    scroll, drag, etc.) using human-like browser interactions.
+    Only the current viewport is screenshotted — the target element must
+    be visible on screen. Scroll it into view first if necessary.
+
+    Supported actions (chosen automatically by the model): click,
+    double-click, right-click, drag, type text, hotkey, scroll, and wait.
 
     Args:
         task: Natural-language description of what to do, e.g.
-            ``"Click the Login button"`` or ``"Type hello into the search box"``.
+            ``"Click the Login button"``, ``"Drag the slider to the right"``,
+            or ``"Type hello into the search box"``.
 
     Returns:
         Updated page snapshot string after executing the action.

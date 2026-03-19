@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test 6: Captcha & Image Drag - Browser Agent Tests</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* --- Rotation Captcha --- */
+  .rotate-container {
+    text-align: center;
+    margin: 16px 0;
+  }
+  .rotate-frame {
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 16px;
+    border: 3px solid #ddd;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+  }
+  .rotate-img {
+    transition: transform 0.3s;
+  }
+  .rotate-controls { display: flex; gap: 12px; justify-content: center; }
+  .rotate-hint {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: #666;
+    min-height: 24px;
+  }
+
+  /* --- Puzzle Piece --- */
+  .puzzle-area {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    background: #fafafa;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  .puzzle-slot {
+    position: absolute;
+    border: 3px dashed #999;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: #999;
+    background: rgba(0,0,0,0.03);
+    cursor: pointer;
+  }
+  .puzzle-slot.filled { border-style: solid; border-color: #27ae60; background: rgba(39,174,96,0.1); }
+  .puzzle-piece {
+    position: absolute;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    border: 3px solid;
+    z-index: 5;
+  }
+  .puzzle-piece:active { cursor: grabbing; }
+
+  /* --- Image Sort --- */
+  .sort-lane {
+    display: flex;
+    gap: 8px;
+    min-height: 100px;
+    padding: 12px;
+    background: #fafafa;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .sort-lane.target { border-style: dashed; background: #f8f8ff; }
+  .sort-item {
+    width: 90px;
+    height: 90px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    user-select: none;
+    border: 2px solid #999;
+    background: #fff;
+  }
+  .sort-item .sort-icon { font-size: 2rem; margin-bottom: 4px; }
+  .sort-item:active { cursor: grabbing; }
+
+  /* --- Slider Captcha --- */
+  .slider-captcha {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    margin: 16px auto;
+  }
+  .slider-track-captcha {
+    height: 44px;
+    background: #eee;
+    border-radius: 22px;
+    border: 2px solid #ddd;
+    position: relative;
+    overflow: hidden;
+  }
+  .slider-fill-captcha {
+    height: 100%;
+    background: #27ae60;
+    border-radius: 22px;
+    width: 0;
+    transition: width 0.1s;
+  }
+  .slider-thumb {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    width: 40px;
+    height: 40px;
+    background: #fff;
+    border: 2px solid #999;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    z-index: 2;
+  }
+  .slider-thumb:active { cursor: grabbing; }
+  .slider-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #999;
+    font-weight: 600;
+    font-size: 0.85rem;
+    pointer-events: none;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html">Dashboard</a>
+  <a href="01_clicks_and_forms.html">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html">2. Navigation</a>
+  <a href="03_keyboard_and_text.html">3. Keyboard</a>
+  <a href="04_advanced.html">4. Advanced</a>
+  <a href="05_games.html">5. Games</a>
+  <a href="06_captcha_and_drag.html" class="current">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Test 6: Captcha & Image Drag</h1>
+  <p>Tests visual captcha solving, puzzle piece dragging, image sorting, and slider captcha.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> These challenges mimic real captcha and image interaction scenarios.
+  Rotate images, drag puzzle pieces, slide to verify, sort items, and identify patterns.
+</div>
+
+<div class="page-layout">
+  <div class="sidebar">
+    <div class="score-bar">
+      <div class="score-row">
+        <span class="score-label">Score</span>
+        <div class="progress-track"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <span class="score-value" id="page-score">0 / 5</span>
+      </div>
+      <span class="next-link"><a href="index.html">Back to Dashboard &rarr;</a></span>
+    </div>
+    <ol class="task-list" id="task-list">
+      <li data-task="1"><span class="task-num">1</span><span class="task-text">Rotation Captcha: Make the arrow point <strong>UP</strong>.</span><span class="status pending">PENDING</span></li>
+      <li data-task="2"><span class="task-num">2</span><span class="task-text">Puzzle Piece: Place each colored piece into its matching outlined slot.</span><span class="status pending">PENDING</span></li>
+      <li data-task="3"><span class="task-num">3</span><span class="task-text">Slide to Verify: Complete the slider verification.</span><span class="status pending">PENDING</span></li>
+      <li data-task="4"><span class="task-num">4</span><span class="task-text">Image Sort: Categorize each item into the correct zone (Animals or Food).</span><span class="status pending">PENDING</span></li>
+      <li data-task="5"><span class="task-num">5</span><span class="task-text">Select all cells that contain a <strong>star</strong> (&#9733;) and verify your selection.</span><span class="status pending">PENDING</span></li>
+    </ol>
+  </div>
+  <div class="test-section">
+
+  <!-- ======== Rotation Captcha ======== -->
+  <div class="test-card">
+    <div class="test-card-header">1. Rotation Captcha</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Rotate the arrow until it points straight <strong>up</strong>.</p>
+      <div class="rotate-container">
+        <div class="rotate-frame">
+          <svg class="rotate-img" id="rotate-arrow" width="120" height="120" viewBox="0 0 120 120">
+            <polygon points="60,10 85,70 70,70 70,110 50,110 50,70 35,70" fill="#e94560" stroke="#c0392b" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="rotate-controls">
+          <button class="btn btn-secondary" id="rotate-ccw">&#8634; Rotate Left</button>
+          <button class="btn btn-secondary" id="rotate-cw">Rotate Right &#8635;</button>
+        </div>
+        <div class="rotate-hint" id="rotate-hint">Current rotation: <span id="rotate-deg">—</span>&deg;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Puzzle Piece Drag ======== -->
+  <div class="test-card">
+    <div class="test-card-header">2. Puzzle Piece Drag</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Drag each colored piece (left side) into its matching outlined slot (right side).</p>
+      <div class="puzzle-area" id="puzzle-area">
+        <!-- Pieces on left -->
+        <button class="puzzle-piece" id="piece-red" data-piece="red" aria-label="Red piece"
+             style="left:20px; top:20px; width:70px; height:70px; background:#e94560; border-color:#c0392b; color:#fff;">Red</button>
+        <button class="puzzle-piece" id="piece-blue" data-piece="blue" aria-label="Blue piece"
+             style="left:20px; top:120px; width:70px; height:70px; background:#3498db; border-color:#2980b9; color:#fff;">Blue</button>
+        <button class="puzzle-piece" id="piece-green" data-piece="green" aria-label="Green piece"
+             style="left:20px; top:220px; width:70px; height:70px; background:#27ae60; border-color:#1e8449; color:#fff;">Green</button>
+
+        <!-- Slots on right -->
+        <button class="puzzle-slot" id="slot-red" data-slot="red" aria-label="Red slot"
+             style="right:20px; top:20px; width:80px; height:80px; color:#c0392b; border-color:#c0392b;">Red slot</button>
+        <button class="puzzle-slot" id="slot-blue" data-slot="blue" aria-label="Blue slot"
+             style="right:20px; top:120px; width:80px; height:80px; color:#2980b9; border-color:#2980b9;">Blue slot</button>
+        <button class="puzzle-slot" id="slot-green" data-slot="green" aria-label="Green slot"
+             style="right:160px; top:170px; width:80px; height:80px; color:#1e8449; border-color:#1e8449;">Green slot</button>
+      </div>
+      <div style="text-align:center;">
+        <span id="puzzle-feedback" style="font-weight:600; color:#666;">Pieces placed: 0 / 3</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Slider Captcha ======== -->
+  <div class="test-card">
+    <div class="test-card-header">3. Slide to Verify</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Drag the slider thumb from left to right to verify.</p>
+      <div class="slider-captcha" id="slider-captcha">
+        <div class="slider-track-captcha">
+          <div class="slider-fill-captcha" id="slider-fill"></div>
+          <div class="slider-label" id="slider-label">Slide to verify &rarr;</div>
+          <button class="slider-thumb" id="slider-thumb" aria-label="Slider thumb">&#8250;</button>
+        </div>
+      </div>
+      <div style="text-align:center;">
+        <span id="slider-feedback" style="font-weight:600; color:#666;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Image Sort (Categorize) ======== -->
+  <div class="test-card">
+    <div class="test-card-header">4. Image Sort: Categorize</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Drag each item into the correct category zone.</p>
+
+      <div style="margin-bottom:8px; font-weight:600; color:#555;">Items:</div>
+      <div class="sort-lane" id="source-lane">
+        <button class="sort-item" data-category="animal" data-name="cat" aria-label="Cat (animal)">
+          <span class="sort-icon">&#128049;</span>Cat
+        </button>
+        <button class="sort-item" data-category="food" data-name="pizza" aria-label="Pizza (food)">
+          <span class="sort-icon">&#127829;</span>Pizza
+        </button>
+        <button class="sort-item" data-category="animal" data-name="dog" aria-label="Dog (animal)">
+          <span class="sort-icon">&#128054;</span>Dog
+        </button>
+        <button class="sort-item" data-category="food" data-name="apple" aria-label="Apple (food)">
+          <span class="sort-icon">&#127822;</span>Apple
+        </button>
+        <button class="sort-item" data-category="animal" data-name="bird" aria-label="Bird (animal)">
+          <span class="sort-icon">&#128038;</span>Bird
+        </button>
+        <button class="sort-item" data-category="food" data-name="cake" aria-label="Cake (food)">
+          <span class="sort-icon">&#127856;</span>Cake
+        </button>
+      </div>
+
+      <div style="display:flex; gap:16px; margin-top:12px;">
+        <div style="flex:1;">
+          <div style="font-weight:600; color:#555; margin-bottom:4px;">Animals</div>
+          <div class="sort-lane target" id="animals-lane" data-accept="animal" aria-label="Animals drop zone" style="cursor:pointer;">Drop animals here</div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:600; color:#555; margin-bottom:4px;">Food</div>
+          <div class="sort-lane target" id="food-lane" data-accept="food" aria-label="Food drop zone" style="cursor:pointer;">Drop food here</div>
+        </div>
+      </div>
+      <div style="text-align:center; margin-top:8px;">
+        <span id="sort-feedback" style="font-weight:600; color:#666;">Correctly sorted: 0 / 6</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Select All Stars ======== -->
+  <div class="test-card">
+    <div class="test-card-header">5. Select All: Find the Stars</div>
+    <div class="test-card-body">
+      <p style="margin-bottom:8px;">Click all cells that contain a <strong>star</strong> (&#9733;). Then click Verify.</p>
+      <div style="display:grid; grid-template-columns:repeat(4,80px); gap:8px; margin:16px auto; width:fit-content;" id="star-grid"></div>
+      <div style="text-align:center; margin-top:12px;">
+        <button class="btn btn-primary" id="star-verify">Verify</button>
+        <span id="star-feedback" style="margin-left:12px; font-weight:600; color:#666;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Event Log ======== -->
+  <div class="test-card">
+    <div class="test-card-header">Event Log</div>
+    <div class="test-card-body">
+      <div class="event-log" id="event-log"></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// Everything in an IIFE so T is not globally accessible via execute_javascript
+(function() {
+  var T = new TaskTracker("captcha_and_drag", 5);
+
+  // Helper: reject synthetic events
+  function trusted(e) { return e && e.isTrusted; }
+
+  // ============================================================
+  // ROTATION CAPTCHA
+  // ============================================================
+  var currentRotation;
+  var options = [90, 180, 270];
+  currentRotation = options[Math.floor(Math.random() * options.length)];
+  var arrow = document.getElementById("rotate-arrow");
+  arrow.style.transform = "rotate(" + currentRotation + "deg)";
+  document.getElementById("rotate-deg").textContent = currentRotation;
+
+  function rotateArrow(deg) {
+    currentRotation = (currentRotation + deg + 360) % 360;
+    arrow.style.transform = "rotate(" + currentRotation + "deg)";
+    document.getElementById("rotate-deg").textContent = currentRotation;
+    T.log("Rotated arrow to " + currentRotation + " deg");
+    if (currentRotation === 0) {
+      T.pass(1);
+      document.getElementById("rotate-hint").innerHTML = '<span style="color:#27ae60; font-weight:600;">Arrow is pointing up. Correct!</span>';
+    }
+  }
+
+  document.getElementById("rotate-ccw").addEventListener("click", function(e) {
+    if (!trusted(e)) return;
+    rotateArrow(-90);
+  });
+  document.getElementById("rotate-cw").addEventListener("click", function(e) {
+    if (!trusted(e)) return;
+    rotateArrow(90);
+  });
+
+  // ============================================================
+  // PUZZLE PIECE DRAG
+  // ============================================================
+  (function() {
+    var area = document.getElementById("puzzle-area");
+    var pieces = area.querySelectorAll(".puzzle-piece");
+    var slots = area.querySelectorAll(".puzzle-slot");
+    var dragging = null;
+    var filledCount = 0;
+
+    pieces.forEach(function(p) {
+      p.addEventListener("mousedown", function(e) {
+        if (!trusted(e)) return;
+        dragging = p;
+        p.style.zIndex = 10;
+        e.preventDefault();
+      });
+    });
+
+    document.addEventListener("mousemove", function(e) {
+      if (!dragging || !trusted(e)) return;
+      var rect = area.getBoundingClientRect();
+      var x = e.clientX - rect.left - 35;
+      var y = e.clientY - rect.top - 35;
+      dragging.style.left = Math.max(0, Math.min(x, rect.width - 70)) + "px";
+      dragging.style.top = Math.max(0, Math.min(y, rect.height - 70)) + "px";
+    });
+
+    document.addEventListener("mouseup", function(e) {
+      if (!dragging || !trusted(e)) return;
+      dragging.style.zIndex = 5;
+      var dRect = dragging.getBoundingClientRect();
+      var cx = dRect.left + dRect.width / 2;
+      var cy = dRect.top + dRect.height / 2;
+
+      slots.forEach(function(slot) {
+        if (slot.classList.contains("filled")) return;
+        var sRect = slot.getBoundingClientRect();
+        if (cx >= sRect.left && cx <= sRect.right && cy >= sRect.top && cy <= sRect.bottom) {
+          if (dragging.dataset.piece === slot.dataset.slot) {
+            slot.classList.add("filled");
+            slot.textContent = dragging.dataset.piece + " placed!";
+            dragging.style.display = "none";
+            filledCount++;
+            T.log("Puzzle: " + dragging.dataset.piece + " placed correctly");
+            document.getElementById("puzzle-feedback").textContent = "Pieces placed: " + filledCount + " / 3";
+            if (filledCount === 3) {
+              T.pass(2);
+              document.getElementById("puzzle-feedback").style.color = "#27ae60";
+            }
+          } else {
+            T.log("Puzzle: " + dragging.dataset.piece + " doesn't fit " + slot.dataset.slot + " slot");
+          }
+        }
+      });
+      dragging = null;
+    });
+  })();
+
+  // ============================================================
+  // SLIDER CAPTCHA
+  // ============================================================
+  (function() {
+    var thumb = document.getElementById("slider-thumb");
+    var fill = document.getElementById("slider-fill");
+    var track = thumb.parentElement;
+    var sliding = false;
+    var done = false;
+
+    thumb.addEventListener("mousedown", function(e) {
+      if (done || !trusted(e)) return;
+      sliding = true;
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", function(e) {
+      if (!sliding || done || !trusted(e)) return;
+      var rect = track.getBoundingClientRect();
+      var x = e.clientX - rect.left;
+      var pct = Math.max(0, Math.min(x / rect.width, 1));
+      thumb.style.left = (pct * (rect.width - 44)) + "px";
+      fill.style.width = (pct * 100) + "%";
+
+      if (pct > 0.95) {
+        done = true;
+        sliding = false;
+        thumb.style.left = (rect.width - 44) + "px";
+        fill.style.width = "100%";
+        document.getElementById("slider-label").textContent = "Verified!";
+        document.getElementById("slider-label").style.color = "#fff";
+        document.getElementById("slider-feedback").textContent = "Slider verified!";
+        document.getElementById("slider-feedback").style.color = "#27ae60";
+        T.pass(3);
+        T.log("Slider captcha verified");
+      }
+    });
+
+    document.addEventListener("mouseup", function() {
+      if (!sliding) return;
+      sliding = false;
+      if (!done) {
+        thumb.style.left = "0";
+        fill.style.width = "0";
+      }
+    });
+  })();
+
+  // ============================================================
+  // IMAGE SORT (CATEGORIZE)
+  // ============================================================
+  (function() {
+    var source = document.getElementById("source-lane");
+    var animalsLane = document.getElementById("animals-lane");
+    var foodLane = document.getElementById("food-lane");
+    var correctCount = 0;
+    var dragging = null;
+
+    function makeDraggable(item) {
+      item.addEventListener("mousedown", function(e) {
+        if (!trusted(e)) return;
+        dragging = item;
+        item.style.opacity = "0.6";
+        e.preventDefault();
+      });
+    }
+
+    source.querySelectorAll(".sort-item").forEach(makeDraggable);
+
+    document.addEventListener("mouseup", function(e) {
+      if (!dragging || !trusted(e)) return;
+      dragging.style.opacity = "1";
+
+      var lanes = [animalsLane, foodLane];
+      for (var i = 0; i < lanes.length; i++) {
+        var lane = lanes[i];
+        var rect = lane.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          var accept = lane.dataset.accept;
+          var cat = dragging.dataset.category;
+          lane.appendChild(dragging);
+          if (cat === accept) {
+            correctCount++;
+            T.log("Sort: " + dragging.dataset.name + " -> " + accept + " (correct)");
+          } else {
+            T.log("Sort: " + dragging.dataset.name + " -> " + accept + " (wrong)");
+          }
+          document.getElementById("sort-feedback").textContent = "Correctly sorted: " + correctCount + " / 6";
+          if (correctCount === 6) {
+            T.pass(4);
+            document.getElementById("sort-feedback").style.color = "#27ae60";
+          }
+          break;
+        }
+      }
+      dragging = null;
+    });
+  })();
+
+  // ============================================================
+  // SELECT ALL STARS
+  // ============================================================
+  (function() {
+    var grid = document.getElementById("star-grid");
+    var symbols = [
+      { icon: "\u2733", hasStar: false },
+      { icon: "\u2605", hasStar: true },
+      { icon: "\u2666", hasStar: false },
+      { icon: "\u2605", hasStar: true },
+      { icon: "\u2665", hasStar: false },
+      { icon: "\u2663", hasStar: false },
+      { icon: "\u2605", hasStar: true },
+      { icon: "\u2660", hasStar: false },
+      { icon: "\u2666", hasStar: false },
+      { icon: "\u2605", hasStar: true },
+      { icon: "\u2665", hasStar: false },
+      { icon: "\u2733", hasStar: false }
+    ];
+
+    for (var i = 0; i < symbols.length; i++) {
+      var cell = document.createElement("div");
+      cell.style.width = "80px";
+      cell.style.height = "80px";
+      cell.style.borderRadius = "8px";
+      cell.style.border = "2px solid #ddd";
+      cell.style.display = "flex";
+      cell.style.alignItems = "center";
+      cell.style.justifyContent = "center";
+      cell.style.fontSize = "2.5rem";
+      cell.style.cursor = "pointer";
+      cell.style.background = "#fff";
+      cell.style.transition = "border-color 0.2s, background 0.2s";
+      cell.style.userSelect = "none";
+      cell.textContent = symbols[i].icon;
+      cell.dataset.hasStar = symbols[i].hasStar;
+      cell.dataset.selected = "false";
+      cell.addEventListener("click", function(e) {
+        if (!trusted(e)) return;
+        if (this.dataset.selected === "false") {
+          this.dataset.selected = "true";
+          this.style.borderColor = "#e94560";
+          this.style.background = "#fdf0ef";
+        } else {
+          this.dataset.selected = "false";
+          this.style.borderColor = "#ddd";
+          this.style.background = "#fff";
+        }
+      });
+      grid.appendChild(cell);
+    }
+
+    document.getElementById("star-verify").addEventListener("click", function(e) {
+      if (!trusted(e)) return;
+      var cells = grid.children;
+      var allCorrect = true;
+      for (var i = 0; i < cells.length; i++) {
+        var shouldSelect = cells[i].dataset.hasStar === "true";
+        var isSelected = cells[i].dataset.selected === "true";
+        if (shouldSelect !== isSelected) {
+          allCorrect = false;
+          break;
+        }
+      }
+      if (allCorrect) {
+        T.pass(5);
+        document.getElementById("star-feedback").textContent = "Correct! All stars found.";
+        document.getElementById("star-feedback").style.color = "#27ae60";
+        T.log("Star selection: correct");
+      } else {
+        document.getElementById("star-feedback").textContent = "Incorrect. Try again.";
+        document.getElementById("star-feedback").style.color = "#e94560";
+        T.log("Star selection: incorrect");
+      }
+    });
+  })();
+
+  // ============================================================
+  // COMPLETE BUTTON
+  // ============================================================
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test 1: Clicks & Forms - Browser Agent Tests</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="brand">Browser Agent Tests</span>
+  <a href="index.html">Dashboard</a>
+  <a href="01_clicks_and_forms.html" class="current">1. Clicks & Forms</a>
+  <a href="02_navigation_and_scroll.html">2. Navigation</a>
+  <a href="03_keyboard_and_text.html">3. Keyboard</a>
+  <a href="04_advanced.html">4. Advanced</a>
+  <a href="05_games.html">5. Games</a>
+  <a href="06_captcha_and_drag.html">6. Captcha</a>
+</nav>
+
+<div class="page-header">
+  <h1>Test 1: Clicks & Forms</h1>
+  <p>Tests <code>click</code>, <code>fill_field</code>, and <code>select_option</code>.</p>
+</div>
+
+<div class="instructions">
+  <strong>AGENT:</strong> Complete each numbered task in the sidebar. Each task will automatically
+  mark as PASS when completed correctly.
+</div>
+
+<div class="page-layout">
+  <div class="sidebar">
+    <div class="score-bar">
+      <div class="score-row">
+        <span class="score-label">Score</span>
+        <div class="progress-track"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <span class="score-value" id="page-score">0 / 10</span>
+      </div>
+      <span class="next-link"><a href="02_navigation_and_scroll.html">Next: Navigation &rarr;</a></span>
+    </div>
+
+    <ol class="task-list" id="task-list">
+      <li data-task="1"><span class="task-num">1</span><span class="task-text">Click the "Start Test" button below.</span><span class="status pending">PENDING</span></li>
+      <li data-task="2"><span class="task-num">2</span><span class="task-text">Click the "Confirm" button (not the "Cancel" button).</span><span class="status pending">PENDING</span></li>
+      <li data-task="3"><span class="task-num">3</span><span class="task-text">Enter "Jane Doe" in the Full Name field.</span><span class="status pending">PENDING</span></li>
+      <li data-task="4"><span class="task-num">4</span><span class="task-text">Enter "jane@example.com" in the Email field.</span><span class="status pending">PENDING</span></li>
+      <li data-task="5"><span class="task-num">5</span><span class="task-text">Set the Department to "Engineering".</span><span class="status pending">PENDING</span></li>
+      <li data-task="6"><span class="task-num">6</span><span class="task-text">Check the "I agree to the terms" checkbox.</span><span class="status pending">PENDING</span></li>
+      <li data-task="7"><span class="task-num">7</span><span class="task-text">Select the "Premium" plan.</span><span class="status pending">PENDING</span></li>
+      <li data-task="8"><span class="task-num">8</span><span class="task-text">Enter "Looking forward to getting started." in the Notes field.</span><span class="status pending">PENDING</span></li>
+      <li data-task="9"><span class="task-num">9</span><span class="task-text">Submit the registration form.</span><span class="status pending">PENDING</span></li>
+      <li data-task="10"><span class="task-num">10</span><span class="task-text">Click "Edit" for Alice Chen in the user table.</span><span class="status pending">PENDING</span></li>
+    </ol>
+  </div>
+
+  <div class="test-section">
+    <!-- ======== SECTION: Buttons ======== -->
+    <div class="test-card">
+      <div class="test-card-header">1-2. Buttons</div>
+      <div class="test-card-body">
+        <p style="margin-bottom:12px;">Click the correct buttons as instructed above.</p>
+        <button class="btn btn-primary" id="start-btn" onclick="T.pass(1); T.log('Clicked: Start Test')">Start Test</button>
+        <button class="btn btn-outline" id="cancel-btn" onclick="T.log('Clicked: Cancel (wrong button)')">Cancel</button>
+        <button class="btn btn-success" id="confirm-btn" onclick="T.pass(2); T.log('Clicked: Confirm')">Confirm</button>
+        <button class="btn btn-secondary" id="reset-btn" onclick="T.log('Clicked: Reset')">Reset</button>
+      </div>
+    </div>
+
+    <!-- ======== SECTION: Form ======== -->
+    <div class="test-card">
+      <div class="test-card-header">3-9. Registration Form</div>
+      <div class="test-card-body">
+        <form id="test-form" onsubmit="handleSubmit(event)">
+          <div class="form-group">
+            <label for="full-name">Full Name</label>
+            <input type="text" id="full-name" name="full_name" placeholder="Enter full name">
+          </div>
+
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" placeholder="Enter email address">
+          </div>
+
+          <div class="form-group">
+            <label for="department">Department</label>
+            <select id="department" name="department">
+              <option value="">-- Select department --</option>
+              <option value="sales">Sales</option>
+              <option value="engineering">Engineering</option>
+              <option value="marketing">Marketing</option>
+              <option value="support">Support</option>
+              <option value="hr">Human Resources</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Agreement</label>
+            <div class="inline-options">
+              <label><input type="checkbox" id="agree-terms" name="agree"> I agree to the terms</label>
+              <label><input type="checkbox" id="agree-newsletter" name="newsletter"> Subscribe to newsletter</label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Plan</label>
+            <div class="inline-options">
+              <label><input type="radio" name="plan" id="plan-free" value="free"> Free</label>
+              <label><input type="radio" name="plan" id="plan-basic" value="basic"> Basic</label>
+              <label><input type="radio" name="plan" id="plan-premium" value="premium"> Premium</label>
+              <label><input type="radio" name="plan" id="plan-enterprise" value="enterprise"> Enterprise</label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" placeholder="Enter any notes..."></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submit-btn">Submit</button>
+          <span id="form-result" style="margin-left:12px; font-weight:600;"></span>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======== SECTION: Table ======== -->
+    <div class="test-card">
+      <div class="test-card-header">10. User Table</div>
+      <div class="test-card-body">
+        <table class="data-table" id="user-table">
+          <thead>
+            <tr><th>Name</th><th>Role</th><th>Department</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Bob Martinez</td><td>Manager</td><td>Sales</td>
+              <td><button class="btn btn-outline" style="padding:4px 12px; font-size:0.8rem;"
+                          onclick="T.log('Edit: Bob Martinez')">Edit</button></td>
+            </tr>
+            <tr>
+              <td>Alice Chen</td><td>Engineer</td><td>Engineering</td>
+              <td><button class="btn btn-outline" style="padding:4px 12px; font-size:0.8rem;"
+                          id="edit-alice" onclick="T.pass(10); T.log('Edit: Alice Chen')">Edit</button></td>
+            </tr>
+            <tr>
+              <td>Carlos Rivera</td><td>Designer</td><td>Marketing</td>
+              <td><button class="btn btn-outline" style="padding:4px 12px; font-size:0.8rem;"
+                          onclick="T.log('Edit: Carlos Rivera')">Edit</button></td>
+            </tr>
+            <tr>
+              <td>Diana Patel</td><td>Analyst</td><td>Support</td>
+              <td><button class="btn btn-outline" style="padding:4px 12px; font-size:0.8rem;"
+                          onclick="T.log('Edit: Diana Patel')">Edit</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ======== Event Log ======== -->
+    <div class="test-card">
+      <div class="test-card-header">Event Log</div>
+      <div class="test-card-body">
+        <div class="event-log" id="event-log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+  var T = new TaskTracker("clicks_and_forms", 10);
+
+  // Form field watchers
+  document.getElementById("full-name").addEventListener("input", function() {
+    if (this.value.trim().toLowerCase() === "jane doe") T.pass(3);
+  });
+  document.getElementById("email").addEventListener("input", function() {
+    if (this.value.trim().toLowerCase() === "jane@example.com") T.pass(4);
+  });
+  document.getElementById("department").addEventListener("change", function() {
+    if (this.value === "engineering") T.pass(5);
+  });
+  document.getElementById("agree-terms").addEventListener("change", function() {
+    if (this.checked) T.pass(6);
+  });
+  document.getElementById("plan-premium").addEventListener("change", function() {
+    if (this.checked) T.pass(7);
+  });
+  document.getElementById("notes").addEventListener("input", function() {
+    if (this.value.trim().length > 10) T.pass(8);
+  });
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    T.pass(9);
+    T.log("Form submitted");
+    document.getElementById("form-result").textContent = "Submitted!";
+    document.getElementById("form-result").style.color = "#27ae60";
+  }
+</script>
+
+</body>
+</html>
