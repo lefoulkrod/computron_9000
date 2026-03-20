@@ -176,6 +176,41 @@ async def _execute_tool_call(
         return str(exc)
 
 
+async def _run_tool_with_hooks(
+    tool_call: Any,
+    tools: list[Callable[..., Any]],
+    hooks: list[Any],
+) -> dict[str, Any]:
+    """Execute a single tool call with before/after hooks."""
+    tool_name = tool_call.function.name
+    tool_arguments = tool_call.function.arguments
+
+    intercepted = None
+    for hook in hooks:
+        fn = getattr(hook, "before_tool", None)
+        if fn:
+            intercepted = fn(tool_name, tool_arguments)
+            if intercepted is not None:
+                break
+
+    if intercepted is not None:
+        tool_result = intercepted
+    else:
+        tool_result = await _execute_tool_call(tool_name, tool_arguments, tools)
+
+    for hook in hooks:
+        fn = getattr(hook, "after_tool", None)
+        if fn:
+            tool_result = fn(tool_name, tool_arguments, tool_result)
+
+    return {
+        "role": "tool",
+        "tool_name": tool_name,
+        "tool_call_id": tool_call.id,
+        "content": tool_result,
+    }
+
+
 async def run_tool_call_loop(
     history: ConversationHistory,
     agent: Agent,
@@ -252,36 +287,11 @@ async def run_tool_call_loop(
                 _publish_final()
                 break
 
-            for tool_call in tool_calls:
-                tool_name = tool_call.function.name
-                tool_arguments = tool_call.function.arguments
-
-                # ── before_tool hooks ────────────────────────────────
-                intercepted = None
-                for hook in hooks:
-                    fn = getattr(hook, "before_tool", None)
-                    if fn:
-                        intercepted = fn(tool_name, tool_arguments)
-                        if intercepted is not None:
-                            break
-
-                if intercepted is not None:
-                    tool_result = intercepted
-                else:
-                    tool_result = await _execute_tool_call(tool_name, tool_arguments, tools)
-
-                # ── after_tool hooks (chain: each rewrites result) ───
-                for hook in hooks:
-                    fn = getattr(hook, "after_tool", None)
-                    if fn:
-                        tool_result = fn(tool_name, tool_arguments, tool_result)
-
-                history.append({
-                    "role": "tool",
-                    "tool_name": tool_name,
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result,
-                })
+            results = await asyncio.gather(
+                *(_run_tool_with_hooks(tc, tools, hooks) for tc in tool_calls),
+            )
+            for result in results:
+                history.append(result)
 
         except StopRequestedError:
             logger.info("Agent '%s' tool loop stopped by user request", agent.name)
