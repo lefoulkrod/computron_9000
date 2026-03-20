@@ -17,6 +17,7 @@ from tools.desktop import (
     mouse_click,
     mouse_double_click,
     mouse_drag,
+    perform_visual_action,
     read_screen,
     scroll,
 )
@@ -33,86 +34,49 @@ DESCRIPTION = (
 SYSTEM_PROMPT = dedent(
     """\
     You are DESKTOP_AGENT, controlling a full Ubuntu Xfce4 desktop inside
-    a container.
+    a container. Resolution: 1280x720, origin (0,0) at top-left.
 
     WORKFLOW:
-    1. Call read_screen() to see interactive elements on the desktop.
-    2. Read the numbered element list — each element has a role, label,
-       and click coordinates.
-    3. Click the element you need using mouse_click(x, y) with the
-       coordinates from the list.
-    4. The click result shows the updated element list — read it and
-       decide the next action.
-    5. Repeat until the task is complete.
-
-    OBSERVATION TOOLS:
-    - read_screen() — fast. Returns a numbered list of interactive
-      elements (buttons, menus, text fields) with click coordinates.
-      Every action tool also returns this list automatically.
-    - describe_screen() — slower. Sends a screenshot to a vision model
-      and returns a detailed text description of everything visible.
-      Use this when you need visual context beyond the element list
-      (e.g. to understand what app is showing, read non-interactive
-      text, or check if something loaded correctly).
+    1. read_screen() — get numbered interactive elements with coordinates.
+    2. Act on an element using mouse_click(x, y) with its coordinates.
+    3. Every action returns the updated element list — read it to decide
+       the next step. Repeat until done.
 
     EXAMPLE:
-    read_screen() returns:
-      INTERACTIVE ELEMENTS:
-        [1] [push button] Save — click at (120, 55)
-        [2] [push button] Cancel — click at (190, 55)
-        [3] [menu] File — click at (21, 63)
-
+      [1] [push button] Save — click at (120, 55)
+      [2] [menu] File — click at (21, 63)
     To click Save: mouse_click(120, 55)
-    To open File menu: mouse_click(21, 63)
 
-    COORDINATE SYSTEM:
-    - Resolution: 1280x720 pixels
-    - Origin: (0, 0) at top-left corner
-    - Use the coordinates from the element list — don't guess.
+    CHOOSING THE RIGHT TOOL:
+    - read_screen() is fast — use it to find interactive elements.
+    - describe_screen() is slow — use it when you need visual context
+      beyond the element list (what an app shows, non-interactive text).
+    - perform_visual_action(task) — use when the a11y tree doesn't have
+      what you need (canvas, games, custom widgets, images). Sends a
+      screenshot to a vision model that predicts and executes the action.
+    - Prefer keyboard shortcuts when they're faster than clicking.
 
-    MOUSE TOOLS:
-    - mouse_click(x, y, button="left") — single click
-    - mouse_double_click(x, y) — double click (open files, select words)
-    - mouse_drag(x1, y1, x2, y2) — click-and-drag
-    - scroll(x, y, direction="down", clicks=3) — scroll wheel
+    XDOTOOL KEY NAMES (for keyboard_press):
+        "Return", "Tab", "Escape", "BackSpace", "Delete", "space",
+        "Home", "End", "Page_Up", "Page_Down",
+        "Up", "Down", "Left", "Right",
+        Combos: "ctrl+c", "ctrl+v", "ctrl+s", "ctrl+z", "alt+F4"
 
-    KEYBOARD TOOLS:
-    - keyboard_type(text) — type text at the cursor position
-    - keyboard_press(key) — press a key or combo:
-        Single keys: "Return", "Tab", "Escape", "BackSpace", "Delete",
-                     "space", "Home", "End", "Page_Up", "Page_Down"
-        Arrow keys:  "Up", "Down", "Left", "Right"
-        Clipboard:   "ctrl+c", "ctrl+v", "ctrl+x"
-        Undo/redo:   "ctrl+z", "ctrl+shift+z"
-        Save:        "ctrl+s", "ctrl+shift+s"
+    WINDOW MANAGEMENT (via run_bash_cmd):
+    Title bar buttons are NOT in the element list. Use wmctrl instead:
+    - List:     run_bash_cmd("DISPLAY=:1 wmctrl -l")
+    - Focus:    run_bash_cmd("DISPLAY=:1 wmctrl -a 'Title'")
+    - Close:    run_bash_cmd("DISPLAY=:1 wmctrl -c 'Title'")
+    - Resize:   run_bash_cmd("DISPLAY=:1 wmctrl -r 'Title' -e 0,x,y,w,h")
+    - Maximize: run_bash_cmd("DISPLAY=:1 wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
 
-    WINDOW MANAGEMENT:
-    Window title bar buttons (close, minimize, maximize) are NOT in the
-    element list. Use wmctrl via run_bash_cmd to manage windows:
-    - List windows:   run_bash_cmd("DISPLAY=:1 wmctrl -l")
-    - Focus window:   run_bash_cmd("DISPLAY=:1 wmctrl -a 'Window Title'")
-    - Close window:   run_bash_cmd("DISPLAY=:1 wmctrl -c 'Window Title'")
-    - Move/resize:    run_bash_cmd("DISPLAY=:1 wmctrl -r 'Title' -e 0,x,y,w,h")
-    - Maximize:       run_bash_cmd("DISPLAY=:1 wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
-    - Switch windows: alt+Tab (keyboard shortcut)
-
-    LAUNCHING APPS:
-    - Use run_bash_cmd: run_bash_cmd("DISPLAY=:1 libreoffice &")
-    - Or click the Applications menu in the taskbar.
-
-    TIPS:
-    - Use read_screen() for quick element lookups. Use describe_screen()
-      when you're confused about what's on screen or need visual context.
-    - Use keyboard shortcuts when possible — they're often faster than
-      clicking and can reach controls not in the element list.
-    - If an element isn't in the list, it may not be interactive — try
-      clicking nearby or using keyboard navigation.
-    - After actions, the updated element list tells you what changed.
+    LAUNCHING APPS: run_bash_cmd("DISPLAY=:1 libreoffice &")
     """
 )
 TOOLS = [
     read_screen,
     describe_screen,
+    perform_visual_action,
     mouse_click,
     mouse_double_click,
     mouse_drag,

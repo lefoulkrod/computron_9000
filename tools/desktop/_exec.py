@@ -10,6 +10,34 @@ from config import load_config
 logger = logging.getLogger(__name__)
 
 
+def _strip_stream_headers(data: bytes) -> bytes:
+    """Strip Docker/Podman stream multiplexing headers from exec output.
+
+    Stream framing uses 8-byte headers: [type(1)][pad(3)][size(4)] followed
+    by *size* bytes of payload.  The type byte is 0 (stdin), 1 (stdout), or
+    2 (stderr) and the three padding bytes are always zero.
+    """
+    if len(data) < 8 or data[0] not in (0, 1, 2) or data[1:4] != b"\x00\x00\x00":
+        return data
+    result = bytearray()
+    pos = 0
+    while pos + 8 <= len(data):
+        if data[pos] not in (0, 1, 2) or data[pos + 1 : pos + 4] != b"\x00\x00\x00":
+            # Not a valid framing header — append the rest verbatim.
+            result.extend(data[pos:])
+            break
+        size = int.from_bytes(data[pos + 4 : pos + 8], "big")
+        pos += 8
+        end = min(pos + size, len(data))
+        result.extend(data[pos:end])
+        pos = end
+    else:
+        # Trailing bytes after last complete frame.
+        if pos < len(data):
+            result.extend(data[pos:])
+    return bytes(result)
+
+
 class DesktopExecError(Exception):
     """Raised when a desktop command fails in the container."""
 
@@ -53,7 +81,8 @@ async def _run_desktop_cmd(
             ["bash", "-c", f"export DISPLAY={display}; {cmd}"],
             user=container_user,
         )
-        decoded = output.decode("utf-8", errors="replace") if output else ""
+        clean = _strip_stream_headers(output) if output else b""
+        decoded = clean.decode("utf-8", errors="replace")
         return exit_code, decoded
 
     try:

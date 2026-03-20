@@ -111,6 +111,27 @@ def _python_type_to_json_schema(annotation: Any) -> dict[str, Any]:
     return {"type": json_type}
 
 
+# Section header prefixes that end the description body (case-insensitive).
+_SECTION_PREFIXES = ("args:", "arguments:", "returns:", "raises:", "yields:", "note:", "notes:", "examples:", "example:")
+
+
+def _extract_description(docstring: str | None) -> str:
+    """Extract the full description text from a Google-style docstring.
+
+    Returns everything before the first section header (Args, Returns, etc.),
+    collapsed into a single paragraph.
+    """
+    if not docstring:
+        return ""
+    lines: list[str] = []
+    for line in docstring.strip().splitlines():
+        if line.strip().lower().startswith(_SECTION_PREFIXES):
+            break
+        lines.append(line.strip())
+    # Collapse into a single string, dropping empty lines at boundaries.
+    return " ".join(part for part in lines if part)
+
+
 def callable_to_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
     """Convert a Python callable into an OpenAI-style tool JSON schema.
 
@@ -121,7 +142,8 @@ def callable_to_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
         A dict matching the OpenAI tool schema format.
     """
     sig = inspect.signature(func)
-    arg_descs = _parse_arg_descriptions(func.__doc__)
+    docstring = inspect.getdoc(func)
+    arg_descs = _parse_arg_descriptions(docstring)
     properties: dict[str, Any] = {}
     required: list[str] = []
 
@@ -138,7 +160,7 @@ def callable_to_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": func.__name__,
-            "description": (func.__doc__ or "").strip().split("\n")[0],
+            "description": _extract_description(docstring),
             "parameters": {
                 "type": "object",
                 "properties": properties,
