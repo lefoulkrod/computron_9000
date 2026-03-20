@@ -37,7 +37,7 @@ async def capture_screenshot() -> bytes:
     # Use scrot to capture the screen to a file inside the shared volume
     try:
         await _run_desktop_cmd(
-            "scrot -o %s" % _CONTAINER_SCREENSHOT_PATH,
+            "scrot -o -p %s" % _CONTAINER_SCREENSHOT_PATH,
         )
     except DesktopExecError as exc:
         msg = "Screenshot capture failed: %s" % exc
