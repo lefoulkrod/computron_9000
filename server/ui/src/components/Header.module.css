@@ -87,3 +87,9 @@
   margin-left: 0.35rem;
 }
 
+@media (max-width: 600px) {
+  .desktopBtn {
+    display: none;
+  }
+}
+

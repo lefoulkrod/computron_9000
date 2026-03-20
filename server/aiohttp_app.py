@@ -45,6 +45,8 @@ from conversations._store import (
     list_turns as _list_turns,
     load_turn as _load_turn,
 )
+from tools.desktop._lifecycle import is_desktop_running, start_desktop
+from tools.desktop._exec import DesktopExecError
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +392,17 @@ async def set_memory_hidden_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
+async def desktop_start_handler(_request: Request) -> Response:
+    """Start the desktop environment and return its status."""
+    try:
+        await start_desktop()
+        return web.json_response({"running": True})
+    except DesktopExecError as exc:
+        return web.json_response(
+            {"running": False, "error": str(exc)}, status=503,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
@@ -417,6 +430,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("GET", "/api/memory", list_memory_handler)
     app.router.add_route("DELETE", "/api/memory/{key}", delete_memory_handler)
     app.router.add_route("POST", "/api/memory/{key}/hidden", set_memory_hidden_handler)
+
+    # Desktop API
+    app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)
 
     # Skills API
     app.router.add_route("GET", "/api/skills", list_skills_handler)
