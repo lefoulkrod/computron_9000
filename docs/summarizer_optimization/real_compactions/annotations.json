@@ -1,0 +1,159 @@
+{
+  "_description": "Annotations for real compaction records. Used by the evaluation runner alongside LLM judge scores.",
+  "_fields": {
+    "task_complete": "Was the task genuinely finished at the time of compaction? If false, summary should NOT say Remaining Work: None.",
+    "must_contain": "Regex patterns for facts that must survive in the summary."
+  },
+  "records": {
+    "0e8f4a78": {
+      "task_complete": false,
+      "notes": "Healthcare form — agent stuck on filter panel, task far from complete",
+      "must_contain": ["[Hh]ealthcare|healthcare\\.gov"]
+    },
+    "100aa356": {
+      "task_complete": false,
+      "notes": "Healthcare form — entering household info, still need plans",
+      "must_contain": ["78701|Travis", "35|33"]
+    },
+    "13133cd0": {
+      "task_complete": false,
+      "notes": "Healthcare form — just entered ZIP code and household type",
+      "must_contain": ["78701|Travis"]
+    },
+    "217bdd31": {
+      "task_complete": false,
+      "notes": "Sprite creation — user said sprites still need work, red artifacts visible",
+      "must_contain": ["sprite|guitar"]
+    },
+    "27b39ea1": {
+      "task_complete": false,
+      "notes": "eBay SSD price research — still searching for Crucial P5",
+      "must_contain": ["Samsung.*980|980.*Pro", "\\$1[12]\\d\\.\\d\\d|\\$200"]
+    },
+    "2adb0bea": {
+      "task_complete": false,
+      "notes": "Flight search merge — still comparing options, filtering by time",
+      "must_contain": ["\\$634|\\$558|\\$714", "AUS|ORD"]
+    },
+    "2d51591e": {
+      "task_complete": false,
+      "notes": "Healthcare — found 2 of 3 silver plans, still scrolling for 3rd",
+      "must_contain": ["[Ss]ilver", "Sendero|\\$581|\\$597"]
+    },
+    "34894cd8": {
+      "task_complete": false,
+      "notes": "Power limit research — still gathering docs, need to analyze",
+      "must_contain": ["nvidia-smi|power.limit|RTX.3090"]
+    },
+    "351de4c6": {
+      "task_complete": false,
+      "notes": "Browser test suite — Tests 1-3 done, Test 4 in progress",
+      "must_contain": ["Test [1234]", "10.10|7.7"]
+    },
+    "4195c3c6": {
+      "task_complete": false,
+      "notes": "Healthcare — entering second person info, nowhere near plan comparison",
+      "must_contain": ["78701|Travis|[Hh]ealthcare"]
+    },
+    "45fe6fb6": {
+      "task_complete": false,
+      "notes": "Browser test merge — Test 5 in progress, Test 6 not started",
+      "must_contain": ["Test [1-5]"]
+    },
+    "67a93a77": {
+      "task_complete": false,
+      "notes": "Healthcare — just reached plan results, filtering for Silver",
+      "must_contain": ["[Ss]ilver|[Hh]ealthcare"]
+    },
+    "75a60592": {
+      "task_complete": false,
+      "notes": "Multi-task (firefox, chess) — chess game actively in progress",
+      "must_contain": ["[Ff]irefox|[Cc]hess|chess\\.com"]
+    },
+    "7ac2cc4a": {
+      "task_complete": false,
+      "notes": "Healthcare — fixing form validation errors, still on first person",
+      "must_contain": ["35|[Mm]ale|[Hh]ealthcare"]
+    },
+    "7d367772": {
+      "task_complete": false,
+      "notes": "Healthcare — on household page, need to enter people and income",
+      "must_contain": ["[Hh]ealthcare|household"]
+    },
+    "8f1a0966": {
+      "task_complete": false,
+      "notes": "eBay SSD research — actively searching, more models to check",
+      "must_contain": ["[Ee][Bb]ay|SSD|NVMe"]
+    },
+    "91c02cb6": {
+      "task_complete": false,
+      "notes": "Healthcare — stuck retrying filter panel, task not done",
+      "must_contain": ["[Hh]ealthcare|[Ss]ilver|filter"]
+    },
+    "a436e0db": {
+      "task_complete": true,
+      "notes": "Target clicker game completed + pause feature added and rebuilt",
+      "must_contain": ["[Tt]arget|[Gg]ame|[Pp]ause"]
+    },
+    "aacc0ab1": {
+      "task_complete": false,
+      "notes": "Sprite creation — user gave feedback, iterating on guitar design",
+      "must_contain": ["sprite|guitar|[Ww]arlock|[Jj]ackson"]
+    },
+    "b79a55fa": {
+      "task_complete": false,
+      "notes": "Spreadsheet merge — formula error found, needs fix + PDF export",
+      "must_contain": ["budget|spreadsheet|#NAME|formula"]
+    },
+    "d5edad47": {
+      "task_complete": false,
+      "notes": "Setting desktop wallpaper — found image, needs to apply it",
+      "must_contain": ["wallpaper|[Dd]esktop|generated.*png"]
+    },
+    "dda40413": {
+      "task_complete": false,
+      "notes": "eBay SSD merge — still searching 2TB models",
+      "must_contain": ["Samsung.*980|\\$\\d{2,3}\\.\\d{2}", "2TB|1TB"]
+    },
+    "e67e8cff": {
+      "task_complete": false,
+      "notes": "Chess game merge — game actively in progress, user said play more moves",
+      "must_contain": ["[Cc]hess|e4|[Ss]icilian"]
+    },
+    "e85563ad": {
+      "task_complete": false,
+      "notes": "Spreadsheet — LibreOffice installed, fighting notification banner",
+      "must_contain": ["[Ll]ibre[Oo]ffice|budget|spreadsheet"]
+    },
+    "e9f8f778": {
+      "task_complete": true,
+      "notes": "Sprite creation — warlock guitar sprites created successfully",
+      "must_contain": ["sprite|guitar|warlock|player"]
+    },
+    "f07e1ec3": {
+      "task_complete": false,
+      "notes": "Flight search — found prices but still filtering by airline/time",
+      "must_contain": ["\\$634|\\$558|\\$714", "AUS|ORD"]
+    },
+    "f1e65789": {
+      "task_complete": false,
+      "notes": "Chess merge — game in progress, trying to move knight",
+      "must_contain": ["[Cc]hess|e4|c5"]
+    },
+    "f50e73b4": {
+      "task_complete": false,
+      "notes": "Healthcare merge — restarted form, back to ZIP code step",
+      "must_contain": ["[Hh]ealthcare|78701|ZIP"]
+    },
+    "f6fd7460": {
+      "task_complete": false,
+      "notes": "PDF assembler sub-agent — just read research files, needs to create PDF",
+      "must_contain": ["PDF|RTX.3090|power"]
+    },
+    "fd6ec302": {
+      "task_complete": false,
+      "notes": "Healthcare — reached plan results page, needs to compare Silver plans",
+      "must_contain": ["[Ss]ilver|[Hh]ealth|plan"]
+    }
+  }
+}

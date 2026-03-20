@@ -62,7 +62,7 @@ vision:
     top_k: 20
 
 summary:
-  model: mistral:7b
+  model: gemma3:27b
   think: false
   options:
     num_ctx: 8192

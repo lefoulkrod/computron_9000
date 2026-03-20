@@ -267,3 +267,99 @@ The probe passed on some runs anyway because the probe model (kimi-k2.5) sometim
 **Also tested on real compaction 9 data** (208 messages, false completion case): 0/5 false completions with 200 char cap (was 5/5 with 10k cap). Average time: 4.5s (was 36s).
 
 **Verdict**: Keep — 5% probe improvement, 12× faster on real data, eliminates false completion on real conversation. The 03_fail regression needs monitoring but is offset by improvements elsewhere.
+
+### Experiment 19: Tool result fact extraction before summarization (2026-03-19)
+
+**What changed**: Added a pre-processing step at compaction time that batches tool results and runs an LLM call to extract key facts before the summarizer sees them. Tool results are replaced with extracted bullet points instead of being truncated at 200 chars. Extraction cap: 4000 chars per tool result. Extra LLM call per compaction.
+
+3 runs, 12 scenarios.
+
+| Scenario | Probes (3 runs) | Time (range) | Length (range) |
+|----------|----------------|-------------|----------------|
+| 01_merge | 2/3, 3/3, 2/3 | 4.6–6.4s | 843–1,507 |
+| 02_desktop | 4/4, 3/4, 4/4 | 1.7–2.9s | 562–1,086 |
+| 03_fail | 1/3, 3/3, 2/3 | 1.4–2.7s | 458–516 |
+| 04_form | 3/3, 3/3, 3/3 | 2.8–3.5s | 952–1,210 |
+| 05_debug | 4/4, 4/4, 4/4 | 2.0–12.5s | 773–884 |
+| 06_nav | 4/4, 4/4, 4/4 | 5.6–6.7s | 2,046–2,543 |
+| 08_multi | 4/4, 4/4, 4/4 | 6.5–8.8s | 1,108–1,592 |
+| 09_mixed | 4/4, 4/4, 4/4 | 1.9–2.0s | 708–809 |
+| 10_redirect | 3/4, 2/4, 3/4 | 1.8–2.8s | 640–1,096 |
+| 11_long | 4/4, 4/4, 4/4 | 5.6–11.0s | 1,958–2,239 |
+| 12_false | 2/3, 2/3, 1/3 | 2.5–14.6s | 820–1,116 |
+| 13_stale | 4/4, 3/4, 4/4 | 3.0–4.3s | 655–955 |
+
+**Probe rate**: 117/132 (89%) — same as experiment 17 baseline.
+
+**Also tested on real conversations**:
+
+| Conversation | Without extraction | With extraction | Delta |
+|---|---|---|---|
+| Browser tests (194 msgs) | 1,875 chars, good detail | 1,236 chars, **stale data leaked in** | +8s, worse |
+| Browser tests merge (169 msgs) | 2,480 chars, clean | 7,176 chars, **bloated with process noise** | +19s, worse |
+| GitHub repo (34 msgs) | 1,264 chars, missing game features | 1,377 chars, **game description recovered** | +5s, better |
+| Sprite creation (25 msgs) | 1,120 chars | 943 chars | +7s, neutral |
+
+**Finding**: Extraction helps on research/exploration tasks (GitHub repo — game description recovered) but hurts on task-tracking conversations (browser tests — stale page data and process noise leak in). Page snapshots contain both useful data AND stale state, and the extraction model can't distinguish them. The assistant reasoning is a better signal for task-tracking, while tool results are better for data-gathering. One-size-fits-all extraction doesn't work.
+
+**Verdict**: Discard — no probe improvement over experiment 17, adds 5-19s latency, degrades quality on task-tracking conversations.
+
+### Experiment 11: Fix "Remaining Work: None" prompt (2026-03-19)
+
+**What changed**: Added explicit instructions to the Remaining Work section: "Only write 'None' if EVERY part of the task has been fully addressed. If the conversation mentions steps that were planned but not yet executed, items that were listed but not all completed, or a checklist where some items remain, list them here."
+
+3 runs, 12 scenarios.
+
+**Probe rate**: 115/132 (87%) — down from 115/129 (89%) baseline.
+
+**Scenario 12 (false completion)**: 9/9 — still perfect, prompt didn't hurt.
+
+**Regressions**: Scenario 03 (3/9 vs 5/9), scenario 11 (10/12 vs 12/12). The model over-lists remaining work on scenarios where the task was actually complete, triggering fail patterns.
+
+**Real data** (compaction 9, 3 runs): 2/3 OK, 1/3 BAD (says "None"). No improvement over baseline which was also 0/5 BAD.
+
+**Verdict**: Discard — 2% regression, model over-lists remaining work. The prompt tweak causes the opposite problem: instead of missing remaining work, it invents remaining work on completed tasks.
+
+### Experiment 15: Larger summarizer model (2026-03-20)
+
+**What changed**: Tested 7 model families as summarizer replacements for mistral:7b. Evaluated on 30 real compaction records using deterministic checks + LLM-as-judge (kimi-k2.5:cloud).
+
+**Key finding**: Model size and architecture matter far more than prompt engineering. Experiments 11 and 20 (prompt tweaks) moved remaining work by 0-3%. Switching models moved it by 3-43%.
+
+| Model | Size | Remain Work | Fact | Remain (judge) | State | Process | Avg Time |
+|-------|------|-------------|------|----------------|-------|---------|----------|
+| mistral:7b (baseline) | 4.4 GB | 47% | 2.90 | 2.80 | 2.83 | 2.27 | 6.0s |
+| qwen3.5:4b | 3.4 GB | 60% | 2.80 | 2.80 | 2.63 | 2.40 | 9.8s |
+| qwen3.5:cloud | cloud | 60% | 2.80 | 2.50 | 2.77 | 2.27 | 9.3s |
+| glm-4.7-flash:Q8_0 | 31 GB | 53% | 2.90 | 2.80 | 2.97 | 2.57 | 8.0s |
+| kimi-k2.5:cloud | cloud | 50% | 2.73 | 2.63 | 2.87 | 2.40 | 8.5s |
+| glm-5:cloud | cloud | 70% | 4.10 | 4.47 | 4.27 | 3.40 | 12.7s |
+| **gemma3:27b** | **17 GB** | **80%** | **3.70** | **3.67** | **3.77** | **2.77** | **25.5s** |
+| gemini-3-flash:cloud | cloud | 90% | 4.17 | 4.60 | 4.37 | 3.33 | 12.4s |
+
+**Observations**:
+- qwen3.5 family plateaus at 60% regardless of size (4b and cloud both hit 60%)
+- glm-4.7-flash (30B local) barely improves over mistral:7b despite being 7x larger
+- Google's model family (gemma3/gemini) dominates — gemma3:27b at 80%, gemini-flash at 90%
+- kimi-k2.5:cloud is a poor summarizer despite being a good judge
+- Cloud models aren't consistently better than local — kimi (50%) and qwen3.5:cloud (60%) scored below gemma3:27b local (80%)
+
+**Also tested (too slow — timed out or >2min per record)**:
+- nemotron-3-super:cloud — timed out on record 4
+- deepseek-v3.2:cloud — extremely slow (was 1089s for 30 judge calls)
+- minimax-m2.7:cloud — timed out within 2 minutes on first record
+
+**Also tested (smaller variant)**:
+- gemma3:12b (8.1 GB) — 60% remaining work, 19.2s avg. Only 6s faster than 27b but 20% worse on remaining work. Not worth the tradeoff.
+
+**Decision**: Adopt gemma3:27b. It fits on a single RTX 3090 (17 GB), gets 80% remaining work (up from 47%), and all judge scores improve by ~0.8-0.9 points. Speed is 25.5s avg (4x slower than mistral:7b) but within the 180s timeout budget.
+
+**Verdict**: Keep — gemma3:27b replaces mistral:7b as the summarizer model.
+
+### Experiment 20: Stronger retry suppression prompt (2026-03-20)
+
+**What changed**: Added specific prompt rule: "If the assistant repeated or retried an action multiple times, report ONLY the final outcome."
+
+**Real data**: 47% → 47% remaining work, 2.27 → 2.33 process suppression. Within noise.
+
+**Verdict**: Discard — prompt engineering too subtle for 7B model. (Tested before model switch to gemma3:27b.)
