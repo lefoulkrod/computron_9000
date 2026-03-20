@@ -2,7 +2,7 @@
 
 This package provides:
 - ``run_tool_call_loop``: Main async generator driving the chat/tool loop.
-- ``turn_scope``: Async context manager for session lifecycle.
+- ``turn_scope``: Async context manager for conversation turn lifecycle.
 - Stop/nudge signaling utilities for user-initiated control.
 """
 
@@ -12,6 +12,7 @@ from ._turn import (
     any_turn_active,
     check_stop,
     drain_nudges,
+    get_conversation_id,
     is_turn_active,
     queue_nudge,
     request_stop,
@@ -24,6 +25,7 @@ __all__ = [
     "any_turn_active",
     "check_stop",
     "drain_nudges",
+    "get_conversation_id",
     "is_turn_active",
     "queue_nudge",
     "request_stop",

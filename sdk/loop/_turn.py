@@ -5,9 +5,9 @@ sub-agent work and tool calls that happen in between. This module provides the
 async context manager that sets up and tears down everything a turn needs:
 
 - An event dispatcher bound to a ContextVar so ``publish_event`` works
-- A per-session stop event so ``check_stop`` / ``request_stop`` work
-- Session liveness tracking (``is_turn_active``)
-- Per-session nudge queues (``queue_nudge`` / ``drain_nudges``)
+- A per-conversation stop event so ``check_stop`` / ``request_stop`` work
+- Conversation liveness tracking (``is_turn_active``)
+- Per-conversation nudge queues (``queue_nudge`` / ``drain_nudges``)
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ class StopRequestedError(Exception):
     """Raised at safe checkpoints when the user requests a stop."""
 
 
-_DEFAULT_SESSION_ID = "default"
+_DEFAULT_CONVERSATION_ID = "default"
 
-# Sessions that currently have an active turn.
-_active_sessions: set[str] = set()
+# Conversations that currently have an active turn.
+_active_conversations: set[str] = set()
 
-# Per-session stop events so the HTTP stop endpoint can target a specific
-# session without interfering with others.
+# Per-conversation stop events so the HTTP stop endpoint can target a specific
+# conversation without interfering with others.
 _active_stop_events: dict[str, asyncio.Event] = {}
 
 # Stop event bound to the currently active turn, accessible without passing
@@ -46,21 +46,26 @@ _stop_event: ContextVar[asyncio.Event | None] = ContextVar(
     "turn_stop_event", default=None
 )
 
-# Session ID for the current coroutine context, set inside turn_scope()
+# Conversation ID for the current coroutine context, set inside turn_scope()
 # and inherited by sub-agents automatically via ContextVar semantics.
-_session_id: ContextVar[str | None] = ContextVar("turn_session_id", default=None)
+_conversation_id: ContextVar[str | None] = ContextVar("turn_conversation_id", default=None)
 
-# Per-session nudge queues keyed by session_id.
+# Per-conversation nudge queues keyed by conversation_id.
 _nudge_queues: dict[str, list[str]] = {}
 
 
-def request_stop(session_id: str | None = None) -> None:
+def get_conversation_id() -> str | None:
+    """Return the conversation ID for the current coroutine context, or None."""
+    return _conversation_id.get()
+
+
+def request_stop(conversation_id: str | None = None) -> None:
     """Signal the active turn to stop at the next safe checkpoint.
 
     Args:
-        session_id: Target a specific session. If None, stops the default session.
+        conversation_id: Target a specific conversation. If None, stops the default.
     """
-    sid = session_id or _DEFAULT_SESSION_ID
+    sid = conversation_id or _DEFAULT_CONVERSATION_ID
     event = _active_stop_events.get(sid)
     if event is not None:
         event.set()
@@ -77,27 +82,27 @@ def check_stop() -> None:
         raise StopRequestedError()
 
 
-def is_turn_active(session_id: str | None = None) -> bool:
-    """Return True if the given session has an active turn."""
-    sid = session_id or _DEFAULT_SESSION_ID
-    return sid in _active_sessions
+def is_turn_active(conversation_id: str | None = None) -> bool:
+    """Return True if the given conversation has an active turn."""
+    sid = conversation_id or _DEFAULT_CONVERSATION_ID
+    return sid in _active_conversations
 
 
 def any_turn_active() -> bool:
-    """Return True if any session has an active turn."""
-    return bool(_active_sessions)
+    """Return True if any conversation has an active turn."""
+    return bool(_active_conversations)
 
 
-def queue_nudge(session_id: str, message: str) -> None:
-    """Append a nudge message to the session's queue."""
-    q = _nudge_queues.get(session_id)
+def queue_nudge(conversation_id: str, message: str) -> None:
+    """Append a nudge message to the conversation's queue."""
+    q = _nudge_queues.get(conversation_id)
     if q is not None:
         q.append(message)
 
 
 def drain_nudges() -> list[str]:
-    """Pop and return all queued nudge messages for the current session."""
-    sid = _session_id.get()
+    """Pop and return all queued nudge messages for the current conversation."""
+    sid = _conversation_id.get()
     if sid is None:
         return []
     q = _nudge_queues.get(sid)
@@ -111,7 +116,7 @@ def drain_nudges() -> list[str]:
 @asynccontextmanager
 async def turn_scope(
     handler: Handler | None = None,
-    session_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> AsyncIterator[None]:
     """Set up and tear down everything needed for a single conversation turn.
 
@@ -119,28 +124,28 @@ async def turn_scope(
     - A fresh EventDispatcher is created and bound so ``publish_event`` works
     - A fresh stop event is created and bound so ``check_stop`` works from any
       depth without parameter passing
-    - The session is registered as active so ``is_turn_active`` returns True
-    - A nudge queue is created for the session
+    - The conversation is registered as active so ``is_turn_active`` returns True
+    - A nudge queue is created for the conversation
     - If a handler is provided, it is subscribed for the duration of the turn
     - In-flight async handler tasks are drained before teardown
     - Teardown always occurs, even if the body raises
 
     Args:
         handler: Optional subscriber callable (sync or async).
-        session_id: Session identifier for per-session isolation.
+        conversation_id: Conversation identifier for per-conversation isolation.
 
     Yields:
         None
     """
-    sid = session_id or _DEFAULT_SESSION_ID
+    sid = conversation_id or _DEFAULT_CONVERSATION_ID
     dispatcher = EventDispatcher()
     stop_event = asyncio.Event()
-    _active_sessions.add(sid)
+    _active_conversations.add(sid)
     _active_stop_events[sid] = stop_event
     _nudge_queues[sid] = []
     dispatcher_token = _current_dispatcher.set(dispatcher)
     stop_token = _stop_event.set(stop_event)
-    session_token = _session_id.set(sid)
+    conversation_token = _conversation_id.set(sid)
     try:
         if handler is not None:
             async with dispatcher.subscription(handler):
@@ -151,7 +156,7 @@ async def turn_scope(
         await dispatcher.drain()
         _current_dispatcher.reset(dispatcher_token)
         _stop_event.reset(stop_token)
-        _session_id.reset(session_token)
-        _active_sessions.discard(sid)
+        _conversation_id.reset(conversation_token)
+        _active_conversations.discard(sid)
         _active_stop_events.pop(sid, None)
         _nudge_queues.pop(sid, None)

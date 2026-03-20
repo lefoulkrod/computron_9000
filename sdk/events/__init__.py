@@ -13,6 +13,7 @@ in ``sdk.loop``.
 from ._context import (
     agent_span,
     collect_sub_agent_history,
+    get_current_agent_name,
     get_model_options,
     get_sub_agent_histories,
     init_sub_agent_collector,
@@ -54,6 +55,7 @@ __all__ = [
     "ToolCreatedPayload",
     "agent_span",
     "collect_sub_agent_history",
+    "get_current_agent_name",
     "get_model_options",
     "get_sub_agent_histories",
     "init_sub_agent_collector",

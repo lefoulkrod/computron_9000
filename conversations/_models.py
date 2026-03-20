@@ -83,6 +83,9 @@ class SummaryRecord(BaseModel):
     summary_char_count: int = 0
     messages_compacted: int = 0
     fill_ratio: float = 0.0
+    conversation_id: str = ""
+    agent_name: str = ""
+    options: dict[str, Any] = Field(default_factory=dict)
 
 
 class ConversationSummary(BaseModel):

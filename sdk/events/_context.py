@@ -99,6 +99,12 @@ def _make_child_context_id(label: str | None = None) -> str:
     return f"{parent_id}.{safe}.{next(_subcontext_counter)}"
 
 
+def get_current_agent_name() -> str | None:
+    """Return the agent name from the top of the context stack, or None."""
+    stack = _context_stack.get()
+    return stack[-1][1] if stack else None
+
+
 @contextmanager
 def agent_span(
     agent_name: str | None = None,

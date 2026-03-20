@@ -29,7 +29,7 @@ def test_is_turn_active_outside_context() -> None:
 @pytest.mark.asyncio
 async def test_is_turn_active_inside_context() -> None:
     """is_turn_active returns True while turn_scope is active."""
-    async with turn_scope(session_id="test-sid"):
+    async with turn_scope(conversation_id="test-sid"):
         assert is_turn_active("test-sid") is True
     assert is_turn_active("test-sid") is False
 
@@ -38,7 +38,7 @@ async def test_is_turn_active_inside_context() -> None:
 @pytest.mark.asyncio
 async def test_queue_and_drain_nudges() -> None:
     """Queued nudges are returned by drain_nudges and cleared."""
-    async with turn_scope(session_id="nudge-test"):
+    async with turn_scope(conversation_id="nudge-test"):
         queue_nudge("nudge-test", "hello")
         queue_nudge("nudge-test", "world")
         result = drain_nudges()
@@ -58,7 +58,7 @@ async def test_drain_nudges_empty_without_context() -> None:
 @pytest.mark.asyncio
 async def test_nudge_queue_cleaned_up_after_context() -> None:
     """Nudge queue is removed when turn_scope exits."""
-    async with turn_scope(session_id="cleanup-test"):
+    async with turn_scope(conversation_id="cleanup-test"):
         queue_nudge("cleanup-test", "msg")
     # Queue should not exist after context exits
     assert drain_nudges() == []

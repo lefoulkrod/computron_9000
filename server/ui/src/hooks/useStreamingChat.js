@@ -10,9 +10,9 @@ function _uuid() {
 /**
  * Build the request body for /api/chat including model options.
  */
-function _buildRequestBody(message, fileData, modelSettings, sessionId, agent) {
+function _buildRequestBody(message, fileData, modelSettings, conversationId, agent) {
     const body = { message: message || '(uploaded file)' };
-    if (sessionId) body.session_id = sessionId;
+    if (conversationId) body.conversation_id = conversationId;
     if (agent) body.agent = agent;
     if (fileData) {
         body.data = [fileData];
@@ -108,6 +108,7 @@ function _historyToMessages(rawMessages) {
                     role: 'assistant',
                     content,
                     streaming: false,
+                    agent_name: msg.agent_name || null,
                 });
             }
         }
@@ -125,14 +126,14 @@ export default function useStreamingChat(callbacks) {
         _setIsStreaming(val);
     }, []);
     const abortControllerRef = useRef(null);
-    const sessionIdRef = useRef(_uuid());
+    const conversationIdRef = useRef(_uuid());
 
     const sendMessage = useCallback(async (message, fileData, modelSettings, agent) => {
         if (!message && !fileData) return;
 
         // If already streaming, send as a nudge (fire-and-forget)
         if (isStreamingRef.current) {
-            const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current, agent);
+            const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
             fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -161,7 +162,7 @@ export default function useStreamingChat(callbacks) {
             { id: placeholderId, role: 'assistant', placeholder: true, tempId: placeholderId },
         ]);
 
-        const body = _buildRequestBody(message, fileData, modelSettings, sessionIdRef.current, agent);
+        const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
 
         try {
             const controller = new AbortController();
@@ -351,7 +352,7 @@ export default function useStreamingChat(callbacks) {
     }, [callbacks]);
 
     const stopGeneration = useCallback(() => {
-        fetch(`/api/chat/stop?session_id=${sessionIdRef.current}`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/chat/stop?conversation_id=${conversationIdRef.current}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
     }, []);
 
@@ -369,7 +370,7 @@ export default function useStreamingChat(callbacks) {
             });
             if (!resp.ok) return false;
             const data = await resp.json();
-            sessionIdRef.current = conversationId;
+            conversationIdRef.current = conversationId;
             setMessages(_historyToMessages(data.messages || []));
             return true;
         } catch (_) {
@@ -383,14 +384,14 @@ export default function useStreamingChat(callbacks) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
         }
-        const oldSessionId = sessionIdRef.current;
-        fetch(`/api/chat/stop?session_id=${oldSessionId}`, { method: 'POST' }).catch(() => {});
+        const oldConversationId = conversationIdRef.current;
+        fetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
         setMessages([]);
-        // Generate a fresh session ID for the new session
-        sessionIdRef.current = _uuid();
+        // Generate a fresh conversation ID for the new conversation
+        conversationIdRef.current = _uuid();
         try {
-            await fetch(`/api/chat/history?session_id=${oldSessionId}`, { method: 'DELETE' });
+            await fetch(`/api/chat/history?conversation_id=${oldConversationId}`, { method: 'DELETE' });
         } catch (err) {
             // ignore
         }

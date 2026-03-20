@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
-from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_session
+from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
 from sdk.loop import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
@@ -70,7 +70,7 @@ class ChatRequest(BaseModel):
     message: str
     data: list[Attachment] | None = None
     options: LLMOptions | None = None
-    session_id: str | None = None
+    conversation_id: str | None = None
     agent: str | None = None
 
 
@@ -178,9 +178,9 @@ async def chat_handler(request: Request) -> StreamResponse:
     if not user_query:
         return web.json_response({"error": "Message field is required."}, status=400)
 
-    # If this session already has an active agent, queue the message as a nudge
-    if is_turn_active(payload.session_id):
-        queue_nudge(payload.session_id or "default", user_query)
+    # If this conversation already has an active agent, queue the message as a nudge
+    if is_turn_active(payload.conversation_id):
+        queue_nudge(payload.conversation_id or "default", user_query)
         return web.json_response({"ok": True})
 
     data_objs: list[Data] | None = None
@@ -193,7 +193,7 @@ async def chat_handler(request: Request) -> StreamResponse:
         request,
         handle_user_message(
             user_query, data_objs, options=payload.options,
-            session_id=payload.session_id, agent=payload.agent,
+            conversation_id=payload.conversation_id, agent=payload.agent,
         ),
     )
 
@@ -224,15 +224,15 @@ async def index_handler(_request: Request) -> StreamResponse:
 
 async def stop_handler(request: Request) -> Response:
     """Interrupt the active agent conversation turn."""
-    session_id = request.query.get("session_id")
-    request_stop(session_id=session_id)
+    conversation_id = request.query.get("conversation_id")
+    request_stop(conversation_id=conversation_id)
     return web.json_response({"ok": True})
 
 
 async def delete_history_handler(request: Request) -> Response:
-    """Clear chat history for a session."""
-    session_id = request.query.get("session_id")
-    reset_message_history(session_id=session_id)
+    """Clear chat history for a conversation."""
+    conversation_id = request.query.get("conversation_id")
+    reset_message_history(conversation_id=conversation_id)
     return web.Response(status=204)
 
 
@@ -352,14 +352,14 @@ async def delete_turn_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def list_sessions_handler(_request: Request) -> Response:
-    """Return past conversation summaries for the sessions panel."""
+async def list_conversations_handler(_request: Request) -> Response:
+    """Return past conversation summaries for the conversations panel."""
     summaries = _list_conversations()
     data = [s.model_dump() for s in summaries]
     return web.json_response(data)
 
 
-async def delete_session_handler(request: Request) -> Response:
+async def delete_conversation_handler(request: Request) -> Response:
     """Delete a conversation and all its turns/history."""
     conversation_id = request.match_info["conversation_id"]
     found = _delete_conversation(conversation_id)
@@ -368,10 +368,10 @@ async def delete_session_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def resume_session_handler(request: Request) -> Response:
+async def resume_conversation_handler(request: Request) -> Response:
     """Resume a past conversation by loading its full-fidelity history."""
     conversation_id = request.match_info["conversation_id"]
-    messages = resume_session(conversation_id)
+    messages = resume_conversation(conversation_id)
     if messages is None:
         return web.json_response({"error": "Conversation not found"}, status=404)
     return web.json_response({"conversation_id": conversation_id, "messages": messages})
@@ -423,9 +423,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("DELETE", "/api/skills/{name}", delete_skill_handler)
 
     # Sessions API (conversation resume) — must be before {id} wildcard routes
-    app.router.add_route("GET", "/api/conversations/sessions", list_sessions_handler)
-    app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_session_handler)
-    app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_session_handler)
+    app.router.add_route("GET", "/api/conversations/sessions", list_conversations_handler)
+    app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_conversation_handler)
+    app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_conversation_handler)
 
     # Turns API (formerly conversations)
     app.router.add_route("GET", "/api/conversations", list_turns_handler)
