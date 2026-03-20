@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tools._grounding import GroundingResponse
 from tools.desktop._tools import (
     describe_screen,
     keyboard_press,
@@ -14,6 +15,7 @@ from tools.desktop._tools import (
     mouse_click,
     mouse_double_click,
     mouse_drag,
+    perform_visual_action,
     read_screen,
     scroll,
 )
@@ -247,3 +249,134 @@ async def test_scroll_up(_mock_desktop_deps):
     _mock_desktop_deps["cmd"].assert_called_once_with(
         "xdotool mousemove --sync 640 360 click --repeat 3 4",
     )
+
+
+# ── perform_visual_action ────────────────────────────────────────────
+
+
+def _grounding_response(**kwargs) -> GroundingResponse:
+    """Build a GroundingResponse with defaults."""
+    defaults = {"x": 100, "y": 200, "thought": "test", "action_type": "click", "raw": {}}
+    defaults.update(kwargs)
+    return GroundingResponse(**defaults)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_click(_mock_desktop_deps):
+    """perform_visual_action() sends screenshot to grounding and executes click."""
+    response = _grounding_response(action_type="click", x=300, y=400)
+    with (
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_cap,
+        patch("tools._grounding.run_grounding", new_callable=AsyncMock) as mock_ground,
+    ):
+        mock_cap.return_value = b"\x89PNG"
+        mock_ground.return_value = response
+
+        result = await perform_visual_action("Click the button")
+
+        mock_ground.assert_called_once_with(
+            b"\x89PNG", "Click the button",
+            screenshot_filename="desktop_visual_action.png",
+        )
+        _mock_desktop_deps["cmd"].assert_called_with(
+            "xdotool mousemove --sync 300 400 click 1",
+        )
+        assert "Save" in result  # a11y tree observation returned
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_type(_mock_desktop_deps):
+    """perform_visual_action() executes type action from grounding response."""
+    response = _grounding_response(
+        action_type="type", x=None, y=None,
+        raw={"type_content": "hello"},
+    )
+    with (
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_cap,
+        patch("tools._grounding.run_grounding", new_callable=AsyncMock) as mock_ground,
+    ):
+        mock_cap.return_value = b"\x89PNG"
+        mock_ground.return_value = response
+
+        result = await perform_visual_action("Type hello")
+
+        cmd_arg = _mock_desktop_deps["cmd"].call_args[0][0]
+        assert "xdotool type" in cmd_arg
+        assert "hello" in cmd_arg
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_hotkey(_mock_desktop_deps):
+    """perform_visual_action() normalises hotkey names for xdotool."""
+    response = _grounding_response(
+        action_type="hotkey", x=None, y=None,
+        raw={"hotkey": "ctrl+c"},
+    )
+    with (
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_cap,
+        patch("tools._grounding.run_grounding", new_callable=AsyncMock) as mock_ground,
+    ):
+        mock_cap.return_value = b"\x89PNG"
+        mock_ground.return_value = response
+
+        await perform_visual_action("Copy text")
+
+        _mock_desktop_deps["cmd"].assert_called_with("xdotool key -- ctrl+c")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_screenshot_failure(_mock_desktop_deps):
+    """perform_visual_action() returns error when screenshot fails."""
+    with patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_cap:
+        mock_cap.side_effect = RuntimeError("capture failed")
+        result = await perform_visual_action("Click something")
+        assert "Error" in result
+        assert "capture failed" in result
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_grounding_failure(_mock_desktop_deps):
+    """perform_visual_action() returns error when grounding server fails."""
+    with (
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_cap,
+        patch("tools._grounding.run_grounding", new_callable=AsyncMock) as mock_ground,
+    ):
+        mock_cap.return_value = b"\x89PNG"
+        mock_ground.side_effect = RuntimeError("server down")
+        result = await perform_visual_action("Click something")
+        assert "Error" in result
+        assert "server down" in result
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_empty_task(_mock_desktop_deps):
+    """perform_visual_action() rejects empty task strings."""
+    result = await perform_visual_action("   ")
+    assert "Error" in result
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_visual_action_finished(_mock_desktop_deps):
+    """perform_visual_action() handles 'finished' action type."""
+    response = _grounding_response(
+        action_type="finished", x=None, y=None,
+        raw={"finished_content": "Task complete"},
+    )
+    with (
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_cap,
+        patch("tools._grounding.run_grounding", new_callable=AsyncMock) as mock_ground,
+    ):
+        mock_cap.return_value = b"\x89PNG"
+        mock_ground.return_value = response
+
+        result = await perform_visual_action("Do the thing")
+
+        assert "finished" in result.lower()
+        assert "Task complete" in result

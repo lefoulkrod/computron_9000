@@ -17,6 +17,7 @@ from ._tools import (
     mouse_click,
     mouse_double_click,
     mouse_drag,
+    perform_visual_action,
     read_screen,
     scroll,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "mouse_click",
     "mouse_double_click",
     "mouse_drag",
+    "perform_visual_action",
     "read_screen",
     "scroll",
     "stop_desktop",

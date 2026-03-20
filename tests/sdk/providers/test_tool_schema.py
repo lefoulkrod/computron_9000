@@ -234,16 +234,37 @@ class TestCallableToJsonSchema:
         schema = callable_to_json_schema(mystery)
         assert schema["function"]["description"] == ""
 
-    def test_multiline_docstring_uses_first_line(self):
+    def test_multiline_docstring_includes_body(self):
         def compute(x: float, y: float) -> float:
             """Compute the result.
 
-            This is a longer description that should not appear.
+            This is a longer description that should also appear.
             """
             return x + y
 
         schema = callable_to_json_schema(compute)
-        assert schema["function"]["description"] == "Compute the result."
+        assert schema["function"]["description"] == (
+            "Compute the result. This is a longer description that should also appear."
+        )
+
+    def test_description_stops_at_args_section(self):
+        def fetch(url: str) -> str:
+            """Fetch a URL.
+
+            Supports HTTP and HTTPS. Follows redirects automatically.
+
+            Args:
+                url: The URL to fetch.
+
+            Returns:
+                The response body.
+            """
+            return ""
+
+        schema = callable_to_json_schema(fetch)
+        assert schema["function"]["description"] == (
+            "Fetch a URL. Supports HTTP and HTTPS. Follows redirects automatically."
+        )
 
     def test_unannotated_params_default_to_string(self):
         def loose(a, b):
