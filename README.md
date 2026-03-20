@@ -114,15 +114,6 @@ Requires an NVIDIA GPU (12 GB+ VRAM), a HuggingFace account, and the inference c
 
 Model weights are downloaded on first use and cached in `~/.computron_9000/container_home/`. A persistent inference server keeps models loaded in VRAM and auto-shuts down after 10 minutes of inactivity.
 
-## Custom Tools
-
-COMPUTRON_9000 can create its own persistent tools at runtime. Tools are stored in:
-
-- `~/.computron_9000/custom_tools/registry.json` — tool definitions
-- `~/.computron_9000/container_home/custom_tools/scripts/` — executable scripts
-
-These directories are created automatically by `just setup`.
-
 ## Development
 
 ```sh
