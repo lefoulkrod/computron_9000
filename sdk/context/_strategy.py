@@ -172,6 +172,10 @@ class SummarizeStrategy:
         # Extract any prior summary so we can merge facts forward.
         prior_summary = _extract_prior_summary(compactable)
 
+        # Resolve model name up front so we can unload on any exit path.
+        cfg = load_config()
+        resolved_model, resolved_options = self._resolve_model(cfg)
+
         try:
             summary, model_name = await self._summarize(
                 compactable, prior_summary,
@@ -181,14 +185,14 @@ class SummarizeStrategy:
                 "SummarizeStrategy: compaction timed out after %ds, skipping",
                 _CALL_TIMEOUT,
             )
+            _unload_model(resolved_model)
             return
         except Exception:
             logger.exception("SummarizeStrategy: LLM call failed, skipping compaction")
+            _unload_model(resolved_model)
             return
 
         # Persist the summarization event for quality evaluation.
-        cfg = load_config()
-        _, resolved_options = self._resolve_model(cfg)
         record = SummaryRecord(
             id=str(uuid.uuid4()),
             created_at=datetime.now(UTC).isoformat(),
@@ -219,6 +223,9 @@ class SummarizeStrategy:
             "role": "assistant",
             "content": _SUMMARY_PREFIX + summary,
         })
+
+        # Unload the summarizer model to free VRAM for the main agent.
+        _unload_model(model_name)
 
     async def _summarize(
         self,
@@ -309,6 +316,18 @@ class SummarizeStrategy:
             msg = "No summary model configured. Add a 'summary' section to config.yaml."
             raise RuntimeError(msg)
         return summary_cfg.model, summary_cfg.options
+
+
+def _unload_model(model: str) -> None:
+    """Unload a model from Ollama to free VRAM."""
+    import subprocess
+    try:
+        subprocess.run(
+            ["ollama", "stop", model],
+            capture_output=True, timeout=30,
+        )
+    except Exception:
+        logger.debug("Failed to unload model %s", model)
 
 
 def _log_summary(
