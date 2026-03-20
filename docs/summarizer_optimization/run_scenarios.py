@@ -74,15 +74,8 @@ _TOOL_CALLS_RE = re.compile(r"\[Called tools?:\s*([^\]]+)\]")
 def _parse_scenario(filepath: Path) -> _Scenario:
     text = filepath.read_text()
 
-    # Check if this scenario references an external conversation file
-    conv_match = re.search(
-        r"Conversation ID:\s*`([0-9a-f-]+)`", text,
-    )
-    if conv_match:
-        phases = _load_conversation_phases(conv_match.group(1))
-    else:
-        blocks = _extract_code_blocks(text)
-        phases = [msgs for b in blocks if (msgs := _parse_messages(b))]
+    blocks = _extract_code_blocks(text)
+    phases = [msgs for b in blocks if (msgs := _parse_messages(b))]
 
     return _Scenario(
         name=filepath.stem,
@@ -91,32 +84,6 @@ def _parse_scenario(filepath: Path) -> _Scenario:
         probes=_extract_probes(text),
         threshold=_extract_threshold(text),
     )
-
-
-def _load_conversation_phases(conv_id: str) -> list[list[dict]]:
-    """Load a real conversation from stored history as a single phase."""
-    conv_dir = Path.home() / ".computron_9000" / "conversations"
-    history_file = conv_dir / f"{conv_id}_history.json"
-    if not history_file.exists():
-        # Try without _history suffix
-        history_file = conv_dir / f"{conv_id}.json"
-    if not history_file.exists():
-        print(f"  WARNING: conversation file not found for {conv_id}")
-        return []
-
-    import json
-    data = json.load(open(history_file))
-    msgs = data if isinstance(data, list) else data.get("messages", [])
-
-    # Return non-system messages (minus pinned first user and kept recent)
-    # as a single phase for compaction
-    non_system = [m for m in msgs if m.get("role") != "system"]
-    if len(non_system) <= 7:
-        return [non_system]
-
-    # Compactable = skip pinned first user, skip last keep_recent
-    compactable = non_system[1:-_KEEP_RECENT]
-    return [compactable]
 
 
 def _extract_code_blocks(text: str) -> list[str]:

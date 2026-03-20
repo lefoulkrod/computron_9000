@@ -12,11 +12,11 @@ Concretely, a good summary enables the agent to:
 
 ## 2. Scope
 
-This optimization targets **sub-agent turns**, not the main conversation. Sub-agents are spawned for specific tasks and run autonomously with their own context windows. When their context fills up, the summarizer compacts old messages so the agent can keep working. Any agent — current or future — that gets a `ContextManager` with `SummarizeStrategy()` will hit this code.
+This optimization targets agent conversations — both main agents and sub-agents. When context fills up, the summarizer compacts old messages so the agent can keep working. Any agent with a `ContextManager` and `SummarizeStrategy()` will hit this code.
 
-The summarizer needs to work well across a wide variety of conversation types: web browsing, coding, GUI automation, data analysis, and whatever else agents end up doing. Test scenarios should cover this variety rather than targeting specific agent implementations.
+The summarizer needs to work well across a wide variety of conversation types: web browsing, coding, GUI automation, data analysis, and research. Test scenarios and real conversations should cover this variety.
 
-## 3. Current Algorithm (Baseline)
+## 3. Current Algorithm
 
 **File**: `sdk/context/_strategy.py`
 
@@ -29,96 +29,124 @@ The summarizer needs to work well across a wide variety of conversation types: w
 ### Prompt (`_SUMMARIZE_PROMPT`)
 
 System prompt instructs the model to produce a structured 4-section document:
-- `## User's Request` — original ask in 1-2 sentences
 - `## Completed Work` — bullet points of results/findings (not process)
-- `## Key Data` — all reference data: URLs, prices, ratings, dates, addresses, file paths, etc.
+- `## Key Data` — all reference data: URLs, prices, ratings, dates, file paths, etc.
+- `## Current State` — what application/page is open, modified files, form state
 - `## Remaining Work` — what's left, or "None"
 
 Key prompt rules:
-- Structure enforcement: "MUST start with `## User's Request`"
+- Structure enforcement: "MUST start with `## Completed Work`"
 - Wrong/right examples contrasting process narration vs fact extraction
-- "MUST INCLUDE every URL visited or discovered"
-- "MUST INCLUDE all prices, ratings, quantities, dates, and numerical data"
-- Merge rule: "every URL, price, name, date, and detail from the prior summary MUST appear in your output"
+- Selective URL retention: work-critical URLs only, omit intermediate navigation
+- Merge rule: all facts from prior summaries must carry forward
 
 ### Serialization pipeline (`_serialize_messages`)
 
-Three-phase pipeline:
+1. **Page snapshot dedup** (`_dedup_page_snapshots`) — only the last snapshot per base URL is kept; earlier ones replaced with a short note. Typically cuts 70-80% of redundant content.
 
-1. **Page snapshot dedup** (`_dedup_page_snapshots`) — browser tools return full page state on every click/scroll. Only the last snapshot per base URL (ignoring query params) is kept; earlier ones are replaced with `[page snapshot — superseded by later snapshot]`. Typically cuts 70-80% of redundant content.
+2. **Per-result cap** (`_TOOL_RESULT_CAP = 200`) — tool results over 200 chars are truncated (head only). Intentionally aggressive: assistant messages already contain the distilled findings. In production, tool results are ~96% of input chars but carry little unique signal beyond what the assistant summarized.
 
-2. **Per-result cap** (`_TOOL_RESULT_CAP = 10,000`) — individual tool results over 10k chars are truncated with head+tail (5k each). Catches outliers like huge terminal logs.
-
-3. **Total budget** (`_TOTAL_CHAR_BUDGET = 40,000`) — if total serialized text exceeds 40k chars (~10k tokens), tool results are progressively shrunk oldest-first through stages (2000 -> 500 -> omitted). Most recent results are preserved longest.
+For long conversations (serialized text > 20k chars), the input is split into ~10k char chunks, each summarized independently, then merged in a final pass.
 
 ### Model
 
-- **Summary model**: `qwen3:8b` (configured in `config.yaml` under `summary:`)
-- **Context window**: 60,000 tokens (`num_ctx: 60000`)
+- **Summary model**: `gemma3:27b` (configured in `config.yaml` under `summary:`)
+- **Context window**: 8,192 tokens (`num_ctx: 8192`)
+- **Max output**: 2,048 tokens (`num_predict: 2048`)
 - **Temperature**: 0.3, **Top-k**: 20
-- **Think mode**: disabled
+- **Timeout**: 180 seconds per LLM call
 
-## 4. Test Strategy
+## 4. Evaluation
 
-### Method
+### Two evaluation methods
 
-**Scientific approach — one change at a time.** For each proposed change:
-1. Run all synthetic scenarios against the current baseline
-2. Apply exactly one change
-3. Re-run all scenarios
-4. Record results: fact retention, structure compliance, summary length, time
-5. Compare against baseline to measure impact
-6. Keep or discard the change based on results
-7. If kept, it becomes the new baseline for the next change
+**Synthetic scenarios** (`run_scenarios.py`): Hand-crafted conversations with continuity probes. A capable cloud model (kimi-k2.5:cloud) answers questions after seeing the summary and checks if the agent could continue. Fast (seconds per scenario), good for rapid iteration, but doesn't capture real-world failure modes well. 12 scenarios covering browser, desktop, coding, research tasks.
 
-Changes to test are prioritized in [`experiments.md`](experiments.md).
+**Real compaction records** (`run_real_eval.py`): Summaries from actual agent conversations stored in `real_compactions/`. Evaluated with deterministic checks + LLM-as-judge (kimi-k2.5:cloud). Slower (minutes for 30 records), but tests against real failure modes. This is the ground truth.
 
-### Scoring
+### Real data evaluation
 
-Primary metric: **continuity** — can the agent continue the task after compaction?
+Each compaction in production saves a `SummaryRecord` with the input messages, prior summary, and output summary. These records are copied to `real_compactions/` and annotated with expected behavior.
 
-Each scenario defines **continuity probes** — questions posed to a capable agent model after summarization. The agent sees the same context it would in production: system prompt + pinned first user message + summary + last 6 kept messages. Then it answers questions like "What should you do next?" or "What was the price of X?" Probes have:
-- **Pass patterns**: regex that MUST match in the response (agent knows what to do)
-- **Fail patterns**: regex that must NOT match (agent is trying to redo work or lost context)
+**Deterministic checks** (hard pass/fail):
+- `remaining_work_correct` — does the summary correctly say "None" or not? We know for each record whether the task was actually complete.
+- `must_contain` — regex patterns for key facts that must survive (prices, URLs, names).
+- `has_all_sections` — are all 4 required section headings present?
 
-The summarizer uses the local model being tested (e.g., `qwen3:8b`). The probe uses a capable cloud model (e.g., `kimi-k2.5:cloud`) to minimize probe-side noise — we're testing the summary quality, not the probe model's capability.
+**LLM judge** (1-5 scored, kimi-k2.5:cloud):
+- `fact_retention` — are important facts preserved?
+- `remaining_work` — is the remaining work section accurate?
+- `current_state` — does it describe where the agent left off?
+- `process_suppression` — does it avoid narrating clicks/scrolls/retries?
 
-Secondary metrics (tracked, not asserted):
+Judge was validated for stability (5 runs on 8 records, spread 0-1) and accuracy (calibrated against 6 records where we manually verified the correct answer). kimi-k2.5:cloud was selected over deepseek-v3.2, gemini-3-flash-preview, and glm-5 based on calibration accuracy and reliability.
 
-| Metric | How measured |
-|--------|-------------|
-| **Time** | Wall clock seconds for summarization |
-| **Summary length** | Character count (shorter is better, all else equal) |
-| **Fact retention** | % of required facts found in summary (proxy, informational) |
+### Current baseline (2026-03-20, gemma3:27b)
 
-Priority when evaluating changes: **continuity > time > length**.
+```
+Deterministic:
+  Remaining work correct: 80%
+  Has all sections:       100%
+  Required facts found:   97%
 
-### What constitutes a full run
+LLM judge (30 records):
+  Fact retention:         3.70/5
+  Remaining work:         3.67/5
+  Current state:          3.77/5
+  Process suppression:    2.77/5
+```
 
-A **full run** is the minimum required to evaluate an experiment:
-- Run **all scenarios** (not just the one the experiment targets)
-- Run each scenario **at least 3 times** to account for non-determinism
-- Use `--save` to capture summaries and probe responses for review
-- Report min/median/max across runs for each metric
+Previous baseline (mistral:7b): remaining work 47%, judge scores ~2.8/5.
+Synthetic probe rate: 88% (12 scenarios × 3 runs, with mistral:7b — not yet re-run with gemma3:27b).
 
-An experiment cannot be accepted or rejected based on less than a full run. Targeted runs on individual scenarios are useful for debugging probes but not for evaluating experiments.
+### Running evaluations
 
-Command: `PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 3 --save`
+```bash
+# Baseline (evaluate stored production summaries):
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_real_eval.py
 
-### Anti-regression
+# After a change (re-run summarizer, compare to baseline):
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_real_eval.py --rerun --save
 
-Results are recorded in [`results.md`](results.md).
+# Synthetic scenarios (rapid iteration):
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 3
+```
+
+### Acceptance criteria
 
 A change is **kept** if:
-- All continuity probes that were passing still pass
-- At least one secondary metric improves (time down, length down)
+- Real data remaining work % stays same or improves
+- Real data judge scores stay same or improve
+- Synthetic probe rate stays same or improves
+- No single metric drops by more than 10% or 0.5 points
 
-A change is **discarded** if:
-- Any continuity probe starts failing that was passing before
+## 5. Known Issues
 
-## 5. Test Scenarios
+From real conversation analysis (30 compaction records across 6 conversations):
 
-- Scenario files: [`scenarios/`](scenarios/) — each defines conversation, probes, and expected facts
-- Test runner: `tests/sdk/context/test_scenarios.py` — parses the markdown, runs summarizer, runs probes
-- Real conversation inventory: [`real_conversations/inventory.md`](real_conversations/inventory.md) (for validation after synthetic optimization)
+1. **False "Remaining Work: None"** (47% error rate) — the summarizer says the task is complete when it isn't. Worst on sub-agents that don't know they're part of a larger task, and on multi-step tasks where completed steps dominate the conversation.
 
+2. **Process narration** (2.27/5) — when the agent retries the same action many times (e.g., clicking a button 10 times), the summary becomes a log of attempts rather than facts. The prompt says "omit HOW results were obtained" but the model ignores this for long retry sequences.
+
+3. **Merge fact loss** — during merge compactions, facts from the prior summary get dropped. The flight search lost all prices ($634, $558, $714) during merge despite the prompt saying "merge ALL facts."
+
+4. **Hallucinated data** — one record (8f1a0966) had the summarizer invent SSD prices that didn't exist in the input. The 200-char tool cap means the model sometimes fills in plausible-sounding data instead of admitting the information was truncated.
+
+## 6. Historical Algorithm
+
+For reference, the original algorithm before optimization:
+
+- **Prompt**: 4 sections starting with `## User's Request` (removed in experiment 1)
+- **Tool cap**: 10,000 chars per result with head+tail preservation (reduced to 200 in experiment 17)
+- **Progressive shrink**: 40k total char budget with oldest-first shrinking (removed in experiment 10)
+- **Model**: qwen3:8b with num_ctx=60000 (changed to mistral:7b with num_ctx=8192 in experiments 6/14)
+- **No timeout**: could run indefinitely (added 120s timeout in experiment 14)
+
+See `experiments.md` and `results.md` for the full history of changes.
+
+## 7. Test Data
+
+- `scenarios/` — 12 synthetic scenarios (markdown format with inline conversations and probes)
+- `real_compactions/` — 30 production compaction records (JSON SummaryRecords) with annotations
+- `real_compactions/annotations.json` — per-record expected behavior (task_complete, must_contain patterns)
+- `real_compactions/baseline_scores.json` — baseline evaluation scores for comparison

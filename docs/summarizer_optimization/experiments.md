@@ -1,6 +1,17 @@
 # Experiments
 
-Each experiment is tested in isolation against the current baseline. One change at a time. Results recorded in [`results.md`](results.md).
+Each experiment is tested in isolation against the current baseline. One change at a time.
+
+Historical results from synthetic-only evaluation are in [`results.md`](results.md). Starting 2026-03-20, experiments are also evaluated on 30 real compaction records using deterministic checks + LLM-as-judge. See [`strategy.md`](strategy.md) for evaluation methodology.
+
+**Evaluation commands:**
+```bash
+# Real data (primary — compares against stored baseline):
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_real_eval.py --rerun --save
+
+# Synthetic (secondary — rapid iteration):
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 3
+```
 
 ## Completed
 
@@ -13,6 +24,7 @@ Each experiment is tested in isolation against the current baseline. One change 
 | 9 | Chunked summarization | **Keep** | Split → summarize → merge for long conversations. 2x faster. |
 | 10 | Remove progressive shrink | **Keep** | Dead code with chunking in place. Simplified serialization. |
 | 14 | Fix num_ctx, add num_predict cap, timeout | **Keep** | Bug fix: num_ctx was 60k (model native is 32k), no generation cap, no timeout. Caused 20+ min hangs. |
+| 17 | Aggressive tool result capping (200 chars) | **Keep** | 89% probes (was 84%). Tool results are 96% of input but assistant already distills findings. |
 
 ## Removed (not needed)
 
@@ -22,18 +34,12 @@ Each experiment is tested in isolation against the current baseline. One change 
 | 4 | Relax process suppression | Scenario 05 passes 4/4 — model already preserves failed approaches. |
 | 7 | Conversation-type-aware prompts | No mixed results across scenario types. Single prompt works. |
 | 8 | Structured output format | No evidence current format is a problem. High risk for no clear gain. |
+| 11 | Fix "Remaining Work: None" prompt | 87% probes (was 89%). Model over-lists remaining work, triggering fail patterns. |
+| 19 | Tool result fact extraction | 89% probes but +5-19s latency. Stale tool data confuses summarizer on task-tracking. |
+| 20 | Stronger retry suppression prompt | No change. 47%→47% remaining work, 2.27→2.33 process. Prompt too subtle for 7B model. |
+| 15 | Larger summarizer model | **Keep gemma3:27b** | 47%→80% remaining work, all judge scores up ~0.9 points. See below. |
 
 ## Future experiments
-
-### Experiment 11: Fix "Remaining Work: None" on incomplete tasks
-
-**What**: Add explicit rules to the prompt to prevent the summarizer from marking remaining work as "None" when the task isn't actually complete. The current prompt says to write "None" if the task is complete, but the model sometimes marks tasks as done when they're not — especially after merges where the prior summary's remaining work gets lost.
-
-**Discovered via**: Scenario 01 (merge compaction). The user asked to compare headphones and check comfort reviews. Sony and Sennheiser comfort was checked, but Bose was not. After the merge, the summary says "Remaining Work: None" — the agent would stop working prematurely.
-
-**Proposed change**: Add a rule: "For Remaining Work, carefully check whether ALL aspects of the user's request have been addressed. If any topic was mentioned but not fully investigated, or any comparison is incomplete, list it. Only write 'None' if every part of the request is definitively complete."
-
-**Risk**: Low. Might cause the model to over-list remaining work (listing things that are actually done). Better to err on the side of listing too much than missing work.
 
 ### Experiment 13: Include original request as summarizer context
 
@@ -45,39 +51,54 @@ Each experiment is tested in isolation against the current baseline. One change 
 
 **Risk**: Very low. Adds ~50 tokens. The model might echo the request in the summary, but the "Do NOT echo" rule should handle that.
 
-**Status**: Previously discarded (experiment ran 2026-03-17, 4% regression). But the test suite at the time had no false completion scenario. Re-test on real compaction 9 data (2026-03-18) showed it drops mistral:7b false completions from 100% to 40%. Should re-run with scenario 12 included in the suite.
+**Status**: Previously discarded on synthetics (4% regression). Re-test on real compaction data showed it drops mistral:7b false completions from 100% to 40%. Should re-evaluate with full real-data eval (`run_real_eval.py --rerun`).
 
-### Experiment 15: Larger summarizer model to fix false completion
+### Experiment 22: Remove Remaining Work section
 
-**What**: Switch from mistral:7b to a larger model (glm-4.7-flash:Q8_0, ~30B params) for summarization. The 7B model lacks the reasoning to notice when a multi-step task is partially complete — it consistently writes "Remaining Work: None" even when only 4 of 6 tests have been completed.
+**What**: Remove the `## Remaining Work` section from the summary entirely. The summarizer consistently gets this wrong (47% with mistral:7b, 80% with gemma3:27b), and the information is redundant — the agent can determine what remains from the pinned original request + summary + kept-recent messages.
 
-**Discovered via**: Production compaction 9 — 208 messages from browser test suite. Tests 1-4 completed, Tests 5-6 pending. Dashboard listing all 6 tests was present in the input, but mistral:7b ignored it. 100% false completion rate (5/5 runs say "None"). The dashboard was mentioned only once vs 16-39 mentions of the completed tests — the 7B model can't pick the signal out of the noise.
+The `## Current State` section is strengthened to capture what was happening at the end of the conversation, including in-progress work and what the user last asked for. This gives the agent the context it needs to continue without the summarizer having to predict "what's left."
 
-**Initial results** (compaction 9 real data, 5 runs each):
+**Proposed change**: Remove `## Remaining Work` from prompt. Update Current State description to emphasize recency — "what was the assistant doing in its last message? What did the user most recently ask for?"
 
-| Model | False completions | Avg time | Notes |
-|-------|-------------------|----------|-------|
-| mistral:7b (baseline) | 5/5 (100%) | 36s | Always says "None" |
-| mistral:7b + request | 2/5 (40%) | 35s | Helps, but vague requests don't add signal |
-| glm-4.7-flash:Q8_0 | 0/5 (0%) | 85s | Zero false completions, 2/5 explicitly mention Tests 5-6 |
-| glm-4.7-flash:Q8_0 + request | 0/5 (0%) | 86s | Also zero, but request context didn't improve GOOD rate |
+### ~~Experiment 21: Gemma3 smaller size (12b)~~ — tested, not adopted
 
-**Remaining work to do**:
-- Run full scenario suite with glm-4.7-flash:Q8_0 to check for regressions
-- Measure quality vs speed tradeoff (85s avg vs 3s for mistral:7b)
-- Test whether a smaller-but-better model (qwen3.5:4b, qwen3:8b) can also fix this
-- Consider using the larger model only for the merge pass (not per-chunk), which would be ~1 call at 10-15s
+gemma3:12b scored 60% remaining work (vs 80% for 27b) at 19.2s avg (vs 25.5s). Only 6s faster but 20% worse on the key metric. The 27b remains the better choice.
 
-**Risk**: Medium. 85s is within the 2-minute budget but 30x slower than mistral:7b. If the chunked path makes 12 calls at 85s each, that's 17 minutes — need to verify this is per-full-compaction, not per-chunk.
+### Experiment 18: Two-phase summarization (facts + state)
 
-### Experiment 17: Aggressive tool result capping (200 chars)
+**What**: Split the single summarization call into two focused passes:
 
-**What**: Drop `_TOOL_RESULT_CAP` from 10,000 to 200 chars. The insight: assistant messages already contain the distilled findings from tool results. In production compaction 9, tool results were 96% of input (103k chars) while assistant reasoning was only 4% (4k chars). The summarizer is drowning in DOM trees and bash output when the assistant already wrote "Task 3 complete, score 5/6."
+1. **Facts pass** — "Extract all facts, data, findings, URLs, prices, names, and results from this conversation." Higher tool result cap (e.g., 2k) so data-heavy outputs aren't lost. Output: a flat list of facts.
 
-**Discovered via**: Analysis of compaction 9 content ratio. Also inspired by ACON paper's separation of observation compression vs history compression — the assistant reasoning IS the compressed observation.
+2. **State pass** — "Given these facts and the recent messages, produce the final summary with Current State and Remaining Work sections." Lower tool result cap (200 chars) since this pass only needs the assistant reasoning to understand workflow/progress. Output: the structured 4-section summary.
 
-**Proposed change**:
-- `_TOOL_RESULT_CAP = 200` (down from 10,000)
-- Simple head truncation instead of head+tail (tail is rarely useful at 200 chars)
+The state pass receives the facts pass output as input, so it doesn't need to re-read tool results — it just needs to organize the facts and determine what's current vs completed vs remaining.
 
-**Risk**: Low-medium. Tool results that contain data not echoed by the assistant (e.g., raw API responses, file contents the assistant didn't fully describe) would be lost. But the assistant typically summarizes what it found.
+**Discovered via**: Testing experiment 17 on a real GitHub repo exploration conversation. The 200-char tool cap caused the summarizer to lose data that was only in tool results (README content with game features, 14 commit count, GitHub Pages deployment URL). The assistant said "I got the README" but didn't list the game features — those were in the truncated page snapshot. For task-tracking conversations (browser tests) this was fine because the assistant echoed scores. For research/exploration conversations, tool results carry unique data the assistant didn't repeat.
+
+The current single-pass approach forces the model to simultaneously extract facts AND track state AND determine remaining work, all from a mix of assistant reasoning and tool noise. Splitting into two passes lets each focus on what it does best.
+
+**Proposed changes**:
+- `_serialize_messages` accepts a `tool_cap` parameter instead of using the global constant
+- `_call_summarizer` replaced by `_extract_facts` (tool_cap=2000) + `_build_summary` (tool_cap=200)
+- Facts pass uses a simpler prompt: just extract facts, no structure required
+- State pass uses the existing structured prompt but receives pre-extracted facts instead of raw conversation
+- For chunked conversations: facts pass runs per-chunk, then state pass runs once on merged facts
+
+**Cost**: 2 LLM calls instead of 1. With mistral:7b at 2-4s each, total would be ~6-8s vs ~3-4s currently. For chunked conversations, only 1 extra call (the state pass) since fact extraction replaces the existing chunk summarization.
+
+**Expected benefits**:
+- Better fact retention on research/exploration tasks (higher tool cap in facts pass)
+- Better state tracking (state pass is focused, smaller input)
+- Better remaining work detection (state pass sees organized facts, not raw noise)
+- Facts pass could potentially use a different model than state pass
+
+**Risk**: Medium. Two calls means two points of failure and more latency. The facts pass might produce too much output that then overwhelms the state pass. Need to cap facts pass output (maybe 3k chars). Also need to verify the existing scenario suite doesn't regress — the current single-pass approach works well for most scenarios.
+
+**Note**: Experiment 19 (tool result fact extraction) tested a simpler version of this idea — extracting facts from tool results only, then feeding them to the normal summarizer. It failed because stale tool data confused the summarizer on task-tracking conversations. Experiment 18 differs by splitting the summarizer itself into two passes rather than pre-processing tool results.
+
+**Test plan**:
+1. Evaluate with `run_real_eval.py --rerun` — compare against baseline
+2. Run synthetic scenarios to check for regressions
+3. Test on GitHub repo exploration specifically for fact retention improvement

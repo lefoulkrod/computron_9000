@@ -44,7 +44,8 @@ _CHUNK_TARGET_SIZE = 10_000
 # Maximum time (seconds) for a single summarizer LLM call. If the model
 # takes longer (e.g. runaway generation, contention), the call is cancelled
 # and compaction is skipped rather than blocking the agent indefinitely.
-_CALL_TIMEOUT = 120
+_CALL_TIMEOUT = 180
+
 
 _SUMMARIZE_PROMPT = (
     "You are a summarizer. Condense the following conversation into a factual "
@@ -65,17 +66,14 @@ _SUMMARIZE_PROMPT = (
     "Format as a structured list. If no key data was gathered, write \"None\".\n"
     "\n"
     "## Current State\n"
-    "Describe the current state of the task so the assistant can pick up exactly\n"
-    "where it left off: which application or page is open, what files have been\n"
-    "modified, which form fields are filled vs pending, what errors are unresolved,\n"
-    "cell/row references, coordinates, or other positional details needed to act.\n"
+    "Describe what is happening RIGHT NOW at the end of the conversation.\n"
+    "What page or application is open? What was the assistant doing in its\n"
+    "last message? What did the user most recently ask for? Include any\n"
+    "in-progress work, unresolved errors, or pending actions.\n"
     "If not applicable, write \"None\".\n"
     "\n"
-    "## Remaining Work\n"
-    "List what still needs to be done, or write \"None\" if the task is complete.\n"
-    "\n"
     "RULES:\n"
-    "- Your output MUST start with '## Completed Work' and contain all four "
+    "- Your output MUST start with '## Completed Work' and contain all three "
     "sections above. No other format is acceptable.\n"
     "- Preserve FACTS and DATA, not process. Omit HOW results were obtained "
     "(clicks, navigation, scrolling, filter adjustments, retries, error recovery). "
@@ -391,7 +389,7 @@ def _serialize_messages(messages: list[dict]) -> str:
     Browser tool results that return page snapshots are deduplicated — only
     the last snapshot per URL is kept in full, earlier ones are replaced with
     a short note. Individual tool results over ``_TOOL_RESULT_CAP`` are
-    truncated with head+tail.
+    truncated.
     """
     _dedup_page_snapshots(messages)
 
