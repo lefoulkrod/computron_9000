@@ -16,6 +16,8 @@ from rich.text import Text
 
 from config import load_config
 from conversations import SummaryRecord, save_summary_record
+from sdk.events import get_current_agent_name
+from sdk.loop import get_conversation_id
 
 from ._history import ConversationHistory
 from ._models import ContextStats
@@ -187,6 +189,8 @@ class SummarizeStrategy:
             return
 
         # Persist the summarization event for quality evaluation.
+        cfg = load_config()
+        _, resolved_options = self._resolve_model(cfg)
         record = SummaryRecord(
             id=str(uuid.uuid4()),
             created_at=datetime.now(UTC).isoformat(),
@@ -198,6 +202,9 @@ class SummarizeStrategy:
             summary_char_count=len(summary),
             messages_compacted=len(compactable),
             fill_ratio=stats.fill_ratio,
+            conversation_id=get_conversation_id() or "",
+            agent_name=get_current_agent_name() or "",
+            options=resolved_options if isinstance(resolved_options, dict) else {},
         )
         save_summary_record(record)
 
@@ -211,7 +218,7 @@ class SummarizeStrategy:
         # Replace compactable messages with summary.
         history.drop_range(start, end)
         history.insert(start, {
-            "role": "user",
+            "role": "assistant",
             "content": _SUMMARY_PREFIX + summary,
         })
 
@@ -331,7 +338,9 @@ def _find_first_user(non_system: list[dict]) -> tuple[int, bool]:
     for i, msg in enumerate(non_system):
         if msg.get("role") == "user":
             content = msg.get("content") or ""
-            # A prior summary is not the "original" user message.
+            # New summaries use "assistant" role and are skipped naturally.
+            # The prefix check is legacy safety for old conversations where
+            # summaries had "user" role.
             if not content.startswith(_SUMMARY_PREFIX):
                 return i, True
     return 0, False
@@ -392,6 +401,12 @@ def _serialize_messages(messages: list[dict]) -> str:
         role = msg.get("role", "unknown")
         content = msg.get("content") or ""
 
+        # Summary messages are handled separately via _extract_prior_summary().
+        # Skip regardless of role to avoid double-inclusion (new summaries use
+        # "assistant" role, legacy ones may still have "user").
+        if content.startswith(_SUMMARY_PREFIX):
+            continue
+
         if role == "assistant":
             tool_calls = msg.get("tool_calls")
             if tool_calls:
@@ -415,8 +430,6 @@ def _serialize_messages(messages: list[dict]) -> str:
             entries.append(f"Tool ({tool_name}): {content}")
 
         elif role == "user":
-            if content.startswith(_SUMMARY_PREFIX):
-                continue
             entries.append(f"User: {content}")
 
     return "\n\n".join(entries)

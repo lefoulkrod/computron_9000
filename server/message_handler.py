@@ -76,37 +76,37 @@ def _resolve_agent(agent_id: str | None) -> tuple[str, str, str, list]:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SESSION_ID = "default"
+_DEFAULT_CONVERSATION_ID = "default"
 
 
 @dataclass
-class _Session:
-    """Per-session state: conversation history and context manager."""
+class _Conversation:
+    """Per-conversation state: conversation history and context manager."""
 
     history: ConversationHistory = field(default_factory=ConversationHistory)
     context_manager: ContextManager | None = None
 
 
-# Session store keyed by session ID.
-_sessions: dict[str, _Session] = {}
+# Conversation store keyed by conversation ID.
+_conversations: dict[str, _Conversation] = {}
 
 
-def _get_session(session_id: str | None = None) -> _Session:
-    """Return the session for the given ID, creating one if needed."""
-    sid = session_id or _DEFAULT_SESSION_ID
-    if sid not in _sessions:
-        _sessions[sid] = _Session()
-    return _sessions[sid]
+def _get_conversation(conversation_id: str | None = None) -> _Conversation:
+    """Return the conversation for the given ID, creating one if needed."""
+    cid = conversation_id or _DEFAULT_CONVERSATION_ID
+    if cid not in _conversations:
+        _conversations[cid] = _Conversation()
+    return _conversations[cid]
 
 
-def reset_message_history(session_id: str | None = None) -> None:
-    """Resets the conversation history and context manager for a session."""
-    sid = session_id or _DEFAULT_SESSION_ID
-    _sessions.pop(sid, None)
+def reset_message_history(conversation_id: str | None = None) -> None:
+    """Resets the conversation history and context manager."""
+    cid = conversation_id or _DEFAULT_CONVERSATION_ID
+    _conversations.pop(cid, None)
 
 
-def resume_session(conversation_id: str) -> list[dict] | None:
-    """Load a conversation's full-fidelity history and install it as a session.
+def resume_conversation(conversation_id: str) -> list[dict] | None:
+    """Load a conversation's full-fidelity history and install it.
 
     Returns the raw messages for the UI to display, or None if not found.
     """
@@ -114,8 +114,8 @@ def resume_session(conversation_id: str) -> list[dict] | None:
     if messages is None:
         return None
 
-    session = _Session(history=ConversationHistory(messages))
-    _sessions[conversation_id] = session
+    conversation = _Conversation(history=ConversationHistory(messages))
+    _conversations[conversation_id] = conversation
     return messages
 
 
@@ -161,7 +161,7 @@ async def handle_user_message(
     data: Sequence[Data] | None = None,
     *,
     options: LLMOptions | None = None,
-    session_id: str | None = None,
+    conversation_id: str | None = None,
     agent: str | None = None,
 ) -> AsyncGenerator[AssistantResponse, None]:
     """Handles a user message by sending it to the LLM and yielding events.
@@ -170,13 +170,13 @@ async def handle_user_message(
         message: The user's message.
         data: Optional sequence of file attachment data.
         options: LLM inference options for this turn.
-        session_id: Optional session identifier for conversation isolation.
+        conversation_id: Optional conversation identifier for isolation.
         agent: Optional agent identifier to use for this turn.
 
     Yields:
         AssistantResponse: Events from the LLM.
     """
-    session = _get_session(session_id)
+    conversation = _get_conversation(conversation_id)
 
     # Write any attachments to the virtual computer and augment the message
     # with file paths so the agent can access them via tools.
@@ -218,24 +218,24 @@ async def handle_user_message(
             init_sub_agent_collector()
 
             # Lazily create the context manager with the model's context limit.
-            if session.context_manager is None:
+            if conversation.context_manager is None:
                 num_ctx = active_agent.options.get("num_ctx", 0) if active_agent.options else 0
-                session.context_manager = ContextManager(
-                    history=session.history,
+                conversation.context_manager = ContextManager(
+                    history=conversation.history,
                     context_limit=num_ctx,
                     agent_name=active_agent.name,
                     strategies=[SummarizeStrategy()],
                 )
             try:
-                async with turn_scope(handler=_queue_handler, session_id=session_id):
+                async with turn_scope(handler=_queue_handler, conversation_id=conversation_id):
                     with agent_span(active_agent.name):
-                        session.history.append({"role": "user", "content": user_content})
-                        _refresh_system_message(session.history, agent_prompt)
-                        await session.context_manager.apply_strategies()
+                        conversation.history.append({"role": "user", "content": user_content})
+                        _refresh_system_message(conversation.history, agent_prompt)
+                        await conversation.context_manager.apply_strategies()
                         hooks = default_hooks(
                             active_agent,
                             max_iterations=active_agent.max_iterations,
-                            ctx_manager=session.context_manager,
+                            ctx_manager=conversation.context_manager,
                         )
 
                         # Turn recording and skill tracking hooks
@@ -245,11 +245,12 @@ async def handle_user_message(
                             summary_cfg = _load_cfg().summary
                         except Exception:
                             pass
+                        conv_id = conversation_id or "default"
                         recorder = TurnRecorderHook(
                             user_message=user_content,
                             agent_name=active_agent.name,
                             model=active_agent.model,
-                            conversation_id=session_id or "default",
+                            conversation_id=conv_id,
                             summary_model=summary_cfg.model if summary_cfg else None,
                         )
                         skill_tracker = SkillTrackingHook()
@@ -258,7 +259,7 @@ async def handle_user_message(
 
                         try:
                             async for _, _ in run_tool_call_loop(
-                                history=session.history,
+                                history=conversation.history,
                                 agent=active_agent,
                                 hooks=hooks,
                             ):
@@ -270,8 +271,7 @@ async def handle_user_message(
                                 record.metadata.skill_applied = skill_tracker.applied_skill
 
                             # Save full-fidelity conversation history + sub-agent histories
-                            conv_id = session_id or "default"
-                            save_conversation_history(conv_id, session.history.messages)
+                            save_conversation_history(conv_id, conversation.history.non_system_messages)
                             sub_histories = get_sub_agent_histories()
                             if sub_histories:
                                 save_sub_agent_histories(conv_id, sub_histories)

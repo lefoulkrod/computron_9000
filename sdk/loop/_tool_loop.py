@@ -9,7 +9,7 @@ from typing import Any
 
 from agents.types import Agent
 from sdk.context import ConversationHistory
-from sdk.events import AssistantResponse, ToolCallPayload, publish_event
+from sdk.events import AssistantResponse, ToolCallPayload, get_current_agent_name, publish_event
 from sdk.providers import ChatResponse, ProviderError, get_provider
 from sdk.tools import _normalize_tool_result, _prepare_tool_arguments
 
@@ -237,6 +237,7 @@ async def run_tool_call_loop(
                 "content": content,
                 "tool_calls": serialized_tool_calls,
                 "thinking": thinking if agent.persist_thinking else None,
+                "agent_name": get_current_agent_name(),
             }
             history.append(assistant_message)
             # Emit an event for model content/thinking (non-final, actual final decided by loop end)

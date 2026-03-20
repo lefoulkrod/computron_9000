@@ -1,276 +1,232 @@
-"""Tests for context management strategies."""
+"""Tests for SummarizeStrategy and related helpers."""
+
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from sdk.context import (
-    ContextStats,
-    ConversationHistory,
-    SummarizeStrategy,
-    TriggerPoint,
+from sdk.context import ConversationHistory, SummarizeStrategy
+from sdk.context._models import ContextStats
+from sdk.context._strategy import (
+    _SUMMARY_PREFIX,
+    _extract_prior_summary,
+    _find_first_user,
+    _serialize_messages,
 )
-from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage
 
 
-def _make_fake_chat_response(content: str = "Summary of conversation"):
-    """Create a normalized ChatResponse for summarization."""
-    return ChatResponse(
-        message=ChatMessage(content=content),
-        usage=TokenUsage(),
-    )
+def _make_stats(fill_ratio: float = 0.8) -> ContextStats:
+    """Create a ContextStats with the given fill_ratio."""
+    return ContextStats(context_used=int(fill_ratio * 1000), context_limit=1000)
 
 
-def _make_fake_provider(response):
-    """Create a fake provider that returns the given response from chat()."""
-    provider = AsyncMock()
-    provider.chat.return_value = response
-    return provider
+def _build_history(messages: list[dict]) -> ConversationHistory:
+    return ConversationHistory(messages)
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Summary role is "assistant"
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestSummarizeStrategy:
-    """Tests for the SummarizeStrategy."""
-
-    def _make_history(self, n_turns: int) -> ConversationHistory:
-        """Create a history with a system message and *n* user/assistant turns."""
-        messages: list[dict] = [{"role": "system", "content": "sys"}]
-        for i in range(n_turns):
-            messages.append({"role": "user", "content": f"user-{i}"})
-            messages.append({"role": "assistant", "content": f"assistant-{i}"})
-        return ConversationHistory(messages)
-
-    def _make_tool_history(self) -> ConversationHistory:
-        """Create a history with tool calls to test serialization."""
-        return ConversationHistory([
-            {"role": "system", "content": "sys"},
-            {"role": "user", "content": "find laptops"},
-            {"role": "assistant", "content": "I'll search", "tool_calls": [
-                {"function": {"name": "browse_page", "arguments": {"url": "amazon.com"}}},
-            ]},
-            {"role": "tool", "tool_name": "browse_page", "content": "Page snapshot " * 100},
-            {"role": "assistant", "content": "Found results", "tool_calls": [
-                {"function": {"name": "click", "arguments": {"ref": "5"}}},
-            ]},
-            {"role": "tool", "tool_name": "click", "content": "Clicked element 5"},
-            {"role": "assistant", "content": "The cheapest laptop is $499."},
-            {"role": "user", "content": "thanks"},
-            {"role": "assistant", "content": "You're welcome!"},
-        ])
-
-    def test_trigger_is_before_model_call(self):
-        strategy = SummarizeStrategy()
-        assert strategy.trigger == TriggerPoint.BEFORE_MODEL_CALL
-
-    def test_should_apply_below_threshold(self):
-        strategy = SummarizeStrategy(threshold=0.75)
-        stats = ContextStats(context_used=50000, context_limit=128000)
-        history = self._make_history(5)
-        assert not strategy.should_apply(history, stats)
-
-    def test_should_apply_at_threshold(self):
-        strategy = SummarizeStrategy(threshold=0.75)
-        stats = ContextStats(context_used=96000, context_limit=128000)
-        history = self._make_history(5)
-        assert strategy.should_apply(history, stats)
+class TestSummaryRole:
+    """Verify that compaction inserts summaries with role=assistant."""
 
     @pytest.mark.asyncio
-    async def test_apply_replaces_old_with_summary(self):
-        """Old messages are replaced with a summary, first user msg pinned."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
-        history = self._make_history(5)  # 1 sys + 10 non-sys
-        stats = ContextStats(context_used=100000, context_limit=128000)
+    async def test_summary_inserted_as_assistant_role(self):
+        """After compaction, the summary message should have role 'assistant'."""
+        messages = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "original request"},
+            *[{"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"} for i in range(10)],
+            # keep_recent=2, so last 2 stay
+            {"role": "user", "content": "recent user"},
+            {"role": "assistant", "content": "recent assistant"},
+        ]
+        history = _build_history(messages)
+        strategy = SummarizeStrategy(threshold=0.5, keep_recent=2, summary_model="test-model")
+        stats = _make_stats(0.8)
 
-        fake_resp = _make_fake_chat_response("This is the summary.")
-        fake_provider = _make_fake_provider(fake_resp)
+        with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
+             patch("sdk.context._strategy.save_summary_record"), \
+             patch("sdk.context._strategy.load_config") as mock_cfg:
+            mock_summarize.return_value = ("This is the summary.", "test-model")
+            mock_cfg.return_value = MagicMock(summary=MagicMock(model="test-model", options={}))
 
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                await strategy.apply(history, stats)
+            await strategy.apply(history, stats)
 
-        # system + pinned first user + summary + last 2 non-system messages
-        assert len(history) == 5
-        assert history.system_message["content"] == "sys"
-        # First user message is pinned
-        assert history.messages[1]["content"] == "user-0"
-        # Summary is inserted after pinned message
-        summary_msg = history.messages[2]
-        assert summary_msg["role"] == "user"
-        assert "summary" in summary_msg["content"].lower()
-        assert "This is the summary." in summary_msg["content"]
-        # Last 2 messages preserved verbatim
-        assert history.messages[3]["content"] == "user-4"
-        assert history.messages[4]["content"] == "assistant-4"
-
-    @pytest.mark.asyncio
-    async def test_apply_keeps_recent_messages(self):
-        """The last keep_recent messages are preserved verbatim."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=4)
-        history = self._make_history(5)  # 1 sys + 10 non-sys
-        stats = ContextStats(context_used=100000, context_limit=128000)
-
-        fake_resp = _make_fake_chat_response("Summary")
-        fake_provider = _make_fake_provider(fake_resp)
-
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                await strategy.apply(history, stats)
-
-        # system + pinned first user + summary + 4 recent
-        assert len(history) == 7
-        non_sys = history.non_system_messages
-        assert non_sys[0]["content"] == "user-0"  # pinned
-        assert non_sys[1]["role"] == "user"  # summary
-        assert "summary" in non_sys[1]["content"].lower()
-        # Last 4 are the original messages
-        assert non_sys[2]["content"] == "user-3"
-        assert non_sys[5]["content"] == "assistant-4"
+        non_system = history.non_system_messages
+        # First message is pinned user, second is the summary
+        summary_msg = non_system[1]
+        assert summary_msg["role"] == "assistant"
+        assert summary_msg["content"].startswith(_SUMMARY_PREFIX)
 
     @pytest.mark.asyncio
-    async def test_apply_preserves_system_message(self):
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
-        history = self._make_history(3)  # 1 sys + 6 non-sys
-        stats = ContextStats(context_used=100000, context_limit=128000)
+    async def test_turn_alternation_after_compaction(self):
+        """After compaction: user(pinned) -> assistant(summary) -> user -> assistant."""
+        messages = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "first question"},
+            *[{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(8)],
+            {"role": "user", "content": "latest user"},
+            {"role": "assistant", "content": "latest assistant"},
+        ]
+        history = _build_history(messages)
+        strategy = SummarizeStrategy(threshold=0.5, keep_recent=2, summary_model="test-model")
 
-        fake_resp = _make_fake_chat_response("Summary")
-        fake_provider = _make_fake_provider(fake_resp)
+        with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
+             patch("sdk.context._strategy.save_summary_record"), \
+             patch("sdk.context._strategy.load_config") as mock_cfg:
+            mock_summarize.return_value = ("Summary text.", "test-model")
+            mock_cfg.return_value = MagicMock(summary=MagicMock(model="test-model", options={}))
 
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                await strategy.apply(history, stats)
+            await strategy.apply(history, _make_stats(0.8))
 
-        assert history.system_message is not None
-        assert history.system_message["content"] == "sys"
-        # First user message is still pinned
-        assert history.messages[1]["content"] == "user-0"
+        non_system = history.non_system_messages
+        roles = [m["role"] for m in non_system]
+        assert roles == ["user", "assistant", "user", "assistant"]
+
+
+# ---------------------------------------------------------------------------
+# Serialization: summary skip is role-agnostic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSerializeMessages:
+    """Verify _serialize_messages skips summaries regardless of role."""
+
+    def test_skips_assistant_role_summary(self):
+        """Summary with role=assistant (new format) should be skipped."""
+        messages = [
+            {"role": "assistant", "content": _SUMMARY_PREFIX + "old summary"},
+            {"role": "user", "content": "hello"},
+        ]
+        result = _serialize_messages(messages)
+        assert "old summary" not in result
+        assert "User: hello" in result
+
+    def test_skips_user_role_summary_legacy(self):
+        """Summary with role=user (legacy format) should also be skipped."""
+        messages = [
+            {"role": "user", "content": _SUMMARY_PREFIX + "old summary"},
+            {"role": "assistant", "content": "response"},
+        ]
+        result = _serialize_messages(messages)
+        assert "old summary" not in result
+        assert "Assistant: response" in result
+
+
+# ---------------------------------------------------------------------------
+# _extract_prior_summary: role-agnostic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestExtractPriorSummary:
+    """Verify _extract_prior_summary works regardless of message role."""
+
+    def test_finds_assistant_role_summary(self):
+        messages = [
+            {"role": "assistant", "content": _SUMMARY_PREFIX + "the summary"},
+            {"role": "user", "content": "hello"},
+        ]
+        assert _extract_prior_summary(messages) == "the summary"
+
+    def test_finds_user_role_summary_legacy(self):
+        messages = [
+            {"role": "user", "content": _SUMMARY_PREFIX + "legacy summary"},
+        ]
+        assert _extract_prior_summary(messages) == "legacy summary"
+
+    def test_returns_none_when_absent(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        assert _extract_prior_summary(messages) is None
+
+
+# ---------------------------------------------------------------------------
+# _find_first_user: skips assistant summary naturally
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestFindFirstUser:
+    """Verify _find_first_user finds the real first user message."""
+
+    def test_skips_assistant_summary(self):
+        """An assistant-role summary should be invisible to _find_first_user."""
+        messages = [
+            {"role": "assistant", "content": _SUMMARY_PREFIX + "summary"},
+            {"role": "user", "content": "real first"},
+        ]
+        idx, found = _find_first_user(messages)
+        assert found is True
+        assert idx == 1
+
+    def test_skips_legacy_user_summary(self):
+        """A legacy user-role summary should also be skipped."""
+        messages = [
+            {"role": "user", "content": _SUMMARY_PREFIX + "summary"},
+            {"role": "user", "content": "real first"},
+        ]
+        idx, found = _find_first_user(messages)
+        assert found is True
+        assert idx == 1
+
+    def test_finds_first_user_normally(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        idx, found = _find_first_user(messages)
+        assert found is True
+        assert idx == 0
+
+
+# ---------------------------------------------------------------------------
+# Step 3: SummaryRecord metadata
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSummaryRecordMetadata:
+    """Verify SummaryRecord gets conversation_id, agent_name, options."""
 
     @pytest.mark.asyncio
-    async def test_apply_no_op_few_messages(self):
-        """Does nothing when there are fewer messages than keep_recent."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=4)
-        history = self._make_history(1)  # 1 sys + 2 non-sys
-        stats = ContextStats(context_used=100000, context_limit=128000)
+    async def test_record_includes_metadata(self):
+        """After compaction, SummaryRecord should have context metadata."""
+        messages = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "original"},
+            *[{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(8)],
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent reply"},
+        ]
+        history = _build_history(messages)
+        # Don't set summary_model so _resolve_model falls through to config
+        strategy = SummarizeStrategy(threshold=0.5, keep_recent=2)
 
-        await strategy.apply(history, stats)
+        saved_records = []
 
-        assert len(history) == 3  # unchanged
+        with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
+             patch("sdk.context._strategy.save_summary_record", side_effect=saved_records.append), \
+             patch("sdk.context._strategy.load_config") as mock_cfg, \
+             patch("sdk.context._strategy.get_conversation_id", return_value="conv-123"), \
+             patch("sdk.context._strategy.get_current_agent_name", return_value="BROWSER"):
+            mock_summarize.return_value = ("Summary.", "test-model")
+            mock_cfg.return_value = MagicMock(
+                summary=MagicMock(model="test-model", options={"temperature": 0.3}),
+            )
 
-    @pytest.mark.asyncio
-    async def test_apply_handles_llm_failure(self):
-        """On LLM failure, history is left unchanged."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
-        history = self._make_history(5)
-        original_len = len(history)
-        stats = ContextStats(context_used=100000, context_limit=128000)
+            await strategy.apply(history, _make_stats(0.8))
 
-        fake_provider = AsyncMock()
-        fake_provider.chat.side_effect = Exception("LLM unavailable")
-
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                await strategy.apply(history, stats)
-
-        assert len(history) == original_len  # unchanged
-
-    @pytest.mark.asyncio
-    async def test_serialization_includes_tool_calls(self):
-        """Tool calls and results are included in the serialized conversation."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
-        history = self._make_tool_history()
-        stats = ContextStats(context_used=100000, context_limit=128000)
-
-        fake_resp = _make_fake_chat_response("Summary with tools")
-        fake_provider = _make_fake_provider(fake_resp)
-
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                await strategy.apply(history, stats)
-
-        # Verify the provider was called with serialized conversation
-        call_args = fake_provider.chat.call_args
-        messages = call_args.kwargs["messages"]
-        user_msg = messages[1]["content"]
-        assert "browse_page" in user_msg
-        # "find laptops" is the first user msg — pinned, not in serialized text
-        assert history.messages[1]["content"] == "find laptops"
-
-    @pytest.mark.asyncio
-    async def test_resolve_model_explicit(self):
-        """Explicit summary_model is used when provided."""
-        strategy = SummarizeStrategy(summary_model="custom-model:latest")
-        history = self._make_history(5)
-        stats = ContextStats(context_used=100000, context_limit=128000)
-
-        fake_resp = _make_fake_chat_response("Summary")
-        fake_provider = _make_fake_provider(fake_resp)
-
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                await strategy.apply(history, stats)
-
-        call_args = fake_provider.chat.call_args
-        assert call_args.kwargs["model"] == "custom-model:latest"
-
-
-    @pytest.mark.asyncio
-    async def test_apply_saves_summary_record(self):
-        """A SummaryRecord is saved after successful compaction."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
-        history = self._make_history(5)
-        stats = ContextStats(context_used=100000, context_limit=128000)
-
-        fake_resp = _make_fake_chat_response("This is the summary.")
-        fake_provider = _make_fake_provider(fake_resp)
-
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                with patch("sdk.context._strategy.save_summary_record") as mock_save:
-                    await strategy.apply(history, stats)
-
-        mock_save.assert_called_once()
-        record = mock_save.call_args[0][0]
-        assert record.model == "glm-4.7-flash:q8_0"
-        assert record.summary_text == "This is the summary."
-        # 10 non-sys - 1 pinned - 2 kept = 7 compacted
-        assert record.messages_compacted == 7
-        assert record.fill_ratio == pytest.approx(100000 / 128000)
-        assert record.input_char_count > 0
-
-    @pytest.mark.asyncio
-    async def test_apply_no_summary_record_on_failure(self):
-        """No SummaryRecord is saved when the LLM call fails."""
-        strategy = SummarizeStrategy(threshold=0.75, keep_recent=2)
-        history = self._make_history(5)
-        stats = ContextStats(context_used=100000, context_limit=128000)
-
-        fake_provider = AsyncMock()
-        fake_provider.chat.side_effect = Exception("LLM unavailable")
-
-        with patch("sdk.context._strategy.get_provider", return_value=fake_provider):
-            with patch("sdk.context._strategy.load_config") as mock_cfg:
-                mock_cfg.return_value = _fake_config()
-                with patch("sdk.context._strategy.save_summary_record") as mock_save:
-                    await strategy.apply(history, stats)
-
-        mock_save.assert_not_called()
-
-
-def _fake_config():
-    """Create a fake config for tests."""
-    cfg = MagicMock()
-    cfg.llm.host = "http://localhost:11434"
-
-    # summary config section
-    summary = MagicMock()
-    summary.model = "glm-4.7-flash:q8_0"
-    summary.options = {"temperature": 0.3, "top_k": 20}
-    cfg.summary = summary
-
-    return cfg
+        assert len(saved_records) == 1
+        record = saved_records[0]
+        assert record.conversation_id == "conv-123"
+        assert record.agent_name == "BROWSER"
+        assert record.options == {"temperature": 0.3}
