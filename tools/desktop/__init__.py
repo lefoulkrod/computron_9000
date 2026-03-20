@@ -4,11 +4,11 @@ Public API:
 - read_screen, describe_screen — observation tools.
 - mouse_click, mouse_double_click, mouse_drag,
   keyboard_type, keyboard_press, scroll — action tools.
-- ensure_desktop_running, is_desktop_running, stop_desktop — lifecycle.
+- ensure_desktop_running, is_desktop_running, start_desktop, stop_desktop — lifecycle.
 - capture_screenshot — raw screenshot capture.
 """
 
-from ._lifecycle import ensure_desktop_running, is_desktop_running, stop_desktop
+from ._lifecycle import ensure_desktop_running, is_desktop_running, start_desktop, stop_desktop
 from ._screenshot import capture_screenshot
 from ._tools import (
     describe_screen,
@@ -27,6 +27,7 @@ __all__ = [
     "describe_screen",
     "ensure_desktop_running",
     "is_desktop_running",
+    "start_desktop",
     "keyboard_press",
     "keyboard_type",
     "mouse_click",

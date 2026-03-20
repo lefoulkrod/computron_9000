@@ -226,12 +226,17 @@ def _ensure_taesd():
     log.info("TAESD ready on CPU")
 
 
-def _unpack_flux_latents(lat):
+def _unpack_flux_latents(lat, height=None, width=None):
     """Unpack Flux packed latents (batch, seq_len, packed_ch) to (batch, ch, H, W).
 
     Flux packs latents with 2x2 spatial patches, so packed_channels = latent_channels * 4.
     Returns the unpacked tensor and the detected latent_channels count.
     Returns (None, 0) if the format is unrecognized.
+
+    Args:
+        lat: Latent tensor, either already 4D or packed 3D.
+        height: Target image height in pixels (needed for non-square images).
+        width: Target image width in pixels (needed for non-square images).
     """
     if lat.ndim == 4:
         return lat, lat.shape[1]
@@ -250,31 +255,48 @@ def _unpack_flux_latents(lat):
         log.warning("Flux unpack: unexpected packed_channels=%d", packed_channels)
         return None, 0
 
-    spatial_side = int(seq_len ** 0.5)
-    if spatial_side * spatial_side != seq_len:
-        log.warning("Flux unpack: non-square seq_len=%d, skipping", seq_len)
-        return None, 0
+    # Determine packed spatial dimensions.  The VAE downsamples 8x and
+    # Flux packs 2x2 patches, so each packed axis = pixel_dim // 16.
+    if height is not None and width is not None:
+        packed_h = height // 16
+        packed_w = width // 16
+        if packed_h * packed_w != seq_len:
+            log.warning("Flux unpack: h/w mismatch %d*%d=%d != seq_len=%d",
+                        packed_h, packed_w, packed_h * packed_w, seq_len)
+            return None, 0
+    else:
+        # Fallback: assume square spatial layout
+        spatial_side = int(seq_len ** 0.5)
+        if spatial_side * spatial_side != seq_len:
+            log.warning("Flux unpack: non-square seq_len=%d, pass height/width", seq_len)
+            return None, 0
+        packed_h = spatial_side
+        packed_w = spatial_side
 
     patch_size = packed_channels // latent_channels  # 4 = 2x2
     spatial_per_patch = int(patch_size ** 0.5)  # 2
 
-    # Unpack: (1, S, packed) → (1, sqrt(S), sqrt(S), ch, 2, 2)
-    #       → (1, ch, sqrt(S)*2, sqrt(S)*2)
-    lat = lat.view(batch, spatial_side, spatial_side, latent_channels,
+    # Unpack: (1, S, packed) → (1, pH, pW, ch, 2, 2) → (1, ch, pH*2, pW*2)
+    lat = lat.view(batch, packed_h, packed_w, latent_channels,
                    spatial_per_patch, spatial_per_patch)
     lat = lat.permute(0, 3, 1, 4, 2, 5).contiguous()
     lat = lat.view(batch, latent_channels,
-                   spatial_side * spatial_per_patch,
-                   spatial_side * spatial_per_patch)
+                   packed_h * spatial_per_patch,
+                   packed_w * spatial_per_patch)
     return lat, latent_channels
 
 
-def _decode_preview_taesd(latents):
+def _decode_preview_taesd(latents, height=None, width=None):
     """Decode Flux latents with TAESD on CPU → base64 JPEG.
 
     Works for both 16-channel (Schnell) and 32-channel (Klein) latents.
     For 32-channel models, takes the first 16 channels — the TAESD decoder
     still produces recognizable previews showing generation progress.
+
+    Args:
+        latents: Packed or unpacked latent tensor from the diffusion callback.
+        height: Target image height in pixels (needed for non-square images).
+        width: Target image width in pixels (needed for non-square images).
     """
     import torch
 
@@ -282,7 +304,7 @@ def _decode_preview_taesd(latents):
     try:
         with torch.no_grad():
             lat = latents.detach().float().cpu()
-            lat, latent_channels = _unpack_flux_latents(lat)
+            lat, latent_channels = _unpack_flux_latents(lat, height=height, width=width)
             if lat is None:
                 return None
             # TAESD expects 16 channels — for 32-channel models (Klein),
@@ -297,7 +319,13 @@ def _decode_preview_taesd(latents):
             decoded = (decoded[0].permute(1, 2, 0).numpy() * 255).astype("uint8")
             from PIL import Image
             img = Image.fromarray(decoded)
-            img = img.resize((512, 512), Image.LANCZOS)
+            # Scale to fit 512px on the longest side, preserving aspect ratio
+            max_dim = 512
+            w, h = img.size
+            if w >= h:
+                img = img.resize((max_dim, int(h * max_dim / w)), Image.LANCZOS)
+            else:
+                img = img.resize((int(w * max_dim / h), max_dim), Image.LANCZOS)
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=75)
             return base64.b64encode(buf.getvalue()).decode("ascii")
@@ -826,7 +854,7 @@ def _generate_image_stream(body, write_line):
         preview = None
         if use_preview:
             latents = callback_kwargs.get("latents")
-            preview = _decode_preview_taesd(latents)
+            preview = _decode_preview_taesd(latents, height=height, width=width)
         write_line({
             "status": "generating",
             "step": step_index + 1,

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const _defaultGetId = (item) => item.id;
+const _defaultTransform = (data) => data;
+
 /**
  * Shared hook for sidebar list panels that fetch, refresh, collapse,
  * delete items, and optionally highlight newly-added items.
@@ -13,8 +16,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  */
 export default function useListPanel(endpoint, {
     refreshSignal = 0,
-    getId = (item) => item.id,
-    transform = (data) => data,
+    getId = _defaultGetId,
+    transform = _defaultTransform,
     onFetched = null,
     startCollapsed = false,
 } = {}) {
@@ -25,28 +28,37 @@ export default function useListPanel(endpoint, {
     const [newItemIds, setNewItemIds] = useState(new Set());
     const prevIdsRef = useRef(new Set());
 
+    // Store callbacks in refs so fetchItems doesn't depend on them
+    const getIdRef = useRef(getId);
+    const transformRef = useRef(transform);
+    const onFetchedRef = useRef(onFetched);
+    getIdRef.current = getId;
+    transformRef.current = transform;
+    onFetchedRef.current = onFetched;
+
     const fetchItems = useCallback(async () => {
         try {
             const resp = await fetch(endpoint);
             if (resp.ok) {
                 const data = await resp.json();
-                const fresh = transform(data);
-                const freshIds = new Set(fresh.map(getId));
-                const added = fresh.filter((item) => !prevIdsRef.current.has(getId(item))).map(getId);
+                const fresh = transformRef.current(data);
+                const currentGetId = getIdRef.current;
+                const freshIds = new Set(fresh.map(currentGetId));
+                const added = fresh.filter((item) => !prevIdsRef.current.has(currentGetId(item))).map(currentGetId);
                 prevIdsRef.current = freshIds;
                 if (added.length > 0) {
                     setNewItemIds(new Set(added));
                     setTimeout(() => setNewItemIds(new Set()), 700);
                 }
                 setItems(fresh);
-                if (onFetched) onFetched(data);
+                if (onFetchedRef.current) onFetchedRef.current(data);
             }
         } catch (_) {
             // ignore
         } finally {
             setLoading(false);
         }
-    }, [endpoint, getId, transform, onFetched]);
+    }, [endpoint]);
 
     useEffect(() => { fetchItems(); }, [fetchItems]);
     useEffect(() => { if (refreshSignal > 0) fetchItems(); }, [refreshSignal, fetchItems]);

@@ -143,6 +143,22 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         sendMessage(message, fileData, modelSettings, agent);
     }, [sendMessage, modelSettings]);
 
+    const openDesktop = useCallback(async () => {
+        if (desktopActive && !closedPanels.has('desktop')) return;
+        try {
+            const res = await fetch('/api/desktop/start', { method: 'POST' });
+            const data = await res.json();
+            if (data.running) {
+                setDesktopActive(true);
+                setClosedPanels(_reopenPanel('desktop'));
+            } else {
+                addToast(data.error || 'Desktop is not available', { type: 'error' });
+            }
+        } catch {
+            addToast('Could not reach the server', { type: 'error' });
+        }
+    }, [desktopActive, closedPanels, addToast]);
+
     const newSession = useCallback(async () => {
         await chatNewSession();
         setBrowserSnapshot(null);
@@ -173,6 +189,7 @@ export default function DesktopApp({ dark, onToggleTheme }) {
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
                 onAudioEnded={() => setPendingAudio(null)}
+                onOpenDesktop={openDesktop}
             />
             <div className={`${styles.mainLayout} ${hasAnyPanel ? styles.threeColumn : ''}`}>
                 <div className={styles.column}>
