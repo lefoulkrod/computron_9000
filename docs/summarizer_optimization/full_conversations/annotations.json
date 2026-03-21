@@ -1,0 +1,22 @@
+{
+  "_description": "Annotations for full-fidelity conversation records. These are complete conversations that were never compacted — used to test how well the full compaction pipeline (boundary logic + summarizer) would handle them.",
+  "_fields": {
+    "task_complete": "Was the task finished at the end of the conversation?",
+    "must_contain": "Regex patterns for facts that must survive in the summary.",
+    "conversation_type": "Type of conversation: browser, coding, desktop, mixed."
+  },
+  "records": {
+    "3ad4d39b": {
+      "task_complete": true,
+      "conversation_type": "browser",
+      "notes": "160-message flight search via browser agent. Single user request to find flights AUS to Chicago for all April weekends. Agent found prices for 3 valid weekends and rejected one. Tests browser page snapshot dedup and fact extraction from navigation-heavy conversations.",
+      "must_contain": ["\\$347|\\$694", "\\$411|\\$822", "\\$372|\\$744", "[Aa]merican", "[Ss]outhwest", "April.*(10|17|24)", "[Cc]hicago|ORD"]
+    },
+    "f50c3081": {
+      "task_complete": true,
+      "conversation_type": "coding",
+      "notes": "161-message coding session. Built a PIL rigging system for game characters, fixed wing attachment, then created a cyberpunk side-scroller demo. 60 empty assistant messages, 71 tool calls — tests tool cap impact when assistant doesn't narrate results.",
+      "must_contain": ["[Rr]igging|rig", "[Kk]night", "[Ww]ing", "[Cc]yberpunk", "pil_rigging_system|PIL", "pygame"]
+    }
+  }
+}

@@ -57,15 +57,17 @@ For long conversations (serialized text > 20k chars), the input is split into ~1
 
 ## 4. Evaluation
 
-### Two evaluation methods
+### Three evaluation methods
 
 **Synthetic scenarios** (`run_scenarios.py`): Hand-crafted conversations with continuity probes. A capable cloud model (kimi-k2.5:cloud) answers questions after seeing the summary and checks if the agent could continue. Fast (seconds per scenario), good for rapid iteration, but doesn't capture real-world failure modes well. 12 scenarios covering browser, desktop, coding, research tasks.
 
-**Real compaction records** (`run_real_eval.py`): Summaries from actual agent conversations stored in `real_compactions/`. Evaluated with deterministic checks + LLM-as-judge (kimi-k2.5:cloud). Slower (minutes for 30 records), but tests against real failure modes. This is the ground truth.
+**Real compaction records** (`run_real_eval.py`): Tests summarizer output quality on real compaction records stored in `real_compactions/`. Each record is a `SummaryRecord` from a production compaction event — contains the input messages that were compacted and the summary that was produced. Evaluated with deterministic checks + LLM-as-judge. Tests: "given this input, does the summarizer produce a good summary?"
+
+**Full conversation eval** (`run_full_conv_eval.py`): Tests the full compaction pipeline on complete, never-compacted conversations stored in `full_conversations/`. Simulates compaction with the current strategy (boundary logic + serialization + summarization) and evaluates the result. Tests: "if we compacted this conversation, would the agent be able to continue?" Covers conversation types the compaction records don't (e.g., long coding sessions with silent tool chains).
 
 ### Real data evaluation
 
-Each compaction in production saves a `SummaryRecord` with the input messages, prior summary, and output summary. These records are copied to `real_compactions/` and annotated with expected behavior.
+Each compaction in production saves a `SummaryRecord` with the input messages, prior summary, and output summary. These records are copied to `real_compactions/` and annotated with expected behavior. Currently 31 records.
 
 **Deterministic checks** (hard pass/fail):
 - `must_contain` — regex patterns for key facts that must survive (prices, URLs, names).
@@ -79,32 +81,38 @@ Each compaction in production saves a `SummaryRecord` with the input messages, p
 
 Judge was validated for stability (5 runs on 8 records, spread 0-1) and accuracy (calibrated against 6 records where we manually verified the correct answer). kimi-k2.5:cloud was selected over deepseek-v3.2, gemini-3-flash-preview, and glm-5 based on calibration accuracy and reliability.
 
-### Current baseline (2026-03-20, gemma3:27b)
+### Full conversation evaluation
+
+Full-fidelity conversations are stored in `full_conversations/` — complete message histories from real agent sessions that were never compacted. Currently 2 conversations:
+- `3ad4d39b` — 160-message browser flight search (tests page snapshot dedup, fact extraction)
+- `f50c3081` — 161-message coding session building a rigging system (tests tool cap impact with silent assistant chains)
+
+The runner simulates compaction using the current `keep_recent_groups` boundary logic, runs the summarizer, and evaluates with deterministic checks + LLM judge (including a hallucination score).
+
+### Current baseline (2026-03-21, gemma3:27b)
 
 ```
-Deterministic:
-  Remaining work correct: 80%
+Real compaction records (31 records):
   Has all sections:       100%
-  Required facts found:   97%
-
-LLM judge (30 records):
-  Fact retention:         3.70/5
-  Remaining work:         3.67/5
-  Current state:          3.77/5
-  Process suppression:    2.77/5
+  Required facts found:   98%
+  Fact retention:         3.85/5
+  Current state:          3.36/5
+  Process suppression:    2.82/5
 ```
 
-Previous baseline (mistral:7b): remaining work 47%, judge scores ~2.8/5.
-Synthetic probe rate: 88% (12 scenarios × 3 runs, with mistral:7b — not yet re-run with gemma3:27b).
+Previous baselines: mistral:7b scores ~2.8/5. gemma3:27b pre-serialization-changes: fact 3.70, state 3.77, process 2.77.
 
 ### Running evaluations
 
 ```bash
-# Baseline (evaluate stored production summaries):
+# Real compaction records — baseline (evaluate stored summaries):
 PYTHONPATH=. uv run python docs/summarizer_optimization/run_real_eval.py
 
-# After a change (re-run summarizer, compare to baseline):
+# Real compaction records — after a change (re-run summarizer, compare):
 PYTHONPATH=. uv run python docs/summarizer_optimization/run_real_eval.py --rerun --save
+
+# Full conversation eval:
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_full_conv_eval.py
 
 # Synthetic scenarios (rapid iteration):
 PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 3
@@ -113,8 +121,8 @@ PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 
 ### Acceptance criteria
 
 A change is **kept** if:
-- Real data remaining work % stays same or improves
 - Real data judge scores stay same or improve
+- Full conversation facts and judge scores stay same or improve
 - Synthetic probe rate stays same or improves
 - No single metric drops by more than 10% or 0.5 points
 
@@ -146,6 +154,8 @@ See `experiments.md` and `results.md` for the full history of changes.
 ## 7. Test Data
 
 - `scenarios/` — 12 synthetic scenarios (markdown format with inline conversations and probes)
-- `real_compactions/` — 30 production compaction records (JSON SummaryRecords) with annotations
+- `real_compactions/` — 31 production compaction records (JSON SummaryRecords) with annotations
 - `real_compactions/annotations.json` — per-record expected behavior (task_complete, must_contain patterns)
 - `real_compactions/baseline_scores.json` — baseline evaluation scores for comparison
+- `full_conversations/` — 2 full-fidelity conversations (never compacted) for pipeline testing
+- `full_conversations/annotations.json` — per-conversation expected behavior and type
