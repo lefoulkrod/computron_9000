@@ -13,7 +13,7 @@ const DesktopIcon = () => (
   </svg>
 );
 
-export default function Header({ dark, onToggleTheme, onNewSession, showSubAgents, onToggleSubAgents, audio, muted, onToggleMute, onAudioEnded, compact, onOpenSettings, onOpenDesktop }) {
+export default function Header({ dark, onToggleTheme, onNewConversation, showSubAgents, onToggleSubAgents, audio, muted, onToggleMute, onAudioEnded, compact, onOpenSettings, onOpenDesktop }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -71,11 +71,11 @@ export default function Header({ dark, onToggleTheme, onNewSession, showSubAgent
           <ThemeIcon dark={dark} />
         </button>
         <button
-          onClick={onNewSession}
-          id="newSessionBtn"
+          onClick={onNewConversation}
+          id="newConversationBtn"
           className={styles.iconButton}
-          aria-label="New session"
-          title="New session"
+          aria-label="New conversation"
+          title="New conversation"
         >
           <PlusIcon />
         </button>

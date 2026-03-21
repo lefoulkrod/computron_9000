@@ -10,7 +10,7 @@ from typing import Any
 from agents.types import Agent
 from sdk.context import ConversationHistory
 from sdk.events import AssistantResponse, ToolCallPayload, get_current_agent_name, publish_event
-from sdk.providers import ChatResponse, ProviderError, get_provider
+from sdk.providers import ChatDelta, ChatResponse, ProviderError, get_provider
 from sdk.tools import _normalize_tool_result, _prepare_tool_arguments
 
 from ._turn import StopRequestedError
@@ -31,71 +31,68 @@ def _publish_final(content: str | None = None) -> None:
         logger.exception("Failed to publish terminal AssistantResponse event")
 
 
-async def _chat_with_retries(
+async def _stream_chat_with_retries(
     provider: Any,
     *,
     agent: Agent,
     messages: list[dict[str, Any]],
     tools: list[Callable[..., Any]] | None = None,
     retries: int = 5,
-) -> ChatResponse:
-    """Call provider.chat with retries for transient errors only.
+) -> AsyncGenerator[ChatDelta | ChatResponse, None]:
+    """Yield ChatDelta tokens, then the final ChatResponse. Retries on failure.
 
-    Non-retryable errors (e.g. 404 model not found, 400 bad request) are
-    raised immediately without wasting attempts.
-
-    Args:
-        provider: The LLM provider instance.
-        agent (Agent): The agent providing model, options, tools, and think flag.
-        messages (list[dict[str, Any]]): The chat messages payload.
-        tools: Tool list override. Falls back to ``agent.tools`` when *None*.
-        retries (int): Number of retry attempts after the initial try. Defaults to 5.
-
-    Returns:
-        ChatResponse: The successful chat response.
-
-    Raises:
-        ProviderError: The last exception raised by provider.chat after exhausting retries,
-            or immediately for non-retryable errors.
+    If a stream fails mid-way after emitting deltas, retrying would cause
+    content duplication. On retry, fall back to non-streaming chat() to
+    yield a single complete ChatResponse instead.
     """
     resolved_tools = tools if tools is not None else (agent.tools or [])
     attempt = 0
     total_attempts = 1 + max(0, retries)
     while attempt < total_attempts:
         try:
-            return await provider.chat(
-                model=agent.model,
-                messages=messages,
-                options=agent.options,
-                tools=resolved_tools,
-                think=agent.think,
-            )
+            if attempt == 0:
+                async for chunk in provider.chat_stream(
+                    model=agent.model,
+                    messages=messages,
+                    options=agent.options,
+                    tools=resolved_tools,
+                    think=agent.think,
+                ):
+                    yield chunk
+            else:
+                # Retry with non-streaming to avoid content duplication
+                yield await provider.chat(
+                    model=agent.model,
+                    messages=messages,
+                    options=agent.options,
+                    tools=resolved_tools,
+                    think=agent.think,
+                )
+            return
         except ProviderError as exc:
             attempt += 1
             if not exc.retryable:
                 logger.error(
-                    "provider.chat failed (non-retryable): %s | model=%s",
+                    "provider.chat_stream failed (non-retryable): %s | model=%s",
                     exc,
                     agent.model,
                 )
                 raise
             delay = min(2 ** attempt, 32)
             logger.warning(
-                "provider.chat failed (attempt %s/%s, retryable, backoff %ds): %s | model=%s msgs=%d",
+                "provider.chat_stream failed (attempt %s/%s, retryable, backoff %ds): %s | model=%s",
                 attempt,
                 total_attempts,
                 delay,
                 exc,
                 agent.model,
-                len(messages),
             )
             if attempt >= total_attempts:
                 raise
             await asyncio.sleep(delay)
         except Exception as exc:
-            # Unknown exceptions are not retried
             logger.error(
-                "provider.chat failed (unexpected): %s | model=%s",
+                "provider.chat_stream failed (unexpected): %s | model=%s",
                 exc,
                 agent.model,
             )
@@ -245,13 +242,27 @@ async def run_tool_call_loop(
                 if fn:
                     await fn(history, iteration, agent.name)
 
-            # Call model with internal retry handling
-            response = await _chat_with_retries(
-                provider,
-                agent=agent,
-                messages=history.messages,
-                tools=tools,
-            )
+            # Stream deltas to frontend as tokens arrive
+            response: ChatResponse | None = None
+            streamed_deltas = False
+            async for chunk in _stream_chat_with_retries(
+                provider, agent=agent, messages=history.messages, tools=tools,
+            ):
+                if isinstance(chunk, ChatDelta):
+                    streamed_deltas = True
+                    try:
+                        publish_event(AssistantResponse(
+                            content=chunk.content,
+                            thinking=chunk.thinking,
+                            delta=True,
+                        ))
+                    except Exception:  # pragma: no cover - defensive
+                        logger.exception("Failed to publish delta event")
+                elif isinstance(chunk, ChatResponse):
+                    response = chunk
+
+            if response is None:
+                raise ToolLoopError("No ChatResponse received from provider")
 
             # ── after_model hooks (chain: each can rewrite response) ─
             for hook in hooks:
@@ -275,11 +286,12 @@ async def run_tool_call_loop(
                 "agent_name": get_current_agent_name(),
             }
             history.append(assistant_message)
-            # Emit an event for model content/thinking (non-final, actual final decided by loop end)
-            try:
-                publish_event(AssistantResponse(content=content, thinking=thinking))
-            except Exception:  # pragma: no cover - defensive
-                logger.exception("Failed to publish model AssistantResponse event")
+            # Emit full content only if no deltas were streamed (fallback path)
+            if not streamed_deltas:
+                try:
+                    publish_event(AssistantResponse(content=content, thinking=thinking))
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("Failed to publish model AssistantResponse event")
             if content is not None or thinking is not None:
                 yield content, thinking
 

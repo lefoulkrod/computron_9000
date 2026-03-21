@@ -6,9 +6,9 @@ import remarkMath from 'remark-math';
 import rehypeSanitize from 'rehype-sanitize';
 import { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
+import remend from 'remend';
 import 'katex/dist/katex.min.css';
 import styles from './Message.module.css';
-import ThinkingIcon from './icons/ThinkingIcon.jsx';
 import ChevronIcon from './icons/ChevronIcon.jsx';
 import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
 import ToolCallsSummary from './ToolCallsSummary';
@@ -128,7 +128,9 @@ const markdownComponents = {
     code: (props) => <InlineCode {...props} />,
 };
 
-function MarkdownContent({ children }) {
+function MarkdownContent({ children, streaming }) {
+    let content = preprocessContent(children || '');
+    if (streaming) content = remend(content);
     return (
         <ReactMarkdown
             urlTransform={_urlTransform}
@@ -136,7 +138,7 @@ function MarkdownContent({ children }) {
             rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
             components={markdownComponents}
         >
-            {preprocessContent(children || '')}
+            {content}
         </ReactMarkdown>
     );
 }
@@ -151,8 +153,6 @@ function formatAgentName(agentName) {
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 }
-
-
 
 function ContextUsageBadge({ contextUsage }) {
     if (!contextUsage || !contextUsage.context_limit) return null;
@@ -181,8 +181,8 @@ function ContextUsageBadge({ contextUsage }) {
     );
 }
 
-function AssistantMessage({ content, thinking, images, placeholder, agent_name, depth = 0, data, contextUsage, onPreview }) {
-    const [thinkingExpanded, setThinkingExpanded] = useState(false);
+function AssistantMessage({ content, thinking, images, placeholder, agent_name, depth = 0, data, contextUsage, onPreview, streaming }) {
+    const [thinkingExpanded, setThinkingExpanded] = useState(true);
     const bubbleRef = useRef(null);
     const displayName = formatAgentName(agent_name);
 
@@ -228,20 +228,17 @@ function AssistantMessage({ content, thinking, images, placeholder, agent_name, 
                             className={styles.collapsibleThinkHeader}
                             onClick={() => setThinkingExpanded((e) => !e)}
                         >
-                            <span className={styles.thinkIcon} aria-hidden="true">
-                                <ThinkingIcon size={18} />
-                            </span>
                             <span>{thinkingExpanded ? 'Hide thoughts' : 'Show thoughts'}</span>
                             <ChevronIcon size={12} direction={thinkingExpanded ? 'up' : 'down'} />
                         </div>
                         {thinkingExpanded && (
                             <div className={styles.collapsibleThinkContent}>
-                                <MarkdownContent>{thinking}</MarkdownContent>
+                                <MarkdownContent streaming={streaming}>{thinking}</MarkdownContent>
                             </div>
                         )}
                     </div>
                 )}
-                {!placeholder && <MarkdownContent>{content}</MarkdownContent>}
+                {!placeholder && <MarkdownContent streaming={streaming}>{content}</MarkdownContent>}
                 {fileOutputs.length > 0 && (
                     <div>
                         {fileOutputs.map((item, i) => (

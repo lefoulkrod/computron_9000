@@ -117,9 +117,27 @@ function _historyToMessages(rawMessages) {
     return uiMessages;
 }
 
+/**
+ * Hook that manages a streaming chat conversation with the backend.
+ *
+ * Connects to /api/chat via chunked JSONL streaming. Each JSONL line is either
+ * a streaming token (data.delta=true) or a non-streaming event (tool calls,
+ * context usage, screenshots, final marker, etc.).
+ *
+ * Streaming tokens are buffered and flushed once per animation frame to avoid
+ * excessive React re-renders. Non-streaming events are applied immediately.
+ *
+ * Messages are segmented into separate bubbles when:
+ *  - The agent depth changes (main agent ↔ sub-agent)
+ *  - New thinking arrives after content (next tool-loop iteration)
+ *
+ * Returns: { messages, isStreaming, sendMessage, stopGeneration,
+ *            loadConversation, newConversation }
+ */
 export default function useStreamingChat(callbacks) {
     const [messages, setMessages] = useState([]);
     const [isStreaming, _setIsStreaming] = useState(false);
+    // Ref mirror of isStreaming so sendMessage can read it synchronously
     const isStreamingRef = useRef(false);
     const setIsStreaming = useCallback((val) => {
         isStreamingRef.current = val;
@@ -155,6 +173,7 @@ export default function useStreamingChat(callbacks) {
             userMsg.files = [{ filename: fileData.filename, content_type: fileData.content_type }];
         }
 
+        // Add user message + a placeholder "Thinking..." bubble
         const placeholderId = Math.random().toString(36).slice(2);
         setMessages((prev) => [
             ...prev,
@@ -164,6 +183,7 @@ export default function useStreamingChat(callbacks) {
 
         const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
 
+        let rafId = null;
         try {
             const controller = new AbortController();
             abortControllerRef.current = controller;
@@ -177,17 +197,21 @@ export default function useStreamingChat(callbacks) {
             });
             if (!resp.body) return;
 
+            // ── Read the JSONL stream ────────────────────────────────
             const reader = resp.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            // Track segmentation of assistant output for this single user turn.
+
+            // Segmentation state: a single user turn may produce multiple
+            // assistant message bubbles (one per tool-loop iteration, plus
+            // separate bubbles for sub-agents at different depths).
             let segmentIndex = 0;
             let currentAssistantId = placeholderId;
             let currentHasResponse = false;
-            // Depth tracking: sub-agents (depth > 0) get their own message bubbles
             let currentDepth = 0;
+            let currentAgentName = null;
 
-            // Helper to ensure a segment message exists and optionally initialize
+            // Ensure the current segment's message object exists in state.
             const ensureAssistantMessage = (init = {}) => {
                 setMessages((prev) => {
                     const updated = [...prev];
@@ -210,6 +234,62 @@ export default function useStreamingChat(callbacks) {
                 });
             };
 
+            // Buffer streaming tokens and flush once per animation frame
+            // to avoid re-rendering on every single token.
+            let pendingContent = '';
+            let pendingThinking = '';
+
+            const flushStreamBuffer = () => {
+                rafId = null;
+                if (!pendingContent && !pendingThinking) return;
+                const contentChunk = pendingContent;
+                const thinkingChunk = pendingThinking;
+                pendingContent = '';
+                pendingThinking = '';
+                setMessages((prev) => {
+                    const updated = [...prev];
+                    const i = updated.findIndex(
+                        (m) => m.role === 'assistant' && (m.id === currentAssistantId || m.tempId === currentAssistantId)
+                    );
+                    if (i === -1) return prev;
+                    const next = { ...updated[i] };
+                    // Clear placeholder so content renders during streaming
+                    if (next.placeholder) {
+                        next.placeholder = false;
+                        next.tempId = undefined;
+                        next.streaming = true;
+                    }
+                    if (currentAgentName) next.agent_name = currentAgentName;
+                    if (currentDepth > 0) next.depth = currentDepth;
+                    if (contentChunk) {
+                        next.content = (next.content || '') + contentChunk;
+                    }
+                    if (thinkingChunk) {
+                        next.thinking = (next.thinking || '') + thinkingChunk;
+                    }
+                    updated[i] = next;
+                    return updated;
+                });
+            };
+
+            const scheduleStreamFlush = () => {
+                if (rafId === null) {
+                    rafId = requestAnimationFrame(flushStreamBuffer);
+                }
+            };
+
+            // Mark a segment as done streaming
+            const finishSegment = (oldId) => {
+                setMessages((prev) => {
+                    const idx = prev.findIndex((m) => m.id === oldId);
+                    if (idx === -1 || !prev[idx].streaming) return prev;
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], streaming: false };
+                    return updated;
+                });
+            };
+
+            // ── Process JSONL lines ────────────────────────────────
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -222,43 +302,71 @@ export default function useStreamingChat(callbacks) {
                     try {
                         const data = JSON.parse(line);
 
-                        // Dispatch side-effect events
                         _handleStreamEvent(data, callbacks);
 
+                        // Extract fields from the JSONL event
                         const contentField = typeof data.content === 'string' ? data.content : '';
                         const hasResponse = typeof contentField === 'string' && contentField.length > 0;
                         const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
                         const agentName = data.agent_name || null;
                         const depth = typeof data.depth === 'number' ? data.depth : 0;
-                        const dataField = Array.isArray(data.data) ? data.data : null;
+                        const dataField = Array.isArray(data.data) && data.data.length > 0 ? data.data : null;
                         const toolCallEvent = data.event && data.event.type === 'tool_call' ? data.event : null;
                         const fileOutputEvent = data.event && data.event.type === 'file_output' ? data.event : null;
                         const contextUsageEvent = data.event && data.event.type === 'context_usage' ? data.event : null;
 
-                        // Handle depth transitions: sub-agents get their own message bubbles
-                        if (depth > 0 && currentDepth === 0) {
+                        // Finish the current segment and start a new one when
+                        // depth changes (main ↔ sub-agent) or when new thinking
+                        // arrives after content (next tool-loop iteration).
+                        const maybeNewSegment = (evtDepth, hasThink) => {
+                            const depthChanged = (evtDepth > 0 && currentDepth === 0)
+                                || (evtDepth === 0 && currentDepth > 0);
+                            if (!depthChanged && !(hasThink && currentHasResponse)) return;
+
+                            flushStreamBuffer();
+                            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+                            finishSegment(currentAssistantId);
                             segmentIndex += 1;
-                            currentAssistantId = `${placeholderId}_sub_${segmentIndex}`;
+                            if (evtDepth > 0 && currentDepth === 0) {
+                                currentAssistantId = `${placeholderId}_sub_${segmentIndex}`;
+                            } else if (evtDepth === 0 && currentDepth > 0) {
+                                currentAssistantId = `${placeholderId}_main_${segmentIndex}`;
+                            } else {
+                                currentAssistantId = `${placeholderId}_s${segmentIndex}`;
+                            }
                             currentHasResponse = false;
-                            currentDepth = depth;
-                        } else if (depth === 0 && currentDepth > 0) {
-                            segmentIndex += 1;
-                            currentAssistantId = `${placeholderId}_main_${segmentIndex}`;
-                            currentHasResponse = false;
-                            currentDepth = 0;
+                            currentDepth = evtDepth;
+                            ensureAssistantMessage();
+                        };
+
+                        // ── Streaming tokens ──────────────────────────────
+                        // Buffer content/thinking and flush once per frame.
+                        if (data.delta && !dataField && !toolCallEvent && !fileOutputEvent
+                            && !contextUsageEvent && data.final !== true) {
+                            if (agentName) currentAgentName = agentName;
+                            maybeNewSegment(depth, hasThinking);
+                            if (hasResponse) {
+                                pendingContent += contentField;
+                                currentHasResponse = true;
+                            }
+                            if (hasThinking) pendingThinking += data.thinking;
+                            if (hasResponse || hasThinking) scheduleStreamFlush();
+                            continue;
                         }
 
-                        // If thinking arrives after a response in this segment, start a new segment
-                        if (hasThinking && currentHasResponse) {
-                            segmentIndex += 1;
-                            currentAssistantId = `${placeholderId}_s${segmentIndex}`;
-                            currentHasResponse = false;
-                            ensureAssistantMessage();
-                        } else {
-                            ensureAssistantMessage();
+                        // ── Non-streaming events ──────────────────────────
+                        // Tool calls, context usage, screenshots, final marker.
+                        // Flush buffered tokens first so ordering is preserved.
+                        flushStreamBuffer();
+                        if (rafId !== null) {
+                            cancelAnimationFrame(rafId);
+                            rafId = null;
                         }
+                        maybeNewSegment(depth, hasThinking);
+                        ensureAssistantMessage();
 
-                        // Update the current segment with incoming data
+                        // Apply event data, metadata, and complete-chunk
+                        // content/thinking to the current segment.
                         setMessages((prev) => {
                             const updated = [...prev];
                             const i = updated.findIndex((m) => m.role === 'assistant' && m.id === currentAssistantId);
@@ -327,8 +435,12 @@ export default function useStreamingChat(callbacks) {
                     }
                 }
             }
+            // Stream ended — flush any remaining buffered tokens
+            flushStreamBuffer();
         } catch (err) {
+            if (rafId !== null) cancelAnimationFrame(rafId);
             if (err.name === 'AbortError') return;
+            // Replace the placeholder (or append) with an error message
             setMessages((prev) => {
                 const updated = [...prev];
                 const pIndex = updated.findIndex(
@@ -351,13 +463,14 @@ export default function useStreamingChat(callbacks) {
         }
     }, [callbacks]);
 
+    /** Ask the backend to stop generation and update local state. */
     const stopGeneration = useCallback(() => {
         fetch(`/api/chat/stop?conversation_id=${conversationIdRef.current}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
     }, []);
 
-    const loadSession = useCallback(async (conversationId) => {
-        // Abort any in-flight stream
+    /** Resume a previous conversation by loading its history from the backend. */
+    const loadConversation = useCallback(async (conversationId) => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -378,8 +491,8 @@ export default function useStreamingChat(callbacks) {
         }
     }, []);
 
-    const newSession = useCallback(async () => {
-        // Abort any in-flight stream so it doesn't write into the cleared message list
+    /** Clear messages, generate a fresh conversation ID, and delete backend history. */
+    const newConversation = useCallback(async () => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -402,7 +515,7 @@ export default function useStreamingChat(callbacks) {
         isStreaming,
         sendMessage,
         stopGeneration,
-        loadSession,
-        newSession,
+        loadConversation,
+        newConversation,
     };
 }

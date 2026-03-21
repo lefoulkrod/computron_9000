@@ -54,6 +54,9 @@ class _ProviderScript:
             return _make_response(content="done")
         return self._responses.pop(0)
 
+    async def chat_stream(self, **kwargs: Any):
+        yield await self.chat(**kwargs)
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio

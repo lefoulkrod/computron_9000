@@ -2,11 +2,11 @@
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from ._base import BaseAPIProvider
-from ._models import ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._tool_schema import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
@@ -34,16 +34,15 @@ class AnthropicProvider(BaseAPIProvider):
             kwargs["base_url"] = base_url
         self._client = anthropic.AsyncAnthropic(**kwargs)
 
-    async def chat(
+    def _build_kwargs(
         self,
-        *,
         model: str,
         messages: list[dict[str, Any]],
-        tools: list[Callable[..., Any]] | None = None,
-        options: dict[str, Any] | None = None,
-        think: bool = False,
-    ) -> ChatResponse:
-        """Send a chat request via Anthropic and normalize the response."""
+        tools: list[Callable[..., Any]] | None,
+        options: dict[str, Any] | None,
+        think: bool,
+    ) -> dict[str, Any]:
+        """Build kwargs dict for the Anthropic messages API."""
         opts = options or {}
         system_prompt, converted = _convert_messages(messages)
 
@@ -67,12 +66,51 @@ class AnthropicProvider(BaseAPIProvider):
         if think:
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": max(1024, kwargs["max_tokens"] // 2)}
 
+        return kwargs
+
+    async def chat(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[Callable[..., Any]] | None = None,
+        options: dict[str, Any] | None = None,
+        think: bool = False,
+    ) -> ChatResponse:
+        """Send a chat request via Anthropic and normalize the response."""
+        kwargs = self._build_kwargs(model, messages, tools, options, think)
+
         try:
             async with self._client.messages.stream(**kwargs) as stream:
                 response = await stream.get_final_message()
         except Exception as exc:
             raise _wrap_error(exc) from exc
         return _normalize_response(response)
+
+    async def chat_stream(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[Callable[..., Any]] | None = None,
+        options: dict[str, Any] | None = None,
+        think: bool = False,
+    ) -> AsyncGenerator[ChatDelta | ChatResponse, None]:
+        """Stream token deltas followed by a final ChatResponse."""
+        kwargs = self._build_kwargs(model, messages, tools, options, think)
+
+        try:
+            async with self._client.messages.stream(**kwargs) as stream:
+                async for event in stream:
+                    if event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            yield ChatDelta(content=event.delta.text)
+                        elif event.delta.type == "thinking_delta":
+                            yield ChatDelta(thinking=event.delta.thinking)
+                response = await stream.get_final_message()
+        except Exception as exc:
+            raise _wrap_error(exc) from exc
+        yield _normalize_response(response)
 
     async def list_models(self) -> list[str]:
         """Return available Anthropic model identifiers."""

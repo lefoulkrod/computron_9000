@@ -245,6 +245,9 @@ class AssistantResponse(BaseModel):
     # Final is a boolean flag indicating terminal/complete event. Default to
     # False so consumers can rely on a boolean value instead of None.
     final: bool = False
+    # When True, content/thinking are incremental token deltas to append.
+    # When None (default, excluded from JSON), they are complete chunks.
+    delta: bool | None = None
     # Agent attribution metadata for UI rendering
     agent_name: str | None = None
     depth: int | None = None
