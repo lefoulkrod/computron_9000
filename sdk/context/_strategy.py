@@ -128,11 +128,16 @@ class SummarizeStrategy:
 
     When the context fill ratio exceeds *threshold*, sends the oldest
     messages to an LLM for summarization and replaces them with a compact
-    summary. The most recent *keep_recent* messages are preserved verbatim.
+    summary. The most recent messages are preserved verbatim, with the
+    boundary determined by assistant message groups to avoid splitting
+    tool calls from their results.
 
     Args:
         threshold: Fill ratio above which the strategy activates (0.0–1.0).
-        keep_recent: Number of recent non-system messages to preserve verbatim.
+        keep_recent_groups: Number of recent assistant message groups to
+            preserve. Each group is an assistant message plus its tool
+            results. Any user or other messages interleaved between kept
+            groups are also preserved.
         summary_model: Model identifier string override.
             Falls back to the ``summary`` section in config.
     """
@@ -140,11 +145,11 @@ class SummarizeStrategy:
     def __init__(
         self,
         threshold: float = 0.75,
-        keep_recent: int = 6,
+        keep_recent_groups: int = 2,
         summary_model: str | None = None,
     ) -> None:
         self._threshold = threshold
-        self._keep_recent = keep_recent
+        self._keep_recent_groups = keep_recent_groups
         self._summary_model = summary_model
 
     @property
@@ -157,15 +162,20 @@ class SummarizeStrategy:
     async def apply(self, history: ConversationHistory, stats: ContextStats) -> None:
         """Summarize old messages and replace them with a compact summary."""
         non_system = history.non_system_messages
-        if len(non_system) <= self._keep_recent:
-            return
 
         # Pin the first user message — it contains the original request and
         # must never be summarized away.
         first_user_idx, has_pinned = _find_first_user(non_system)
         pin_offset = 1 if has_pinned else 0
 
-        compactable = non_system[pin_offset : -self._keep_recent]
+        body = non_system[pin_offset:]
+        keep_count = _count_kept_by_assistant_groups(
+            body, self._keep_recent_groups,
+        )
+        if keep_count >= len(body):
+            return
+
+        compactable = body[:-keep_count] if keep_count > 0 else body
         if not compactable:
             return
 
@@ -348,6 +358,40 @@ def _log_summary(
         border_style="magenta",
         expand=False,
     ))
+
+
+def _count_kept_by_assistant_groups(
+    messages: list[dict],
+    keep_groups: int,
+) -> int:
+    """Count how many messages from the tail to keep based on assistant groups.
+
+    Walks backward through *messages* counting assistant messages (with or
+    without tool calls). When *keep_groups* assistant messages have been
+    found, the boundary is set right before the earliest one found. Any
+    non-assistant messages (user messages, tool results) that fall between
+    or after the kept assistant messages are included automatically.
+
+    Returns the number of raw messages to keep from the end.
+    """
+    if keep_groups <= 0 or not messages:
+        return 0
+
+    assistant_count = 0
+    boundary = len(messages)
+
+    for i in range(len(messages) - 1, -1, -1):
+        msg = messages[i]
+        if msg.get("role") == "assistant":
+            assistant_count += 1
+            boundary = i
+            if assistant_count >= keep_groups:
+                break
+
+    if assistant_count == 0:
+        return 0
+
+    return len(messages) - boundary
 
 
 def _find_first_user(non_system: list[dict]) -> tuple[int, bool]:

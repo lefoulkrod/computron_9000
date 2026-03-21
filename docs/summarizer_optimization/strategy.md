@@ -23,16 +23,15 @@ The summarizer needs to work well across a wide variety of conversation types: w
 ### Trigger
 
 - Activates when context fill ratio >= 75% (`threshold=0.75`)
-- Keeps the most recent 6 non-system messages verbatim (`keep_recent=6`)
+- Keeps the last 2 assistant message groups verbatim (`keep_recent_groups=2`). A group is an assistant message plus any following tool results, plus any interleaved user messages between groups. The boundary always falls right before an assistant message, so tool call/result pairs are never split.
 - Pins the first user message (original request) — never summarized
 
 ### Prompt (`_SUMMARIZE_PROMPT`)
 
-System prompt instructs the model to produce a structured 4-section document:
+System prompt instructs the model to produce a structured 3-section document:
 - `## Completed Work` — bullet points of results/findings (not process)
 - `## Key Data` — all reference data: URLs, prices, ratings, dates, file paths, etc.
-- `## Current State` — what application/page is open, modified files, form state
-- `## Remaining Work` — what's left, or "None"
+- `## Current State` — what is happening RIGHT NOW at the end of the conversation, what was the assistant doing, what did the user most recently ask for
 
 Key prompt rules:
 - Structure enforcement: "MUST start with `## Completed Work`"
@@ -69,13 +68,12 @@ For long conversations (serialized text > 20k chars), the input is split into ~1
 Each compaction in production saves a `SummaryRecord` with the input messages, prior summary, and output summary. These records are copied to `real_compactions/` and annotated with expected behavior.
 
 **Deterministic checks** (hard pass/fail):
-- `remaining_work_correct` — does the summary correctly say "None" or not? We know for each record whether the task was actually complete.
 - `must_contain` — regex patterns for key facts that must survive (prices, URLs, names).
-- `has_all_sections` — are all 4 required section headings present?
+- `must_not_contain` — regex patterns for hallucinated content that must not appear.
+- `has_all_sections` — are all 3 required section headings present?
 
 **LLM judge** (1-5 scored, kimi-k2.5:cloud):
 - `fact_retention` — are important facts preserved?
-- `remaining_work` — is the remaining work section accurate?
 - `current_state` — does it describe where the agent left off?
 - `process_suppression` — does it avoid narrating clicks/scrolls/retries?
 
@@ -124,13 +122,13 @@ A change is **kept** if:
 
 From real conversation analysis (30 compaction records across 6 conversations):
 
-1. **False "Remaining Work: None"** (47% error rate) — the summarizer says the task is complete when it isn't. Worst on sub-agents that don't know they're part of a larger task, and on multi-step tasks where completed steps dominate the conversation.
+1. **Process narration** (2.77/5) — when the agent retries the same action many times (e.g., clicking a button 10 times), the summary becomes a log of attempts rather than facts. The prompt says "omit HOW results were obtained" but the model ignores this for long retry sequences.
 
-2. **Process narration** (2.27/5) — when the agent retries the same action many times (e.g., clicking a button 10 times), the summary becomes a log of attempts rather than facts. The prompt says "omit HOW results were obtained" but the model ignores this for long retry sequences.
+2. **Merge fact loss** — during merge compactions, facts from the prior summary get dropped. The flight search lost all prices ($634, $558, $714) during merge despite the prompt saying "merge ALL facts."
 
-3. **Merge fact loss** — during merge compactions, facts from the prior summary get dropped. The flight search lost all prices ($634, $558, $714) during merge despite the prompt saying "merge ALL facts."
+3. **Hallucinated data** — one record (1577ab25) had the summarizer invent a recipe from a near-empty input (orphaned tool call with no results). The 200-char tool cap + boundary splitting left the summarizer with 47 chars of input. Fixed by message group–based boundaries (experiment 23).
 
-4. **Hallucinated data** — one record (8f1a0966) had the summarizer invent SSD prices that didn't exist in the input. The 200-char tool cap means the model sometimes fills in plausible-sounding data instead of admitting the information was truncated.
+4. **Summary bloat on re-compaction** — record 014e818a had a prior summary as the only compactable message. The `_extract_prior_summary` flow extracted it, left the serialized input empty, and the LLM re-emitted it at 6.2k chars (larger than the 5.8k input). Related to the prior summary special handling — separate fix planned.
 
 ## 6. Historical Algorithm
 
@@ -139,8 +137,9 @@ For reference, the original algorithm before optimization:
 - **Prompt**: 4 sections starting with `## User's Request` (removed in experiment 1)
 - **Tool cap**: 10,000 chars per result with head+tail preservation (reduced to 200 in experiment 17)
 - **Progressive shrink**: 40k total char budget with oldest-first shrinking (removed in experiment 10)
-- **Model**: qwen3:8b with num_ctx=60000 (changed to mistral:7b with num_ctx=8192 in experiments 6/14)
-- **No timeout**: could run indefinitely (added 120s timeout in experiment 14)
+- **Keep recent**: 6 raw messages (changed to 2 assistant message groups in experiment 23)
+- **Model**: qwen3:8b with num_ctx=60000 (changed to mistral:7b in experiment 6, then gemma3:27b in experiment 15, with num_ctx=8192 in experiment 14)
+- **No timeout**: could run indefinitely (added 180s timeout in experiment 14)
 
 See `experiments.md` and `results.md` for the full history of changes.
 

@@ -102,3 +102,36 @@ The current single-pass approach forces the model to simultaneously extract fact
 1. Evaluate with `run_real_eval.py --rerun` — compare against baseline
 2. Run synthetic scenarios to check for regressions
 3. Test on GitHub repo exploration specifically for fact retention improvement
+
+### Experiment 23: Message group–based keep_recent
+
+**What**: Replace raw `keep_recent=6` (counts individual messages) with `keep_recent_groups=N` (counts logical message groups). A message group is an atomic unit: a user message, an assistant tool-call + its tool results, or a standalone assistant text response. This prevents splitting tool calls from their results at the compaction boundary.
+
+**Discovered via**: Record `1577ab25` — `keep_recent=6` split an assistant tool-call from its results. The compactable window contained only the orphaned tool call (serialized to 47 chars), and gemma3:27b hallucinated an entire recipe. Record `014e818a` — the only compactable message was a prior summary, which got re-summarized into a bloated 6.2k char version (larger than the 5.8k input). Both caused by the boundary falling in the wrong place.
+
+**Also addresses**: Compaction loops where kept-recent messages are too large and compaction triggers repeatedly with nothing meaningful to compact.
+
+**Proposed change**: In `SummarizeStrategy.apply()`, replace `non_system[pin_offset:-keep_recent]` with a function that identifies message groups from the end and keeps N complete groups. The boundary always falls between groups, never mid-pair.
+
+**Also considers**: Removing the special `_extract_prior_summary` / skip / re-inject flow. Prior summaries would serialize as normal assistant messages. Simplifies the code and eliminates the empty-input edge case.
+
+**Test runner**: `docs/summarizer_optimization/run_grouping_eval.py` — replays saved conversation histories up to the first compaction point. Tests different `keep_recent_groups` values (2, 3, 4) against the current `keep_recent=6` baseline. Compares via LLM-as-judge + orphaned tool call detection.
+
+```bash
+# Dry run — show boundaries without calling summarizer:
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_grouping_eval.py --dry-run
+
+# Full eval with judge:
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_grouping_eval.py
+
+# Specific conversation:
+PYTHONPATH=. uv run python docs/summarizer_optimization/run_grouping_eval.py --conv 803db597
+```
+
+**Risk**: Low-medium. Fewer kept messages means more goes into the summary (potentially better context). But kept message count is variable (a group with 3 tool calls = 4 raw messages vs a standalone text = 1). Need to verify the agent doesn't lose too much immediate context.
+
+**Test plan**:
+1. Dry run on all conversations to verify grouping logic and check for orphaned tool calls
+2. Full eval comparing `keep_recent_groups=2,3,4` vs `raw_6` baseline
+3. Verify record `1577ab25` hallucination case is eliminated
+4. Unit tests for `identify_message_groups` and `compute_compactable_by_groups`

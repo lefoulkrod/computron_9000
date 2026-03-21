@@ -41,12 +41,12 @@ class TestSummaryRole:
             {"role": "system", "content": "You are helpful."},
             {"role": "user", "content": "original request"},
             *[{"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"} for i in range(10)],
-            # keep_recent=2, so last 2 stay
+            # keep_recent_groups=1 keeps the last assistant + anything after
             {"role": "user", "content": "recent user"},
             {"role": "assistant", "content": "recent assistant"},
         ]
         history = _build_history(messages)
-        strategy = SummarizeStrategy(threshold=0.5, keep_recent=2, summary_model="test-model")
+        strategy = SummarizeStrategy(threshold=0.5, keep_recent_groups=1, summary_model="test-model")
         stats = _make_stats(0.8)
 
         with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
@@ -64,17 +64,26 @@ class TestSummaryRole:
         assert summary_msg["content"].startswith(_SUMMARY_PREFIX)
 
     @pytest.mark.asyncio
-    async def test_turn_alternation_after_compaction(self):
-        """After compaction: user(pinned) -> assistant(summary) -> user -> assistant."""
+    async def test_tool_pairs_kept_together(self):
+        """Tool call + tool result should never be split at the boundary."""
         messages = [
             {"role": "system", "content": "system"},
             {"role": "user", "content": "first question"},
-            *[{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(8)],
-            {"role": "user", "content": "latest user"},
-            {"role": "assistant", "content": "latest assistant"},
+            {"role": "assistant", "content": "old response"},
+            {"role": "user", "content": "do something"},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"function": {"name": "run_bash_cmd", "arguments": "{}"}}
+            ]},
+            {"role": "tool", "content": "tool result", "tool_name": "run_bash_cmd"},
+            {"role": "user", "content": "now fix it"},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"function": {"name": "run_bash_cmd", "arguments": "{}"}}
+            ]},
+            {"role": "tool", "content": "fixed", "tool_name": "run_bash_cmd"},
+            {"role": "assistant", "content": "Done!"},
         ]
         history = _build_history(messages)
-        strategy = SummarizeStrategy(threshold=0.5, keep_recent=2, summary_model="test-model")
+        strategy = SummarizeStrategy(threshold=0.5, keep_recent_groups=2, summary_model="test-model")
 
         with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
              patch("sdk.context._strategy.save_summary_record"), \
@@ -85,8 +94,17 @@ class TestSummaryRole:
             await strategy.apply(history, _make_stats(0.8))
 
         non_system = history.non_system_messages
+        # Pinned user + summary + kept messages (last 2 assistant groups + interleaved)
         roles = [m["role"] for m in non_system]
-        assert roles == ["user", "assistant", "user", "assistant"]
+        # The last 2 assistant messages are "Done!" and the tool-call before it.
+        # The boundary falls right before the tool-call assistant, so the
+        # interleaved "now fix it" user message is compacted.
+        assert roles == ["user", "assistant", "assistant", "tool", "assistant"]
+        # Verify no orphaned tool results — every tool result has a preceding assistant
+        for i, m in enumerate(non_system):
+            if m.get("role") == "tool":
+                assert i > 0
+                assert non_system[i - 1].get("role") == "assistant"
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +227,7 @@ class TestSummaryRecordMetadata:
         ]
         history = _build_history(messages)
         # Don't set summary_model so _resolve_model falls through to config
-        strategy = SummarizeStrategy(threshold=0.5, keep_recent=2)
+        strategy = SummarizeStrategy(threshold=0.5, keep_recent_groups=1)
 
         saved_records = []
 
