@@ -1298,6 +1298,17 @@ class Browser:
             target_page, response=response, initial_url=initial_url,
         )
         result.action_ms = action_ms
+
+        # If a download was captured from a new tab, close that tab so the
+        # agent returns to the original page.  Otherwise current_page() would
+        # return the download tab (often about:blank) and subsequent tools
+        # would fail with "Navigate to a page first."
+        if result.download and target_page is not page:
+            try:
+                await target_page.close()
+            except Exception:  # noqa: BLE001
+                pass
+
         return result
 
 
