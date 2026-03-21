@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -285,10 +285,10 @@ function UserMessage({ content, images, files }) {
     );
 }
 
-export default function Message(props) {
+export default React.memo(function Message(props) {
     return props.role === 'assistant' ? (
         <AssistantMessage {...props} />
     ) : (
         <UserMessage {...props} />
     );
-}
+});
