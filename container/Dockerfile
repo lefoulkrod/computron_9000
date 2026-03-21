@@ -67,7 +67,12 @@ RUN python3.12 -m pip install --no-cache-dir \
       scikit-learn \
       pytest \
       edge-tts \
-      kokoro-onnx soundfile
+      kokoro-onnx soundfile \
+      flask flask-socketio
+
+# PyTorch with CUDA support (large, ~2.5 GB — pre-installed to avoid slow runtime installs)
+RUN python3.12 -m pip install --no-cache-dir \
+      torch torchaudio torchvision
 
 # Pre-download Kokoro-82M model files (int8 quantized, ~88 MB) so the agent
 # can use TTS without fetching weights at runtime.
@@ -84,6 +89,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb x11vnc websockify novnc \
     xdotool xclip scrot wmctrl tini \
     python3-pyatspi at-spi2-core libatk-adaptor \
+    # Browsers
+    firefox chromium-browser \
     # Cursor + theme packages for usable desktop appearance
     elementary-xfce-icon-theme \
     greybird-gtk-theme \

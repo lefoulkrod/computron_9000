@@ -1,9 +1,9 @@
 #!/bin/bash
 # Container entrypoint: start desktop environment, then idle.
-export DISPLAY=:1
+export DISPLAY=:99
 
 # Virtual framebuffer
-Xvfb :1 -screen 0 1280x720x24 -ac &
+Xvfb :99 -screen 0 1280x720x24 -ac &
 sleep 1
 
 # D-Bus session (needed by Xfce and AT-SPI accessibility)
@@ -23,7 +23,7 @@ xset s off -dpms 2>/dev/null || true
 xsetroot -cursor_name left_ptr 2>/dev/null || true
 
 # VNC server
-x11vnc -display :1 -forever -nopw -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg
+x11vnc -display :99 -forever -nopw -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg
 
 # noVNC websocket bridge
 websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &

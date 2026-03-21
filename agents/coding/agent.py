@@ -70,9 +70,18 @@ SYSTEM_PROMPT = dedent(
     creating new ones.
 
     COMMANDS — use run_bash_cmd for running tests, installs, and short-lived
-    commands. Do NOT start servers or long-running processes.
+    commands.
 
-    Do NOT run "pip install torch" — it overwrites the CUDA build.
+    SERVERS — you can start servers (e.g. Flask, FastAPI, Node) in the
+    background. The container uses host networking, so any port you listen on
+    is directly accessible from the host and from the browser agent at
+    localhost:<port>. Use ports 8000-8010 to avoid conflicts (8080 is taken
+    by the app server). Start servers in the background:
+        run_bash_cmd("cd /home/computron/my-app && python server.py &")
+
+    PRE-INSTALLED: torch, torchaudio, torchvision (with CUDA), flask,
+    flask-socketio, numpy, pandas, scipy, scikit-learn, matplotlib, pillow,
+    and many more are already installed. Do NOT reinstall these.
 
     SKILLS — Before starting, check if a proven workflow exists for your task:
     lookup_skills(query). If found, use apply_skill(name, params) to get a

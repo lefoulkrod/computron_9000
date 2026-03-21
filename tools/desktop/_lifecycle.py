@@ -82,8 +82,8 @@ async def ensure_desktop_running() -> None:
 
 
 _START_DESKTOP_CMD = (
-    "export DISPLAY=:1;"
-    " Xvfb :1 -screen 0 1280x720x24 -ac &"
+    "export DISPLAY=:99;"
+    " Xvfb :99 -screen 0 1280x720x24 -ac &"
     " sleep 1;"
     " eval $(dbus-launch --sh-syntax);"
     " export GTK_MODULES=gail:atk-bridge ACCESSIBILITY_ENABLED=1;"
@@ -91,7 +91,7 @@ _START_DESKTOP_CMD = (
     " sleep 2;"
     " xset s off -dpms 2>/dev/null || true;"
     " xsetroot -cursor_name left_ptr 2>/dev/null || true;"
-    " x11vnc -display :1 -forever -nopw -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg;"
+    " x11vnc -display :99 -forever -nopw -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg;"
     " websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &"
     " echo started"
 )

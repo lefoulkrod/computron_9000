@@ -72,6 +72,11 @@ SYSTEM_PROMPT = dedent(
     Do NOT start your own HTTP server (python -m http.server, etc.) — it is
     never needed.
 
+    DEV SERVERS: The coding agent can start servers inside the container
+    (e.g. Flask, FastAPI, Node). These are accessible at localhost:<port>.
+    Common ports: 8000-8010 (8080 is the app server). Example:
+        open_url("http://localhost:8000")
+
     DOWNLOADING FILES:
     Click any file link to download it — the browser saves it automatically:
         click("7")  → saved to /home/computron/data.csv

@@ -45,7 +45,7 @@ class DesktopExecError(Exception):
 async def _run_desktop_cmd(
     cmd: str,
     *,
-    display: str = ":1",
+    display: str = ":99",
     user: str | None = None,
 ) -> str:
     """Run a command in the container with DISPLAY set.
