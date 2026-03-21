@@ -7,14 +7,13 @@ export default function ChatMessages({ messages, showSubAgents = true, onPreview
     const endRef = useRef(null);
 
     useEffect(() => {
-        // Smoothly ensure the latest message is visible inside the scroll container
         const el = containerRef.current;
         if (!el) return;
-        // Fallback direct scroll
-        el.scrollTop = el.scrollHeight;
-        // Also ask the last sentinel to scroll into view (more reliable with images/renders)
-        if (endRef.current && endRef.current.scrollIntoView) {
-            endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        // Only auto-scroll if the user is near the bottom (within 150px).
+        // This prevents hijacking manual scroll-back during streaming.
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+        if (nearBottom) {
+            el.scrollTop = el.scrollHeight;
         }
     }, [messages]);
 
