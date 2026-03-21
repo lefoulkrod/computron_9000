@@ -142,7 +142,7 @@ async def stream_events(
 
     try:
         async for event in events:
-            data_out = event.model_dump(mode="json", exclude_none=True)
+            data_out = event.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
             if data_out.get("final"):
                 break

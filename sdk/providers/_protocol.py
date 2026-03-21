@@ -1,11 +1,11 @@
 """Provider protocol defining the interface all LLM providers must implement."""
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from typing import Any, Protocol
 
 from config import LLMConfig
 
-from ._models import ChatResponse
+from ._models import ChatDelta, ChatResponse
 
 
 class Provider(Protocol):
@@ -26,6 +26,18 @@ class Provider(Protocol):
         think: bool = False,
     ) -> ChatResponse:
         """Send a chat completion request and return a normalized response."""
+        ...
+
+    def chat_stream(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[Callable[..., Any]] | None = None,
+        options: dict[str, Any] | None = None,
+        think: bool = False,
+    ) -> AsyncGenerator[ChatDelta | ChatResponse, None]:
+        """Stream token deltas followed by a final ChatResponse."""
         ...
 
     async def list_models(self) -> list[str]:

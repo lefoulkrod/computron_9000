@@ -36,24 +36,24 @@ export default function MobileApp({ dark, onToggleTheme }) {
         isStreaming,
         sendMessage,
         stopGeneration,
-        loadSession,
-        newSession: chatNewSession,
+        loadConversation,
+        newConversation: chatNewConversation,
     } = useStreamingChat(_stableCallbacks);
 
     const handleSend = useCallback((message, fileData, agent) => {
         sendMessage(message, fileData, modelSettings, agent);
     }, [sendMessage, modelSettings]);
 
-    const newSession = useCallback(async () => {
-        await chatNewSession();
-    }, [chatNewSession]);
+    const newConversation = useCallback(async () => {
+        await chatNewConversation();
+    }, [chatNewConversation]);
 
     return (
         <div className={styles.mobileLayout}>
             <Header
                 dark={dark}
                 onToggleTheme={onToggleTheme}
-                onNewSession={newSession}
+                onNewConversation={newConversation}
                 compact
                 onOpenSettings={() => setDrawerOpen(true)}
             />
@@ -76,7 +76,7 @@ export default function MobileApp({ dark, onToggleTheme }) {
                 onClose={() => setDrawerOpen(false)}
                 modelSettings={modelSettings}
                 isStreaming={isStreaming}
-                onLoadSession={loadSession}
+                onLoadConversation={loadConversation}
             />
         </div>
     );

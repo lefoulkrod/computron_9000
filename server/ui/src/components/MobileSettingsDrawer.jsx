@@ -1,9 +1,9 @@
 import React from 'react';
 import ModelSettingsPanel from './ModelSettingsPanel.jsx';
-import SessionsPanel from './SessionsPanel.jsx';
+import ConversationsPanel from './ConversationsPanel.jsx';
 import styles from './MobileSettingsDrawer.module.css';
 
-export default function MobileSettingsDrawer({ open, onClose, modelSettings, isStreaming, onLoadSession }) {
+export default function MobileSettingsDrawer({ open, onClose, modelSettings, isStreaming, onLoadConversation }) {
     return (
         <>
             <div
@@ -22,7 +22,7 @@ export default function MobileSettingsDrawer({ open, onClose, modelSettings, isS
                     </button>
                 </div>
                 <ModelSettingsPanel settings={modelSettings} disabled={isStreaming} />
-                <SessionsPanel onLoadSession={onLoadSession} />
+                <ConversationsPanel onLoadConversation={onLoadConversation} />
             </div>
         </>
     );

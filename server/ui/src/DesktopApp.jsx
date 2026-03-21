@@ -8,7 +8,7 @@ import DesktopPreview from './components/DesktopPreview.jsx';
 import FilePreview from './components/FilePreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import SkillsPanel from './components/SkillsPanel.jsx';
-import SessionsPanel from './components/SessionsPanel.jsx';
+import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
 import ModelSettingsPanel from './components/ModelSettingsPanel.jsx';
 import TerminalPanel from './components/TerminalOutput.jsx';
@@ -122,8 +122,8 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         isStreaming,
         sendMessage,
         stopGeneration,
-        loadSession,
-        newSession: chatNewSession,
+        loadConversation,
+        newConversation: chatNewConversation,
     } = useStreamingChat(_stableCallbacks);
 
     useEffect(() => {
@@ -159,8 +159,8 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         }
     }, [desktopActive, closedPanels, addToast]);
 
-    const newSession = useCallback(async () => {
-        await chatNewSession();
+    const newConversation = useCallback(async () => {
+        await chatNewConversation();
         setBrowserSnapshot(null);
         setFilePreview(null);
         setTerminalLines([]);
@@ -168,7 +168,7 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         setDesktopActive(false);
         setClosedPanels(new Set());
         setToolsPanelKey((k) => k + 1);
-    }, [chatNewSession]);
+    }, [chatNewConversation]);
 
     const showGeneration = generationPreview && !closedPanels.has('generation');
     const showFile = filePreview && !closedPanels.has('file');
@@ -182,7 +182,7 @@ export default function DesktopApp({ dark, onToggleTheme }) {
             <Header
                 dark={dark}
                 onToggleTheme={onToggleTheme}
-                onNewSession={newSession}
+                onNewConversation={newConversation}
                 showSubAgents={showSubAgents}
                 onToggleSubAgents={toggleSubAgents}
                 audio={pendingAudio}
@@ -205,7 +205,7 @@ export default function DesktopApp({ dark, onToggleTheme }) {
                     <MemoryPanel refreshSignal={memoryRefreshSignal} />
                     <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />
                     <SkillsPanel refreshSignal={skillsRefreshSignal} />
-                    <SessionsPanel onLoadSession={loadSession} />
+                    <ConversationsPanel onLoadConversation={loadConversation} />
                 </div>
                 {hasAnyPanel && (
                     <div className={styles.browserColumn}>

@@ -1,11 +1,11 @@
 """Base class for API-key-based LLM providers (OpenAI, Anthropic, etc.)."""
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from config import LLMConfig
 
-from ._models import ChatResponse
+from ._models import ChatDelta, ChatResponse
 
 
 class BaseAPIProvider:
@@ -34,6 +34,20 @@ class BaseAPIProvider:
         think: bool = False,
     ) -> ChatResponse:
         raise NotImplementedError(f"{type(self).__name__} is not yet implemented")
+
+    async def chat_stream(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[Callable[..., Any]] | None = None,
+        options: dict[str, Any] | None = None,
+        think: bool = False,
+    ) -> AsyncGenerator[ChatDelta | ChatResponse, None]:
+        """Default fallback: call chat() and yield the complete response."""
+        yield await self.chat(
+            model=model, messages=messages, tools=tools, options=options, think=think,
+        )
 
     async def list_models(self) -> list[str]:
         raise NotImplementedError(f"{type(self).__name__} is not yet implemented")

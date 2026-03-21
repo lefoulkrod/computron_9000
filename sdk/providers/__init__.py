@@ -6,7 +6,7 @@ from typing import Any
 
 from config import load_config
 
-from ._models import ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._protocol import Provider
 from ._runtime_stats import LLMRuntimeStats, llm_runtime_stats
 
@@ -55,6 +55,7 @@ def reset_provider() -> None:
 
 
 __all__ = [
+    "ChatDelta",
     "ChatMessage",
     "ChatResponse",
     "LLMRuntimeStats",

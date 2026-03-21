@@ -61,6 +61,13 @@ class TokenUsage(BaseModel):
     completion_tokens: int = 0
 
 
+class ChatDelta(BaseModel):
+    """A single incremental token fragment from a streaming chat response."""
+
+    content: str | None = None
+    thinking: str | None = None
+
+
 class ChatResponse(BaseModel):
     """Normalized response from any provider's chat endpoint."""
 

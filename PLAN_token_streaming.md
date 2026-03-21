@@ -187,6 +187,44 @@ Same pattern for thinking (lines 282-292): when `data.delta`, raw concatenation.
 
 **No other frontend changes needed.** The `streaming` flag, `final` handling, message segmentation, depth/agent_name tracking all remain the same.
 
+### 10. Streaming markdown rendering — `server/ui/src/components/Message.jsx`
+
+Install `remend` (`npm install remend`) — a preprocessor that auto-closes unclosed markdown constructs (fenced code blocks, `**`, `$$`, `[](`, etc.) so react-markdown always receives valid syntax during streaming.
+
+Add `streaming` prop to `MarkdownContent` and pipe content through `remend` when active:
+
+```javascript
+import remend from 'remend';
+
+function MarkdownContent({ children, streaming }) {
+    let content = preprocessContent(children || '');
+    if (streaming) content = remend(content);
+    return (
+        <ReactMarkdown
+            urlTransform={_urlTransform}
+            remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
+            rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, sanitizeSchema]]}
+            components={markdownComponents}
+        >
+            {content}
+        </ReactMarkdown>
+    );
+}
+```
+
+Wire `streaming` from `AssistantMessage` (the message object already carries it via `useStreamingChat.js`):
+
+```jsx
+function AssistantMessage({ content, thinking, images, placeholder, agent_name,
+                            depth = 0, data, contextUsage, onPreview, streaming }) {
+    // ...
+    {!placeholder && <MarkdownContent streaming={streaming}>{content}</MarkdownContent>}
+```
+
+**Why `remend` instead of a full renderer swap:** `streamdown` (Vercel's streaming markdown component that uses `remend` internally) requires Tailwind CSS. Our project uses CSS Modules, so `remend` as a standalone preprocessor is the right fit — zero styling opinions, keeps all existing plugins and custom components.
+
+**Future performance optimization:** If long responses with many code blocks cause re-render jank, we can adopt streamdown's block-memoization pattern (split markdown into blocks at stable boundaries, wrap each in `React.memo`, only re-render the active block). Their source is at `github.com/vercel/streamdown` for reference.
+
 ## Files
 
 | Action | File |
@@ -200,6 +238,8 @@ Same pattern for thinking (lines 282-292): when `data.delta`, raw concatenation.
 | Modify | `sdk/events/_models.py` — add `delta` field to `AssistantResponse` |
 | Modify | `sdk/loop/_tool_loop.py` — add `_stream_chat_with_retries()`, modify `run_tool_call_loop()` |
 | Modify | `server/ui/src/hooks/useStreamingChat.js` — delta-aware content append |
+| Modify | `server/ui/src/components/Message.jsx` — `remend` preprocessing during streaming |
+| Add dep | `server/ui/package.json` — add `remend` |
 
 ## Risk Mitigation
 
@@ -209,6 +249,7 @@ Same pattern for thinking (lines 282-292): when `data.delta`, raw concatenation.
 4. **Retry safety**: Retries after partial streaming fall back to non-streaming `chat()` to avoid content duplication.
 5. **Sub-agent depth**: Delta events pass through `publish_event()` which enriches with `agent_name`/`depth` from context stack. No changes needed.
 6. **Message handler filtering**: Deltas are not `final`, so they pass through the depth filter in `message_handler.py` correctly.
+7. **Streaming markdown**: `remend` heals incomplete syntax before react-markdown sees it, preventing code block/math block rendering artifacts.
 
 ## Verification
 
@@ -218,4 +259,5 @@ Same pattern for thinking (lines 282-292): when `data.delta`, raw concatenation.
 4. Manual test: send a message, verify tokens appear incrementally in the UI
 5. Manual test: trigger a tool call (e.g. browse), verify tool execution still works after streaming
 6. Manual test: verify `after_model` hooks still work (e.g. context_usage events)
-7. `just ui-build` — frontend builds cleanly
+7. Manual test: verify markdown renders cleanly during streaming (code blocks, math, bold, links)
+8. `just ui-build` — frontend builds cleanly

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import shared from './CustomToolsPanel.module.css';
-import styles from './SessionsPanel.module.css';
+import styles from './ConversationsPanel.module.css';
 import TrashIcon from './icons/TrashIcon.jsx';
 import useListPanel from '../hooks/useListPanel.js';
 
@@ -22,9 +22,9 @@ function formatTime(isoString) {
     }
 }
 
-export default function SessionsPanel({ onLoadSession }) {
+export default function ConversationsPanel({ onLoadConversation }) {
     const {
-        items: sessions, loading, collapsed, setCollapsed,
+        items: conversations, loading, collapsed, setCollapsed,
         deleting, handleDelete,
     } = useListPanel('/api/conversations/sessions', {
         startCollapsed: true,
@@ -36,7 +36,7 @@ export default function SessionsPanel({ onLoadSession }) {
     const handleResume = async (conversationId) => {
         setResuming(conversationId);
         try {
-            const ok = await onLoadSession(conversationId);
+            const ok = await onLoadConversation(conversationId);
             if (ok) {
                 setCollapsed(true);
             }
@@ -53,47 +53,47 @@ export default function SessionsPanel({ onLoadSession }) {
         );
     };
 
-    if (loading || sessions.length === 0) return null;
+    if (loading || conversations.length === 0) return null;
 
     return (
         <div className={shared.panel}>
             <div className={shared.header} onClick={() => setCollapsed(c => !c)}>
                 <span className={shared.title}>
-                    Past Sessions <span className={shared.count}>{sessions.length}</span>
+                    Past Conversations <span className={shared.count}>{conversations.length}</span>
                 </span>
                 <span className={shared.chevron}>{collapsed ? '▶' : '▼'}</span>
             </div>
             {!collapsed && (
                 <ul className={shared.list}>
-                    {sessions.map(session => (
-                        <li key={session.conversation_id} className={shared.item}>
+                    {conversations.map(convo => (
+                        <li key={convo.conversation_id} className={shared.item}>
                             <div className={shared.itemMain}>
                                 <span className={shared.name}>
-                                    {session.first_message
-                                        ? session.first_message.slice(0, 60) + (session.first_message.length > 60 ? '…' : '')
+                                    {convo.first_message
+                                        ? convo.first_message.slice(0, 60) + (convo.first_message.length > 60 ? '…' : '')
                                         : '(empty)'}
                                 </span>
                             </div>
                             <p className={shared.desc}>
-                                {session.turn_count} turn{session.turn_count !== 1 ? 's' : ''}
-                                {session.started_at ? ` · ${formatTime(session.started_at)}` : ''}
+                                {convo.turn_count} turn{convo.turn_count !== 1 ? 's' : ''}
+                                {convo.started_at ? ` · ${formatTime(convo.started_at)}` : ''}
                             </p>
                             <div className={styles.actions}>
                                 <button
                                     className={styles.resumeBtn}
-                                    onClick={() => handleResume(session.conversation_id)}
-                                    disabled={resuming === session.conversation_id}
+                                    onClick={() => handleResume(convo.conversation_id)}
+                                    disabled={resuming === convo.conversation_id}
                                     title="Resume this conversation"
                                 >
-                                    {resuming === session.conversation_id ? '…' : '↩'}
+                                    {resuming === convo.conversation_id ? '…' : '↩'}
                                 </button>
                                 <button
                                     className={shared.deleteBtn}
-                                    onClick={() => onDelete(session.conversation_id)}
-                                    disabled={deleting === session.conversation_id}
+                                    onClick={() => onDelete(convo.conversation_id)}
+                                    disabled={deleting === convo.conversation_id}
                                     title="Delete this conversation"
                                 >
-                                    {deleting === session.conversation_id ? '…' : <TrashIcon size={13} />}
+                                    {deleting === convo.conversation_id ? '…' : <TrashIcon size={13} />}
                                 </button>
                             </div>
                         </li>
