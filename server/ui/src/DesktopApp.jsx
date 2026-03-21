@@ -60,22 +60,25 @@ export default function DesktopApp({ dark, onToggleTheme }) {
         onTerminalOutput: (event) => {
             setTerminalLines((prev) => {
                 const idx = prev.findIndex((e) => e.cmd_id === event.cmd_id);
+                let next;
                 if (idx !== -1) {
-                    const updated = [...prev];
+                    next = [...prev];
                     if (event.status === 'streaming') {
-                        const existing = updated[idx];
-                        updated[idx] = {
+                        const existing = next[idx];
+                        next[idx] = {
                             ...existing,
                             status: 'streaming',
                             stdout: (existing.stdout || '') + (event.stdout || '') || null,
                             stderr: (existing.stderr || '') + (event.stderr || '') || null,
                         };
                     } else {
-                        updated[idx] = event;
+                        next[idx] = event;
                     }
-                    return updated;
+                } else {
+                    next = [...prev, event];
                 }
-                return [...prev, event];
+                // Keep only the most recent commands to avoid unbounded memory growth
+                return next.length > 50 ? next.slice(-50) : next;
             });
             setClosedPanels(_reopenPanel('terminal'));
         },
@@ -210,7 +213,7 @@ export default function DesktopApp({ dark, onToggleTheme }) {
                 {hasAnyPanel && (
                     <div className={styles.browserColumn}>
                         {showGeneration && (
-                            <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />
+                            <GenerationPreview preview={generationPreview} onClose={() => { setGenerationPreview(null); setClosedPanels(_closePanel('generation')); }} />
                         )}
                         {showFile && (
                             <FilePreview item={filePreview} onClose={() => setClosedPanels(_closePanel('file'))} />
