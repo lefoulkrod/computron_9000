@@ -1149,12 +1149,14 @@ class Browser:
             if late_downloads:
                 download_info = late_downloads[0]
 
-        # 3. Iframe detection
+        # 3. Iframe detection (skip if download — page may be a PDF viewer stub)
         frame_transition: str | None = None
         final_url = getattr(page, "url", initial_url)
         navigated = bool(initial_url and final_url and final_url != initial_url)
 
-        if navigated:
+        if download_info is not None:
+            self._active_frame = None
+        elif navigated:
             self._active_frame = None
         else:
             try:
