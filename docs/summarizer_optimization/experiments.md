@@ -103,6 +103,21 @@ The current single-pass approach forces the model to simultaneously extract fact
 2. Run synthetic scenarios to check for regressions
 3. Test on GitHub repo exploration specifically for fact retention improvement
 
+### Experiment 24: Include tool call arguments and skip trivial results
+
+**What**: Two changes to `_serialize_messages` that improve signal-to-noise ratio:
+1. Include key tool call arguments in serialization — file paths for write/read, commands for bash, URLs for navigation. Controlled by `_TOOL_ARG_KEYS` registry mapping tool names to argument keys worth extracting.
+2. Skip trivial tool results that carry no information — `{'success': True, 'error': None}`, `{'stdout': None, 'exit_code': 0}`, etc. These are pure noise that reads as process narration in the summary.
+
+**Discovered via**: Analysis of 1,729 tool→assistant transitions across all compaction records. 89% of assistant messages after tool results are empty (47%) or short transitions (42%). The actual data is in the tool results, which get capped to 200 chars. Including tool arguments gives the summarizer the "what" (which file, which command) even when both the assistant message and tool result are empty/truncated.
+
+**Results (2026-03-21)**:
+- Real compaction records (31): fact 2.90→3.85 (+0.95), state 2.83→3.36 (+0.53), process 2.27→2.82 (+0.55). No regressions.
+- Full conversation — coding (f50c3081): summary 6,510→3,695 chars (-43%), time 165→149s. Process noise dramatically reduced.
+- Full conversation — browser (3ad4d39b): summary 2,776→2,053 chars (-26%), time 44→24s. All facts preserved.
+
+**Verdict**: **Keep**. Clear improvement across all metrics and conversation types.
+
 ### Experiment 23: Message group–based keep_recent
 
 **What**: Replace raw `keep_recent=6` (counts individual messages) with `keep_recent_groups=N` (counts logical message groups). A message group is an atomic unit: a user message, an assistant tool-call + its tool results, or a standalone assistant text response. This prevents splitting tool calls from their results at the compaction boundary.

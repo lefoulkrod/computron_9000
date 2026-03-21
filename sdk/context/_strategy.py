@@ -17,7 +17,7 @@ from rich.text import Text
 from config import load_config
 from conversations import SummaryRecord, save_summary_record
 from sdk.events import get_current_agent_name
-from sdk.loop import get_conversation_id
+from sdk.turn import get_conversation_id
 
 from ._history import ConversationHistory
 from ._models import ContextStats
@@ -394,6 +394,75 @@ def _count_kept_by_assistant_groups(
     return len(messages) - boundary
 
 
+# Keys from tool call arguments worth including in the serialized summary.
+# Maps tool name → list of argument keys to extract. Keys are checked in
+# order; the first present key is used. Values over 200 chars are truncated.
+_TOOL_ARG_KEYS: dict[str, list[str]] = {
+    "write_file": ["path"],
+    "read_file": ["path"],
+    "apply_text_patch": ["path"],
+    "replace_in_file": ["path"],
+    "run_bash_cmd": ["cmd", "command"],
+    "open_url": ["url"],
+    "click": ["selector", "ref"],
+    "fill_field": ["selector", "ref"],
+    "grep": ["pattern", "query"],
+    "list_dir": ["path"],
+    "generate_media": ["prompt"],
+    "describe_image": ["path", "image_path"],
+}
+
+
+def _summarize_tool_args(tool_name: str, fn: object) -> str:
+    """Extract a short summary of tool call arguments for serialization."""
+    keys = _TOOL_ARG_KEYS.get(tool_name)
+    if not keys:
+        return ""
+
+    raw_args = getattr(fn, "arguments", None) or fn.get("arguments", {})  # type: ignore[union-attr]
+    if isinstance(raw_args, str):
+        try:
+            import json as _json
+            raw_args = _json.loads(raw_args)
+        except (ValueError, TypeError):
+            return ""
+    if not isinstance(raw_args, dict):
+        return ""
+
+    parts = []
+    for key in keys:
+        val = raw_args.get(key)
+        if val is not None:
+            val_str = str(val)
+            if len(val_str) > 200:
+                val_str = val_str[:200] + "..."
+            parts.append(val_str)
+
+    return ", ".join(parts)
+
+
+# Patterns that indicate a tool result carries no useful information.
+_TRIVIAL_PATTERNS = [
+    "{'success': True",
+    '{"success": true',
+    "{'stdout': None, 'stderr': None, 'exit_code': 0}",
+    "{'stdout': '', 'stderr': None, 'exit_code': 0}",
+    "{'stdout': '', 'stderr': '', 'exit_code': 0}",
+    "{'stdout': None, 'stderr': '', 'exit_code': 0}",
+]
+
+
+def _is_trivial_tool_result(content: str) -> bool:
+    """Check if a tool result is trivially empty and can be skipped."""
+    stripped = content.strip()
+    if not stripped:
+        return True
+    for pattern in _TRIVIAL_PATTERNS:
+        if stripped.startswith(pattern) and len(stripped) < 200:
+            return True
+    return False
+
+
 def _find_first_user(non_system: list[dict]) -> tuple[int, bool]:
     """Return the index of the first user message and whether one was found."""
     for i, msg in enumerate(non_system):
@@ -471,21 +540,27 @@ def _serialize_messages(messages: list[dict]) -> str:
         if role == "assistant":
             tool_calls = msg.get("tool_calls")
             if tool_calls:
-                tool_names = []
+                tool_parts = []
                 for tc in tool_calls:
                     fn = getattr(tc, "function", None) or tc.get("function", {})
                     name = getattr(fn, "name", None) or fn.get("name", "unknown")
-                    tool_names.append(name)
-                tools_str = ", ".join(tool_names)
+                    args_summary = _summarize_tool_args(name, fn)
+                    if args_summary:
+                        tool_parts.append(f"{name}({args_summary})")
+                    else:
+                        tool_parts.append(name)
+                tools_str = ", ".join(tool_parts)
                 if content:
-                    entries.append(f"Assistant: {content}\n  [Called tools: {tools_str}]")
+                    entries.append(f"Assistant: {content}\n  [Called: {tools_str}]")
                 else:
-                    entries.append(f"Assistant: [Called tools: {tools_str}]")
+                    entries.append(f"Assistant: [Called: {tools_str}]")
             elif content:
                 entries.append(f"Assistant: {content}")
 
         elif role == "tool":
             tool_name = msg.get("tool_name", "unknown")
+            if _is_trivial_tool_result(content):
+                continue
             if len(content) > _TOOL_RESULT_CAP:
                 content = content[:_TOOL_RESULT_CAP] + "..."
             entries.append(f"Tool ({tool_name}): {content}")
