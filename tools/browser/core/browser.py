@@ -1139,6 +1139,16 @@ class Browser:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Page settle raised unexpectedly: %s", exc)
 
+            # Re-check for downloads that arrived during page settle.
+            # This catches same-tab redirect chains to PDFs (e.g. Bing
+            # click-through → prier.com/document.pdf) where the download
+            # event fires after the initial check but during settle.
+            if self._download_tasks:
+                await asyncio.gather(*self._download_tasks, return_exceptions=True)
+            late_downloads = self.drain_downloads()
+            if late_downloads:
+                download_info = late_downloads[0]
+
         # 3. Iframe detection
         frame_transition: str | None = None
         final_url = getattr(page, "url", initial_url)
