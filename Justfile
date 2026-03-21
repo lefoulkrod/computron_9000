@@ -583,7 +583,8 @@ container-start:
       --name computron_virtual_computer \
       --userns=keep-id \
       --group-add keep-groups \
-      -p 6080:6080 \
+      --device nvidia.com/gpu=all \
+      --network=host \
       $hf_token_args \
       $github_args \
       -v "$home_dir:/home/computron:rw,z" \
