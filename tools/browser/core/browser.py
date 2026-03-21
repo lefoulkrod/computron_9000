@@ -430,6 +430,10 @@ class Browser:
         self._download_listener_pages: set[int] = set()  # page id() tracking
         self._download_tasks: set[asyncio.Task[None]] = set()
 
+        # Auto-attach download listeners to pages created by popups or
+        # target=_blank links so file downloads in new tabs are captured.
+        self._context.on("page", self._on_context_page)
+
         # Capture the Playwright driver PID so the atexit handler can kill the
         # process tree if the async close path never ran (e.g. SIGKILL, event
         # loop torn down before shutdown hooks complete).
@@ -456,6 +460,14 @@ class Browser:
 
         page.on("download", _on_download)
 
+    def _on_context_page(self, page: Page) -> None:
+        """Handle new pages created by popups or ``target=_blank`` links.
+
+        Immediately attaches a download listener so file downloads in the
+        new tab are captured by ``_pending_downloads``.
+        """
+        self._attach_download_listener(page)
+
     async def _handle_download(self, download: Any) -> None:
         """Process a Playwright download event and record the result."""
         try:
@@ -463,6 +475,22 @@ class Browser:
             if not path:
                 logger.warning("Download completed but no path available")
                 return
+
+            # Playwright saves downloads with opaque UUID filenames.  Rename
+            # to the server's suggested name so the agent sees a meaningful
+            # filename and MIME-type detection works correctly.
+            suggested: str = getattr(download, "suggested_filename", "")
+            if suggested and self._downloads_dir:
+                dest = Path(self._downloads_dir) / suggested
+                if dest.exists():
+                    stem, suffix = dest.stem, dest.suffix
+                    suggested = f"{stem}_{secrets.token_hex(4)}{suffix}"
+                    dest = Path(self._downloads_dir) / suggested
+                try:
+                    Path(path).rename(dest)
+                    path = str(dest)
+                except OSError:
+                    logger.debug("Could not rename download to %s", suggested)
 
             from tools.browser.core._file_detection import build_download_info_from_path
 
@@ -901,7 +929,21 @@ class Browser:
         self.clear_active_frame()
         self._pending_downloads.clear()
         initial_url = getattr(page, "url", "")
-        response = await page.goto(url, wait_until="domcontentloaded")
+        try:
+            response = await page.goto(url, wait_until="domcontentloaded")
+        except PlaywrightError as exc:
+            # When --disable-pdf-viewer converts a navigation to a download,
+            # Chromium aborts the page load with net::ERR_ABORTED.  The
+            # download listener captures the file asynchronously — wait
+            # for the download event before falling through to finalize.
+            if "net::ERR_ABORTED" not in str(exc):
+                raise
+            logger.debug("Navigation aborted (likely download): %s", url)
+            response = None
+            try:
+                await page.wait_for_event("download", timeout=5_000)
+            except (PlaywrightTimeoutError, PlaywrightError):
+                pass
         return await self._finalize_action(page, response=response, initial_url=initial_url)
 
     async def navigate_back(self) -> BrowserInteractionResult:
@@ -1087,6 +1129,46 @@ class Browser:
             frame_transition=frame_transition,
         )
 
+    async def _probe_file_url(self, new_page: Page, url: str) -> Page | None:
+        """Probe a new tab's URL to check if it's a file download.
+
+        Chrome's PDF viewer extension (non-headless) can silently handle file
+        URLs without firing Playwright response or download events.  This
+        method fetches the URL directly via the API request context, saves
+        the file if it's a non-HTML content-type, and appends a
+        ``DownloadInfo`` to ``_pending_downloads``.
+
+        Returns the new page if a file was saved, or ``None`` to stay on the
+        original page.
+        """
+        from tools.browser.core._file_detection import (
+            is_file_content_type,
+            save_response_as_file,
+        )
+
+        try:
+            api_resp = await asyncio.wait_for(
+                self._context.request.get(url), timeout=15.0,
+            )
+            ct = api_resp.headers.get("content-type", "")
+            if is_file_content_type(ct):
+                info = await save_response_as_file(
+                    api_resp,
+                    downloads_dir=self._downloads_dir or ".",
+                    container_dir=self._container_dir or "/tmp",
+                )
+                self._pending_downloads.append(info)
+                logger.info(
+                    "Probed file URL in new tab: %s (%s, %d bytes)",
+                    info.filename, info.content_type, info.size_bytes,
+                )
+                await api_resp.dispose()
+                return new_page
+            await api_resp.dispose()
+        except Exception:  # noqa: BLE001
+            logger.debug("Failed to probe new tab URL: %s", url)
+        return None
+
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
@@ -1098,11 +1180,29 @@ class Browser:
         self._pending_downloads.clear()
         captured_responses: list[Response] = []
 
+        # Track pages opened during this interaction (popups / target=_blank)
+        # and capture their document responses so file downloads in new tabs
+        # are detected properly.
+        new_pages: list[Page] = []
+        new_page_responses: list[Response] = []
+        _np_listeners: list[tuple[Page, Callable[..., Any]]] = []
+
         def _on_response(resp: Response) -> None:
             if resp.frame == page.main_frame and resp.request.resource_type == "document":
                 captured_responses.append(resp)
 
+        def _on_new_page(new_page: Page) -> None:
+            new_pages.append(new_page)
+
+            def _on_np_response(resp: Response) -> None:
+                if resp.request.resource_type == "document":
+                    new_page_responses.append(resp)
+
+            new_page.on("response", _on_np_response)
+            _np_listeners.append((new_page, _on_np_response))
+
         page.on("response", _on_response)
+        self._context.on("page", _on_new_page)
 
         t0 = time.monotonic()
         await action()
@@ -1112,9 +1212,47 @@ class Browser:
         await flush_progressive_screenshot()
 
         page.remove_listener("response", _on_response)
+        self._context.remove_listener("page", _on_new_page)
 
         response = captured_responses[-1] if captured_responses else None
-        result = await self._finalize_action(page, response=response, initial_url=initial_url)
+        target_page = page
+
+        # If a new tab opened and the original page had no document response,
+        # the click likely opened a file (PDF, etc.) in a new tab.  Wait for
+        # the new page to finish its navigation, then use its response so
+        # _finalize_action can detect the file download.
+        if new_pages and response is None:
+            new_page = new_pages[-1]
+            if not new_page_responses:
+                try:
+                    await new_page.wait_for_load_state(
+                        "domcontentloaded", timeout=10_000,
+                    )
+                except (PlaywrightTimeoutError, PlaywrightError):
+                    pass
+            if new_page_responses or self._pending_downloads or self._download_tasks:
+                target_page = new_page
+                response = new_page_responses[-1] if new_page_responses else None
+
+            # Fallback: Chrome's PDF viewer extension (non-headless) can
+            # silently handle file URLs without firing response or download
+            # events.  Detect this by probing the new page's URL and fetch
+            # the file directly via the API request context.
+            if target_page is page and not self._pending_downloads:
+                new_url = getattr(new_page, "url", "")
+                if new_url and not new_url.startswith(("about:", "chrome:")):
+                    target_page = await self._probe_file_url(new_page, new_url) or page
+
+        # Clean up response listeners on new pages
+        for np, listener in _np_listeners:
+            try:
+                np.remove_listener("response", listener)
+            except Exception:  # noqa: BLE001
+                pass
+
+        result = await self._finalize_action(
+            target_page, response=response, initial_url=initial_url,
+        )
         result.action_ms = action_ms
         return result
 
