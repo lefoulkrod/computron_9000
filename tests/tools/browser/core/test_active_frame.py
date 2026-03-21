@@ -84,6 +84,12 @@ class _FakeContext:
     def __init__(self, pages: list[Any]) -> None:
         self.pages = pages
 
+    def on(self, event: str, callback: Any) -> None:
+        pass
+
+    def remove_listener(self, event: str, callback: Any) -> None:
+        pass
+
 
 def _make_browser(page: _FakePage) -> Browser:
     """Create a Browser wrapping a fake context containing one page."""

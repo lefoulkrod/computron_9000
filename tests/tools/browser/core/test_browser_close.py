@@ -15,6 +15,12 @@ class DummyContext:
         self._hang = hang
         self.pages: list[object] = []
 
+    def on(self, event: str, callback: object) -> None:
+        pass
+
+    def remove_listener(self, event: str, callback: object) -> None:
+        pass
+
     async def close(self) -> None:  # type: ignore[override]
         self._closed_calls += 1
         if self._hang:

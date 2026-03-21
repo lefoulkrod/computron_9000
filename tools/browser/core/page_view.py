@@ -371,7 +371,10 @@ _STRUCTURED_SNAPSHOT_JS = """
 
       if (role === 'combobox' || el.tagName === 'SELECT') {
         const sel = el.querySelector('option:checked,option[selected]');
-        node.value = sel ? sel.textContent.trim() : '';
+        // For <input role="combobox"> (autocomplete widgets), fall back to
+        // el.value since child <option> elements won't exist.
+        node.value = sel ? sel.textContent.trim()
+                         : (el.value != null && el.value !== '') ? String(el.value) : '';
       } else if (role === 'checkbox' || role === 'radio' || role === 'switch') {
         node.checked = el.checked || el.getAttribute('aria-checked') === 'true';
       } else if (role === 'textbox' || role === 'searchbox' || role === 'spinbutton' || role === 'slider') {

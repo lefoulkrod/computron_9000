@@ -23,6 +23,12 @@ class FakeContext:
     def __init__(self, pages: list[FakePage] | None = None) -> None:
         self.pages = pages or []
 
+    def on(self, event: str, callback: Any) -> None:
+        pass
+
+    def remove_listener(self, event: str, callback: Any) -> None:
+        pass
+
     async def new_page(self) -> FakePage:
         page = FakePage()
         self.pages.append(page)
