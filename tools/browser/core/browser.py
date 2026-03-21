@@ -408,6 +408,7 @@ class Browser:
         extra_headers: dict[str, str] | None = None,
         pw: Playwright | None = None,
         use_channel: bool = False,
+        profile_dir: str = "",
     ) -> None:
         """Initialize the browser wrapper.
 
@@ -417,8 +418,10 @@ class Browser:
             pw: The Playwright driver instance used to launch the context.
             use_channel: True when using a real Chrome channel. Disables
                 viewport overrides so the OS window manager controls sizing.
+            profile_dir: Path to the Chromium user-data-dir.
         """
         self._context: BrowserContext = context
+        self._profile_dir: str = profile_dir
         self._extra_headers: dict[str, str] = extra_headers or {}
         self._pw: Playwright | None = pw
         self._use_channel: bool = use_channel
@@ -744,7 +747,7 @@ class Browser:
         await context.add_init_script(anti_bot)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
 
-        return cls(context=context, extra_headers=headers, pw=pw, use_channel=_use_channel)
+        return cls(context=context, extra_headers=headers, pw=pw, use_channel=_use_channel, profile_dir=str(profile_path))
 
     async def new_page(self) -> Page:
         """Open a new page within the persistent context.
@@ -1048,8 +1051,49 @@ class Browser:
                     type(exc).__name__,
                     exc,
                 )
+
+            # Chrome with --no-sandbox can detach from the Playwright driver's
+            # process group and survive pw.stop().  Kill any orphaned Chrome
+            # process that is still holding the profile lock.
+            self._kill_orphaned_chrome()
+
         if context_exc:
             logger.debug("Browser.close completed with suppressed context exception")
+
+    def _kill_orphaned_chrome(self) -> None:
+        """Kill any Chrome process still holding the profile lock.
+
+        Chrome launched with ``--no-sandbox`` can detach from the Playwright
+        driver's process group and survive ``pw.stop()``.  This reads the PID
+        from the ``SingletonLock`` symlink and sends SIGKILL if the process is
+        still alive.
+        """
+        if not self._profile_dir:
+            return
+        lock = Path(self._profile_dir) / "SingletonLock"
+        try:
+            target = os.readlink(lock)
+        except OSError:
+            return
+
+        parts = target.rsplit("-", 1)
+        if len(parts) != 2:
+            return
+        try:
+            pid = int(parts[1])
+        except ValueError:
+            return
+
+        try:
+            os.kill(pid, 0)  # Check if alive
+        except (ProcessLookupError, PermissionError):
+            return
+
+        logger.info("Killing orphaned Chrome process (pid %d)", pid)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
 
     async def _finalize_action(
         self,
