@@ -154,6 +154,16 @@
       "task_complete": false,
       "notes": "Healthcare — reached plan results page, needs to compare Silver plans",
       "must_contain": ["[Ss]ilver|[Hh]ealth|plan"]
-    }
-  }
+    },
+    "1577ab25": {
+      "task_complete": false,
+      "notes": "HALLUCINATION TEST — input is 1 assistant tool-call message (read_file x2 for interactive_ml files) with zero tool results. Serializes to ~47 chars. Any mention of recipes, shrimp, garlic, or ingredients is a hallucination. Summary should either be minimal/empty or only reference the tool calls that were made (read_file for interactive_ml).",
+      "must_not_contain": ["[Rr]ecipe", "[Ss]hrimp", "[Gg]arlic", "[Ii]ngredient"],
+      "must_contain": ["interactive_ml|read_file|index\\.html|style\\.css"]
+    },
+    "3ad4d39b": {
+      "task_complete": true,
+      "notes": "FULL FIDELITY — 160-message flight search, never compacted. Single user request to find flights AUS→Chicago for all April weekends. Agent found prices for 3 valid weekends (April 10-12, 17-19, 24-26) and determined April 3-5 didn't meet criteria. Key data: American $347/person (Apr 10-12), American $411/person (Apr 17-19), Southwest $372/person (Apr 24-26). April 3-5 rejected (Sunday returns after noon).",
+      "must_contain": ["\\$347|\\$694", "\\$411|\\$822", "\\$372|\\$744", "[Aa]merican", "[Ss]outhwest", "April.*(10|17|24)", "[Cc]hicago|ORD"]
+    }  }
 }
