@@ -45,12 +45,12 @@ Key prompt rules:
 
 2. **Per-result cap** (`_TOOL_RESULT_CAP = 200`) — tool results over 200 chars are truncated (head only). Intentionally aggressive: assistant messages already contain the distilled findings. In production, tool results are ~96% of input chars but carry little unique signal beyond what the assistant summarized.
 
-For long conversations (serialized text > 20k chars), the input is split into ~10k char chunks, each summarized independently, then merged in a final pass.
+For long conversations, the input is split into chunks, each summarized independently, then merged in a final pass. The chunk threshold scales with the summarizer's `num_ctx` setting (60% of `num_ctx × 4` chars). With `num_ctx: 32768`, the threshold is ~78k chars — most compactions run as a single pass.
 
 ### Model
 
 - **Summary model**: `gemma3:27b` (configured in `config.yaml` under `summary:`)
-- **Context window**: 8,192 tokens (`num_ctx: 8192`)
+- **Context window**: 32,768 tokens (`num_ctx: 32768`)
 - **Max output**: 2,048 tokens (`num_predict: 2048`)
 - **Temperature**: 0.3, **Top-k**: 20
 - **Timeout**: 180 seconds per LLM call
@@ -89,18 +89,30 @@ Full-fidelity conversations are stored in `full_conversations/` — complete mes
 
 The runner simulates compaction using the current `keep_recent_groups` boundary logic, runs the summarizer, and evaluates with deterministic checks + LLM judge (including a hallucination score).
 
-### Current baseline (2026-03-21, gemma3:27b)
+### Current baseline (2026-03-22, gemma3:27b, num_ctx=32768)
 
 ```
-Real compaction records (31 records):
+Real compaction records (33 records):
   Has all sections:       100%
   Required facts found:   98%
-  Fact retention:         3.85/5
-  Current state:          3.36/5
+  Fact retention:         3.76/5
+  Current state:          3.18/5
   Process suppression:    2.82/5
+
+Full conversations (2 records):
+  Fact retention:         3.50/5
+  Current state:          3.50/5
+  Process suppression:    2.00/5
+  Hallucination:          4.50/5
+
+Synthetic scenarios (12):
+  Pass rate:              8/12 (67%)
 ```
 
-Previous baselines: mistral:7b scores ~2.8/5. gemma3:27b pre-serialization-changes: fact 3.70, state 3.77, process 2.77.
+Previous baselines:
+- 2026-03-21 (num_ctx=8192): fact 3.85, state 3.36, process 2.82
+- 2026-03-20 (gemma3:27b initial): fact 3.70, state 3.77, process 2.77
+- 2026-03-19 (mistral:7b): fact ~2.8, state ~2.8, process ~2.3
 
 ### Running evaluations
 

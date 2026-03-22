@@ -33,13 +33,13 @@ _console = Console(stderr=True)
 _TOOL_RESULT_CAP = 200
 
 
-# When serialized conversation exceeds this threshold, switch to chunked
-# summarization (split → summarize each chunk → merge).
-_CHUNK_THRESHOLD = 20_000
+# Approximate characters per token for estimating chunk boundaries.
+_CHARS_PER_TOKEN = 4
 
-# Target size per chunk in characters. Each chunk gets its own summarizer
-# call, so this controls the input size per call.
-_CHUNK_TARGET_SIZE = 10_000
+# Fraction of the summarizer's context window to use for input.
+# Leaves room for the system prompt (~500 tokens) and generated output
+# (num_predict, typically 2048 tokens).
+_CTX_INPUT_FRACTION = 0.6
 
 # Maximum time (seconds) for a single summarizer LLM call. If the model
 # takes longer (e.g. runaway generation, contention), the call is cancelled
@@ -246,17 +246,24 @@ class SummarizeStrategy:
 
         For short conversations, serializes and summarizes in a single call.
         For long conversations, splits into chunks, summarizes each, then
-        merges the chunk summaries.
+        merges the chunk summaries. The chunk threshold scales with the
+        summarizer's configured context window.
         """
         import copy
 
+        cfg = load_config()
+        _, options = self._resolve_model(cfg)
+        num_ctx = options.get("num_ctx", 8192) if isinstance(options, dict) else 8192
+        chunk_threshold = int(num_ctx * _CHARS_PER_TOKEN * _CTX_INPUT_FRACTION)
+        chunk_target = chunk_threshold // 2
+
         # Serialize to check total size.
         serialized = _serialize_messages(copy.deepcopy(messages))
-        if len(serialized) <= _CHUNK_THRESHOLD:
+        if len(serialized) <= chunk_threshold:
             return await self._call_summarizer(serialized, prior_summary)
 
         # Split messages into chunks and summarize each independently.
-        chunks = _split_into_chunks(messages)
+        chunks = _split_into_chunks(messages, chunk_target)
         logger.info(
             "Chunked summarization: %d messages → %d chunks",
             len(messages), len(chunks),
@@ -485,8 +492,11 @@ def _extract_prior_summary(messages: list[dict]) -> str | None:
     return None
 
 
-def _split_into_chunks(messages: list[dict]) -> list[list[dict]]:
-    """Split messages into chunks that each fit within ``_CHUNK_TARGET_SIZE``.
+def _split_into_chunks(
+    messages: list[dict],
+    target_size: int = 10_000,
+) -> list[list[dict]]:
+    """Split messages into chunks of approximately *target_size* characters.
 
     Keeps assistant + tool-call pairs together so a tool call and its
     result are never separated across chunks.
@@ -501,7 +511,7 @@ def _split_into_chunks(messages: list[dict]) -> list[list[dict]]:
 
         # If adding this message would exceed the target and the chunk
         # already has content, start a new chunk.
-        if current_size + msg_size > _CHUNK_TARGET_SIZE and current_chunk:
+        if current_size + msg_size > target_size and current_chunk:
             chunks.append(current_chunk)
             current_chunk = []
             current_size = 0
