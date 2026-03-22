@@ -165,36 +165,237 @@ Slim 36px header with original computron logo, theme toggle, desktop button, new
 
 ---
 
-## Phase 2: Parallel Execution + Multi-Browser + Resource Locking
+## Phase 2: Parallel Execution + Multi-Browser + Resource Isolation
 
-*Phase 2 is unchanged from the original plan — not yet started.*
+### Design Principle: Concurrency Toggle
 
-### Task P2-1: Parallel agent tool execution
-Replace sequential `for tc in tool_calls` with `asyncio.gather` for agent tools only. Regular tools stay sequential.
+All parallel infrastructure is built and wired up, but actual concurrent execution is controlled by a config flag. When `parallel.enabled = false` (default), agent tool calls execute sequentially as today. When `true`, agent tool calls run in parallel via `asyncio.gather`. This lets us deploy the supporting work (browser pool, hook isolation, grounding fixes) safely and enable concurrency when ready.
 
-### Task P2-2: Hook safety audit
-Review hooks for thread safety under parallel execution (LoopDetector, BudgetGuard, ScratchpadHook).
+```yaml
+# config.yaml
+parallel:
+  enabled: false          # toggle concurrent agent execution
+  max_concurrent: 4       # max simultaneous agent tool calls
+```
+
+### Task P2-1: Config and agent tool marker
+
+**Files:**
+- `config/__init__.py` — Add `ParallelConfig` model:
+  ```python
+  class ParallelConfig(BaseModel):
+      enabled: bool = False
+      max_concurrent: int = 4
+  ```
+  Add to `AppConfig`: `parallel: ParallelConfig = Field(default_factory=ParallelConfig)`
+
+- `sdk/tools/_agent_wrapper.py` line 363 — Mark agent tools with `__is_agent_tool__ = True`:
+  ```python
+  run_agent_as_tool.__is_agent_tool__ = True
+  return run_agent_as_tool
+  ```
+
+- `config.yaml` — Add `parallel:` section with defaults
+
+**Test:** Config loads correctly, agent tools have the marker attribute.
+
+### Task P2-2: Hook isolation — per-agent state
+
+Hooks with mutable state must not corrupt when multiple agents run in parallel. Each agent already gets its own hook instances via `default_hooks()` in `_agent_wrapper.py`, so sub-agents are isolated. But the root agent's hooks are shared across its tool loop iterations — if parallel agent tool calls trigger concurrent `before_tool`/`after_tool` callbacks on the root's hooks, state will corrupt.
+
+**Fix:** The root's hooks only run in the root's sequential context. Sub-agent hooks are already per-agent (created in `run_agent_as_tool`). The real risk is the root's `LoopDetector` and `BudgetGuard` receiving interleaved `before_tool`/`after_tool` calls from parallel tool execution.
+
+**Solution:** Skip root-level `before_tool`/`after_tool` hooks for parallel tool calls. When parallel agent tools run, they each have their own hook instances inside `run_agent_as_tool`. The root's hooks should only see the aggregated results, not individual sub-agent tool calls.
+
+**Files:**
+- `sdk/hooks/_loop_detector.py` — No change needed if hooks are per-agent
+- `sdk/hooks/_budget_guard.py` — No change needed if hooks are per-agent
+- `sdk/turn/_execution.py` — When running parallel agent tools, skip root hooks for those calls (only run hooks for sequential non-agent tools)
+
+**Test:** Run two agent tools in parallel (with parallel.enabled=true), verify no hook state corruption.
 
 ### Task P2-3: Browser context pool
-One Chromium process, separate `BrowserContext` per agent via `browser.new_context()`.
 
-### Task P2-4: Agent-to-browser-context binding
-Use `get_current_agent_id()` as key for browser context pool lookups.
+Replace the browser singleton with a pool that provides isolated `BrowserContext` instances per agent.
 
-### Task P2-5: Resource lock manager
-Pooled resources (browser, desktop) and naturally queued resources (Ollama, GPU).
+**Files:**
+- `tools/browser/core/browser.py`:
+  - Keep `_browser` as the default/root browser (backward compat for simple chat)
+  - Add `_agent_browsers: dict[str, Browser] = {}` keyed by agent_id
+  - Add `get_browser_for_agent(agent_id: str | None) -> Browser`:
+    - If `agent_id` is None or matches root: return default singleton
+    - Else: create/return isolated Browser with unique profile path
+  - Update `get_browser()` to call `get_browser_for_agent(get_current_agent_id())`
+  - Each agent gets profile at `{home_dir}/browser/profiles/{agent_id}/`
+  - Each agent gets downloads at `{home_dir}/downloads/{agent_id}/`
 
-### Task P2-5b: Desktop display pool
-Per-agent Xvfb + Xfce4 + x11vnc on unique display numbers and VNC ports.
+- New `tools/browser/core/_cleanup.py`:
+  - `cleanup_agent_browser(agent_id)` — close context, remove from dict
+  - Called from `agent_span()` completion or registered via atexit
 
-### Task P2-6: Agent task registry
-Track running agent tasks for per-agent cancellation.
+**Important:** Playwright `launch_persistent_context` creates a full browser process per context. For a pool, we should use `browser.new_context()` on a shared browser instance instead. This means:
+  - Launch ONE browser process: `browser = pw.chromium.launch()`
+  - Create contexts: `ctx = browser.new_context(storage_state=...)`
+  - Each `Browser` wrapper holds a context, not a process
+  - Root agent uses `launch_persistent_context` (preserves cookies/profile)
+  - Sub-agents use `new_context()` on the shared process (lighter weight, isolated)
 
-### Task P2-7: Grounding screenshot collision fix
-Use `agent_id` in screenshot filenames.
+**Test:** Two browser agents running concurrently navigate to different URLs, verify no cross-contamination.
 
-### Task P2-8: Frontend updates for true parallelism
-Handle multiple running agents simultaneously, segment by `agent_id` not just `depth`.
+### Task P2-4: Parallel tool execution in the turn loop
+
+The core change — replace the sequential loop with conditional parallel execution.
+
+**File:** `sdk/turn/_execution.py` lines 314-318
+
+```python
+# Current:
+for tc in tool_calls:
+    result = await _run_tool_with_hooks(tc, tools, hooks)
+    history.append(result)
+
+# New:
+from config import load_config
+
+parallel_cfg = load_config().parallel
+agent_tcs = []
+regular_tcs = []
+for tc in tool_calls:
+    func = next((t for t in tools if getattr(t, '__name__', None) == tc.function.name), None)
+    if func and getattr(func, '__is_agent_tool__', False):
+        agent_tcs.append(tc)
+    else:
+        regular_tcs.append(tc)
+
+# Regular tools always run sequentially
+for tc in regular_tcs:
+    result = await _run_tool_with_hooks(tc, tools, hooks)
+    history.append(result)
+
+# Agent tools: parallel if enabled, sequential otherwise
+if agent_tcs:
+    if parallel_cfg.enabled and len(agent_tcs) > 1:
+        sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
+        async def _run_with_sem(tc):
+            async with sem:
+                return await _execute_tool_call(tc.function.name, tc.function.arguments, tools)
+        tasks = [asyncio.create_task(_run_with_sem(tc)) for tc in agent_tcs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for tc, result in zip(agent_tcs, results):
+            if isinstance(result, Exception):
+                logger.error("Agent tool '%s' failed: %s", tc.function.name, result)
+                history.append({"role": "tool", "tool_name": tc.function.name,
+                               "tool_call_id": tc.id, "content": f"Agent error: {result}"})
+            else:
+                history.append({"role": "tool", "tool_name": tc.function.name,
+                               "tool_call_id": tc.id, "content": result})
+    else:
+        for tc in agent_tcs:
+            result = await _run_tool_with_hooks(tc, tools, hooks)
+            history.append(result)
+```
+
+**Key details:**
+- `asyncio.create_task` copies ContextVars automatically in Python 3.12 — each parallel agent gets its own context stack copy, so `agent_span()` push/pop is isolated
+- `Semaphore(max_concurrent)` limits concurrency
+- Regular tools (file ops, bash commands) always sequential — filesystem safety
+- When `parallel.enabled = false`, everything runs sequentially as before
+- Parallel agent tools skip root-level before/after hooks (they run their own hooks internally via `default_hooks()`)
+
+**Test:** With `parallel.enabled: true`, send a message that triggers 2+ agent tools. Verify they run concurrently (check timestamps in logs). With `parallel.enabled: false`, verify sequential execution.
+
+### Task P2-5: Grounding screenshot collision fix
+
+**File:** `tools/_grounding.py` line 53, 79, 82
+
+Use `get_current_agent_id()` in the screenshot filename:
+
+```python
+from sdk.events import get_current_agent_id
+
+async def run_grounding(screenshot_bytes, task, *, screenshot_filename=None):
+    if screenshot_filename is None:
+        agent_id = get_current_agent_id() or "default"
+        safe_id = agent_id.replace(".", "_")
+        screenshot_filename = f"grounding_{safe_id}.png"
+    # ... rest unchanged
+```
+
+**Test:** Two agents calling `run_grounding()` simultaneously don't overwrite each other's screenshots.
+
+### Task P2-6: Desktop display pool
+
+Enable multiple desktop agents with separate virtual displays.
+
+**Files:**
+- `tools/desktop/_lifecycle.py` — Parameterize `start_desktop(display=":99")`:
+  - Replace hardcoded `:99` in `_START_DESKTOP_CMD` with dynamic display parameter
+  - VNC port derived from display: `6080 + (display_num - 99)`
+
+- `tools/desktop/_exec.py` — Already parameterized (`display: str = ":99"`)
+
+- `config/__init__.py` — Add to `DesktopConfig`:
+  ```python
+  user_display: str = ":99"      # user's personal desktop
+  agent_display_base: int = 100   # agents start from :100
+  ```
+
+- New `tools/desktop/_display_pool.py`:
+  ```python
+  class DisplayPool:
+      _next: int  # next display number to allocate
+      _active: dict[str, int]  # agent_id -> display number
+      _lock: asyncio.Lock
+
+      async def acquire(self, agent_id: str) -> int
+      async def release(self, agent_id: str) -> None
+  ```
+
+- `container/entrypoint.sh` — Start only the user's desktop (`:99`), not agent desktops
+
+**Test:** Two desktop agents each get their own display, can operate independently.
+
+### Task P2-7: Agent task registry
+
+Track running agent tasks for per-agent cancellation (beyond cooperative stop).
+
+**New file:** `sdk/turn/_agent_registry.py`
+
+```python
+_running: dict[str, asyncio.Task] = {}
+
+def register(agent_id: str, task: asyncio.Task) -> None
+def cancel(agent_id: str) -> None
+def cancel_all() -> None
+def cleanup(agent_id: str) -> None
+```
+
+Wire into `_execution.py` — when creating parallel tasks, register them. On stop, cancel specific or all tasks.
+
+**Test:** Start 3 parallel agents, cancel one by ID, verify others continue.
+
+### Task P2-8: Frontend updates
+
+Phase 1 UI already handles multiple running agents (keyed by `agent_id`). Additional work:
+
+- Multiple pulsing status dots (already works — `@keyframes pulse` on `.running`)
+- Agent cards updating independently during streaming (already works — reducer dispatches by `agent_id`)
+- `useStreamingChat` segmentation — already routes by `agent_id` not just `depth`
+
+Main change: ensure interleaved events from parallel agents don't break the stream reader. The `_handleStreamEvent` function processes each event independently by `agent_id`, so this should work without changes.
+
+**Test:** With parallel enabled, send a task that spawns 3 agents. Verify all 3 cards appear, stream independently, and show correct status on completion.
+
+### Implementation Order
+
+1. **P2-1** Config + marker (foundation, no behavior change)
+2. **P2-5** Grounding fix (simple, prevents file collisions)
+3. **P2-3** Browser pool (major refactor, needed before parallel)
+4. **P2-2** Hook isolation (verify existing isolation is sufficient)
+5. **P2-4** Parallel execution (the big one — gated by config flag)
+6. **P2-6** Desktop display pool (optional, only needed for parallel desktop agents)
+7. **P2-7** Agent task registry (optional, for per-agent cancellation)
+8. **P2-8** Frontend verification (should work with no changes)
 
 ---
 
