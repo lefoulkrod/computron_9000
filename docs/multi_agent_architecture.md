@@ -394,24 +394,9 @@ Enable multiple desktop agents with separate virtual displays.
 
 **Test:** Two desktop agents each get their own display. Tools automatically route to the correct display without the agent specifying `DISPLAY=:N`.
 
-### Task P2-7: Agent task registry
+### Task P2-7: Agent task registry — DEFERRED
 
-Track running agent tasks for per-agent cancellation (beyond cooperative stop).
-
-**New file:** `sdk/turn/_agent_registry.py`
-
-```python
-_running: dict[str, asyncio.Task] = {}
-
-def register(agent_id: str, task: asyncio.Task) -> None
-def cancel(agent_id: str) -> None
-def cancel_all() -> None
-def cleanup(agent_id: str) -> None
-```
-
-Wire into `_execution.py` — when creating parallel tasks, register them. On stop, cancel specific or all tasks.
-
-**Test:** Start 3 parallel agents, cancel one by ID, verify others continue.
+Per-agent cancellation (stop one agent without stopping all). Needs UI work (cancel button per agent card) and `asyncio.Task` tracking. Current `request_stop()` stops everything, which is sufficient for now. Revisit when users ask for granular control.
 
 ### Task P2-8: Frontend updates
 
