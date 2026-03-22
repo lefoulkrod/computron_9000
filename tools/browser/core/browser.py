@@ -779,7 +779,6 @@ class Browser:
             locale="en-US",
             timezone_id="America/Chicago",
             accept_downloads=True,
-            downloads_path=root_browser._downloads_dir or None,
             java_script_enabled=True,
         )
 
