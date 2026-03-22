@@ -753,28 +753,26 @@ class Browser:
     async def start_ephemeral(
         cls,
         root_browser: Browser,
-        storage_state: dict[str, Any],
+        storage_state: Any,
+        pw_browser: Any,
     ) -> Browser:
-        """Create an ephemeral browser context on the same Chromium process.
+        """Create an ephemeral browser context on a shared Chromium process.
 
         The new context inherits cookies and localStorage from *storage_state*
         but is fully isolated — changes do not affect the root profile or other
         ephemeral contexts.
 
         Args:
-            root_browser: The persistent root browser whose Chromium process
-                will host the new context.
+            root_browser: The persistent root browser used as template for
+                headers, anti-bot patches, and download/container paths.
             storage_state: Cookies and localStorage snapshot from
                 ``root_browser._context.storage_state()``.
+            pw_browser: A Playwright ``Browser`` instance (from
+                ``chromium.launch()``) that hosts the ephemeral contexts.
 
         Returns:
             A ``Browser`` wrapping the new ephemeral context.
         """
-        pw_browser = root_browser._context.browser
-        if pw_browser is None:
-            msg = "Cannot create ephemeral context: no underlying browser process"
-            raise RuntimeError(msg)
-
         context = await pw_browser.new_context(
             storage_state=storage_state,
             viewport=_viewport(),
@@ -1400,6 +1398,7 @@ class Browser:
 
 
 _browser: Browser | None = None
+_ephemeral_pw_browser: Any = None  # Playwright Browser for sub-agent contexts
 _agent_browsers: dict[str, Browser] = {}
 _agent_browser_lock = asyncio.Lock()
 
@@ -1476,8 +1475,32 @@ async def get_browser() -> Browser:
         if agent_id in _agent_browsers:
             return _agent_browsers[agent_id]
 
+        # Lazily launch a separate headless Chromium process for ephemeral
+        # contexts.  Persistent contexts (launch_persistent_context) don't
+        # expose a Browser object in Playwright, so we need a second process.
+        global _ephemeral_pw_browser
+        if _ephemeral_pw_browser is None:
+            config = load_config()
+            channel = config.tools.browser.channel
+            headless = config.tools.browser.headless
+            launch_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=AutomationControlled",
+                "--no-default-browser-check",
+                "--disable-dev-shm-usage",
+            ]
+            pw = await async_playwright().start()
+            _ephemeral_pw_browser = await pw.chromium.launch(
+                channel=channel,
+                headless=headless,
+                args=launch_args,
+            )
+            logger.info("Launched ephemeral Chromium process for sub-agent contexts")
+
         state = await root._context.storage_state()
-        ephemeral = await Browser.start_ephemeral(root, storage_state=state)
+        ephemeral = await Browser.start_ephemeral(
+            root, storage_state=state, pw_browser=_ephemeral_pw_browser,
+        )
         _agent_browsers[agent_id] = ephemeral
         logger.info("Created ephemeral browser context for agent '%s'", agent_id)
         return ephemeral
@@ -1497,7 +1520,7 @@ async def release_agent_browser(agent_id: str) -> None:
 
 async def close_browser() -> None:
     """Shutdown all browser instances — ephemeral contexts and root singleton."""
-    global _browser
+    global _browser, _ephemeral_pw_browser
 
     # Close all ephemeral sub-agent contexts first.
     async with _agent_browser_lock:
@@ -1508,6 +1531,14 @@ async def close_browser() -> None:
             await browser.close_context()
         except Exception:  # noqa: BLE001
             logger.warning("Failed to close ephemeral context for '%s'", agent_id)
+
+    # Close the ephemeral Chromium process if it was launched.
+    if _ephemeral_pw_browser is not None:
+        try:
+            await _ephemeral_pw_browser.close()
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to close ephemeral Chromium process")
+        _ephemeral_pw_browser = None
 
     if _browser is None:
         logger.debug("close_browser called but no browser instance exists")
