@@ -197,15 +197,20 @@ parallel:
 
 Hooks with mutable state must not corrupt when multiple agents run in parallel. Each agent already gets its own hook instances via `default_hooks()` in `_agent_wrapper.py`, so sub-agents are isolated. But the root agent's hooks are shared across its tool loop iterations — if parallel agent tool calls trigger concurrent `before_tool`/`after_tool` callbacks on the root's hooks, state will corrupt.
 
-**The risk:** When parallel tool calls run via `asyncio.create_task`, they all call `_run_tool_with_hooks()` which iterates the root's shared hook instances. Concurrent `before_tool`/`after_tool` calls on the same `LoopDetector` or `BudgetGuard` will corrupt their mutable state (`_recent`, `_current_round`, `_exhausted`).
+**The risk:** When parallel tool calls run via `asyncio.create_task`, they all call `_run_tool_with_hooks()` which iterates the root's shared hook instances. Concurrent `before_tool`/`after_tool` calls on the same `LoopDetector` or `TurnRecorder` will corrupt their mutable state.
 
-**Solution:** When running tools in parallel, use `_execute_tool_call()` directly instead of `_run_tool_with_hooks()`. This skips the root's before/after hooks for parallel calls. Sub-agents already create their own hooks internally via `default_hooks()` in `run_agent_as_tool`, so they're fully isolated. The root's `before_model`/`after_model` hooks still run normally (they're called sequentially between iterations, not during parallel tool execution).
+**Solution:** Add `asyncio.Lock` to hooks with mutable state. This is the correct fix — hooks continue to run normally for all tool calls (parallel or sequential), and the lock prevents concurrent corruption. Sub-agents already create their own hook instances via `default_hooks()` in `run_agent_as_tool`, so they're naturally isolated.
 
 **Files:**
-- `sdk/turn/_execution.py` — Parallel path calls `_execute_tool_call()` directly, sequential path continues to use `_run_tool_with_hooks()`
-- No changes needed to hook implementations themselves
+- `sdk/hooks/_loop_detector.py` — Add `self._lock = asyncio.Lock()`. Lock around `_current_round.append()` in `after_tool` and the finalization in `before_model`.
+- `sdk/hooks/_budget_guard.py` — Add `self._lock = asyncio.Lock()`. Lock around `_exhausted` check/set in `before_model`.
+- `sdk/hooks/_turn_recorder.py` — Replace `_tool_start_time` (single value) with `_tool_start_times: dict[str, float]` keyed by tool_call_id. Add lock around `_messages.append()` and `_total_tool_calls` increment.
+- `sdk/hooks/_scratchpad_hook.py` — No change needed (stateless logging).
+- Remove `sdk/hooks/_skill_tracking.py` — skill extraction is dropped.
 
-**Test:** Run two tool calls in parallel (with parallel.enabled=true), verify no hook state corruption and no crashes.
+**Note on sub-agent nesting:** Sub-agents can spawn their own sub-agents. Each level creates fresh hooks via `default_hooks()`, so nesting depth doesn't affect hook safety. The locks only matter for the specific agent whose tool loop is running parallel calls.
+
+**Test:** Run two tool calls in parallel (with parallel.enabled=true), verify no hook state corruption.
 
 ### Task P2-3: Browser context pool
 
@@ -255,11 +260,7 @@ if parallel_cfg.enabled and len(tool_calls) > 1:
     sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
     async def _run_with_sem(tc):
         async with sem:
-            # Skip root hooks for parallel calls — use _execute_tool_call directly
-            # Sub-agents create their own hooks internally
-            result = await _execute_tool_call(tc.function.name, tc.function.arguments, tools)
-            return tc, {"role": "tool", "tool_name": tc.function.name,
-                        "tool_call_id": tc.id, "content": result}
+            return tc, await _run_tool_with_hooks(tc, tools, hooks)
     tasks = [asyncio.create_task(_run_with_sem(tc)) for tc in tool_calls]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for result in results:
@@ -280,7 +281,9 @@ else:
 - `asyncio.create_task` copies ContextVars automatically in Python 3.12 — each parallel task gets its own context stack copy
 - `Semaphore(max_concurrent)` limits concurrency
 - When `parallel.enabled = false` (default), everything runs sequentially as before
-- Each sub-agent creates its own hooks via `default_hooks()` inside `run_agent_as_tool`, so hook isolation is automatic
+- Hooks are thread-safe via `asyncio.Lock` (Task P2-2), so `_run_tool_with_hooks` works in parallel
+- Sub-agents spawned by parallel tool calls each create their own hooks via `default_hooks()` — naturally isolated
+- Sub-agents can nest further (agent → sub-agent → sub-sub-agent) — each level gets fresh hooks
 
 **Test:** With `parallel.enabled: true`, send a message that triggers 2+ tool calls. Verify they run concurrently (check timestamps in logs). With `parallel.enabled: false`, verify sequential execution.
 
