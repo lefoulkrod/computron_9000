@@ -1,9 +1,5 @@
 .inputAreaWrapper {
-  background-color: var(--secondary);
-  border-radius: var(--radius);
-  border: 1px solid var(--button);
-  padding: 1rem;
-  box-shadow: var(--shadow);
+  padding: 0.5rem 0.75rem;
 }
 
 .customInputWrapper {
@@ -12,37 +8,36 @@
 }
 
 .customInput {
-  min-height: 2.25rem;
+  min-height: 2rem;
   max-height: 10rem;
   overflow-y: auto;
-  font-size: 1rem;
-  padding: 0.75rem 0.9rem;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.6rem;
   outline: none;
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.4rem;
   border: 1px solid var(--button);
   border-radius: var(--radius);
-  background: var(--secondary);
+  background: var(--primary);
   color: var(--text);
   resize: none;
 }
 
 /* Adds headroom when an inline preview is shown */
 .withPreview {
-  /* Reserve space to the left for the thumbnail and a small gap */
-  padding-left: 208px; /* 180px preview + ~28px gap/border */
-  padding-top: 12px;   /* small headroom so first line doesn't touch top */
-  min-height: 148px;   /* ensure the preview fits inside the textarea box */
+  padding-left: 208px;
+  padding-top: 12px;
+  min-height: 148px;
 }
 
 .customInput::placeholder {
-  color: #8a8a8a;
+  color: var(--button);
 }
 
 .customInput:focus {
   border-color: #7aa2ff;
-  box-shadow: 0 0 0 3px rgba(122,162,255,0.25);
+  box-shadow: 0 0 0 2px rgba(122,162,255,0.2);
 }
 
 .inputArea {
@@ -51,24 +46,16 @@
 }
 
 .inputArea button {
-  margin-left: 0;
-  margin-top: 0.25rem;
-  align-self: flex-end;
+  margin: 0;
 }
 
 .inputArea button:disabled {
-  background: #aaa;
+  opacity: 0.5;
 }
 
 .customInput:disabled {
-  background: var(--secondary);
-  border-color: var(--button);
   opacity: 0.65;
   cursor: not-allowed;
-}
-
-.customInput:disabled::placeholder {
-  color: #9a9a9a;
 }
 
 .inputAreaButtons {
@@ -76,85 +63,50 @@
   gap: 0.4rem;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.25rem;
 }
 
 .actionButtons {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.agentSelector {
   display: flex;
   gap: 0.25rem;
   align-items: center;
 }
 
 .agentSelect {
-  padding: 0.3rem 0.5rem;
-  font-size: 0.85rem;
-  border-radius: var(--radius);
+  padding: 0.2rem 0.4rem;
+  font-size: 0.75rem;
+  border-radius: 5px;
   border: 1px solid var(--button);
-  background: var(--secondary);
+  background: var(--primary);
   color: var(--text);
   cursor: pointer;
 }
-
-.agentButton {
-  padding: 0.3rem 0.7rem;
-  font-size: 0.78rem;
-  font-weight: 500;
-  border-radius: 999px;
-  border: 1px solid var(--button);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-  line-height: 1.2;
-}
-
-.agentButton:hover {
-  background: var(--button);
-}
-
-.agentButtonActive {
-  background: var(--button);
-  border-color: #7aa2ff;
-  color: #7aa2ff;
-  font-weight: 600;
-}
-
 
 .iconButton {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: var(--button);
-  color: var(--text);
-  border: 1px solid rgba(0,0,0,0.25);
-  box-shadow: none;
-  line-height: 1;
-  transition: transform 120ms ease, filter 160ms ease, box-shadow 160ms ease;
+  border-radius: 6px;
+  background: none;
+  color: var(--button);
+  border: none;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
-.iconButton svg { width: 18px; height: 18px; display: block; }
+.iconButton svg { width: 16px; height: 16px; display: block; }
 
-.iconButton:hover:not(:disabled) { filter: brightness(1.08); }
+.iconButton:hover:not(:disabled) { background: var(--secondary); color: var(--text); }
 .iconButton:active:not(:disabled) { transform: translateY(1px); }
-.iconButton:disabled { opacity: 0.6; }
+.iconButton:disabled { opacity: 0.4; cursor: not-allowed; }
 .iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
 
 .stopButton {
-  background: var(--color-danger);
-  color: #fff;
-  border-color: rgba(0,0,0,0.3);
+  color: var(--color-danger);
 }
-.stopButton:hover { filter: brightness(1.12); }
+.stopButton:hover { background: rgba(192, 57, 43, 0.1); color: var(--color-danger); }
 
 /* Inline preview that sits inside the textarea area (top-left) */
 .inlinePreview {
@@ -163,11 +115,10 @@
   left: 8px;
   width: 180px;
   height: 120px;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(0,0,0,0.15);
-  box-shadow: var(--shadow);
-  pointer-events: none; /* allow typing/selecting text without interference */
+  border: 1px solid var(--button);
+  pointer-events: none;
 }
 
 .inlinePreview img {
@@ -181,37 +132,24 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #111;
-  border: 1px solid rgba(0,0,0,0.15);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--secondary);
+  color: var(--text);
+  border: 1px solid var(--button);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
   padding: 0;
-  opacity: 0.9;
-  transition: transform 120ms ease, opacity 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: geometricPrecision;
-  pointer-events: auto; /* re-enable interaction on the button */
+  pointer-events: auto;
 }
 
 .removeAttachment:hover {
-  opacity: 1;
-  transform: scale(1.05);
-  background: #ffffff;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.2);
-}
-
-.removeAttachment:focus-visible {
-  outline: 2px solid #7aa2ff;
-  outline-offset: 2px;
+  background: var(--button);
 }
 
 /* Generic file chip for non-image attachments */
@@ -224,20 +162,19 @@
   padding: 0.5rem;
   box-sizing: border-box;
   background: var(--secondary);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .fileChipIcon {
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   flex-shrink: 0;
 }
 
 .fileChipName {
   font-family: var(--font-mono);
-  font-size: 0.78em;
+  font-size: 0.75em;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-

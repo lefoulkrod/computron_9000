@@ -42,26 +42,36 @@ function _handleStreamEvent(data, callbacks) {
     if (!data.event) return;
 
     const { type } = data.event;
+    const agentId = data.agent_id || null;
+
+    if (type === 'agent_started' || type === 'agent_completed') {
+        if (callbacks.onAgentEvent) callbacks.onAgentEvent(data.event);
+    }
 
     if (type === 'browser_screenshot') {
         callbacks.onBrowserSnapshot({
             url: data.event.url,
             title: data.event.title,
             screenshot: data.event.screenshot,
+            agentId,
         });
     }
 
     if (type === 'terminal_output') {
-        callbacks.onTerminalOutput(data.event);
+        callbacks.onTerminalOutput({ ...data.event, agentId });
     }
 
     if (type === 'tool_created') {
         callbacks.onToolCreated();
     }
 
-    if (type === 'tool_call' &&
-        (data.event.name === 'remember' || data.event.name === 'forget')) {
-        callbacks.onMemoryChanged();
+    if (type === 'tool_call') {
+        if (data.event.name === 'remember' || data.event.name === 'forget') {
+            callbacks.onMemoryChanged();
+        }
+        if (callbacks.onAgentToolCall) {
+            callbacks.onAgentToolCall({ name: data.event.name, agentId });
+        }
     }
 
     if (type === 'audio_playback') {
@@ -72,19 +82,34 @@ function _handleStreamEvent(data, callbacks) {
     }
 
     if (type === 'desktop_active') {
-        callbacks.onDesktopActive();
+        callbacks.onDesktopActive(agentId);
     }
 
     if (type === 'generation_preview') {
-        callbacks.onGenerationPreview(data.event);
+        callbacks.onGenerationPreview({ ...data.event, agentId });
     }
 
     if (type === 'skill_applied') {
-        callbacks.onSkillApplied(data.event);
+        if (callbacks.onSkillApplied) callbacks.onSkillApplied(data.event);
+    }
+
+    if (type === 'file_output') {
+        if (callbacks.onAgentFileOutput) {
+            callbacks.onAgentFileOutput({ ...data.event, agentId });
+        }
     }
 
     // context_usage events are handled inline by the message component,
-    // not as a side-effect callback.
+    // not as a side-effect callback. Pass iteration info to agent state.
+    if (type === 'context_usage') {
+        if (callbacks.onAgentContextUsage && agentId) {
+            callbacks.onAgentContextUsage({
+                agentId,
+                iteration: data.event.iteration || null,
+                maxIterations: data.event.max_iterations || null,
+            });
+        }
+    }
 }
 
 /**
@@ -341,8 +366,21 @@ export default function useStreamingChat(callbacks) {
 
                         // ── Streaming tokens ──────────────────────────────
                         // Buffer content/thinking and flush once per frame.
+                        // Sub-agent tokens (depth > 0) route to agent state,
+                        // not to chat messages.
                         if (data.delta && !dataField && !toolCallEvent && !fileOutputEvent
                             && !contextUsageEvent && data.final !== true) {
+                            if (depth > 0 && data.agent_id) {
+                                // Route sub-agent tokens to agent state
+                                if (callbacks.onAgentContent && (hasResponse || hasThinking)) {
+                                    callbacks.onAgentContent({
+                                        agentId: data.agent_id,
+                                        content: hasResponse ? contentField : null,
+                                        thinking: hasThinking ? data.thinking : null,
+                                    });
+                                }
+                                continue;
+                            }
                             if (agentName) currentAgentName = agentName;
                             maybeNewSegment(depth, hasThinking);
                             if (hasResponse) {
@@ -356,6 +394,18 @@ export default function useStreamingChat(callbacks) {
 
                         // ── Non-streaming events ──────────────────────────
                         // Tool calls, context usage, screenshots, final marker.
+                        // Sub-agent non-streaming content also routes to agent state.
+                        if (depth > 0 && data.agent_id && !data.final) {
+                            if ((hasResponse || hasThinking) && callbacks.onAgentContent) {
+                                callbacks.onAgentContent({
+                                    agentId: data.agent_id,
+                                    content: hasResponse ? contentField : null,
+                                    thinking: hasThinking ? data.thinking : null,
+                                });
+                            }
+                            continue;
+                        }
+
                         // Flush buffered tokens first so ordering is preserved.
                         flushStreamBuffer();
                         if (rafId !== null) {

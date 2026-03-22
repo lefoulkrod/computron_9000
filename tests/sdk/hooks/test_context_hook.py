@@ -25,8 +25,9 @@ async def test_after_model_records_and_returns():
     class FakeCtxManager:
         recorded = None
 
-        async def record_response(self, response: Any) -> None:
+        async def record_response(self, response: Any, **kwargs: Any) -> None:
             self.recorded = response
+            self.kwargs = kwargs
 
     mgr = FakeCtxManager()
     hook = ContextHook(mgr)

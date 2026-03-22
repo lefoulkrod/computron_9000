@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import styles from './CustomToolsPanel.module.css';
 import localStyles from './ModelSettingsPanel.module.css';
 
 const SETTING_TIPS = {
@@ -59,16 +58,8 @@ export default function ModelSettingsPanel({ settings, disabled }) {
         unlimitedTurns, setUnlimitedTurns: onUnlimitedTurnsChange,
         agentTurns, setAgentTurns: onAgentTurnsChange,
     } = settings;
-    const [collapsed, setCollapsed] = useState(true);
-
     return (
-        <div className={styles.panel}>
-            <div className={styles.header} onClick={() => setCollapsed((c) => !c)}>
-                <span className={styles.title}>Settings</span>
-                <span className={styles.chevron}>{collapsed ? '▶' : '▼'}</span>
-            </div>
-            {!collapsed && (
-                <div className={localStyles.body}>
+        <div className={localStyles.body}>
                     <label className={localStyles.row}>
                         <span className={localStyles.label}>Model<InfoTip text={SETTING_TIPS.model} /></span>
                         <select
@@ -221,8 +212,6 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                             }
                         </div>
                     </div>
-                </div>
-            )}
         </div>
     );
 }

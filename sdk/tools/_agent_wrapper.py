@@ -307,7 +307,11 @@ Returns:
             options=model_options.to_options() if model_options else {},
             max_iterations=effective_max_iterations,
         )
-        with agent_span(agent.name):
+        logger.info(
+            "Spawning sub-agent '%s' (tool=%s, max_iter=%d, instruction=%.100s)",
+            agent.name, func_name, effective_max_iterations, instructions,
+        )
+        with agent_span(agent.name, instruction=instructions):
             history = ConversationHistory([
                 {"role": "system", "content": agent.instruction},
                 {"role": "user", "content": instructions},

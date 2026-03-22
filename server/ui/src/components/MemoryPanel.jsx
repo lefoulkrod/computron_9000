@@ -12,7 +12,7 @@ export default function MemoryPanel({ refreshSignal }) {
     }, []);
 
     const {
-        items: entries, loading, collapsed, setCollapsed,
+        items: entries, loading,
         deleting, handleDelete,
     } = useListPanel('/api/memory', {
         refreshSignal,
@@ -52,45 +52,37 @@ export default function MemoryPanel({ refreshSignal }) {
     if (loading || entries.length === 0) return null;
 
     return (
-        <div className={styles.panel}>
-            <div className={styles.header} onClick={() => setCollapsed(c => !c)}>
-                <span className={styles.title}>Memory <span className={styles.count}>{entries.length}</span></span>
-                <span className={styles.chevron}>{collapsed ? '▶' : '▼'}</span>
-            </div>
-            {!collapsed && (
-                <ul className={styles.list}>
-                    {entries.map(([key, value]) => {
-                        const isHidden = hiddenKeys.has(key);
-                        return (
-                            <li key={key} className={styles.item}>
-                                <div className={styles.itemMain}>
-                                    <span className={styles.name}>{key}</span>
-                                </div>
-                                <p className={styles.desc} title={isHidden ? undefined : value}>
-                                    {isHidden ? '••••••••' : value}
-                                </p>
-                                <div className={styles.itemActions}>
-                                    <button
-                                        className={`${styles.eyeBtn}${isHidden ? ` ${styles.eyeBtnActive}` : ''}`}
-                                        onClick={() => toggleHidden(key)}
-                                        title={isHidden ? 'Show value' : 'Hide value'}
-                                    >
-                                        <EyeIcon size={12} slashed={isHidden} />
-                                    </button>
-                                    <button
-                                        className={styles.deleteBtn}
-                                        onClick={() => onDelete(key)}
-                                        disabled={deleting === key}
-                                        title="Forget"
-                                    >
-                                        {deleting === key ? '…' : <TrashIcon size={13} />}
-                                    </button>
-                                </div>
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
-        </div>
+        <ul className={styles.list}>
+            {entries.map(([key, value]) => {
+                const isHidden = hiddenKeys.has(key);
+                return (
+                    <li key={key} className={styles.item}>
+                        <div className={styles.itemMain}>
+                            <span className={styles.name}>{key}</span>
+                        </div>
+                        <p className={styles.desc} title={isHidden ? undefined : value}>
+                            {isHidden ? '••••••••' : value}
+                        </p>
+                        <div className={styles.itemActions}>
+                            <button
+                                className={`${styles.eyeBtn}${isHidden ? ` ${styles.eyeBtnActive}` : ''}`}
+                                onClick={() => toggleHidden(key)}
+                                title={isHidden ? 'Show value' : 'Hide value'}
+                            >
+                                <EyeIcon size={12} slashed={isHidden} />
+                            </button>
+                            <button
+                                className={styles.deleteBtn}
+                                onClick={() => onDelete(key)}
+                                disabled={deleting === key}
+                                title="Forget"
+                            >
+                                {deleting === key ? '…' : <TrashIcon size={13} />}
+                            </button>
+                        </div>
+                    </li>
+                );
+            })}
+        </ul>
     );
 }

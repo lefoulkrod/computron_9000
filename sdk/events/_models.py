@@ -170,6 +170,8 @@ class ContextUsagePayload(BaseModel):
     context_used: int
     context_limit: int
     fill_ratio: float
+    iteration: int | None = None
+    max_iterations: int | None = None
 
 
 class GenerationPreviewPayload(BaseModel):
@@ -206,6 +208,40 @@ class GenerationPreviewPayload(BaseModel):
     output_path: str | None = None
 
 
+class AgentStartedPayload(BaseModel):
+    """Emitted when an agent begins execution.
+
+    Attributes:
+        type: Discriminator; always "agent_started".
+        agent_id: Hierarchical context id for this agent instance.
+        agent_name: Human-readable agent name.
+        parent_agent_id: Context id of the parent agent, or None for root.
+        instruction: The instruction or user message this agent was given.
+    """
+
+    type: Literal["agent_started"]
+    agent_id: str
+    agent_name: str
+    parent_agent_id: str | None = None
+    instruction: str | None = None
+
+
+class AgentCompletedPayload(BaseModel):
+    """Emitted when an agent finishes execution.
+
+    Attributes:
+        type: Discriminator; always "agent_completed".
+        agent_id: Hierarchical context id for this agent instance.
+        agent_name: Human-readable agent name.
+        status: How the agent finished — success, error, or stopped.
+    """
+
+    type: Literal["agent_completed"]
+    agent_id: str
+    agent_name: str
+    status: Literal["success", "error", "stopped"]
+
+
 # Extend this alias with additional payload models as new event types are introduced.
 AssistantEventPayload = Annotated[
     ToolCallPayload
@@ -217,7 +253,9 @@ AssistantEventPayload = Annotated[
     | GenerationPreviewPayload
     | ContextUsagePayload
     | SkillAppliedPayload
-    | DesktopActivePayload,
+    | DesktopActivePayload
+    | AgentStartedPayload
+    | AgentCompletedPayload,
     Field(discriminator="type"),
 ]
 
@@ -251,9 +289,12 @@ class AssistantResponse(BaseModel):
     # Agent attribution metadata for UI rendering
     agent_name: str | None = None
     depth: int | None = None
+    agent_id: str | None = None
 
 
 __all__ = [
+    "AgentCompletedPayload",
+    "AgentStartedPayload",
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",

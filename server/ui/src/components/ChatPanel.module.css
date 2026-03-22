@@ -1,0 +1,14 @@
+.panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--button);
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+}

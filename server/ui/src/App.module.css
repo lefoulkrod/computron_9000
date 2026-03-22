@@ -88,6 +88,82 @@
   z-index: 10;
 }
 
+/* ── New multi-agent layout ───────────────────────────────────── */
+
+.appShell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.bodyRow {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.mainContent {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Network overview + chat side-by-side */
+.networkWithChat {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+.networkArea {
+    flex: 1;
+    overflow: hidden;
+    border-right: 1px solid var(--button);
+}
+.chatArea {
+    width: 28%;
+    min-width: 320px;
+    max-width: 480px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--primary);
+}
+.chatHeader {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--button);
+    font-size: 12px;
+    font-weight: 600;
+}
+.chatInputWrap {
+    border-top: 1px solid var(--button);
+    padding: 6px 8px;
+}
+
+/* Simple chat (no sub-agents) with optional preview panels */
+.simpleChat {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+.simpleChat.withPanels .previewColumn {
+    flex: 0 0 45%;
+    max-width: 45%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border-right: 1px solid var(--button);
+}
+.chatColumn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 /* Nudge toast */
 .nudgeToast {
   position: fixed;

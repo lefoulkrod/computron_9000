@@ -144,8 +144,6 @@ async def stream_events(
         async for event in events:
             data_out = event.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
             await resp.write((json.dumps(data_out) + "\n").encode("utf-8"))
-            if data_out.get("final"):
-                break
     except ConnectionResetError:
         logger.debug("Client disconnected during event stream")
     except Exception:  # pragma: no cover - defensive logging

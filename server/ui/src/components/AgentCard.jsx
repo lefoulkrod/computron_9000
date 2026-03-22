@@ -1,0 +1,74 @@
+import React, { memo } from 'react';
+import { formatElapsed } from '../utils/agentUtils.js';
+import styles from './AgentCard.module.css';
+
+function formatAgentName(name) {
+    if (!name) return 'Agent';
+    return name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function AgentCard({ agent, onClick }) {
+    const statusClass = styles[agent.status] || '';
+    const toolCallCount = agent.activityLog
+        ? agent.activityLog.filter((e) => e.type === 'tool_call').length
+        : 0;
+
+    return (
+        <div
+            className={`${styles.card} ${statusClass}`}
+            onClick={() => onClick(agent.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && onClick(agent.id)}
+        >
+            <div className={styles.header}>
+                <span className={`${styles.dot} ${statusClass}`} />
+                <span className={styles.name}>{formatAgentName(agent.name)}</span>
+            </div>
+
+            {agent.browserSnapshot && (
+                <div className={styles.thumbRow}>
+                    <img
+                        className={styles.thumb}
+                        src={`data:image/png;base64,${agent.browserSnapshot.screenshot}`}
+                        alt=""
+                    />
+                </div>
+            )}
+
+            <div className={styles.meta}>
+                {agent.childIds.length > 0 && (
+                    <span className={`${styles.badge} ${styles.agents}`}>
+                        {agent.childIds.length} sub-agent{agent.childIds.length !== 1 ? 's' : ''}
+                    </span>
+                )}
+                {toolCallCount > 0 && (
+                    <span className={`${styles.badge} ${styles.iter}`}>
+                        {toolCallCount} tool{toolCallCount !== 1 ? 's' : ''}
+                    </span>
+                )}
+                {agent.startedAt && (
+                    <span className={`${styles.badge} ${styles.time}`}>
+                        {formatElapsed(agent.startedAt)}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+}
+
+export default memo(AgentCard, (prev, next) => {
+    const a = prev.agent, b = next.agent;
+    return (
+        a.status === b.status &&
+        a.activeTool === b.activeTool &&
+        a.childIds.length === b.childIds.length &&
+        a.browserSnapshot === b.browserSnapshot &&
+        a.startedAt === b.startedAt &&
+        a.activityLog.length === b.activityLog.length
+    );
+});
+
+export { formatAgentName };

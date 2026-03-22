@@ -1,0 +1,55 @@
+.flyout {
+    position: fixed;
+    left: 44px;
+    top: 36px;
+    bottom: 0;
+    width: 270px;
+    background: var(--secondary);
+    border-right: 1px solid var(--button);
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+}
+
+.header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--button);
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.title {
+    flex: 1;
+}
+
+.close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--button);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 4px;
+}
+.close:hover {
+    color: var(--text);
+}
+
+.body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+}
+
+.scrim {
+    position: fixed;
+    top: 36px;
+    left: 314px;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}

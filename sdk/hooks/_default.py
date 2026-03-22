@@ -27,5 +27,5 @@ def default_hooks(
     hooks.append(LoggingHook(agent))
     hooks.append(ScratchpadHook())
     if ctx_manager is not None:
-        hooks.append(ContextHook(ctx_manager))
+        hooks.append(ContextHook(ctx_manager, max_iterations=max_iterations))
     return hooks

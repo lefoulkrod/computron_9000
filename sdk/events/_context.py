@@ -26,7 +26,7 @@ if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
 from agents.types import LLMOptions
 
 from ._dispatcher import EventDispatcher
-from ._models import AssistantResponse
+from ._models import AgentCompletedPayload, AgentStartedPayload, AssistantResponse
 
 logger = logging.getLogger(__name__)
 
@@ -105,30 +105,82 @@ def get_current_agent_name() -> str | None:
     return stack[-1][1] if stack else None
 
 
+def get_current_agent_id() -> str | None:
+    """Return the context id from the top of the context stack, or None."""
+    stack = _context_stack.get()
+    return stack[-1][0] if stack else None
+
+
+def get_current_dispatcher() -> EventDispatcher | None:
+    """Return the active event dispatcher for the current context, or None."""
+    return _current_dispatcher.get()
+
+
+def get_current_depth() -> int:
+    """Return the current nesting depth (0 = root, 1+ = sub-agents)."""
+    stack = _context_stack.get()
+    return max(0, len(stack) - 1) if stack else 0
+
+
 @contextmanager
 def agent_span(
     agent_name: str | None = None,
+    instruction: str | None = None,
 ) -> Generator[str, None, None]:
     """Push an attribution frame for the duration of the block.
 
     Events published inside will be tagged with the given agent name and an
-    incremented depth.
+    incremented depth. Emits agent lifecycle events on entry and exit.
 
     Args:
         agent_name: Human-readable agent name for event attribution.
+        instruction: The instruction or user message this agent was given.
 
     Yields:
         str: The context id pushed onto the stack.
 
     Example:
-        with agent_span("Browser Agent"):
+        with agent_span("Browser Agent", instruction="Browse example.com"):
             publish_event(AssistantResponse(thinking="Navigating..."))
     """
+    stack = _context_stack.get()
+    parent_id = stack[-1][0] if stack else None
     context_id = _make_child_context_id(agent_name)
-    token = _context_stack.set((*_context_stack.get(), (context_id, agent_name)))
+    depth = len(stack)
+    token = _context_stack.set((*stack, (context_id, agent_name)))
+
+    logger.info(
+        "Agent started: %s (id=%s, parent=%s, depth=%d)",
+        agent_name, context_id, parent_id, depth,
+    )
+
+    publish_event(AssistantResponse(event=AgentStartedPayload(
+        type="agent_started",
+        agent_id=context_id,
+        agent_name=agent_name or "",
+        parent_agent_id=parent_id,
+        instruction=instruction,
+    )))
+
+    status = "success"
     try:
         yield context_id
+    except Exception as exc:
+        # Import here to avoid circular dependency with sdk.turn
+        from sdk.turn._turn import StopRequestedError
+        status = "stopped" if isinstance(exc, StopRequestedError) else "error"
+        raise
     finally:
+        logger.info(
+            "Agent completed: %s (id=%s, status=%s, depth=%d)",
+            agent_name, context_id, status, depth,
+        )
+        publish_event(AssistantResponse(event=AgentCompletedPayload(
+            type="agent_completed",
+            agent_id=context_id,
+            agent_name=agent_name or "",
+            status=status,
+        )))
         _context_stack.reset(token)
 
 
@@ -155,6 +207,7 @@ def publish_event(event: AssistantResponse) -> None:
                 update={
                     "agent_name": stack[-1][1] if stack else None,
                     "depth": len(stack) - 1 if stack else 0,
+                    "agent_id": stack[-1][0] if stack else None,
                 }
             )
         )

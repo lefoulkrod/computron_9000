@@ -245,6 +245,7 @@ async def run_turn(
     try:
         while True:
             iteration += 1
+            logger.debug("Tool loop iteration %d for agent '%s'", iteration, agent.name)
 
             try:
                 # ── before_model hooks ───────────────────────────────────
@@ -310,6 +311,8 @@ async def run_turn(
                     _publish_final()
                     return final_content
 
+                tool_names = [tc.function.name for tc in tool_calls]
+                logger.debug("Executing %d tool call(s) for '%s': %s", len(tool_calls), agent.name, tool_names)
                 for tc in tool_calls:
                     result = await _run_tool_with_hooks(tc, tools, hooks)
                     history.append(result)
@@ -317,7 +320,7 @@ async def run_turn(
             except StopRequestedError:
                 logger.info("Agent '%s' tool loop stopped by user request", agent.name)
                 _publish_final()
-                return final_content
+                raise
             except Exception as exc:
                 logger.exception("Unhandled exception in tool loop")
                 error_msg = "An error occurred while processing your message."

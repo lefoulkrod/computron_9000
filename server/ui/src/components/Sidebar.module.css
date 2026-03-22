@@ -1,0 +1,42 @@
+.sidebar {
+    width: 44px;
+    background: var(--secondary);
+    border-right: 1px solid var(--button);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 10px;
+    gap: 5px;
+    flex-shrink: 0;
+    z-index: 20;
+}
+
+.icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--button);
+    border: 1px solid transparent;
+    padding: 0;
+}
+.icon:hover {
+    background: var(--button);
+    color: var(--text);
+}
+.icon.active {
+    background: #1e1e30;
+    color: #7b8cff;
+    border-color: #3a3a5a;
+}
+
+.sep {
+    width: 20px;
+    height: 1px;
+    background: var(--button);
+    margin: 3px 0;
+}

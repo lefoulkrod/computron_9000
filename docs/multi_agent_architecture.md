@@ -1,0 +1,231 @@
+# Multi-Agent Architecture Overhaul
+
+## Context
+
+The current architecture runs tool calls sequentially (`for tc in tool_calls` at `sdk/turn/_execution.py:313`). When the LLM responds with N tool calls, they run one at a time — only allowing a single linear chain of sub-agents. The browser is a process-level singleton, the desktop has one display, and the frontend treats preview state (browser screenshots, terminal output) as global singletons.
+
+**Goal**: Enable a network of parallel sub-agents, each with scoped resources and previews, visualized in a new UI that shows agent lineage and per-agent preview panels.
+
+**Incremental approach**: Phase 1 builds the new UI and per-agent scoping on top of the existing sequential execution. Phase 2 adds parallel execution, multi-browser, and resource locking.
+
+### Mockups
+
+All UI views at 1920x1080:
+
+1. [Simple chat](mockup_01_simple_chat.png) — no agents spawned, standard chat experience
+2. [Network overview](mockup_02_network_overview.png) — agent graph with chat panel on right
+3. [Flyout panel](mockup_03_flyout_panel.png) — settings flyout over the network view
+4. [Expanded browser agent](mockup_04_expanded_browser_agent.png) — activity stream + browser/terminal/files + nudge bar
+5. [Expanded coder agent](mockup_05_expanded_coder_agent.png) — activity stream + terminal/files + nudge bar
+6. [Expanded desktop agent](mockup_06_expanded_desktop_agent.png) — activity stream + VNC preview + nudge bar
+7. [Desktop overlay](mockup_07_desktop_overlay.png) — user's personal desktop (display :99) floating over network
+8. [Large network](mockup_08_large_network.png) — 14 agents across 4 levels, showing scalability
+
+### UI Model
+
+The left settings column is replaced by a narrow icon sidebar. Clicking an icon opens a **flyout panel** (~280px) that slides out over the content with a scrim overlay ([mockup_03_flyout_panel.png](mockup_03_flyout_panel.png)). Clicking outside or the same icon closes it. No full-expand option — flyout only. Panel components (ModelSettings, Memory, Conversations, Custom Tools) render flat content directly inside the flyout — no nested collapsible headers. The layout adapts based on context:
+
+**Network overview** (monitoring all agents):
+- **Left**: Collapsed icon sidebar (settings, memory, conversations)
+- **Middle**: Agent network graph showing the full agent tree with cards ([mockup_02_network_overview.png](mockup_02_network_overview.png))
+- **Right**: Chat panel — the user's conversation with the root agent. Used for initial instructions and nudging.
+
+**Drilled into an agent** (observing one agent's work):
+- **Left**: Collapsed icon sidebar
+- **Middle**: Agent activity stream (thinking, content, tool calls) + scoped preview panels (browser, terminal, files) ([mockup_04_expanded_browser_agent.png](mockup_04_expanded_browser_agent.png))
+- **Right**: Chat panel collapses. A compact floating nudge bar stays at the bottom of the view — nudges always queue for the root agent.
+- "← Agents" button returns to the network overview. Breadcrumb shows lineage.
+
+**No sub-agents** (simple chat, no network needed):
+- **Left**: Collapsed icon sidebar
+- **Middle**: Preview panels for the root agent (browser, terminal, files, desktop) — same as today's middle column. Shows when the root agent uses browser tools, runs bash commands, generates files, etc. Empty placeholder with network icon when no previews are active.
+- **Right**: Chat panel with agent selector dropdown.
+
+**Transition when sub-agents spawn**:
+- The middle area transitions from root agent preview panels to the **agent network graph**. The root agent becomes a card in the graph like any other agent.
+- To see the root agent's previews again, click its card in the network — same as any other agent.
+- The root is not special in the graph view — it's just the top-level card. All agents (root and sub) are accessed the same way: click card → expanded view with activity stream + preview panels.
+- When all sub-agents complete, the network stays visible (agents in "complete" state) so you can review any agent's work. Starting a new conversation resets to simple chat.
+
+**Multi-turn conversations**: Each turn creates a new root agent with a unique ID. The network graph handles multiple roots (a forest) — all roots appear side-by-side at level 0, each with their own sub-agent trees below. Previous turns' agents show in "complete" state.
+
+### Interaction Model
+
+- The user only directly interacts with the **root agent** via chat. Sub-agents are "observe only" — their full activity (thinking, streaming output, tool calls, preview panels) is visible by clicking their card in the network.
+- **Nudges always target the root agent.** In Phase 1, nudges queue and are processed when the root's next `before_model` runs (after current sub-agents finish). In Phase 2, the root agent may be able to relay nudges to running sub-agents.
+- **Nudge routing fix**: Sub-agents must NOT drain the nudge queue. Only the root agent's `NudgeHook` should drain nudges. Uses public `get_current_depth()` API to check depth.
+- When the root agent is running without sub-agents, the experience is identical to today's chat.
+
+---
+
+## Phase 1: New UI + Per-Agent Event Scoping (Sequential Execution)
+
+### Task 1: Add `agent_id` to events — DONE ✓
+
+Added `agent_id: str | None = None` to `AssistantResponse`. `publish_event()` enriches it from the context stack. Added `get_current_agent_id()`, `get_current_depth()`, and `get_current_dispatcher()` public APIs.
+
+### Task 2: Emit agent lifecycle events — DONE ✓
+
+Added `AgentStartedPayload` and `AgentCompletedPayload`. `agent_span()` emits lifecycle events on entry/exit with catch-and-reraise for status detection. `run_turn()` re-raises `StopRequestedError`. `message_handler.py` catches it with `suppress(StopRequestedError)`. Added `instruction` parameter to `agent_span()`.
+
+### Task 2b: Fix nudge routing — DONE ✓
+
+`NudgeHook` uses `get_current_depth() > 0` to skip draining for sub-agents.
+
+### Task 2c: Root agent lifecycle events — DONE ✓
+
+Root agent was already wrapped in `agent_span()` in `message_handler.py`. Instruction passed through.
+
+### Task 3: useAgentState hook — DONE ✓
+
+React Context + useReducer at `server/ui/src/hooks/useAgentState.jsx`. Activity log merges consecutive content/thinking tokens to prevent per-token entry explosion. Shared `mergeTerminalEvent()` and `formatElapsed()` utilities in `server/ui/src/utils/agentUtils.js`.
+
+### Task 4: Route events by agent_id — DONE ✓
+
+`_handleStreamEvent()` passes `agent_id` with all callbacks. Sub-agent tokens (depth > 0) route to agent state reducer via `onAgentContent` callback. Root tokens continue to chat messages. New callbacks: `onAgentEvent`, `onAgentToolCall`, `onAgentContent`, `onAgentContextUsage`, `onAgentFileOutput`.
+
+### Task 5: Wire AgentStateProvider — DONE ✓
+
+`DesktopApp` wrapped in `AgentStateProvider`. All stream callbacks dispatch to both global state (backward compat for simple chat) and per-agent reducer state. `parentAgentId` coerced with `|| null` to handle `exclude_none=True` serialization.
+
+### Task 6: AgentCard + AgentNetwork — DONE ✓
+
+`AgentCard` with React.memo, status dots, badges, browser thumbnail, formatAgentName. `AgentNetwork` with SVG bezier connectors, BFS level layout, ResizeObserver, single-pass stats counting. Handles multi-root (forest) for multi-turn conversations.
+
+### Task 7: Agent-aware layout — DONE ✓
+
+Three contextual views: simple chat (no agents), network overview (sub-agents exist), expanded agent (selected). Sidebar with flyout panels.
+
+### Task 8: AgentActivityView — DONE ✓
+
+Two-pane layout: activity stream (left) + preview panels (right). Shared `MarkdownContent` component extracted from Message.jsx for markdown rendering. Thinking blocks match main chat style (left border, Hide/Show toggle with ChevronIcon). Tool calls rendered inline with wrench icon. Nudge bar at bottom. Breadcrumb navigation.
+
+### Task 9: Remove sub-agent messages from chat — DONE ✓
+
+Sub-agent streaming tokens routed to agent state reducer, not chat messages. Depth-based filtering removed from ChatMessages.
+
+### Task 10: Redesign header + sidebar — DONE ✓
+
+Slim 36px header with original computron logo, theme toggle, desktop button, new conversation. Icon sidebar with flyout panels. Panel components (ModelSettings, Memory, Conversations, CustomTools) stripped of collapsible wrappers — render flat content directly. Skills panel removed (skill extraction dropped). All CSS uses `var(--primary)`, `var(--secondary)`, `var(--button)`, `var(--text)` for theme support.
+
+### Task 11: Agent state persistence — PARTIALLY DONE
+
+**Backend done:**
+- `AgentEventBufferHook` captures lifecycle, screenshot, terminal, file events during turn
+- `save_agent_events()` / `load_agent_events()` in conversations store
+- `delete_conversation()` cleans up `_agent_events.json`
+- Buffer subscribed to dispatcher in `message_handler._run_turn()`
+- Events saved after turn completion
+
+**Not yet done:**
+- Frontend replay on conversation resume (`REPLAY_EVENTS` reducer action)
+- Resume API endpoint including agent events in response
+- Removing `_sub_agents.json` and related code (skill extraction removal)
+- Testing resume flow end-to-end
+
+---
+
+## Bugs Found and Fixed During Implementation
+
+1. **`parent_agent_id: undefined` vs `null`** — Pydantic's `exclude_none=True` omits `None` fields from JSON. In JS, `undefined !== null` is `true`, causing `hasSubAgents()` to incorrectly return true for root-only conversations. Fixed with `|| null` coercion.
+
+2. **Activity log token explosion** — Every streaming token dispatched a separate `APPEND_ACTIVITY` action. Fixed by merging consecutive same-type entries in the reducer.
+
+3. **Root agent stuck on "running"** — `stream_events()` in `aiohttp_app.py` broke on `final=true` before the root's `agent_completed` event could be sent (it's published in `agent_span()`'s finally block, after `_publish_final()`). Fixed by removing the `break` — stream continues until the producer queue signals end.
+
+4. **Multi-turn agents not showing** — `_buildLevels()` used a single `rootId` set from the first turn. Multi-turn conversations create multiple roots. Fixed by finding all root agents (parentId === null) and BFS from each.
+
+5. **`_formatAgentName` ReferenceError** — Rename from `_formatAgentName` to `formatAgentName` missed a call site. Fixed.
+
+6. **`useState` not defined crash** — Removed `useState` import from ModelSettingsPanel but `InfoTip` component still used it. Restored.
+
+7. **Light mode not applying** — All new CSS files used hardcoded dark-mode colors. Fixed with CSS variables.
+
+---
+
+## Follow-up Items (Not Yet Done)
+
+### UI Polish
+- **CSS units inconsistency** — Original codebase uses `rem` for spacing throughout. All new components use `px`. Should do a pass to convert new component CSS to `rem` for consistency and font-size scaling.
+- **Preview panel container styles** — The preview panels (BrowserPreview, TerminalOutput, DesktopPreview) may have been affected by the CSS changes — they look more rounded than the original design. Review `PreviewShell.module.css` and the preview components' CSS to ensure they match the original styling, not the new rounder aesthetic.
+- **Content snippet throttling** — `UPDATE_CONTENT_SNIPPET` fires per-token. Should be throttled to 500ms in the callback, not just in the plan.
+- **Agent activity view virtualization** — Long-running agents can accumulate 100+ activity log entries. Consider virtualized list rendering.
+- **DesktopApp re-renders on every agent dispatch** — `useAgentState()` in the component body subscribes to the full agent tree. Consider splitting into a selector pattern or moving agent-dependent logic to child components.
+- **Dual state updates** — Every browser snapshot, terminal event, etc. updates both global useState (simple chat mode) and per-agent reducer. Could consolidate to reducer-only once simple chat mode reads from root agent state.
+
+### Architecture
+- **`final` event mechanism** — Fragile. The `final=true` flag on `AssistantResponse` was used to close the server stream (`break` in `stream_events`). We removed the `break` to fix the root agent status bug, but the `final` concept is still confusing. The stream should end based on the producer completing (queue sends `None`), not a flag. Consider removing `_publish_final()` entirely and letting the stream close naturally.
+- **Skill extraction removal** — Plan says to remove `skills/_extractor.py`, `skills/_registry.py`, `SkillsPanel`, `/api/skills` endpoints, `skill_extraction_loop`, `SkillAppliedPayload`, `_sub_agents.json`, and related ContextVars. Not yet done — deferred to avoid scope creep in the initial implementation.
+- **`ContextUsagePayload` iteration fields** — Added `iteration` and `max_iterations` fields and threaded them through `ContextHook` → `ContextManager.record_response()`. This works but mixes iteration tracking (agent lifecycle concern) with token usage tracking (context management concern). Consider emitting iteration info from a separate event or the lifecycle events instead.
+
+---
+
+## Phase 2: Parallel Execution + Multi-Browser + Resource Locking
+
+*Phase 2 is unchanged from the original plan — not yet started.*
+
+### Task P2-1: Parallel agent tool execution
+Replace sequential `for tc in tool_calls` with `asyncio.gather` for agent tools only. Regular tools stay sequential.
+
+### Task P2-2: Hook safety audit
+Review hooks for thread safety under parallel execution (LoopDetector, BudgetGuard, ScratchpadHook).
+
+### Task P2-3: Browser context pool
+One Chromium process, separate `BrowserContext` per agent via `browser.new_context()`.
+
+### Task P2-4: Agent-to-browser-context binding
+Use `get_current_agent_id()` as key for browser context pool lookups.
+
+### Task P2-5: Resource lock manager
+Pooled resources (browser, desktop) and naturally queued resources (Ollama, GPU).
+
+### Task P2-5b: Desktop display pool
+Per-agent Xvfb + Xfce4 + x11vnc on unique display numbers and VNC ports.
+
+### Task P2-6: Agent task registry
+Track running agent tasks for per-agent cancellation.
+
+### Task P2-7: Grounding screenshot collision fix
+Use `agent_id` in screenshot filenames.
+
+### Task P2-8: Frontend updates for true parallelism
+Handle multiple running agents simultaneously, segment by `agent_id` not just `depth`.
+
+---
+
+## Key Design Decisions
+
+1. **Chat is root-only** — the user interacts exclusively with the root agent. Sub-agent output never appears in chat. Sub-agents are observed through the agent network's activity view.
+2. **Agent IDs reuse the existing `context_id` format** — the hierarchical dotted format (`root.browser_agent.3`) naturally encodes lineage. No new ID scheme needed.
+3. **Lifecycle events emit from `agent_span()`** — the single chokepoint all agents pass through, so no agent can be missed.
+4. **Agent state reducer lives in React Context**, separate from `useStreamingChat`. The streaming hook routes root events to chat messages and sub-agent events to the agent state reducer.
+5. **Per-agent activity logs and previews from the start** — the state model stores per-agent activity, screenshots, terminal, etc. even in Phase 1 (one active agent at a time), so Phase 2 requires zero frontend state model changes.
+6. **Only agent tools parallelize** — regular tools (file writes, bash) stay sequential to avoid filesystem race conditions without complex locking.
+7. **Browser multi-context uses Playwright's native `browser.new_context()`** — one Chromium process, many contexts. Memory-efficient and natively supported.
+8. **Shared components** — `MarkdownContent` extracted from Message.jsx into its own module, shared by both main chat and agent activity views. `formatAgentName` shared from AgentCard. `mergeTerminalEvent` and `formatElapsed` shared from `utils/agentUtils.js`.
+9. **Multi-turn forest** — each conversation turn creates a new root agent. The network graph renders a forest (multiple disconnected trees) by finding all root agents and BFS from each.
+10. **Skill extraction dropped** — dead end. Agent events are the better foundation for any future learning/reuse system.
+
+---
+
+## Verification
+
+### Phase 1 — Tested and Verified ✓
+1. `just test` — 235 SDK tests pass
+2. UI build passes (`npx vite build`)
+3. Manual testing with Playwright:
+   - ✓ Simple chat (no sub-agents) — no agent network shown
+   - ✓ Dark/light mode toggle works correctly
+   - ✓ Sidebar flyout panels open/close, settings render flat
+   - ✓ New conversation resets state
+   - ✓ Browser agent — network shows 2 agents with connector line, sub-agent card with thumbnail
+   - ✓ Coder agent — terminal preview with output, file output
+   - ✓ Expanded view — instruction, thinking (matching main chat style), markdown content, tool call badges, browser/terminal preview, back button, nudge bar
+   - ✓ Agent status transitions (running → complete/success)
+   - ✓ Multi-turn — turn 1 simple chat, turn 2 spawns sub-agent, all 3 agents visible in network graph
+
+### Phase 2
+4. Test parallel execution: send a message that triggers 2+ agent tool calls simultaneously
+5. Verify separate browser sessions (different URLs in different agent cards)
+6. Verify desktop pool works with multiple desktop agents
+7. Verify cancellation propagates to all parallel agents

@@ -1,32 +1,27 @@
 .header {
   width: 100%;
+  height: 36px;
   border-bottom: 1px solid var(--secondary);
   box-sizing: border-box;
-  position: sticky;
-  top: 0;
-  z-index: 50;
   background: var(--primary);
-  backdrop-filter: saturate(1.2) blur(4px);
+  flex-shrink: 0;
+  z-index: 50;
 }
 
 .headerInner {
   width: 100%;
-  max-width: 1400px;
-  /* match main layout */
-  margin: 0 auto;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.5rem 1.5rem;
-  /* match App.module.css mainLayout padding */
+  gap: 6px;
+  padding: 0 14px;
   box-sizing: border-box;
 }
 
 .logo {
-  height: 48px;
+  height: 24px;
 }
 
-/* Light theme shows .logoLight, dark theme swaps to .logoDark */
 .logoDark {
   display: none;
 }
@@ -40,33 +35,38 @@
 }
 
 .appTitle {
-  font-size: 1.5rem;
-  font-weight: bold;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.03em;
-  font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace, Arial, sans-serif;
+  font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
   color: var(--text);
   margin-right: auto;
-  /* push controls to right */
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .iconButton {
-  width: 36px;
-  height: 36px;
-  padding: 0 !important;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: var(--button);
-  color: var(--text);
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  box-shadow: none;
-  line-height: 1;
-  transition: transform 120ms ease, filter 160ms ease;
+  border-radius: 5px;
+  background: none;
+  color: var(--button);
+  border: none;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .iconButton:hover {
-  filter: brightness(1.08);
+  background: var(--secondary);
+  color: var(--text);
 }
 
 .iconButton:active {
@@ -77,19 +77,3 @@
   outline: 2px solid #7aa2ff;
   outline-offset: 2px;
 }
-
-.iconButton.active {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
-}
-
-.iconButton+.iconButton {
-  margin-left: 0.35rem;
-}
-
-@media (max-width: 600px) {
-  .desktopBtn {
-    display: none;
-  }
-}
-

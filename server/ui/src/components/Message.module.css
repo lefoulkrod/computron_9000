@@ -16,11 +16,11 @@
   color: var(--text);
   margin-right: auto;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--button);
+  border: none;
+  border-bottom: 1px solid var(--secondary);
+  border-radius: 0;
   width: 100%;
-  /* fill available width inside its column */
   max-width: 100%;
-  /* no additional cap */
 }
 
 .user .bubble {

@@ -13,7 +13,10 @@ in ``sdk.turn``.
 from ._context import (
     agent_span,
     collect_sub_agent_history,
+    get_current_agent_id,
     get_current_agent_name,
+    get_current_depth,
+    get_current_dispatcher,
     get_model_options,
     get_sub_agent_histories,
     init_sub_agent_collector,
@@ -22,6 +25,8 @@ from ._context import (
 )
 from ._dispatcher import EventDispatcher, Handler
 from ._models import (
+    AgentCompletedPayload,
+    AgentStartedPayload,
     AssistantEventPayload,
     AssistantResponse,
     AssistantResponseData,
@@ -38,6 +43,8 @@ from ._models import (
 )
 
 __all__ = [
+    "AgentCompletedPayload",
+    "AgentStartedPayload",
     "AssistantEventPayload",
     "AssistantResponse",
     "AssistantResponseData",
@@ -55,7 +62,10 @@ __all__ = [
     "ToolCreatedPayload",
     "agent_span",
     "collect_sub_agent_history",
+    "get_current_agent_id",
     "get_current_agent_name",
+    "get_current_depth",
+    "get_current_dispatcher",
     "get_model_options",
     "get_sub_agent_histories",
     "init_sub_agent_collector",

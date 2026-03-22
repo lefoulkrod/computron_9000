@@ -9,7 +9,7 @@ function ToolTypeBadge({ type, language }) {
 
 export default function CustomToolsPanel({ refreshSignal, onToolsChanged }) {
     const {
-        items: tools, loading, collapsed, setCollapsed,
+        items: tools, loading,
         deleting, handleDelete, newItemIds,
     } = useListPanel('/api/custom-tools', { refreshSignal });
 
@@ -24,35 +24,27 @@ export default function CustomToolsPanel({ refreshSignal, onToolsChanged }) {
 
     if (loading) return null;
 
+    if (tools.length === 0) return <p className={styles.empty}>No custom tools defined.</p>;
+
     return (
-        <div className={styles.panel}>
-            <div className={styles.header} onClick={() => setCollapsed(c => !c)}>
-                <span className={styles.title}>Custom Tools {tools.length > 0 && <span className={styles.count}>{tools.length}</span>}</span>
-                <span className={styles.chevron}>{collapsed ? '▶' : '▼'}</span>
-            </div>
-            {!collapsed && (
-                tools.length === 0
-                    ? <p className={styles.empty}>No custom tools defined.</p>
-                    : <ul className={styles.list}>
-                        {tools.map(tool => (
-                            <li key={tool.id} className={`${styles.item} ${newItemIds.has(tool.id) ? styles.itemNew : ''}`}>
-                                <div className={styles.itemMain}>
-                                    <ToolTypeBadge type={tool.type} language={tool.language} />
-                                    <span className={styles.name}>{tool.name}</span>
-                                </div>
-                                <p className={styles.desc}>{tool.description}</p>
-                                <button
-                                    className={styles.deleteBtn}
-                                    onClick={() => onDelete(tool.name)}
-                                    disabled={deleting === tool.name}
-                                    title="Delete tool"
-                                >
-                                    {deleting === tool.name ? '…' : <TrashIcon size={13} />}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-            )}
-        </div>
+        <ul className={styles.list}>
+            {tools.map(tool => (
+                <li key={tool.id} className={`${styles.item} ${newItemIds.has(tool.id) ? styles.itemNew : ''}`}>
+                    <div className={styles.itemMain}>
+                        <ToolTypeBadge type={tool.type} language={tool.language} />
+                        <span className={styles.name}>{tool.name}</span>
+                    </div>
+                    <p className={styles.desc}>{tool.description}</p>
+                    <button
+                        className={styles.deleteBtn}
+                        onClick={() => onDelete(tool.name)}
+                        disabled={deleting === tool.name}
+                        title="Delete tool"
+                    >
+                        {deleting === tool.name ? '…' : <TrashIcon size={13} />}
+                    </button>
+                </li>
+            ))}
+        </ul>
     );
 }

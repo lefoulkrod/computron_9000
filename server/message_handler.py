@@ -11,6 +11,7 @@ from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import (
     AssistantResponse,
     agent_span,
+    get_current_dispatcher,
     init_sub_agent_collector,
     set_model_options,
 )
@@ -43,13 +44,15 @@ from agents.desktop import (
     SYSTEM_PROMPT as _DESKTOP_PROMPT,
     TOOLS as _DESKTOP_TOOLS,
 )
-from conversations import load_conversation_history
+from conversations import load_conversation_history, save_agent_events
 from sdk import (
     PersistenceHook,
     TurnRecorderHook,
     default_hooks,
     run_turn,
 )
+from sdk.hooks._agent_event_buffer import AgentEventBufferHook
+from sdk.turn._turn import StopRequestedError
 
 # Agent registry mapping user-facing IDs to their config constants.
 _AGENT_REGISTRY: dict[str, tuple[str, str, str, list]] = {
@@ -198,6 +201,12 @@ async def _run_turn(
     handler: Callable[[AssistantResponse], object],
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
+    logger.info(
+        "Turn started: conv=%s agent=%s message=%.80s",
+        conversation_id or _DEFAULT_CONVERSATION_ID,
+        active_agent.name,
+        user_content,
+    )
     set_model_options(options)
     init_sub_agent_collector()
 
@@ -205,7 +214,13 @@ async def _run_turn(
     conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
 
     async with turn_scope(handler=handler, conversation_id=conversation_id):
-        with agent_span(active_agent.name):
+        # Subscribe event buffer to capture agent lifecycle/preview events
+        event_buffer = AgentEventBufferHook()
+        dispatcher = get_current_dispatcher()
+        if dispatcher:
+            dispatcher.subscribe(event_buffer.handle_event)
+
+        with agent_span(active_agent.name, instruction=user_content):
             conversation.history.append({"role": "user", "content": user_content})
             _refresh_system_message(conversation.history, active_agent.instruction)
 
@@ -228,11 +243,21 @@ async def _run_turn(
                 history=conversation.history,
             ))
 
-            await run_turn(
-                history=conversation.history,
-                agent=active_agent,
-                hooks=hooks,
-            )
+            with suppress(StopRequestedError):
+                await run_turn(
+                    history=conversation.history,
+                    agent=active_agent,
+                    hooks=hooks,
+                )
+
+        # Save agent events after the turn (outside agent_span so completion is captured)
+        buffered_events = event_buffer.get_events()
+        if buffered_events:
+            try:
+                save_agent_events(conv_id, buffered_events)
+                logger.info("Saved %d agent events for conv=%s", len(buffered_events), conv_id)
+            except Exception:
+                logger.exception("Failed to save agent events for '%s'", conv_id)
 
 
 async def handle_user_message(

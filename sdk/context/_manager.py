@@ -52,7 +52,11 @@ class ContextManager:
         """Current context statistics."""
         return self._tracker.stats
 
-    async def record_response(self, response: Any) -> TokenUsage:
+    async def record_response(
+        self, response: Any, *,
+        iteration: int | None = None,
+        max_iterations: int | None = None,
+    ) -> TokenUsage:
         """Record token usage from an LLM response and run after-model strategies.
 
         Publishes a ``ContextUsagePayload`` event so the UI can display
@@ -72,6 +76,8 @@ class ContextManager:
                     context_used=stats.context_used,
                     context_limit=stats.context_limit,
                     fill_ratio=stats.fill_ratio,
+                    iteration=iteration,
+                    max_iterations=max_iterations,
                 ),
             ))
         except Exception:  # pragma: no cover - defensive

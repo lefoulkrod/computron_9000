@@ -191,7 +191,7 @@ def delete_conversation(conversation_id: str) -> bool:
     _save_index(remaining)
 
     # Delete history and sub-agent files
-    for suffix in ("_history.json", "_sub_agents.json"):
+    for suffix in ("_history.json", "_sub_agents.json", "_agent_events.json"):
         path = conv_dir / f"{conversation_id}{suffix}"
         if path.exists():
             path.unlink()
@@ -259,6 +259,44 @@ def load_sub_agent_histories(conversation_id: str) -> list[dict[str, Any]]:
         return data
     except Exception:
         logger.exception("Failed to load sub-agent histories %s", conversation_id)
+        return []
+
+
+# -- Agent event persistence ------------------------------------------------
+
+
+def save_agent_events(conversation_id: str, events: list[dict[str, Any]]) -> None:
+    """Append agent events for a conversation.
+
+    Accumulates across turns — each call appends to the existing file.
+    """
+    conv_dir = _get_conversations_dir()
+    conv_dir.mkdir(parents=True, exist_ok=True)
+
+    path = conv_dir / f"{conversation_id}_agent_events.json"
+    existing: list[dict[str, Any]] = []
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.exception("Failed to load agent events %s", conversation_id)
+
+    existing.extend(events)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def load_agent_events(conversation_id: str) -> list[dict[str, Any]]:
+    """Load agent events for a conversation."""
+    path = _get_conversations_dir() / f"{conversation_id}_agent_events.json"
+    if not path.exists():
+        return []
+    try:
+        data: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
+        return data
+    except Exception:
+        logger.exception("Failed to load agent events %s", conversation_id)
         return []
 
 

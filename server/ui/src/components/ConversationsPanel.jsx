@@ -24,10 +24,9 @@ function formatTime(isoString) {
 
 export default function ConversationsPanel({ onLoadConversation }) {
     const {
-        items: conversations, loading, collapsed, setCollapsed,
+        items: conversations, loading,
         deleting, handleDelete,
     } = useListPanel('/api/conversations/sessions', {
-        startCollapsed: true,
         getId: (s) => s.conversation_id,
     });
 
@@ -36,10 +35,7 @@ export default function ConversationsPanel({ onLoadConversation }) {
     const handleResume = async (conversationId) => {
         setResuming(conversationId);
         try {
-            const ok = await onLoadConversation(conversationId);
-            if (ok) {
-                setCollapsed(true);
-            }
+            await onLoadConversation(conversationId);
         } finally {
             setResuming(null);
         }
@@ -56,50 +52,40 @@ export default function ConversationsPanel({ onLoadConversation }) {
     if (loading || conversations.length === 0) return null;
 
     return (
-        <div className={shared.panel}>
-            <div className={shared.header} onClick={() => setCollapsed(c => !c)}>
-                <span className={shared.title}>
-                    Past Conversations <span className={shared.count}>{conversations.length}</span>
-                </span>
-                <span className={shared.chevron}>{collapsed ? '▶' : '▼'}</span>
-            </div>
-            {!collapsed && (
-                <ul className={shared.list}>
-                    {conversations.map(convo => (
-                        <li key={convo.conversation_id} className={shared.item}>
-                            <div className={shared.itemMain}>
-                                <span className={shared.name}>
-                                    {convo.first_message
-                                        ? convo.first_message.slice(0, 60) + (convo.first_message.length > 60 ? '…' : '')
-                                        : '(empty)'}
-                                </span>
-                            </div>
-                            <p className={shared.desc}>
-                                {convo.turn_count} turn{convo.turn_count !== 1 ? 's' : ''}
-                                {convo.started_at ? ` · ${formatTime(convo.started_at)}` : ''}
-                            </p>
-                            <div className={styles.actions}>
-                                <button
-                                    className={styles.resumeBtn}
-                                    onClick={() => handleResume(convo.conversation_id)}
-                                    disabled={resuming === convo.conversation_id}
-                                    title="Resume this conversation"
-                                >
-                                    {resuming === convo.conversation_id ? '…' : '↩'}
-                                </button>
-                                <button
-                                    className={shared.deleteBtn}
-                                    onClick={() => onDelete(convo.conversation_id)}
-                                    disabled={deleting === convo.conversation_id}
-                                    title="Delete this conversation"
-                                >
-                                    {deleting === convo.conversation_id ? '…' : <TrashIcon size={13} />}
-                                </button>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
+        <ul className={shared.list}>
+            {conversations.map(convo => (
+                <li key={convo.conversation_id} className={shared.item}>
+                    <div className={shared.itemMain}>
+                        <span className={shared.name}>
+                            {convo.first_message
+                                ? convo.first_message.slice(0, 60) + (convo.first_message.length > 60 ? '…' : '')
+                                : '(empty)'}
+                        </span>
+                    </div>
+                    <p className={shared.desc}>
+                        {convo.turn_count} turn{convo.turn_count !== 1 ? 's' : ''}
+                        {convo.started_at ? ` · ${formatTime(convo.started_at)}` : ''}
+                    </p>
+                    <div className={styles.actions}>
+                        <button
+                            className={styles.resumeBtn}
+                            onClick={() => handleResume(convo.conversation_id)}
+                            disabled={resuming === convo.conversation_id}
+                            title="Resume this conversation"
+                        >
+                            {resuming === convo.conversation_id ? '…' : '↩'}
+                        </button>
+                        <button
+                            className={shared.deleteBtn}
+                            onClick={() => onDelete(convo.conversation_id)}
+                            disabled={deleting === convo.conversation_id}
+                            title="Delete this conversation"
+                        >
+                            {deleting === convo.conversation_id ? '…' : <TrashIcon size={13} />}
+                        </button>
+                    </div>
+                </li>
+            ))}
+        </ul>
     );
 }
