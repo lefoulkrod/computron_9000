@@ -203,7 +203,7 @@ Hooks with mutable state must not corrupt when multiple agents run in parallel. 
 
 **Files:**
 - `sdk/hooks/_loop_detector.py` — Add `self._lock = asyncio.Lock()`. Lock around `_current_round.append()` in `after_tool` and the finalization in `before_model`.
-- `sdk/hooks/_budget_guard.py` — Add `self._lock = asyncio.Lock()`. Lock around `_exhausted` check/set in `before_model`.
+- `sdk/hooks/_budget_guard.py` — No lock needed. `before_model` runs sequentially between iterations (after all parallel tool calls complete), never concurrently.
 - `sdk/hooks/_turn_recorder.py` — Replace `_tool_start_time` (single value) with `_tool_start_times: dict[str, float]` keyed by tool_call_id. Add lock around `_messages.append()` and `_total_tool_calls` increment.
 - `sdk/hooks/_scratchpad_hook.py` — No change needed (stateless logging).
 - Remove `sdk/hooks/_skill_tracking.py` — skill extraction is dropped.
@@ -239,8 +239,10 @@ This gives us:
 **Files:**
 - `tools/browser/core/browser.py`:
   - Keep `_browser` singleton for the root (persistent profile)
-  - Add `_playwright_instance` — the shared Playwright browser process, used by both root and pool
-  - Refactor `Browser.start()` to separate process launch from context creation
+  - **Key refactor:** Currently `Browser.start()` calls `launch_persistent_context()` which creates the Chromium process AND context together (single API call). For the pool, we need to separate these:
+    - `_launch_browser_process()` — calls `chromium.launch()`, returns a Playwright `Browser` object (the process)
+    - Root context: `browser.new_context(storage_state=profile_path)` or keep `launch_persistent_context` for the root
+    - Sub-agent contexts: `browser.new_context(storage_state=snapshot)` on the shared process
   - Add `Browser.start_ephemeral(playwright_browser, storage_state)` class method — creates a `Browser` wrapper around a `new_context()`
   - Add `_agent_browsers: dict[str, Browser] = {}` keyed by agent_id
   - Update `get_browser()` to route by agent_id:
@@ -266,17 +268,9 @@ This gives us:
     ```
   - The root persistent browser is always launched first (even if the root agent doesn't use it). This ensures sub-agents always have a profile to snapshot from. The root browser launch is the same lazy singleton as today — no behavior change for existing code.
 
-- New `tools/browser/core/_context_pool.py`:
-  ```python
-  class BrowserContextPool:
-      _contexts: dict[str, Browser]  # agent_id -> Browser
-      _lock: asyncio.Lock
+- No separate pool class needed — the dict + lock lives inline in `browser.py`. `get_browser()` handles all routing.
 
-      async def acquire(self, agent_id: str, root_browser: Browser) -> Browser
-      async def release(self, agent_id: str) -> None  # closes context
-  ```
-
-- Cleanup: when `agent_completed` fires, call `context.close()` and remove from pool. Ephemeral contexts are in-memory only — no profile files on disk to clean up (unlike `launch_persistent_context` which writes to the profile directory). Just close the context and discard.
+- Cleanup: `context.close()` must happen in a `finally` block (not just on success) to handle agent errors. Wire into `agent_span()`'s finally or add cleanup in `_agent_wrapper.py`'s finally block. Ephemeral contexts are in-memory only — no disk cleanup needed.
 
 **Downloads:** Each ephemeral context can be configured with a unique `downloads_path`. Downloaded files persist on disk (they're useful output), but the browser state itself is gone after `context.close()`.
 
@@ -375,24 +369,19 @@ Enable multiple desktop agents with separate virtual displays.
   agent_display_base: int = 100   # agents start from :100
   ```
 
-- New `tools/desktop/_display_pool.py`:
+- Display allocation is a simple counter + dict in `_lifecycle.py` (no separate pool class needed):
   ```python
-  class DisplayPool:
-      _next: int  # next display number to allocate
-      _active: dict[str, int]  # agent_id -> display number
-      _lock: asyncio.Lock
-
-      async def acquire(self, agent_id: str) -> int
-      async def release(self, agent_id: str) -> None
+  _next_display: int = 100
+  _active_displays: dict[str, int] = {}  # agent_id -> display number
   ```
 
 - `container/entrypoint.sh` — Start only the user's desktop (`:99`), not agent desktops
 
-- Desktop tools (`read_screen`, `click_element`, `keyboard_type`, etc.) — these use `_run_desktop_cmd()` which already accepts a `display` parameter. Add a `_current_display` ContextVar that the display pool sets when allocating a display. `_run_desktop_cmd()` reads from the ContextVar instead of defaulting to `:99`. This way tools automatically use the correct display for the agent's context — no prompt changes, no explicit threading.
+- Desktop tools (`read_screen`, `click_element`, `keyboard_type`, etc.) — these use `_run_desktop_cmd()` which already accepts a `display` parameter. Add a `_current_display` ContextVar that gets set when allocating a display. `_run_desktop_cmd()` reads from the ContextVar instead of defaulting to `:99`. The agent never knows its display number — tools handle routing transparently.
 
-- `run_bash_cmd` — the general-purpose bash tool also needs display awareness. When the desktop agent runs `run_bash_cmd("wmctrl -l")`, the tool should prepend `DISPLAY=:N` automatically if the current context has an allocated display.
+- `run_bash_cmd` does NOT need display awareness — desktop operations should use the dedicated desktop tools, not raw bash with DISPLAY prefix.
 
-**Test:** Two desktop agents each get their own display. Tools automatically route to the correct display without the agent specifying `DISPLAY=:N`.
+**Test:** Two desktop agents each get their own display. Tools automatically route to the correct display.
 
 ### Task P2-7: Agent task registry — DEFERRED
 
