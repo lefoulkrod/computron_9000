@@ -178,7 +178,7 @@ parallel:
   max_concurrent: 4       # max simultaneous agent tool calls
 ```
 
-### Task P2-1: Config and agent tool marker
+### Task P2-1: Config
 
 **Files:**
 - `config/__init__.py` — Add `ParallelConfig` model:
@@ -189,30 +189,23 @@ parallel:
   ```
   Add to `AppConfig`: `parallel: ParallelConfig = Field(default_factory=ParallelConfig)`
 
-- `sdk/tools/_agent_wrapper.py` line 363 — Mark agent tools with `__is_agent_tool__ = True`:
-  ```python
-  run_agent_as_tool.__is_agent_tool__ = True
-  return run_agent_as_tool
-  ```
-
 - `config.yaml` — Add `parallel:` section with defaults
 
-**Test:** Config loads correctly, agent tools have the marker attribute.
+**Test:** Config loads correctly.
 
 ### Task P2-2: Hook isolation — per-agent state
 
 Hooks with mutable state must not corrupt when multiple agents run in parallel. Each agent already gets its own hook instances via `default_hooks()` in `_agent_wrapper.py`, so sub-agents are isolated. But the root agent's hooks are shared across its tool loop iterations — if parallel agent tool calls trigger concurrent `before_tool`/`after_tool` callbacks on the root's hooks, state will corrupt.
 
-**Fix:** The root's hooks only run in the root's sequential context. Sub-agent hooks are already per-agent (created in `run_agent_as_tool`). The real risk is the root's `LoopDetector` and `BudgetGuard` receiving interleaved `before_tool`/`after_tool` calls from parallel tool execution.
+**The risk:** When parallel tool calls run via `asyncio.create_task`, they all call `_run_tool_with_hooks()` which iterates the root's shared hook instances. Concurrent `before_tool`/`after_tool` calls on the same `LoopDetector` or `BudgetGuard` will corrupt their mutable state (`_recent`, `_current_round`, `_exhausted`).
 
-**Solution:** Skip root-level `before_tool`/`after_tool` hooks for parallel tool calls. When parallel agent tools run, they each have their own hook instances inside `run_agent_as_tool`. The root's hooks should only see the aggregated results, not individual sub-agent tool calls.
+**Solution:** When running tools in parallel, use `_execute_tool_call()` directly instead of `_run_tool_with_hooks()`. This skips the root's before/after hooks for parallel calls. Sub-agents already create their own hooks internally via `default_hooks()` in `run_agent_as_tool`, so they're fully isolated. The root's `before_model`/`after_model` hooks still run normally (they're called sequentially between iterations, not during parallel tool execution).
 
 **Files:**
-- `sdk/hooks/_loop_detector.py` — No change needed if hooks are per-agent
-- `sdk/hooks/_budget_guard.py` — No change needed if hooks are per-agent
-- `sdk/turn/_execution.py` — When running parallel agent tools, skip root hooks for those calls (only run hooks for sequential non-agent tools)
+- `sdk/turn/_execution.py` — Parallel path calls `_execute_tool_call()` directly, sequential path continues to use `_run_tool_with_hooks()`
+- No changes needed to hook implementations themselves
 
-**Test:** Run two agent tools in parallel (with parallel.enabled=true), verify no hook state corruption.
+**Test:** Run two tool calls in parallel (with parallel.enabled=true), verify no hook state corruption and no crashes.
 
 ### Task P2-3: Browser context pool
 
@@ -244,7 +237,7 @@ Replace the browser singleton with a pool that provides isolated `BrowserContext
 
 ### Task P2-4: Parallel tool execution in the turn loop
 
-The core change — replace the sequential loop with conditional parallel execution.
+The core change — run all tool calls in parallel when enabled.
 
 **File:** `sdk/turn/_execution.py` lines 314-318
 
@@ -258,51 +251,38 @@ for tc in tool_calls:
 from config import load_config
 
 parallel_cfg = load_config().parallel
-agent_tcs = []
-regular_tcs = []
-for tc in tool_calls:
-    func = next((t for t in tools if getattr(t, '__name__', None) == tc.function.name), None)
-    if func and getattr(func, '__is_agent_tool__', False):
-        agent_tcs.append(tc)
-    else:
-        regular_tcs.append(tc)
-
-# Regular tools always run sequentially
-for tc in regular_tcs:
-    result = await _run_tool_with_hooks(tc, tools, hooks)
-    history.append(result)
-
-# Agent tools: parallel if enabled, sequential otherwise
-if agent_tcs:
-    if parallel_cfg.enabled and len(agent_tcs) > 1:
-        sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
-        async def _run_with_sem(tc):
-            async with sem:
-                return await _execute_tool_call(tc.function.name, tc.function.arguments, tools)
-        tasks = [asyncio.create_task(_run_with_sem(tc)) for tc in agent_tcs]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for tc, result in zip(agent_tcs, results):
-            if isinstance(result, Exception):
-                logger.error("Agent tool '%s' failed: %s", tc.function.name, result)
-                history.append({"role": "tool", "tool_name": tc.function.name,
-                               "tool_call_id": tc.id, "content": f"Agent error: {result}"})
-            else:
-                history.append({"role": "tool", "tool_name": tc.function.name,
-                               "tool_call_id": tc.id, "content": result})
-    else:
-        for tc in agent_tcs:
-            result = await _run_tool_with_hooks(tc, tools, hooks)
-            history.append(result)
+if parallel_cfg.enabled and len(tool_calls) > 1:
+    sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
+    async def _run_with_sem(tc):
+        async with sem:
+            # Skip root hooks for parallel calls — use _execute_tool_call directly
+            # Sub-agents create their own hooks internally
+            result = await _execute_tool_call(tc.function.name, tc.function.arguments, tools)
+            return tc, {"role": "tool", "tool_name": tc.function.name,
+                        "tool_call_id": tc.id, "content": result}
+    tasks = [asyncio.create_task(_run_with_sem(tc)) for tc in tool_calls]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error("Parallel tool call failed: %s", result)
+            # Can't recover tool_call_id from exception — log and skip
+        else:
+            tc, tool_result = result
+            history.append(tool_result)
+else:
+    for tc in tool_calls:
+        result = await _run_tool_with_hooks(tc, tools, hooks)
+        history.append(result)
 ```
 
 **Key details:**
-- `asyncio.create_task` copies ContextVars automatically in Python 3.12 — each parallel agent gets its own context stack copy, so `agent_span()` push/pop is isolated
+- ALL tool calls run in parallel when enabled — no agent vs regular distinction
+- `asyncio.create_task` copies ContextVars automatically in Python 3.12 — each parallel task gets its own context stack copy
 - `Semaphore(max_concurrent)` limits concurrency
-- Regular tools (file ops, bash commands) always sequential — filesystem safety
-- When `parallel.enabled = false`, everything runs sequentially as before
-- Parallel agent tools skip root-level before/after hooks (they run their own hooks internally via `default_hooks()`)
+- When `parallel.enabled = false` (default), everything runs sequentially as before
+- Each sub-agent creates its own hooks via `default_hooks()` inside `run_agent_as_tool`, so hook isolation is automatic
 
-**Test:** With `parallel.enabled: true`, send a message that triggers 2+ agent tools. Verify they run concurrently (check timestamps in logs). With `parallel.enabled: false`, verify sequential execution.
+**Test:** With `parallel.enabled: true`, send a message that triggers 2+ tool calls. Verify they run concurrently (check timestamps in logs). With `parallel.enabled: false`, verify sequential execution.
 
 ### Task P2-5: Grounding screenshot collision fix
 
