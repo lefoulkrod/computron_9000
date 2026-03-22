@@ -214,31 +214,74 @@ Hooks with mutable state must not corrupt when multiple agents run in parallel. 
 
 ### Task P2-3: Browser context pool
 
-Replace the browser singleton with a pool that provides isolated `BrowserContext` instances per agent.
+Replace the browser singleton with a pool that provides isolated `BrowserContext` instances per agent, seeded with the root profile's session state.
+
+**Browser isolation model — copy-on-create:**
+- The **root browser** continues to use `launch_persistent_context` with the default profile at `~/.computron_9000/browser/profiles/default/`. This preserves cookies, login sessions, localStorage across conversations.
+- When a **sub-agent** needs a browser, the pool:
+  1. Snapshots the root context's session state via `context.storage_state()` (exports cookies + localStorage as JSON)
+  2. Launches a new ephemeral context on the same Chromium process via `browser.new_context(storage_state=snapshot)`
+  3. The sub-agent inherits the root's login sessions, cookies, etc. but changes are isolated — if the sub-agent logs into something new, it doesn't affect the root or other agents
+  4. When the sub-agent completes, the ephemeral context is closed and discarded
+
+This gives us:
+- **Session inheritance** — sub-agents can access sites the user is logged into
+- **Isolation** — sub-agents can't corrupt the root profile or each other
+- **Lightweight** — `new_context()` on an existing process is fast (~50ms), no new Chromium process needed
+- **Concurrency** — each context has its own pages, cookies, downloads — fully independent
+
+**Architecture change:**
+- Currently: `get_browser()` returns a module-level singleton `_browser: Browser | None`
+- New: `get_browser()` checks `get_current_agent_id()`:
+  - Root agent (depth 0): returns the persistent singleton as before
+  - Sub-agents: returns a pooled ephemeral `Browser` wrapper from `_agent_browsers: dict[str, Browser]`
 
 **Files:**
 - `tools/browser/core/browser.py`:
-  - Keep `_browser` as the default/root browser (backward compat for simple chat)
+  - Keep `_browser` singleton for the root (persistent profile)
+  - Add `_playwright_instance` — the shared Playwright browser process, used by both root and pool
+  - Refactor `Browser.start()` to separate process launch from context creation
+  - Add `Browser.start_ephemeral(playwright_browser, storage_state)` class method — creates a `Browser` wrapper around a `new_context()`
   - Add `_agent_browsers: dict[str, Browser] = {}` keyed by agent_id
-  - Add `get_browser_for_agent(agent_id: str | None) -> Browser`:
-    - If `agent_id` is None or matches root: return default singleton
-    - Else: create/return isolated Browser with unique profile path
-  - Update `get_browser()` to call `get_browser_for_agent(get_current_agent_id())`
-  - Each agent gets profile at `{home_dir}/browser/profiles/{agent_id}/`
-  - Each agent gets downloads at `{home_dir}/downloads/{agent_id}/`
+  - Update `get_browser()` to route by agent_id:
+    ```python
+    async def get_browser() -> Browser:
+        agent_id = get_current_agent_id()
+        if agent_id is None or get_current_depth() == 0:
+            return await _get_root_browser()  # existing singleton
+        if agent_id not in _agent_browsers:
+            root = await _get_root_browser()
+            state = await root._context.storage_state()
+            _agent_browsers[agent_id] = await Browser.start_ephemeral(
+                _playwright_instance, storage_state=state)
+        return _agent_browsers[agent_id]
+    ```
 
-- New `tools/browser/core/_cleanup.py`:
-  - `cleanup_agent_browser(agent_id)` — close context, remove from dict
-  - Called from `agent_span()` completion or registered via atexit
+- New `tools/browser/core/_context_pool.py`:
+  ```python
+  class BrowserContextPool:
+      _contexts: dict[str, Browser]  # agent_id -> Browser
+      _lock: asyncio.Lock
 
-**Important:** Playwright `launch_persistent_context` creates a full browser process per context. For a pool, we should use `browser.new_context()` on a shared browser instance instead. This means:
-  - Launch ONE browser process: `browser = pw.chromium.launch()`
-  - Create contexts: `ctx = browser.new_context(storage_state=...)`
-  - Each `Browser` wrapper holds a context, not a process
-  - Root agent uses `launch_persistent_context` (preserves cookies/profile)
-  - Sub-agents use `new_context()` on the shared process (lighter weight, isolated)
+      async def acquire(self, agent_id: str, root_browser: Browser) -> Browser
+      async def release(self, agent_id: str) -> None  # closes context
+  ```
 
-**Test:** Two browser agents running concurrently navigate to different URLs, verify no cross-contamination.
+- Cleanup: when `agent_completed` fires, release the browser context. Wire via `agent_span()` finally block or an `on_turn_end` hook.
+
+**Downloads isolation:** Each ephemeral context gets its own downloads directory:
+  `{home_dir}/downloads/{safe_agent_id}/`
+  Cleaned up when context is released.
+
+**What sub-agents CAN do:** Navigate, click, fill forms, read pages, take screenshots — all on their own isolated pages with inherited cookies.
+
+**What sub-agents CANNOT do:** Modify the root's persistent cookies, interfere with other agents' pages, or access each other's downloads.
+
+**Test:**
+1. Log into a site in the root browser
+2. Spawn a sub-agent to browse that site — verify it has the login session
+3. Spawn two sub-agents concurrently — verify they don't see each other's navigation
+4. Verify root profile is unchanged after sub-agents complete
 
 ### Task P2-4: Parallel tool execution in the turn loop
 
