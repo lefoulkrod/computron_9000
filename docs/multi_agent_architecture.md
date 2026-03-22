@@ -247,15 +247,24 @@ This gives us:
     ```python
     async def get_browser() -> Browser:
         agent_id = get_current_agent_id()
-        if agent_id is None or get_current_depth() == 0:
-            return await _get_root_browser()  # existing singleton
+        depth = get_current_depth()
+
+        # Root browser: persistent singleton, lazy-initialized on first call
+        # by ANY agent (root or sub-agent). This ensures cookies/profile
+        # are always available for sub-agents to snapshot from.
+        root = await _get_root_browser()
+
+        if depth == 0:
+            return root  # root agent uses persistent context directly
+
+        # Sub-agent: ephemeral context seeded from root's session state
         if agent_id not in _agent_browsers:
-            root = await _get_root_browser()
             state = await root._context.storage_state()
             _agent_browsers[agent_id] = await Browser.start_ephemeral(
                 _playwright_instance, storage_state=state)
         return _agent_browsers[agent_id]
     ```
+  - The root persistent browser is always launched first (even if the root agent doesn't use it). This ensures sub-agents always have a profile to snapshot from. The root browser launch is the same lazy singleton as today — no behavior change for existing code.
 
 - New `tools/browser/core/_context_pool.py`:
   ```python
