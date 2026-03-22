@@ -250,6 +250,10 @@ async def _run_turn(
                     hooks=hooks,
                 )
 
+        # Yield to event loop so call_soon callbacks (sync event handlers)
+        # have a chance to run before we read the buffer
+        await asyncio.sleep(0)
+
         # Save agent events after the turn (outside agent_span so completion is captured)
         buffered_events = event_buffer.get_events()
         if buffered_events:
