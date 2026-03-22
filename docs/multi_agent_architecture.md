@@ -153,6 +153,11 @@ Slim 36px header with original computron logo, theme toggle, desktop button, new
 - **DesktopApp re-renders on every agent dispatch** — `useAgentState()` in the component body subscribes to the full agent tree. Consider splitting into a selector pattern or moving agent-dependent logic to child components.
 - **Dual state updates** — Every browser snapshot, terminal event, etc. updates both global useState (simple chat mode) and per-agent reducer. Could consolidate to reducer-only once simple chat mode reads from root agent state.
 
+### Bugs Found in Regression Testing (Not Yet Fixed)
+- **Stop doesn't update agent status** — After clicking Stop, both root and sub-agent cards remain green (running). The `agent_completed(status="stopped")` events may not be reaching the frontend, or the stop signal isn't propagating to the sub-agent in time. Need to investigate whether `request_stop()` → `check_stop()` → `StopRequestedError` → `agent_span()` status detection is working end-to-end.
+- **Desktop opens as preview panel, not overlay** — Plan specified the user's desktop (header button) should open as a floating overlay. Currently it opens as a preview panel in the simple chat layout's middle column (existing behavior, not changed). Should be converted to an overlay/modal that appears on top of any view.
+- **Resumed conversations don't restore agent network** — When resuming a past conversation that had sub-agents, the chat messages load but the agent network view doesn't appear. The frontend event replay (Task 11 frontend) is not yet wired up.
+
 ### Architecture
 - **`final` event mechanism** — Fragile. The `final=true` flag on `AssistantResponse` was used to close the server stream (`break` in `stream_events`). We removed the `break` to fix the root agent status bug, but the `final` concept is still confusing. The stream should end based on the producer completing (queue sends `None`), not a flag. Consider removing `_publish_final()` entirely and letting the stream close naturally.
 - **Skill extraction removal** — Plan says to remove `skills/_extractor.py`, `skills/_registry.py`, `SkillsPanel`, `/api/skills` endpoints, `skill_extraction_loop`, `SkillAppliedPayload`, `_sub_agents.json`, and related ContextVars. Not yet done — deferred to avoid scope creep in the initial implementation.
