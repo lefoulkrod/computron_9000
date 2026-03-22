@@ -317,6 +317,12 @@ Enable multiple desktop agents with separate virtual displays.
 
 - `tools/desktop/_exec.py` — Already parameterized (`display: str = ":99"`)
 
+- `agents/desktop/agent.py` — **Critical:** The system prompt has hardcoded `DISPLAY=:99` in all examples (lines 67-73: wmctrl commands, app launching). The prompt must be parameterized:
+  - Change `SYSTEM_PROMPT` from a static string to a function: `def make_desktop_prompt(display: str = ":99") -> str`
+  - Replace all `:99` in the prompt with the `{display}` parameter
+  - The desktop agent tool factory (`make_run_agent_as_tool_function`) must call `make_desktop_prompt(display)` with the allocated display number
+  - This means the desktop agent tool can't be created at module import time — it must be created dynamically when a display is allocated
+
 - `config/__init__.py` — Add to `DesktopConfig`:
   ```python
   user_display: str = ":99"      # user's personal desktop
@@ -336,7 +342,9 @@ Enable multiple desktop agents with separate virtual displays.
 
 - `container/entrypoint.sh` — Start only the user's desktop (`:99`), not agent desktops
 
-**Test:** Two desktop agents each get their own display, can operate independently.
+- Desktop tools (`read_screen`, `click_element`, `keyboard_type`, etc.) — these use `_run_desktop_cmd()` which already accepts a `display` parameter. Need to thread the allocated display number through to these calls, either via ContextVar or by creating tool functions bound to a specific display.
+
+**Test:** Two desktop agents each get their own display and use correct `DISPLAY=:N` in all commands.
 
 ### Task P2-7: Agent task registry
 
