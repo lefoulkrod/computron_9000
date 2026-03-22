@@ -12,6 +12,7 @@ from textwrap import dedent
 from sdk import make_run_agent_as_tool_function
 from tools.desktop import (
     describe_screen,
+    desktop_shell,
     keyboard_press,
     keyboard_type,
     mouse_click,
@@ -21,7 +22,6 @@ from tools.desktop import (
     read_screen,
     scroll,
 )
-from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +62,15 @@ SYSTEM_PROMPT = dedent(
         "Up", "Down", "Left", "Right",
         Combos: "ctrl+c", "ctrl+v", "ctrl+s", "ctrl+z", "alt+F4"
 
-    WINDOW MANAGEMENT (via run_bash_cmd):
+    WINDOW MANAGEMENT (via desktop_shell):
     Title bar buttons are NOT in the element list. Use wmctrl instead:
-    - List:     run_bash_cmd("wmctrl -l")
-    - Focus:    run_bash_cmd("wmctrl -a 'Title'")
-    - Close:    run_bash_cmd("wmctrl -c 'Title'")
-    - Resize:   run_bash_cmd("wmctrl -r 'Title' -e 0,x,y,w,h")
-    - Maximize: run_bash_cmd("wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
+    - List:     desktop_shell("wmctrl -l")
+    - Focus:    desktop_shell("wmctrl -a 'Title'")
+    - Close:    desktop_shell("wmctrl -c 'Title'")
+    - Resize:   desktop_shell("wmctrl -r 'Title' -e 0,x,y,w,h")
+    - Maximize: desktop_shell("wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
 
-    LAUNCHING APPS: run_bash_cmd("libreoffice &")
+    LAUNCHING APPS: desktop_shell("libreoffice &")
     """
 )
 TOOLS = [
@@ -83,7 +83,7 @@ TOOLS = [
     keyboard_type,
     keyboard_press,
     scroll,
-    run_bash_cmd,
+    desktop_shell,
 ]
 
 desktop_agent_tool = make_run_agent_as_tool_function(

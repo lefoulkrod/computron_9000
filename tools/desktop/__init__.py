@@ -20,6 +20,7 @@ from ._lifecycle import (
 from ._screenshot import capture_screenshot
 from ._tools import (
     describe_screen,
+    desktop_shell,
     keyboard_press,
     keyboard_type,
     mouse_click,
@@ -34,6 +35,7 @@ __all__ = [
     "allocate_display",
     "capture_screenshot",
     "describe_screen",
+    "desktop_shell",
     "ensure_desktop_running",
     "is_desktop_running",
     "keyboard_press",

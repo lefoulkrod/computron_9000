@@ -500,6 +500,23 @@ def _require_desktop_coords(response: GroundingResponse) -> tuple[int, int]:
     return response.x, response.y
 
 
+async def desktop_shell(cmd: str) -> str:
+    """Run a shell command on the desktop with DISPLAY set automatically.
+
+    Use this for window management (wmctrl), launching GUI apps, or any
+    command that needs access to the X11 display.
+
+    Args:
+        cmd: The shell command to execute on the desktop.
+
+    Returns:
+        Command output.
+    """
+    await ensure_desktop_running()
+    output = await _run_desktop_cmd(cmd)
+    return output.strip() or "ok"
+
+
 async def perform_visual_action(task: str) -> str:
     """Ask a vision model to decide and execute the next GUI action.
 
