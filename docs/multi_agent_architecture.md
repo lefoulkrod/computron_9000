@@ -317,11 +317,7 @@ Enable multiple desktop agents with separate virtual displays.
 
 - `tools/desktop/_exec.py` — Already parameterized (`display: str = ":99"`)
 
-- `agents/desktop/agent.py` — **Critical:** The system prompt has hardcoded `DISPLAY=:99` in all examples (lines 67-73: wmctrl commands, app launching). The prompt must be parameterized:
-  - Change `SYSTEM_PROMPT` from a static string to a function: `def make_desktop_prompt(display: str = ":99") -> str`
-  - Replace all `:99` in the prompt with the `{display}` parameter
-  - The desktop agent tool factory (`make_run_agent_as_tool_function`) must call `make_desktop_prompt(display)` with the allocated display number
-  - This means the desktop agent tool can't be created at module import time — it must be created dynamically when a display is allocated
+- `agents/desktop/agent.py` — Remove hardcoded `DISPLAY=:99` from system prompt examples (lines 67-73). Replace with plain commands like `run_bash_cmd("wmctrl -l")`. The display routing is handled transparently by the tools — the agent never needs to know its display number.
 
 - `config/__init__.py` — Add to `DesktopConfig`:
   ```python
@@ -342,9 +338,11 @@ Enable multiple desktop agents with separate virtual displays.
 
 - `container/entrypoint.sh` — Start only the user's desktop (`:99`), not agent desktops
 
-- Desktop tools (`read_screen`, `click_element`, `keyboard_type`, etc.) — these use `_run_desktop_cmd()` which already accepts a `display` parameter. Need to thread the allocated display number through to these calls, either via ContextVar or by creating tool functions bound to a specific display.
+- Desktop tools (`read_screen`, `click_element`, `keyboard_type`, etc.) — these use `_run_desktop_cmd()` which already accepts a `display` parameter. Add a `_current_display` ContextVar that the display pool sets when allocating a display. `_run_desktop_cmd()` reads from the ContextVar instead of defaulting to `:99`. This way tools automatically use the correct display for the agent's context — no prompt changes, no explicit threading.
 
-**Test:** Two desktop agents each get their own display and use correct `DISPLAY=:N` in all commands.
+- `run_bash_cmd` — the general-purpose bash tool also needs display awareness. When the desktop agent runs `run_bash_cmd("wmctrl -l")`, the tool should prepend `DISPLAY=:N` automatically if the current context has an allocated display.
+
+**Test:** Two desktop agents each get their own display. Tools automatically route to the correct display without the agent specifying `DISPLAY=:N`.
 
 ### Task P2-7: Agent task registry
 
