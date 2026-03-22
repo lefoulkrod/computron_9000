@@ -267,11 +267,9 @@ This gives us:
       async def release(self, agent_id: str) -> None  # closes context
   ```
 
-- Cleanup: when `agent_completed` fires, release the browser context. Wire via `agent_span()` finally block or an `on_turn_end` hook.
+- Cleanup: when `agent_completed` fires, call `context.close()` and remove from pool. Ephemeral contexts are in-memory only — no profile files on disk to clean up (unlike `launch_persistent_context` which writes to the profile directory). Just close the context and discard.
 
-**Downloads isolation:** Each ephemeral context gets its own downloads directory:
-  `{home_dir}/downloads/{safe_agent_id}/`
-  Cleaned up when context is released.
+**Downloads:** Each ephemeral context can be configured with a unique `downloads_path`. Downloaded files persist on disk (they're useful output), but the browser state itself is gone after `context.close()`.
 
 **What sub-agents CAN do:** Navigate, click, fill forms, read pages, take screenshots — all on their own isolated pages with inherited cookies.
 
