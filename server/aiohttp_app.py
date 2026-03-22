@@ -27,7 +27,7 @@ import asyncio
 
 from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
-from sdk.loop import is_turn_active, queue_nudge, request_stop
+from sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
 from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools

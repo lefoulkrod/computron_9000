@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from sdk.loop import (
+from sdk.turn import (
     drain_nudges,
     is_turn_active,
     queue_nudge,

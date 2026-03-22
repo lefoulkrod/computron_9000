@@ -2,19 +2,19 @@
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
+from config import load_config
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import (
     AssistantResponse,
     agent_span,
-    get_sub_agent_histories,
     init_sub_agent_collector,
     set_model_options,
 )
-from sdk.loop import turn_scope
+from sdk.turn import turn_scope
 from agents.types import Agent, Data, LLMOptions
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
@@ -43,12 +43,12 @@ from agents.desktop import (
     SYSTEM_PROMPT as _DESKTOP_PROMPT,
     TOOLS as _DESKTOP_TOOLS,
 )
-from conversations import save_conversation_history, save_sub_agent_histories, load_conversation_history
+from conversations import load_conversation_history
 from sdk import (
+    PersistenceHook,
     TurnRecorderHook,
-    SkillTrackingHook,
     default_hooks,
-    run_tool_call_loop,
+    run_turn,
 )
 
 # Agent registry mapping user-facing IDs to their config constants.
@@ -156,6 +156,85 @@ def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str
     )
 
 
+def _build_agent(agent_id: str | None, options: LLMOptions) -> Agent:
+    """Construct an Agent from a registry ID and LLM options."""
+    agent_name, agent_desc, agent_prompt, agent_tools = _resolve_agent(agent_id)
+    return Agent(
+        name=agent_name,
+        description=agent_desc,
+        instruction=agent_prompt,
+        tools=agent_tools,
+        model=options.model,  # type: ignore[arg-type]  # validated by caller
+        think=options.think or False,
+        persist_thinking=options.persist_thinking if options.persist_thinking is not None else True,
+        options=options.to_options(),
+        max_iterations=options.max_iterations or 0,
+    )
+
+
+def _ensure_context_manager(
+    conversation: _Conversation,
+    active_agent: Agent,
+) -> ContextManager:
+    """Return the conversation's context manager, creating it if needed."""
+    if conversation.context_manager is None:
+        num_ctx = active_agent.options.get("num_ctx", 0) if active_agent.options else 0
+        conversation.context_manager = ContextManager(
+            history=conversation.history,
+            context_limit=num_ctx,
+            agent_name=active_agent.name,
+            strategies=[SummarizeStrategy()],
+        )
+    return conversation.context_manager
+
+
+async def _run_turn(
+    *,
+    conversation: _Conversation,
+    active_agent: Agent,
+    user_content: str,
+    options: LLMOptions,
+    conversation_id: str | None,
+    handler: Callable[[AssistantResponse], object],
+) -> None:
+    """Execute a single conversation turn: model calls, tool execution, persistence."""
+    set_model_options(options)
+    init_sub_agent_collector()
+
+    ctx_manager = _ensure_context_manager(conversation, active_agent)
+    conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
+
+    async with turn_scope(handler=handler, conversation_id=conversation_id):
+        with agent_span(active_agent.name):
+            conversation.history.append({"role": "user", "content": user_content})
+            _refresh_system_message(conversation.history, active_agent.instruction)
+
+            hooks = default_hooks(
+                active_agent,
+                max_iterations=active_agent.max_iterations,
+                ctx_manager=ctx_manager,
+            )
+
+            summary_cfg = load_config().summary
+            hooks.append(TurnRecorderHook(
+                user_message=user_content,
+                agent_name=active_agent.name,
+                model=active_agent.model,
+                conversation_id=conv_id,
+                summary_model=summary_cfg.model if summary_cfg else None,
+            ))
+            hooks.append(PersistenceHook(
+                conversation_id=conv_id,
+                history=conversation.history,
+            ))
+
+            await run_turn(
+                history=conversation.history,
+                agent=active_agent,
+                hooks=hooks,
+            )
+
+
 async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None,
@@ -178,8 +257,6 @@ async def handle_user_message(
     """
     conversation = _get_conversation(conversation_id)
 
-    # Write any attachments to the virtual computer and augment the message
-    # with file paths so the agent can access them via tools.
     user_content = message
     if data:
         user_content = _augment_message_with_attachments(message, data)
@@ -189,92 +266,33 @@ async def handle_user_message(
     if not options.model:
         msg = "No model specified. The UI must send a model in the request options."
         raise ValueError(msg)
+
     try:
-        # Bridge published events via a local queue so we can stream results to the caller.
+        # Bridge published events via a queue so we can stream them to the caller.
         queue: asyncio.Queue[AssistantResponse | None] = asyncio.Queue()
 
         async def _queue_handler(evt: AssistantResponse) -> None:
+            # Drop final events from nested agents — only the root agent's
+            # final event should reach the client (it signals end-of-stream).
+            if evt.final and evt.depth is not None and evt.depth > 0:
+                return
             try:
                 await queue.put(evt)
             except Exception:  # pragma: no cover - defensive logging
                 logger.exception("Failed to enqueue AssistantResponse in message handler")
 
+        active_agent = _build_agent(agent, options)
+
         async def _producer() -> None:
-            agent_name, agent_desc, agent_prompt, agent_tools = _resolve_agent(agent)
-            active_agent = Agent(
-                name=agent_name,
-                description=agent_desc,
-                instruction=agent_prompt,
-                tools=agent_tools,
-                model=options.model,  # type: ignore[arg-type]  # resolved above
-                think=options.think or False,
-                persist_thinking=options.persist_thinking if options.persist_thinking is not None else True,
-                options=options.to_options(),
-                max_iterations=options.max_iterations or 0,
-            )
-            # Propagate options to sub-agents via context vars
-            set_model_options(options)
-            # Initialize sub-agent history collector for skill extraction
-            init_sub_agent_collector()
-
-            # Lazily create the context manager with the model's context limit.
-            if conversation.context_manager is None:
-                num_ctx = active_agent.options.get("num_ctx", 0) if active_agent.options else 0
-                conversation.context_manager = ContextManager(
-                    history=conversation.history,
-                    context_limit=num_ctx,
-                    agent_name=active_agent.name,
-                    strategies=[SummarizeStrategy()],
-                )
             try:
-                async with turn_scope(handler=_queue_handler, conversation_id=conversation_id):
-                    with agent_span(active_agent.name):
-                        conversation.history.append({"role": "user", "content": user_content})
-                        _refresh_system_message(conversation.history, agent_prompt)
-                        await conversation.context_manager.apply_strategies()
-                        hooks = default_hooks(
-                            active_agent,
-                            max_iterations=active_agent.max_iterations,
-                            ctx_manager=conversation.context_manager,
-                        )
-
-                        # Turn recording and skill tracking hooks
-                        summary_cfg = None
-                        try:
-                            from config import load_config as _load_cfg
-                            summary_cfg = _load_cfg().summary
-                        except Exception:
-                            pass
-                        conv_id = conversation_id or "default"
-                        recorder = TurnRecorderHook(
-                            user_message=user_content,
-                            agent_name=active_agent.name,
-                            model=active_agent.model,
-                            conversation_id=conv_id,
-                            summary_model=summary_cfg.model if summary_cfg else None,
-                        )
-                        skill_tracker = SkillTrackingHook()
-                        hooks.append(recorder)
-                        hooks.append(skill_tracker)
-
-                        try:
-                            async for _, _ in run_tool_call_loop(
-                                history=conversation.history,
-                                agent=active_agent,
-                                hooks=hooks,
-                            ):
-                                pass
-                        finally:
-                            # Persist turn record and track skill outcome
-                            record = recorder.finalize()
-                            if skill_tracker.applied_skill:
-                                record.metadata.skill_applied = skill_tracker.applied_skill
-
-                            # Save full-fidelity conversation history + sub-agent histories
-                            save_conversation_history(conv_id, conversation.history.non_system_messages)
-                            sub_histories = get_sub_agent_histories()
-                            if sub_histories:
-                                save_sub_agent_histories(conv_id, sub_histories)
+                await _run_turn(
+                    conversation=conversation,
+                    active_agent=active_agent,
+                    user_content=user_content,
+                    options=options,
+                    conversation_id=conversation_id,
+                    handler=_queue_handler,
+                )
             finally:
                 await queue.put(None)
 
@@ -284,9 +302,6 @@ async def handle_user_message(
                 item = await queue.get()
                 if item is None:
                     break
-                # Filter out final events from nested agents (keep everything else)
-                if item.final and item.depth is not None and item.depth > 0:
-                    continue
                 yield item
         finally:
             if not producer_task.done():

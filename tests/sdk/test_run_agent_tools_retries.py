@@ -24,13 +24,13 @@ async def test_json_parse_retries_then_succeeds(monkeypatch):
 
     payload = {"ok": True}
 
-    async def fake_loop(**_: Any):
-        yield json.dumps(payload), None
+    async def fake_loop(**_: Any) -> str | None:
+        return json.dumps(payload)
 
     import sdk.tools._agent_wrapper as mod
 
     # Patch the symbol in the target module
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     # Monkeypatch json.loads to fail the first 3 times, then succeed
     call_count = {"n": 0}
@@ -58,12 +58,12 @@ async def test_json_parse_retry_exhaustion_raises(monkeypatch):
 
     content = "{not really json}"
 
-    async def fake_loop(**_: Any):
-        yield content, None
+    async def fake_loop(**_: Any) -> str | None:
+        return content
 
     import sdk.tools._agent_wrapper as mod
 
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     # Always fail loads
     def always_fail(s: str, *args: Any, **kwargs: Any):
@@ -86,15 +86,15 @@ async def test_tool_loop_is_rerun_each_retry(monkeypatch):
     # Count tool loop invocations
     loop_calls = {"n": 0}
 
-    async def counting_fake_loop(**_: Any):
+    async def counting_fake_loop(**_: Any) -> str | None:
         loop_calls["n"] += 1
-        # Always yield valid JSON payload; the retry will be triggered by loads failing
-        yield json.dumps(payload), None
+        # Always return valid JSON payload; the retry will be triggered by loads failing
+        return json.dumps(payload)
 
     import sdk.tools._agent_wrapper as mod
 
     # Patch the symbol in the target module
-    monkeypatch.setattr(mod, "run_tool_call_loop", counting_fake_loop)
+    monkeypatch.setattr(mod, "run_turn", counting_fake_loop)
 
     # Fail json.loads for the first 2 attempts, then succeed.
     # This should cause exactly 3 total tool loop invocations.

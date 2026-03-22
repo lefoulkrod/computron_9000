@@ -681,7 +681,7 @@ async def skill_extraction_loop() -> None:
     Runs as an asyncio.Task started at server boot. Sleeps between
     cycles and skips analysis when a conversation turn is active.
     """
-    from sdk.loop import any_turn_active
+    from sdk.turn import any_turn_active
 
     cfg = load_config()
     skills_cfg = getattr(cfg, "skills", None)

@@ -74,7 +74,7 @@ def test_publish_event_delegates_to_dispatcher() -> None:
 @pytest.mark.unit
 def test_child_context_ids_form_hierarchy() -> None:
     """Child context ids should extend their parent ids deterministically."""
-    with agent_span(context_id="root") as root_id:
+    with agent_span("root") as root_id:
         with agent_span("nested") as child_id:
             assert child_id.startswith(root_id)
             with agent_span("deep") as grandchild_id:

@@ -1,12 +1,12 @@
 """React loop: iterative LLM-call → tool-execution cycle and turn lifecycle.
 
 This package provides:
-- ``run_tool_call_loop``: Main async generator driving the chat/tool loop.
+- ``run_turn``: Async function driving the chat/tool loop.
 - ``turn_scope``: Async context manager for conversation turn lifecycle.
 - Stop/nudge signaling utilities for user-initiated control.
 """
 
-from ._tool_loop import ToolLoopError, run_tool_call_loop
+from ._execution import ToolLoopError, run_turn
 from ._turn import (
     StopRequestedError,
     any_turn_active,
@@ -29,6 +29,6 @@ __all__ = [
     "is_turn_active",
     "queue_nudge",
     "request_stop",
-    "run_tool_call_loop",
+    "run_turn",
     "turn_scope",
 ]

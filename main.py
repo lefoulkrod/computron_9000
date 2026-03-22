@@ -34,7 +34,13 @@ def main() -> None:
     async def _run_shutdown_callbacks(_app: aiohttp.web.Application) -> None:  # pragma: no cover
         await run_shutdown_callbacks()
 
+    async def _shutdown_executor(_app: aiohttp.web.Application) -> None:  # pragma: no cover
+        import asyncio
+        loop = asyncio.get_running_loop()
+        await loop.shutdown_default_executor()
+
     app.on_shutdown.append(_run_shutdown_callbacks)
+    app.on_cleanup.append(_shutdown_executor)
     logger.info("Starting server on port %s", PORT)
     aiohttp.web.run_app(app, port=PORT)
 

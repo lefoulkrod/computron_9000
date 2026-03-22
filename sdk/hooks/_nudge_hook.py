@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sdk.loop import drain_nudges
+from sdk.turn import drain_nudges
 
 logger = logging.getLogger(__name__)
 
