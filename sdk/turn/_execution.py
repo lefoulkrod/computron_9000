@@ -208,21 +208,24 @@ async def _run_tool_with_hooks(
     }
 
 
-async def run_tool_call_loop(
+async def run_turn(
     history: ConversationHistory,
     agent: Agent,
     *,
     hooks: list[Any] | None = None,
-) -> AsyncGenerator[tuple[str | None, str | None]]:
-    """Executes a chat loop with the LLM, handling tool calls and yielding message content.
+) -> str | None:
+    """Executes a chat loop with the LLM, handling tool calls.
+
+    Streaming is handled via publish_event; this function drives the loop
+    and mutates *history* in place.
 
     Args:
         history: The conversation history to read from and append to.
         agent: The agent providing model, tools, options, and think flag.
-        hooks: Pluggable hooks invoked at four phases of each iteration.
+        hooks: Pluggable hooks invoked at six phases of the turn.
 
-    Yields:
-        tuple[str | None, str | None]: The message content and thinking as they are generated.
+    Returns:
+        The final assistant message content, or None if no content was produced.
 
     Raises:
         ToolLoopError: If an unexpected error occurs in the tool loop.
@@ -231,86 +234,100 @@ async def run_tool_call_loop(
     tools = list(agent.tools or [])
     if hooks is None:
         hooks = []
+
+    for hook in hooks:
+        fn = getattr(hook, "on_turn_start", None)
+        if fn:
+            fn(agent.name)
+
+    final_content: str | None = None
     iteration = 0
-    while True:
-        iteration += 1
+    try:
+        while True:
+            iteration += 1
 
-        try:
-            # ── before_model hooks ───────────────────────────────────────
-            for hook in hooks:
-                fn = getattr(hook, "before_model", None)
-                if fn:
-                    await fn(history, iteration, agent.name)
+            try:
+                # ── before_model hooks ───────────────────────────────────
+                for hook in hooks:
+                    fn = getattr(hook, "before_model", None)
+                    if fn:
+                        await fn(history, iteration, agent.name)
 
-            # Stream deltas to frontend as tokens arrive
-            response: ChatResponse | None = None
-            streamed_deltas = False
-            async for chunk in _stream_chat_with_retries(
-                provider, agent=agent, messages=history.messages, tools=tools,
-            ):
-                if isinstance(chunk, ChatDelta):
-                    streamed_deltas = True
+                # Stream deltas to frontend as tokens arrive
+                response: ChatResponse | None = None
+                streamed_deltas = False
+                async for chunk in _stream_chat_with_retries(
+                    provider, agent=agent, messages=history.messages, tools=tools,
+                ):
+                    if isinstance(chunk, ChatDelta):
+                        streamed_deltas = True
+                        try:
+                            publish_event(AssistantResponse(
+                                content=chunk.content,
+                                thinking=chunk.thinking,
+                                delta=True,
+                            ))
+                        except Exception:  # pragma: no cover - defensive
+                            logger.exception("Failed to publish delta event")
+                    elif isinstance(chunk, ChatResponse):
+                        response = chunk
+
+                if response is None:
+                    raise ToolLoopError("No ChatResponse received from provider")
+
+                # ── after_model hooks (chain: each can rewrite response) ─
+                for hook in hooks:
+                    fn = getattr(hook, "after_model", None)
+                    if fn:
+                        response = await fn(response, history, iteration, agent.name)
+
+                content = response.message.content
+                thinking = response.message.thinking
+                tool_calls = response.message.tool_calls
+                # Serialize tool calls to plain dicts for history storage so
+                # providers can reconstruct their own types on the next turn.
+                serialized_tool_calls = (
+                    [tc.model_dump() for tc in tool_calls] if tool_calls else None
+                )
+                assistant_message = {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": serialized_tool_calls,
+                    "thinking": thinking if agent.persist_thinking else None,
+                    "agent_name": get_current_agent_name(),
+                }
+                history.append(assistant_message)
+                # Emit full content only if no deltas were streamed (fallback path)
+                if not streamed_deltas:
                     try:
-                        publish_event(AssistantResponse(
-                            content=chunk.content,
-                            thinking=chunk.thinking,
-                            delta=True,
-                        ))
+                        publish_event(AssistantResponse(content=content, thinking=thinking))
                     except Exception:  # pragma: no cover - defensive
-                        logger.exception("Failed to publish delta event")
-                elif isinstance(chunk, ChatResponse):
-                    response = chunk
+                        logger.exception("Failed to publish model AssistantResponse event")
+                if content is not None:
+                    final_content = content
 
-            if response is None:
-                raise ToolLoopError("No ChatResponse received from provider")
+                if not tool_calls:
+                    _publish_final()
+                    return final_content
 
-            # ── after_model hooks (chain: each can rewrite response) ─
-            for hook in hooks:
-                fn = getattr(hook, "after_model", None)
-                if fn:
-                    response = await fn(response, history, iteration, agent.name)
+                for tc in tool_calls:
+                    result = await _run_tool_with_hooks(tc, tools, hooks)
+                    history.append(result)
 
-            content = response.message.content
-            thinking = response.message.thinking
-            tool_calls = response.message.tool_calls
-            # Serialize tool calls to plain dicts for history storage so
-            # providers can reconstruct their own types on the next turn.
-            serialized_tool_calls = (
-                [tc.model_dump() for tc in tool_calls] if tool_calls else None
-            )
-            assistant_message = {
-                "role": "assistant",
-                "content": content,
-                "tool_calls": serialized_tool_calls,
-                "thinking": thinking if agent.persist_thinking else None,
-                "agent_name": get_current_agent_name(),
-            }
-            history.append(assistant_message)
-            # Emit full content only if no deltas were streamed (fallback path)
-            if not streamed_deltas:
-                try:
-                    publish_event(AssistantResponse(content=content, thinking=thinking))
-                except Exception:  # pragma: no cover - defensive
-                    logger.exception("Failed to publish model AssistantResponse event")
-            if content is not None or thinking is not None:
-                yield content, thinking
-
-            if not tool_calls:
+            except StopRequestedError:
+                logger.info("Agent '%s' tool loop stopped by user request", agent.name)
                 _publish_final()
-                break
-
-            results = await asyncio.gather(
-                *(_run_tool_with_hooks(tc, tools, hooks) for tc in tool_calls),
-            )
-            for result in results:
-                history.append(result)
-
-        except StopRequestedError:
-            logger.info("Agent '%s' tool loop stopped by user request", agent.name)
-            _publish_final()
-            return
-        except Exception as exc:
-            logger.exception("Unhandled exception in tool loop")
-            error_msg = "An error occurred while processing your message."
-            _publish_final(content=error_msg)
-            raise ToolLoopError(error_msg) from exc
+                return final_content
+            except Exception as exc:
+                logger.exception("Unhandled exception in tool loop")
+                error_msg = "An error occurred while processing your message."
+                _publish_final(content=error_msg)
+                raise ToolLoopError(error_msg) from exc
+    finally:
+        for hook in hooks:
+            fn = getattr(hook, "on_turn_end", None)
+            if fn:
+                try:
+                    fn(final_content, agent.name)
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("on_turn_end hook failed")

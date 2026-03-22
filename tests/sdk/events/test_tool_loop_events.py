@@ -3,7 +3,6 @@
 Covers:
 - Emission of content/thinking events after a model response
 - Emission of tool_call event before executing a tool
-- Preservation of generator contract (still yields content, thinking)
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import pytest
 from sdk.context import ConversationHistory
 from sdk.events import AssistantResponse, ToolCallPayload
 from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolCallFunction
-from sdk.loop import run_tool_call_loop, turn_scope
+from sdk.turn import run_turn, turn_scope
 from agents.types import Agent
 
 
@@ -62,7 +61,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     )
     resp2 = _make_response(content="done")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     # Patch provider used by the module under test
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
@@ -90,11 +89,10 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     )
 
     async with turn_scope(handler=_handler):
-        async for _content, _thinking in run_tool_call_loop(
+        await run_turn(
             history,
             agent=agent,
-        ):
-            pass
+        )
 
     # Assert: at least two events: one model output and one tool_call
     assert any(e.content == "partial" and e.thinking == "t" for e in captured)

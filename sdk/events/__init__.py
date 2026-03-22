@@ -7,7 +7,7 @@ This package provides:
     ``agent_span`` are available for emission and attribution inside a turn scope.
 
 Turn lifecycle management (``turn_scope``, stop signaling, nudge queues) lives
-in ``sdk.loop``.
+in ``sdk.turn``.
 """
 
 from ._context import (

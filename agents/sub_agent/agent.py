@@ -13,9 +13,9 @@ from textwrap import dedent
 
 from sdk import (
     default_hooks,
-    run_tool_call_loop,
+    run_turn,
 )
-from sdk.loop import StopRequestedError
+from sdk.turn import StopRequestedError
 from agents.browser import browser_agent_tool
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import agent_span, get_model_options
@@ -139,19 +139,16 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
             max_iterations=effective_max_iterations,
             ctx_manager=ctx_manager,
         )
-        result_text = ""
         try:
-            async for content, _ in run_tool_call_loop(
+            result_text = await run_turn(
                 history=history,
                 agent=agent,
                 hooks=hooks,
-            ):
-                if content:
-                    result_text = content
+            )
         except StopRequestedError:
             logger.info("Sub-agent '%s' stopped by user request", agent_name)
             raise
         except Exception:
             logger.exception("Unexpected error in sub-agent '%s'", agent_name)
             raise
-        return result_text.strip()
+        return (result_text or "").strip()

@@ -108,27 +108,23 @@ def get_current_agent_name() -> str | None:
 @contextmanager
 def agent_span(
     agent_name: str | None = None,
-    context_id: str | None = None,
 ) -> Generator[str, None, None]:
     """Push an attribution frame for the duration of the block.
 
     Events published inside will be tagged with the given agent name and an
-    incremented depth. If context_id is omitted, one is generated from the
-    current stack.
+    incremented depth.
 
     Args:
         agent_name: Human-readable agent name for event attribution.
-        context_id: Optional explicit context id. If omitted, one is generated.
 
     Yields:
-        str: The resolved context id pushed onto the stack.
+        str: The context id pushed onto the stack.
 
     Example:
         with agent_span("Browser Agent"):
             publish_event(AssistantResponse(thinking="Navigating..."))
     """
-    if context_id is None:
-        context_id = _make_child_context_id(agent_name)
+    context_id = _make_child_context_id(agent_name)
     token = _context_stack.set((*_context_stack.get(), (context_id, agent_name)))
     try:
         yield context_id

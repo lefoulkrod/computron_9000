@@ -6,14 +6,14 @@ produce async tool-call wrappers from agent instances.
 
 import json
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast, get_args, get_origin
 
 from agents.types import Agent
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
 from sdk.events import agent_span, collect_sub_agent_history, get_model_options
 from sdk.hooks import default_hooks
-from sdk.loop import StopRequestedError, run_tool_call_loop
+from sdk.turn import StopRequestedError, run_turn
 
 
 class AgentToolMarker:
@@ -161,7 +161,7 @@ def _convert_result_to_type[T](raw_text: str, result_type: type[T]) -> T:
     return cast("T", parsed)
 
 
-async def _run_tool_loop_once(
+async def _run_agent_turn(
     *,
     history: ConversationHistory,
     agent: Agent,
@@ -180,16 +180,12 @@ async def _run_tool_loop_once(
     Raises:
         Propagates any unexpected exceptions from the tool loop after logging.
     """
-    result_text = ""
     try:
-        gen: AsyncGenerator[tuple[str | None, str | None], None] = run_tool_call_loop(
+        result_text = await run_turn(
             history=history,
             agent=agent,
             hooks=hooks,
         )
-        async for content, _ in gen:
-            if content:
-                result_text = content
     except StopRequestedError:
         logger.info("Agent tool '%s' stopped by user request", agent.name)
         raise
@@ -200,7 +196,7 @@ async def _run_tool_loop_once(
         )
         raise
 
-    return result_text.strip()
+    return (result_text or "").strip()
 
 
 async def _run_with_json_retry[T](
@@ -231,7 +227,7 @@ async def _run_with_json_retry[T](
         Exception: Any unexpected error raised by the tool loop.
     """
     for attempt in range(max_attempts):
-        final_text = await _run_tool_loop_once(
+        final_text = await _run_agent_turn(
             history=history,
             agent=agent,
             hooks=hooks,
@@ -332,7 +328,7 @@ Returns:
             try:
                 # For string results, single pass without retry
                 if result_type is str:
-                    return await _run_tool_loop_once(
+                    return await _run_agent_turn(
                         history=history,
                         agent=agent,
                         hooks=hooks,

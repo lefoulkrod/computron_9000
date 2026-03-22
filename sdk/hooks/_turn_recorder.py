@@ -47,6 +47,7 @@ class TurnRecorderHook:
         self._tool_start_time: float | None = None
         self._agent_chain: list[str] = [agent_name]
         self._total_tool_calls = 0
+        self._applied_skill: str | None = None
         self._last_content: str | None = None
         self._last_thinking: str | None = None
 
@@ -113,11 +114,22 @@ class TurnRecorderHook:
     def after_tool(
         self, tool_name: str | None, tool_arguments: dict[str, Any], tool_result: str
     ) -> str:
-        """Record tool result and duration."""
+        """Record tool result and duration, and detect skill application."""
         duration_ms = None
         if self._tool_start_time is not None:
             duration_ms = int((time.monotonic() - self._tool_start_time) * 1000)
             self._tool_start_time = None
+
+        # Track skill application
+        if tool_name == "apply_skill" and "skill_name" in tool_arguments:
+            self._applied_skill = tool_arguments["skill_name"]
+            logger.info("Skill applied: %s", self._applied_skill)
+            try:
+                from skills import record_skill_used
+
+                record_skill_used(self._applied_skill)
+            except Exception:
+                logger.exception("Failed to record usage for skill '%s'", self._applied_skill)
 
         # Store full tool results (no truncation)
         result_summary = tool_result or ""
@@ -142,6 +154,10 @@ class TurnRecorderHook:
         )
         return tool_result
 
+    def on_turn_end(self, final_content: str | None, agent_name: str) -> None:
+        """Finalize and persist the turn record."""
+        self.finalize()
+
     def finalize(self) -> TurnRecord:
         """Build and persist the final TurnRecord."""
         ended_at = datetime.now(UTC).isoformat()
@@ -162,6 +178,7 @@ class TurnRecorderHook:
                 total_tool_calls=self._total_tool_calls,
                 agent_chain=self._agent_chain,
                 duration_seconds=duration,
+                skill_applied=self._applied_skill,
             ),
         )
 

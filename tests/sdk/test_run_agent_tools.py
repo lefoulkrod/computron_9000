@@ -21,16 +21,15 @@ _AGENT_KWARGS = {
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_run_agent_as_tool_returns_string_by_default(monkeypatch):
-    """Factory returns only the last emission's content when no type specified."""
+    """Factory returns the loop's final content when no type specified."""
 
-    async def fake_loop(**_: Any):
-        yield "hello", None
-        yield "world", None
+    async def fake_loop(**_: Any) -> str | None:
+        return "world"
 
     # Patch the symbol in the target module
     import sdk.tools._agent_wrapper as mod
 
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS)
     result = await tool_fn("say something")
@@ -44,12 +43,12 @@ async def test_run_agent_as_tool_dict_conversion(monkeypatch):
 
     payload = {"a": 1, "b": "x"}
 
-    async def fake_loop(**_: Any):
-        yield json.dumps(payload), None
+    async def fake_loop(**_: Any) -> str | None:
+        return json.dumps(payload)
 
     import sdk.tools._agent_wrapper as mod
 
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     result = await tool_fn("return dict")
@@ -63,12 +62,12 @@ async def test_run_agent_as_tool_list_conversion(monkeypatch):
 
     payload = [1, 2, 3]
 
-    async def fake_loop(**_: Any):
-        yield json.dumps(payload), None
+    async def fake_loop(**_: Any) -> str | None:
+        return json.dumps(payload)
 
     import sdk.tools._agent_wrapper as mod
 
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=list)
     result = await tool_fn("return list")
@@ -86,12 +85,12 @@ async def test_run_agent_as_tool_pydantic_model_conversion(monkeypatch):
         base64_encoded: str
         content_type: str
 
-    async def fake_loop(**_: Any):
-        yield json.dumps(payload), None
+    async def fake_loop(**_: Any) -> str | None:
+        return json.dumps(payload)
 
     import sdk.tools._agent_wrapper as mod
 
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=InlineModel)
     result = await tool_fn("return model")
@@ -105,12 +104,12 @@ async def test_run_agent_as_tool_pydantic_model_conversion(monkeypatch):
 async def test_run_agent_as_tool_invalid_json_raises(monkeypatch):
     """Invalid JSON with non-string type should raise AgentToolConversionError."""
 
-    async def fake_loop(**_: Any):
-        yield "not json", None
+    async def fake_loop(**_: Any) -> str | None:
+        return "not json"
 
     import sdk.tools._agent_wrapper as mod
 
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(AgentToolConversionError):
@@ -122,29 +121,29 @@ async def test_run_agent_as_tool_invalid_json_raises(monkeypatch):
 async def test_scalar_conversions_int_float_bool(monkeypatch):
     """Support JSON scalar conversions to int/float/bool via result_type."""
 
-    async def fake_loop_int(**_: Any):
-        yield "123", None
+    async def fake_loop_int(**_: Any) -> str | None:
+        return "123"
 
-    async def fake_loop_float(**_: Any):
-        yield "3.14", None
+    async def fake_loop_float(**_: Any) -> str | None:
+        return "3.14"
 
-    async def fake_loop_bool_true(**_: Any):
-        yield "true", None
+    async def fake_loop_bool_true(**_: Any) -> str | None:
+        return "true"
 
     import sdk.tools._agent_wrapper as mod
 
     # int
-    mod.run_tool_call_loop = fake_loop_int  # type: ignore[assignment]
+    mod.run_turn = fake_loop_int  # type: ignore[assignment]
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=int)
     assert await tool_fn("return int") == 123
 
     # float
-    mod.run_tool_call_loop = fake_loop_float  # type: ignore[assignment]
+    mod.run_turn = fake_loop_float  # type: ignore[assignment]
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=float)
     assert await tool_fn("return float") == 3.14
 
     # bool
-    mod.run_tool_call_loop = fake_loop_bool_true  # type: ignore[assignment]
+    mod.run_turn = fake_loop_bool_true  # type: ignore[assignment]
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=bool)
     assert await tool_fn("return bool") is True
 
@@ -154,11 +153,11 @@ async def test_scalar_conversions_int_float_bool(monkeypatch):
 async def test_empty_or_whitespace_with_non_str_type_raises(monkeypatch):
     """Whitespace content should fail JSON parsing when non-str type requested."""
 
-    async def fake_loop(**_: Any):
-        yield "   \n\t  ", None
+    async def fake_loop(**_: Any) -> str | None:
+        return "   \n\t  "
 
     import sdk.tools._agent_wrapper as mod
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(AgentToolConversionError):
@@ -172,12 +171,12 @@ async def test_hooks_are_created_and_passed(monkeypatch):
 
     received_kwargs = {}
 
-    async def fake_loop(**kwargs: Any):
+    async def fake_loop(**kwargs: Any) -> str | None:
         received_kwargs.update(kwargs)
-        yield json.dumps({"ok": True}), None
+        return json.dumps({"ok": True})
 
     import sdk.tools._agent_wrapper as mod
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     res = await tool_fn("x")
@@ -200,15 +199,11 @@ async def test_exception_propagation(monkeypatch):
     class Boom(Exception):
         pass
 
-    async def fake_loop(**_: Any):
-        # Return an async generator that raises on first iteration to match the
-        # async-iterator contract expected by the wrapper.
+    async def fake_loop(**_: Any) -> str | None:
         raise Boom("nope")
-        if False:  # pragma: no cover - ensure it's recognized as an async generator
-            yield None, None
 
     import sdk.tools._agent_wrapper as mod
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=dict)
     with pytest.raises(Boom):
@@ -229,11 +224,11 @@ async def test_run_agent_as_tool_list_of_pydantic_models(monkeypatch):
         {"id": 2, "name": "b"},
     ]
 
-    async def fake_loop(**_: Any):
-        yield json.dumps(payload), None
+    async def fake_loop(**_: Any) -> str | None:
+        return json.dumps(payload)
 
     import sdk.tools._agent_wrapper as mod
-    monkeypatch.setattr(mod, "run_tool_call_loop", fake_loop)
+    monkeypatch.setattr(mod, "run_turn", fake_loop)
 
     tool_fn = make_run_agent_as_tool_function(**_AGENT_KWARGS, result_type=list[Item])
     result = await tool_fn("return list of models")

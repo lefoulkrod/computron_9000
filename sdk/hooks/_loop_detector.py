@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class LoopDetector:
     """Detects when the model repeats the same tool-call signature N rounds in a row."""
 
-    def __init__(self, threshold: int = 3) -> None:
+    def __init__(self, threshold: int = 10) -> None:
         """Initialize with the number of identical rounds that triggers a nudge."""
         self._threshold = threshold
         self._recent: list[str] = []
@@ -39,21 +39,20 @@ class LoopDetector:
         self._recent.append(sig_hash)
         if len(self._recent) > self._threshold:
             self._recent.pop(0)
-        if (
-            len(self._recent) == self._threshold
-            and len(set(self._recent)) == 1
-        ):
+        if len(self._recent) == self._threshold and len(set(self._recent)) == 1:
             logger.warning(
                 "Agent '%s' stuck in loop: same tool call %d times in a row",
                 agent_name,
                 self._threshold,
             )
             self._recent.clear()
-            history.append({
-                "role": "user",
-                "content": (
-                    "You are repeating the same tool call without making progress. "
-                    "Try a different approach, use a different tool, or change your arguments. "
-                    "If the current approach isn't working, move on to the next step."
-                ),
-            })
+            history.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "You are repeating the same tool call without making progress. "
+                        "Try a different approach, use a different tool, or change your arguments. "
+                        "If the current approach isn't working, move on to the next step."
+                    ),
+                }
+            )

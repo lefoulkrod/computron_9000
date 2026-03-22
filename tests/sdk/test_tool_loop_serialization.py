@@ -1,4 +1,4 @@
-"""Tests for tool result serialization and history behaviour in run_tool_call_loop.
+"""Tests for tool result serialization and history behaviour in run_turn.
 
 These tests mock the provider to emit tool_calls and verify that tool
 results are stored as plain strings in tool messages — Pydantic models are
@@ -18,7 +18,7 @@ import pytest
 
 from sdk.context import ConversationHistory
 from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage
-from sdk.loop import run_tool_call_loop
+from sdk.turn import run_turn
 from agents.types import Agent
 from tools.virtual_computer.models import ApplyPatchResult
 
@@ -72,7 +72,7 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
     }])
     resp2 = _make_response(content="done")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
 
@@ -84,8 +84,7 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
-    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
-        pass
+    await run_turn(history, agent=agent)
 
     messages = history.messages
     tool_msg = next(msg for msg in reversed(messages) if msg.get("role") == "tool")
@@ -111,7 +110,7 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
     }])
     resp2 = _make_response(content="done")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
 
@@ -120,8 +119,7 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
-    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
-        pass
+    await run_turn(history, agent=agent)
 
     tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     content = tool_msg["content"]
@@ -137,7 +135,7 @@ async def test_tool_serialization_tool_exception_as_error(monkeypatch):
     resp1 = _make_response(tool_calls=[{"name": "explode", "arguments": {"x": 1}}])
     resp2 = _make_response(content="done")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
 
@@ -146,8 +144,7 @@ async def test_tool_serialization_tool_exception_as_error(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[explode])
-    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
-        pass
+    await run_turn(history, agent=agent)
 
     tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     content = tool_msg["content"]
@@ -162,7 +159,7 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
     resp1 = _make_response(tool_calls=[{"name": "run_bash_cmd", "arguments": {"cmd": "echo hi"}}])
     resp2 = _make_response(content="done")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
 
@@ -171,8 +168,7 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[run_bash_cmd])
-    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
-        pass
+    await run_turn(history, agent=agent)
 
     tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     content = tool_msg["content"]
@@ -191,7 +187,7 @@ async def test_persist_thinking_true_stores_thinking_in_history(monkeypatch):
     """When persist_thinking=True, thinking is stored in the assistant message."""
     resp = _make_response(content="hello", thinking="deep thought")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp]))
 
@@ -201,8 +197,7 @@ async def test_persist_thinking_true_stores_thinking_in_history(monkeypatch):
         model="dummy", options={}, tools=[],
         persist_thinking=True,
     )
-    async for _content, _thinking in run_tool_call_loop(history, agent=agent):
-        pass
+    await run_turn(history, agent=agent)
 
     assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
     assert assistant_msg["thinking"] == "deep thought"
@@ -214,7 +209,7 @@ async def test_persist_thinking_false_excludes_thinking_from_history(monkeypatch
     """When persist_thinking=False, thinking is None in history but still emitted."""
     resp = _make_response(content="hello", thinking="deep thought")
 
-    import sdk.loop._tool_loop as mod
+    import sdk.turn._execution as mod
 
     monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp]))
 
@@ -234,17 +229,12 @@ async def test_persist_thinking_false_excludes_thinking_from_history(monkeypatch
         model="dummy", options={}, tools=[],
         persist_thinking=False,
     )
-    yielded_thinking = []
-    async for _content, thinking in run_tool_call_loop(history, agent=agent):
-        yielded_thinking.append(thinking)
+    await run_turn(history, agent=agent)
 
     # History should NOT contain thinking
     assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
     assert assistant_msg["thinking"] is None
 
-    # But thinking should still be yielded to the caller
-    assert "deep thought" in yielded_thinking
-
-    # And the AssistantResponse event should contain thinking
+    # But thinking should still be emitted via events
     content_events = [e for e in emitted_events if hasattr(e, "thinking") and e.thinking]
     assert any(e.thinking == "deep thought" for e in content_events)

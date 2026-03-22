@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sdk.loop import StopRequestedError, check_stop
+from sdk.turn import StopRequestedError, check_stop
 
 
 class StopHook:
