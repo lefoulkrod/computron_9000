@@ -6,7 +6,7 @@ Public API:
 
 from playwright.async_api import Error as PlaywrightError
 
-from .browser import ActiveView, Browser, PageOrFrame, close_browser, get_browser
+from .browser import ActiveView, Browser, PageOrFrame, close_browser, get_browser, release_agent_browser
 from .exceptions import BrowserToolError
 from ._file_detection import DownloadInfo
 
@@ -18,6 +18,7 @@ __all__ = [
     "close_browser",
     "get_browser",
     "get_active_view",
+    "release_agent_browser",
 ]
 
 

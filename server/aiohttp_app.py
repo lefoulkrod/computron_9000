@@ -33,11 +33,6 @@ from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
-from skills._extractor import skill_extraction_loop
-from skills._registry import (
-    delete_skill as _delete_skill,
-    list_skills as _list_skills,
-)
 from conversations._store import (
     delete_conversation as _delete_conversation,
     delete_turn as _delete_turn,
@@ -295,35 +290,6 @@ async def delete_memory_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def list_skills_handler(_request: Request) -> Response:
-    """Return all skill definitions as JSON."""
-    skills = _list_skills()
-    data = [
-        {
-            "id": s.id,
-            "name": s.name,
-            "description": s.description,
-            "agent_scope": s.agent_scope,
-            "usage_count": s.usage_count,
-            "steps": [{"tool": st.tool, "description": st.description} for st in s.steps],
-            "created_at": s.created_at,
-            "last_used_at": s.last_used_at,
-        }
-        for s in skills
-    ]
-    return web.json_response(data)
-
-
-async def delete_skill_handler(request: Request) -> Response:
-    """Delete a skill by name."""
-    name = request.match_info["name"]
-    found = _delete_skill(name)
-    if not found:
-        return web.json_response({"error": f"Skill '{name}' not found"}, status=404)
-    return web.Response(status=204)
-
-
-
 async def list_turns_handler(request: Request) -> Response:
     """Return turn index entries (paginated)."""
     limit = int(request.query.get("limit", "50"))
@@ -432,10 +398,6 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Desktop API
     app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)
 
-    # Skills API
-    app.router.add_route("GET", "/api/skills", list_skills_handler)
-    app.router.add_route("DELETE", "/api/skills/{name}", delete_skill_handler)
-
     # Sessions API (conversation resume) — must be before {id} wildcard routes
     app.router.add_route("GET", "/api/conversations/sessions", list_conversations_handler)
     app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_conversation_handler)
@@ -445,22 +407,6 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("GET", "/api/conversations", list_turns_handler)
     app.router.add_route("GET", "/api/conversations/{id}", get_turn_handler)
     app.router.add_route("DELETE", "/api/conversations/{id}", delete_turn_handler)
-
-    # Start background skill extraction loop
-    async def _start_extraction(app: web.Application) -> None:
-        app["_skill_extraction_task"] = asyncio.create_task(skill_extraction_loop())
-
-    async def _stop_extraction(app: web.Application) -> None:
-        task = app.get("_skill_extraction_task")
-        if task and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-    app.on_startup.append(_start_extraction)
-    app.on_cleanup.append(_stop_extraction)
 
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.

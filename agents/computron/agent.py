@@ -12,7 +12,6 @@ from agents.sub_agent import run_sub_agent
 from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.memory import forget, remember
-from tools.skills import apply_skill, lookup_skills
 from tools.virtual_computer import output_file, play_audio, run_bash_cmd
 from tools.virtual_computer.describe_image import describe_image
 
@@ -97,10 +96,6 @@ SYSTEM_PROMPT = dedent(
 
         MEMORY — remember(key, value) / forget(key). Store user preferences proactively.
 
-        SKILLS — Before starting complex or recurring tasks, check if a proven workflow
-        exists: lookup_skills(query). If found, use apply_skill(name, params) to get a
-        step-by-step plan based on past successes. Follow the plan but adapt as needed.
-
         Respond in Markdown. Brief rationale before tool calls; short summary after.
         """
 )
@@ -119,8 +114,6 @@ TOOLS = [
     run_sub_agent,
     remember,
     forget,
-    lookup_skills,
-    apply_skill,
 ]
 
 __all__ = [

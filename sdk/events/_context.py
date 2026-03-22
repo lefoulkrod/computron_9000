@@ -45,13 +45,6 @@ _context_stack: ContextVar[tuple[tuple[str, str | None], ...]] = ContextVar(
 # LLM options propagated from the user's UI selection for the current turn.
 _model_options: ContextVar[LLMOptions | None] = ContextVar("assistant_events_model_options", default=None)
 
-# Collector for sub-agent conversation histories during a turn.
-# Each entry is {"agent_name": str, "parent_tool": str, "messages": list[dict]}.
-_sub_agent_histories: ContextVar[list[dict] | None] = ContextVar(
-    "sub_agent_histories", default=None
-)
-
-
 def get_model_options() -> LLMOptions | None:
     """Return the LLM options set for the current request context, or None."""
     return _model_options.get()
@@ -60,30 +53,6 @@ def get_model_options() -> LLMOptions | None:
 def set_model_options(options: LLMOptions | None) -> None:
     """Set the LLM options for the current request context."""
     _model_options.set(options)
-
-
-def init_sub_agent_collector() -> None:
-    """Initialize the sub-agent history collector for this turn."""
-    _sub_agent_histories.set([])
-
-
-def collect_sub_agent_history(
-    agent_name: str, parent_tool: str, messages: list[dict],
-) -> None:
-    """Append a sub-agent's conversation history to the collector."""
-    collector = _sub_agent_histories.get()
-    if collector is None:
-        return
-    collector.append({
-        "agent_name": agent_name,
-        "parent_tool": parent_tool,
-        "messages": messages,
-    })
-
-
-def get_sub_agent_histories() -> list[dict]:
-    """Return collected sub-agent histories, or empty list."""
-    return _sub_agent_histories.get() or []
 
 
 _subcontext_counter = itertools.count(1)

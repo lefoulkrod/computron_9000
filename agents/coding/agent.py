@@ -13,7 +13,6 @@ from textwrap import dedent
 
 from sdk import make_run_agent_as_tool_function
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.skills import apply_skill, lookup_skills
 from tools.virtual_computer import (
     apply_text_patch,
     describe_image,
@@ -83,10 +82,6 @@ SYSTEM_PROMPT = dedent(
     flask-socketio, numpy, pandas, scipy, scikit-learn, matplotlib, pillow,
     and many more are already installed. Do NOT reinstall these.
 
-    SKILLS — Before starting, check if a proven workflow exists for your task:
-    lookup_skills(query). If found, use apply_skill(name, params) to get a
-    step-by-step plan. Follow it but adapt as needed.
-
     Return a concise summary of changes with all file paths when done.
     """
 )
@@ -107,9 +102,6 @@ TOOLS = [
     # Scratchpad
     save_to_scratchpad,
     recall_from_scratchpad,
-    # Skills
-    lookup_skills,
-    apply_skill,
 ]
 
 computer_agent_tool = make_run_agent_as_tool_function(

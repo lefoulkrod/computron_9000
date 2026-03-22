@@ -8,7 +8,15 @@ Public API:
 - capture_screenshot — raw screenshot capture.
 """
 
-from ._lifecycle import ensure_desktop_running, is_desktop_running, start_desktop, stop_desktop
+from ._lifecycle import (
+    allocate_display,
+    ensure_desktop_running,
+    is_desktop_running,
+    release_display,
+    start_agent_desktop,
+    start_desktop,
+    stop_desktop,
+)
 from ._screenshot import capture_screenshot
 from ._tools import (
     describe_screen,
@@ -23,11 +31,11 @@ from ._tools import (
 )
 
 __all__ = [
+    "allocate_display",
     "capture_screenshot",
     "describe_screen",
     "ensure_desktop_running",
     "is_desktop_running",
-    "start_desktop",
     "keyboard_press",
     "keyboard_type",
     "mouse_click",
@@ -35,6 +43,9 @@ __all__ = [
     "mouse_drag",
     "perform_visual_action",
     "read_screen",
+    "release_display",
     "scroll",
+    "start_agent_desktop",
+    "start_desktop",
     "stop_desktop",
 ]

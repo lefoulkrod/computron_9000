@@ -84,3 +84,7 @@ skills:
 # Otherwise, this YAML value is used as the default.
 llm:
   provider: ollama
+
+parallel:
+  enabled: true
+  max_concurrent: 4

@@ -161,7 +161,8 @@ async def test_run_grounding_success(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert response.y == 360
 
     # Verify screenshot was written to .vision/ subdirectory
-    screenshot_path = tmp_path / ".vision" / "grounding_screenshot.png"
+    # Default agent_id is None → "default", so filename is grounding_default.png
+    screenshot_path = tmp_path / ".vision" / "grounding_default.png"
     assert screenshot_path.exists()
     assert screenshot_path.read_bytes() == b"fake-png-bytes"
 

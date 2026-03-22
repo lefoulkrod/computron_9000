@@ -749,6 +749,81 @@ class Browser:
 
         return cls(context=context, extra_headers=headers, pw=pw, use_channel=_use_channel, profile_dir=str(profile_path))
 
+    @classmethod
+    async def start_ephemeral(
+        cls,
+        root_browser: Browser,
+        storage_state: dict[str, Any],
+    ) -> Browser:
+        """Create an ephemeral browser context on the same Chromium process.
+
+        The new context inherits cookies and localStorage from *storage_state*
+        but is fully isolated — changes do not affect the root profile or other
+        ephemeral contexts.
+
+        Args:
+            root_browser: The persistent root browser whose Chromium process
+                will host the new context.
+            storage_state: Cookies and localStorage snapshot from
+                ``root_browser._context.storage_state()``.
+
+        Returns:
+            A ``Browser`` wrapping the new ephemeral context.
+        """
+        pw_browser = root_browser._context.browser
+        if pw_browser is None:
+            msg = "Cannot create ephemeral context: no underlying browser process"
+            raise RuntimeError(msg)
+
+        context = await pw_browser.new_context(
+            storage_state=storage_state,
+            viewport=_viewport(),
+            locale="en-US",
+            timezone_id="America/Chicago",
+            accept_downloads=True,
+            downloads_path=root_browser._downloads_dir or None,
+            java_script_enabled=True,
+        )
+
+        # Apply the same HTTP headers and anti-bot patches as the root.
+        headers = dict(root_browser._extra_headers)
+        await context.set_extra_http_headers(headers)
+        anti_bot = _build_anti_bot_script(use_channel=root_browser._use_channel)
+        await context.add_init_script(anti_bot)
+        await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
+
+        instance = cls(
+            context=context,
+            extra_headers=headers,
+            pw=None,  # ephemeral — does not own the Playwright driver
+            use_channel=root_browser._use_channel,
+            profile_dir="",
+        )
+        instance._downloads_dir = root_browser._downloads_dir
+        instance._container_dir = root_browser._container_dir
+        return instance
+
+    async def close_context(self) -> None:
+        """Close only the browser context, not the Playwright driver.
+
+        Used for ephemeral sub-agent contexts that share the root's Chromium
+        process.  The ``close()`` method is inappropriate here because it also
+        stops the Playwright driver, which would kill the shared process.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        for page in list(self._context.pages):
+            try:
+                if not page.is_closed():
+                    await asyncio.wait_for(page.close(), timeout=3.0)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            await asyncio.wait_for(self._context.close(), timeout=5.0)
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to close ephemeral browser context")
+
     async def new_page(self) -> Page:
         """Open a new page within the persistent context.
 
@@ -1325,6 +1400,8 @@ class Browser:
 
 
 _browser: Browser | None = None
+_agent_browsers: dict[str, Browser] = {}
+_agent_browser_lock = asyncio.Lock()
 
 
 def _kill_driver_tree(pid: int) -> None:
@@ -1363,19 +1440,12 @@ def _atexit_kill_browser() -> None:
     _kill_driver_tree(pid)
 
 
-async def get_browser() -> Browser:
-    """Get the singleton browser instance, initializing it if necessary.
-
-    Returns:
-        _Browser: The persistent browser instance used for agent tools.
-    """
+async def _get_root_browser() -> Browser:
+    """Return the persistent root browser, initializing it on first call."""
     global _browser
     if _browser is None:
-        # initialize once and keep it for the lifetime of the process
         config = load_config()
         profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
-        # Route browser downloads to the virtual computer's shared home directory
-        # so the agent can access downloaded files via run_bash_cmd.
         downloads_path = config.virtual_computer.home_dir
         channel = config.tools.browser.channel
         headless = config.tools.browser.headless
@@ -1386,20 +1456,65 @@ async def get_browser() -> Browser:
     return _browser
 
 
-async def close_browser() -> None:
-    """Shutdown the persistent browser instance if it exists.
+async def get_browser() -> Browser:
+    """Get the browser instance for the current agent.
 
-    This function closes the browser context and resets the singleton instance.
+    Root agents (depth 0) get the persistent singleton browser.  Sub-agents
+    get an ephemeral context on the same Chromium process, seeded with the
+    root's cookies and localStorage for session inheritance.
     """
+    from sdk.events import get_current_agent_id, get_current_depth
+
+    root = await _get_root_browser()
+    depth = get_current_depth()
+
+    if depth == 0:
+        return root
+
+    agent_id = get_current_agent_id() or "sub_default"
+    async with _agent_browser_lock:
+        if agent_id in _agent_browsers:
+            return _agent_browsers[agent_id]
+
+        state = await root._context.storage_state()
+        ephemeral = await Browser.start_ephemeral(root, storage_state=state)
+        _agent_browsers[agent_id] = ephemeral
+        logger.info("Created ephemeral browser context for agent '%s'", agent_id)
+        return ephemeral
+
+
+async def release_agent_browser(agent_id: str) -> None:
+    """Close and remove the ephemeral browser context for an agent."""
+    async with _agent_browser_lock:
+        browser = _agent_browsers.pop(agent_id, None)
+    if browser is not None:
+        try:
+            await browser.close_context()
+            logger.info("Released ephemeral browser context for agent '%s'", agent_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to release browser context for agent '%s'", agent_id)
+
+
+async def close_browser() -> None:
+    """Shutdown all browser instances — ephemeral contexts and root singleton."""
     global _browser
+
+    # Close all ephemeral sub-agent contexts first.
+    async with _agent_browser_lock:
+        agents = list(_agent_browsers.items())
+        _agent_browsers.clear()
+    for agent_id, browser in agents:
+        try:
+            await browser.close_context()
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to close ephemeral context for '%s'", agent_id)
+
     if _browser is None:
         logger.debug("close_browser called but no browser instance exists")
         return
     try:
         await _browser.close()
     except PlaywrightError as exc:  # pragma: no cover - defensive
-        # Should generally be handled inside Browser.close already, but we add
-        # an outer guard in case of future changes.
         logger.warning("Suppressed exception in close_browser wrapper: %s: %s", type(exc).__name__, exc)
     except Exception as exc:  # noqa: BLE001  pragma: no cover - highly defensive
         logger.warning(

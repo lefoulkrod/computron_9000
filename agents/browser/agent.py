@@ -28,7 +28,6 @@ from tools.browser import (
     select_option,
 )
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.skills import apply_skill, lookup_skills
 from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
@@ -110,9 +109,6 @@ SYSTEM_PROMPT = dedent(
     - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
     - Ambiguous → ask user for clarification
 
-    SKILLS — Before starting, check if a proven workflow exists for your task:
-    lookup_skills(query). If found, use apply_skill(name, params) to get a
-    step-by-step plan. Follow it but adapt as needed.
     """
 )
 TOOLS = [
@@ -134,8 +130,6 @@ TOOLS = [
     run_bash_cmd,
     save_to_scratchpad,
     recall_from_scratchpad,
-    lookup_skills,
-    apply_skill,
 ]
 
 browser_agent_tool = make_run_agent_as_tool_function(

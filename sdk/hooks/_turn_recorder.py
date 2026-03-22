@@ -120,23 +120,12 @@ class TurnRecorderHook:
     def after_tool(
         self, tool_name: str | None, tool_arguments: dict[str, Any], tool_result: str
     ) -> str:
-        """Record tool result and duration, and detect skill application."""
+        """Record tool result and duration."""
         key = f"{tool_name}_{id(tool_arguments)}"
         duration_ms = None
         start = self._tool_start_times.pop(key, None)
         if start is not None:
             duration_ms = int((time.monotonic() - start) * 1000)
-
-        # Track skill application
-        if tool_name == "apply_skill" and "skill_name" in tool_arguments:
-            self._applied_skill = tool_arguments["skill_name"]
-            logger.info("Skill applied: %s", self._applied_skill)
-            try:
-                from skills import record_skill_used
-
-                record_skill_used(self._applied_skill)
-            except Exception:
-                logger.exception("Failed to record usage for skill '%s'", self._applied_skill)
 
         # Store full tool results (no truncation)
         result_summary = tool_result or ""

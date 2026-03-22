@@ -2,12 +2,17 @@
 
 import asyncio
 import logging
+from contextvars import ContextVar
 
 from podman import PodmanClient
 
 from config import load_config
 
 logger = logging.getLogger(__name__)
+
+# ContextVar for per-agent display routing.  When set, desktop tools
+# operate on this display instead of the default user display.
+_current_display: ContextVar[str | None] = ContextVar("_current_display", default=None)
 
 
 def _strip_stream_headers(data: bytes) -> bytes:
@@ -45,14 +50,16 @@ class DesktopExecError(Exception):
 async def _run_desktop_cmd(
     cmd: str,
     *,
-    display: str = ":99",
+    display: str | None = None,
     user: str | None = None,
 ) -> str:
     """Run a command in the container with DISPLAY set.
 
     Args:
         cmd: Shell command to execute.
-        display: X11 display to use.
+        display: X11 display to use.  If ``None``, reads from the
+            ``_current_display`` ContextVar, falling back to the user
+            display from config.
         user: Container user to run as. Defaults to config user.
 
     Returns:
@@ -62,6 +69,8 @@ async def _run_desktop_cmd(
         DesktopExecError: If the command fails or container is not found.
     """
     config = load_config()
+    if display is None:
+        display = _current_display.get() or config.desktop.user_display
     container_name = config.virtual_computer.container_name
     container_user = user or config.virtual_computer.container_user
 

@@ -11,7 +11,7 @@ from typing import Any, Protocol, cast, get_args, get_origin
 
 from agents.types import Agent
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
-from sdk.events import agent_span, collect_sub_agent_history, get_model_options
+from sdk.events import agent_span, get_current_agent_id, get_model_options
 from sdk.hooks import default_hooks
 from sdk.turn import StopRequestedError, run_turn
 
@@ -347,12 +347,14 @@ Returns:
                     max_attempts=5,
                 )
             finally:
-                # Collect sub-agent history for skill extraction
-                collect_sub_agent_history(
-                    agent_name=name,
-                    parent_tool=func_name,
-                    messages=history.messages,
-                )
+                # Release ephemeral browser context if one was created.
+                agent_id = get_current_agent_id()
+                if agent_id:
+                    try:
+                        from tools.browser.core import release_agent_browser
+                        await release_agent_browser(agent_id)
+                    except Exception:  # noqa: BLE001
+                        logger.debug("No browser context to release for '%s'", agent_id)
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
     # distinguish multiple agent tools. We assume name values are unique.

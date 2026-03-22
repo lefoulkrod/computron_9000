@@ -12,7 +12,6 @@ from sdk.events import (
     AssistantResponse,
     agent_span,
     get_current_dispatcher,
-    init_sub_agent_collector,
     set_model_options,
 )
 from sdk.turn import turn_scope
@@ -208,7 +207,6 @@ async def _run_turn(
         user_content,
     )
     set_model_options(options)
-    init_sub_agent_collector()
 
     ctx_manager = _ensure_context_manager(conversation, active_agent)
     conv_id = conversation_id or _DEFAULT_CONVERSATION_ID

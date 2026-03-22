@@ -22,7 +22,6 @@ from sdk.events import agent_span, get_model_options
 from agents.types import Agent
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.skills import apply_skill, lookup_skills
 from tools.generation import generate_media
 from tools.virtual_computer import (
     apply_text_patch,
@@ -52,10 +51,6 @@ _SYSTEM_PROMPT = dedent(
 
     In HTML/web content, reference assets by container path
     (e.g. src="/home/computron/workspace/sprite.png"), never base64.
-
-    SKILLS — Before starting, check if a proven workflow exists for your task:
-    lookup_skills(query). If found, use apply_skill(name, params) to get a
-    step-by-step plan. Follow it but adapt as needed.
 
     FILE OUTPUT — Do NOT call output_file. Instead, include the full paths of every
     file you created in your return summary so COMPUTRON can deliver them.
@@ -87,9 +82,6 @@ _TOOLS = [
     # Scratchpad
     save_to_scratchpad,
     recall_from_scratchpad,
-    # Skills
-    lookup_skills,
-    apply_skill,
 ]
 
 

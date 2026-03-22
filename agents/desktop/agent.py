@@ -64,13 +64,13 @@ SYSTEM_PROMPT = dedent(
 
     WINDOW MANAGEMENT (via run_bash_cmd):
     Title bar buttons are NOT in the element list. Use wmctrl instead:
-    - List:     run_bash_cmd("DISPLAY=:99 wmctrl -l")
-    - Focus:    run_bash_cmd("DISPLAY=:99 wmctrl -a 'Title'")
-    - Close:    run_bash_cmd("DISPLAY=:99 wmctrl -c 'Title'")
-    - Resize:   run_bash_cmd("DISPLAY=:99 wmctrl -r 'Title' -e 0,x,y,w,h")
-    - Maximize: run_bash_cmd("DISPLAY=:99 wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
+    - List:     run_bash_cmd("wmctrl -l")
+    - Focus:    run_bash_cmd("wmctrl -a 'Title'")
+    - Close:    run_bash_cmd("wmctrl -c 'Title'")
+    - Resize:   run_bash_cmd("wmctrl -r 'Title' -e 0,x,y,w,h")
+    - Maximize: run_bash_cmd("wmctrl -r 'Title' -b toggle,maximized_vert,maximized_horz")
 
-    LAUNCHING APPS: run_bash_cmd("DISPLAY=:99 libreoffice &")
+    LAUNCHING APPS: run_bash_cmd("libreoffice &")
     """
 )
 TOOLS = [

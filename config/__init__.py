@@ -153,6 +153,8 @@ class DesktopConfig(BaseModel):
     """Configuration for the desktop environment (noVNC + Xfce4)."""
 
     display: str = ":1"
+    user_display: str = ":99"
+    agent_display_base: int = 100
     resolution: str = "1280x720"
     vnc_port: int = 5900
     websocket_port: int = 6080

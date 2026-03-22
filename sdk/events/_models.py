@@ -132,18 +132,6 @@ class TerminalOutputPayload(BaseModel):
     exit_code: int | None = None
 
 
-class SkillAppliedPayload(BaseModel):
-    """Emitted when a skill is applied during a conversation.
-
-    Attributes:
-        type: Discriminator; always "skill_applied".
-        skill_name: The name of the skill being applied.
-    """
-
-    type: Literal["skill_applied"]
-    skill_name: str
-
-
 class DesktopActivePayload(BaseModel):
     """Emitted when the desktop environment starts to signal the UI.
 
@@ -252,7 +240,6 @@ AssistantEventPayload = Annotated[
     | TerminalOutputPayload
     | GenerationPreviewPayload
     | ContextUsagePayload
-    | SkillAppliedPayload
     | DesktopActivePayload
     | AgentStartedPayload
     | AgentCompletedPayload,
@@ -304,7 +291,6 @@ __all__ = [
     "DesktopActivePayload",
     "FileOutputPayload",
     "GenerationPreviewPayload",
-    "SkillAppliedPayload",
     "TerminalOutputPayload",
     "ToolCallPayload",
     "ToolCreatedPayload",
