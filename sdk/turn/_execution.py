@@ -16,6 +16,12 @@ from sdk.tools import _normalize_tool_result, _prepare_tool_arguments
 from ._turn import StopRequestedError
 
 
+def _get_parallel_config():
+    """Lazy-load parallel config to avoid circular imports at module level."""
+    from config import load_config
+    return load_config().parallel
+
+
 class ToolLoopError(Exception):
     """Custom exception for errors in the tool loop."""
 
@@ -313,9 +319,31 @@ async def run_turn(
 
                 tool_names = [tc.function.name for tc in tool_calls]
                 logger.debug("Executing %d tool call(s) for '%s': %s", len(tool_calls), agent.name, tool_names)
-                for tc in tool_calls:
-                    result = await _run_tool_with_hooks(tc, tools, hooks)
-                    history.append(result)
+
+                parallel_cfg = _get_parallel_config()
+                if parallel_cfg.enabled and len(tool_calls) > 1:
+                    logger.info(
+                        "Running %d tool calls in parallel for '%s' (max_concurrent=%d)",
+                        len(tool_calls), agent.name, parallel_cfg.max_concurrent,
+                    )
+                    sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
+
+                    async def _run_parallel(tc_item):
+                        async with sem:
+                            return tc_item, await _run_tool_with_hooks(tc_item, tools, hooks)
+
+                    tasks = [asyncio.create_task(_run_parallel(tc)) for tc in tool_calls]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for result in results:
+                        if isinstance(result, Exception):
+                            logger.error("Parallel tool call failed: %s", result)
+                        else:
+                            _tc, tool_result = result
+                            history.append(tool_result)
+                else:
+                    for tc in tool_calls:
+                        result = await _run_tool_with_hooks(tc, tools, hooks)
+                        history.append(result)
 
             except StopRequestedError:
                 logger.info("Agent '%s' tool loop stopped by user request", agent.name)

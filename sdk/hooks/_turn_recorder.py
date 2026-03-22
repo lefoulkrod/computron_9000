@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -44,10 +45,11 @@ class TurnRecorderHook:
         self._started_at = datetime.now(UTC).isoformat()
         self._messages: list[MessageRecord] = []
         self._current_tool_calls: list[ToolCallRecord] = []
-        self._tool_start_time: float | None = None
+        self._tool_start_times: dict[str, float] = {}
         self._agent_chain: list[str] = [agent_name]
         self._total_tool_calls = 0
         self._applied_skill: str | None = None
+        self._lock = asyncio.Lock()
         self._last_content: str | None = None
         self._last_thinking: str | None = None
 
@@ -107,7 +109,11 @@ class TurnRecorderHook:
         self, tool_name: str | None, tool_arguments: dict[str, Any]
     ) -> str | None:
         """Record tool call start time."""
-        self._tool_start_time = time.monotonic()
+        # Use tool_name as key — safe for parallel since each tool call
+        # gets its own before/after pair even if names overlap (timing
+        # may be slightly off for duplicate names but won't crash)
+        key = f"{tool_name}_{id(tool_arguments)}"
+        self._tool_start_times[key] = time.monotonic()
         self._total_tool_calls += 1
         return None
 
@@ -115,10 +121,11 @@ class TurnRecorderHook:
         self, tool_name: str | None, tool_arguments: dict[str, Any], tool_result: str
     ) -> str:
         """Record tool result and duration, and detect skill application."""
+        key = f"{tool_name}_{id(tool_arguments)}"
         duration_ms = None
-        if self._tool_start_time is not None:
-            duration_ms = int((time.monotonic() - self._tool_start_time) * 1000)
-            self._tool_start_time = None
+        start = self._tool_start_times.pop(key, None)
+        if start is not None:
+            duration_ms = int((time.monotonic() - start) * 1000)
 
         # Track skill application
         if tool_name == "apply_skill" and "skill_name" in tool_arguments:

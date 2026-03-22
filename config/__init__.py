@@ -200,6 +200,13 @@ class SkillsConfig(BaseModel):
     single_conversation_extraction: bool = True
 
 
+class ParallelConfig(BaseModel):
+    """Configuration for parallel agent execution."""
+
+    enabled: bool = False
+    max_concurrent: int = 4
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -214,6 +221,7 @@ class AppConfig(BaseModel):
     vision: VisionConfig | None = None
     summary: SummaryConfig | None = None
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
+    parallel: ParallelConfig = Field(default_factory=ParallelConfig)
 
 
 logger = logging.getLogger(__name__)

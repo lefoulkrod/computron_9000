@@ -50,7 +50,7 @@ async def run_grounding(
     screenshot_bytes: bytes,
     task: str,
     *,
-    screenshot_filename: str = "grounding_screenshot.png",
+    screenshot_filename: str | None = None,
 ) -> GroundingResponse:
     """Send a screenshot to the UI-TARS grounding server and return an action.
 
@@ -67,6 +67,12 @@ async def run_grounding(
         RuntimeError: If the inference container is unreachable or the
             grounding server fails.
     """
+    if screenshot_filename is None:
+        from sdk.events import get_current_agent_id
+        agent_id = get_current_agent_id() or "default"
+        safe_id = agent_id.replace(".", "_")
+        screenshot_filename = f"grounding_{safe_id}.png"
+
     cfg = load_config()
     host_home = cfg.inference_container.home_dir
     container_name = cfg.inference_container.container_name
