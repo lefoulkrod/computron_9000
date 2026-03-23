@@ -1,0 +1,61 @@
+.contextBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.4em;
+  padding: 0.1em 0.45em;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.contextPie {
+  flex-shrink: 0;
+}
+
+.contextPieTrack {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  opacity: 0.2;
+}
+
+.contextPieFill {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.contextBadge_low {
+  background: rgba(76, 175, 80, 0.15);
+  color: #388e3c;
+}
+
+.contextBadge_medium {
+  background: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+}
+
+.contextBadge_high {
+  background: rgba(244, 67, 54, 0.15);
+  color: #c62828;
+}
+
+:global(.dark-theme) .contextBadge_low {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+}
+
+:global(.dark-theme) .contextBadge_medium {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+}
+
+:global(.dark-theme) .contextBadge_high {
+  background: rgba(244, 67, 54, 0.2);
+  color: #ef9a9a;
+}

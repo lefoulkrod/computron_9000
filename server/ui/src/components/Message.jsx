@@ -1,40 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import styles from './Message.module.css';
-import ChevronIcon from './icons/ChevronIcon.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
+import CollapsibleThinking from './CollapsibleThinking.jsx';
 import ToolCallsSummary from './ToolCallsSummary';
 import FileOutput from './FileOutput.jsx';
+import ContextUsageBadge from './ContextUsageBadge.jsx';
 import { formatAgentName } from './AgentCard.jsx';
 
-function ContextUsageBadge({ contextUsage }) {
-    if (!contextUsage || !contextUsage.context_limit) return null;
-    const pct = Math.round(contextUsage.fill_ratio * 100);
-    const level = pct >= 85 ? 'high' : pct >= 70 ? 'medium' : 'low';
-    // SVG donut: radius 5, circumference ≈ 31.4
-    const r = 5;
-    const circ = 2 * Math.PI * r;
-    const filled = Math.min(pct / 100, 1) * circ;
-    return (
-        <span
-            className={`${styles.contextBadge} ${styles[`contextBadge_${level}`]}`}
-            title={`Context: ${contextUsage.context_used.toLocaleString()} / ${contextUsage.context_limit.toLocaleString()} tokens (${pct}%)`}
-        >
-            <svg width="14" height="14" viewBox="0 0 14 14" className={styles.contextPie}>
-                <circle cx="7" cy="7" r={r} className={styles.contextPieTrack} />
-                <circle
-                    cx="7" cy="7" r={r}
-                    className={styles.contextPieFill}
-                    strokeDasharray={`${filled} ${circ}`}
-                    transform="rotate(-90 7 7)"
-                />
-            </svg>
-            {pct}%
-        </span>
-    );
-}
-
 function AssistantMessage({ content, thinking, images, placeholder, agent_name, depth = 0, data, contextUsage, onPreview, streaming }) {
-    const [thinkingExpanded, setThinkingExpanded] = useState(true);
     const bubbleRef = useRef(null);
     const displayName = formatAgentName(agent_name);
 
@@ -73,22 +46,7 @@ function AssistantMessage({ content, thinking, images, placeholder, agent_name, 
                     </div>
                 )}
                 {!placeholder && thinking && (
-                    <div
-                        className={`${styles.collapsibleThink} ${thinkingExpanded ? styles.expanded : ''}`}
-                    >
-                        <div
-                            className={styles.collapsibleThinkHeader}
-                            onClick={() => setThinkingExpanded((e) => !e)}
-                        >
-                            <span>{thinkingExpanded ? 'Hide thoughts' : 'Show thoughts'}</span>
-                            <ChevronIcon size={12} direction={thinkingExpanded ? 'up' : 'down'} />
-                        </div>
-                        {thinkingExpanded && (
-                            <div className={styles.collapsibleThinkContent}>
-                                <MarkdownContent streaming={streaming}>{thinking}</MarkdownContent>
-                            </div>
-                        )}
-                    </div>
+                    <CollapsibleThinking text={thinking} streaming={streaming} />
                 )}
                 {!placeholder && <MarkdownContent streaming={streaming}>{content}</MarkdownContent>}
                 {fileOutputs.length > 0 && (

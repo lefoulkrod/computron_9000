@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import PreviewShell from './PreviewShell.jsx';
+import { ExpandOverlay } from './PreviewShell.jsx';
 import styles from './FilePreview.module.css';
 import LockIcon from './icons/LockIcon.jsx';
 
@@ -82,37 +82,16 @@ export default function FilePreview({ item, onClose }) {
         };
     }, [iframeSrc]);
 
-    const icon = isHtml ? '\u{1F310}' : '\u{1F4C4}';
-
     return (
-        <PreviewShell
-            icon={icon}
-            title={filename}
-            onClose={onClose}
-            expandContent={
-                <FileOverlayContent
-                    iframeSrc={iframeSrc}
-                    text={text}
-                    isHtml={isHtml}
-                    isMarkdown={isMarkdown}
-                    filename={filename}
-                    path={path}
-                />
-            }
-        >
-            <div className={styles.content}>
-                {isHtml ? (
-                    <iframe className={styles.htmlFrame} src={iframeSrc} title={filename} />
-                ) : text == null ? (
-                    <div className={styles.statusText}>Loading...</div>
-                ) : isMarkdown ? (
-                    <div className={styles.markdownContent}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-                    </div>
-                ) : (
-                    <pre className={styles.plainText}>{text}</pre>
-                )}
-            </div>
-        </PreviewShell>
+        <ExpandOverlay onClose={onClose}>
+            <FileOverlayContent
+                iframeSrc={iframeSrc}
+                text={text}
+                isHtml={isHtml}
+                isMarkdown={isMarkdown}
+                filename={filename}
+                path={path}
+            />
+        </ExpandOverlay>
     );
 }

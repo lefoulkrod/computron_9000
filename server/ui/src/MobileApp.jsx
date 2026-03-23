@@ -60,7 +60,6 @@ export default function MobileApp({ dark, onToggleTheme }) {
             <div className={styles.messageArea}>
                 <ChatMessages
                     messages={messages}
-                    showSubAgents={true}
                 />
             </div>
             <div className={styles.inputBar}>

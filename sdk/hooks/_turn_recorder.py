@@ -48,7 +48,6 @@ class TurnRecorderHook:
         self._tool_start_times: dict[str, float] = {}
         self._agent_chain: list[str] = [agent_name]
         self._total_tool_calls = 0
-        self._applied_skill: str | None = None
         self._lock = asyncio.Lock()
         self._last_content: str | None = None
         self._last_thinking: str | None = None
@@ -174,7 +173,7 @@ class TurnRecorderHook:
                 total_tool_calls=self._total_tool_calls,
                 agent_chain=self._agent_chain,
                 duration_seconds=duration,
-                skill_applied=self._applied_skill,
+                skill_applied=None,
             ),
         )
 

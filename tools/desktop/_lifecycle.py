@@ -18,8 +18,9 @@ _STARTUP_TIMEOUT_S = 15
 _POLL_INTERVAL_S = 0.5
 
 # Display allocation for parallel desktop agents.
-_next_display_num: int | None = None  # lazily initialized from config
 _active_displays: dict[str, int] = {}  # agent_id → display number
+_free_displays: list[int] = []  # recycled display numbers available for reuse
+_next_display_num: int | None = None  # lazily initialized from config
 _display_lock = asyncio.Lock()
 
 def _notify_ui() -> None:
@@ -86,11 +87,10 @@ async def ensure_desktop_running() -> None:
     raise DesktopExecError(msg)
 
 
-def _build_start_desktop_cmd() -> str:
-    """Build the shell command to start the user's desktop environment."""
-    config = load_config()
-    display = config.desktop.user_display
-    resolution = config.desktop.resolution
+def _build_desktop_cmd(
+    display: str, resolution: str, vnc_port: int, ws_port: int,
+) -> str:
+    """Build the shell command to start a desktop environment on the given display."""
     return (
         "export DISPLAY=%s;"
         " Xvfb %s -screen 0 %sx24 -ac &"
@@ -101,10 +101,21 @@ def _build_start_desktop_cmd() -> str:
         " sleep 2;"
         " xset s off -dpms 2>/dev/null || true;"
         " xsetroot -cursor_name left_ptr 2>/dev/null || true;"
-        " x11vnc -display %s -forever -nopw -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg;"
-        " websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &"
+        " x11vnc -display %s -forever -nopw -listen 0.0.0.0 -rfbport %d -shared -cursor arrow -bg;"
+        " websockify --web /usr/share/novnc 0.0.0.0:%d localhost:%d &"
         " echo started"
-        % (display, display, resolution, display)
+        % (display, display, resolution, display, vnc_port, ws_port, vnc_port)
+    )
+
+
+def _build_start_desktop_cmd() -> str:
+    """Build the shell command to start the user's desktop environment."""
+    config = load_config()
+    return _build_desktop_cmd(
+        display=config.desktop.user_display,
+        resolution=config.desktop.resolution,
+        vnc_port=5900,
+        ws_port=6080,
     )
 
 
@@ -150,12 +161,12 @@ async def stop_desktop() -> None:
         raise
 
 
-async def allocate_display(agent_id: str) -> str:
+async def allocate_display(agent_id: str) -> tuple[str, int]:
     """Allocate a virtual display for a desktop agent and set the ContextVar.
 
-    Returns the display string (e.g. ``":100"``).  The ContextVar is set so
-    that all subsequent ``_run_desktop_cmd`` calls in this async context
-    automatically use the allocated display.
+    Returns ``(display_str, display_num)`` — e.g. ``(":100", 100)``.
+    The ContextVar is set so that all subsequent ``_run_desktop_cmd`` calls
+    in this async context automatically use the allocated display.
     """
     global _next_display_num
     config = load_config()
@@ -164,26 +175,31 @@ async def allocate_display(agent_id: str) -> str:
         if agent_id in _active_displays:
             display_num = _active_displays[agent_id]
         else:
-            if _next_display_num is None:
-                _next_display_num = config.desktop.agent_display_base
-            display_num = _next_display_num
-            _next_display_num += 1
+            if _free_displays:
+                display_num = _free_displays.pop()
+            else:
+                if _next_display_num is None:
+                    _next_display_num = config.desktop.agent_display_base
+                display_num = _next_display_num
+                _next_display_num += 1
             _active_displays[agent_id] = display_num
 
     display = ":%d" % display_num
     _current_display.set(display)
     logger.info("Allocated display %s for agent '%s'", display, agent_id)
-    return display
+    return display, display_num
 
 
 async def release_display(agent_id: str) -> None:
     """Release the virtual display allocated to an agent.
 
     Stops the Xvfb and related processes for that display, then removes
-    the allocation.
+    the allocation and returns the display number to the free pool.
     """
     async with _display_lock:
         display_num = _active_displays.pop(agent_id, None)
+        if display_num is not None:
+            _free_displays.append(display_num)
     if display_num is None:
         return
 
@@ -206,48 +222,38 @@ async def release_display(agent_id: str) -> None:
 async def start_agent_desktop(agent_id: str) -> str:
     """Allocate a display and start a full desktop environment on it.
 
-    Returns the display string.
+    Returns the display string.  On failure the allocated display is
+    released so the number can be recycled.
     """
-    display = await allocate_display(agent_id)
+    display, display_num = await allocate_display(agent_id)
     config = load_config()
-    display_num = _active_displays[agent_id]
     vnc_port = 5900 + (display_num - 99)
     ws_port = config.desktop.websocket_port + (display_num - 99)
 
-    start_cmd = (
-        "export DISPLAY=%s;"
-        " Xvfb %s -screen 0 %sx24 -ac &"
-        " sleep 1;"
-        " eval $(dbus-launch --sh-syntax);"
-        " export GTK_MODULES=gail:atk-bridge ACCESSIBILITY_ENABLED=1;"
-        " startxfce4 &"
-        " sleep 2;"
-        " xset s off -dpms 2>/dev/null || true;"
-        " xsetroot -cursor_name left_ptr 2>/dev/null || true;"
-        " x11vnc -display %s -forever -nopw -listen 0.0.0.0 -rfbport %d -shared -cursor arrow -bg;"
-        " websockify --web /usr/share/novnc 0.0.0.0:%d localhost:%d &"
-        " echo started"
-        % (display, display, config.desktop.resolution, display, vnc_port, ws_port, vnc_port)
-    )
+    try:
+        start_cmd = _build_desktop_cmd(display, config.desktop.resolution, vnc_port, ws_port)
+        await _run_desktop_cmd(start_cmd, display=display, user="root")
 
-    await _run_desktop_cmd(start_cmd, display=display, user="root")
+        # Poll until ready
+        elapsed = 0.0
+        while elapsed < _STARTUP_TIMEOUT_S:
+            await asyncio.sleep(_POLL_INTERVAL_S)
+            elapsed += _POLL_INTERVAL_S
+            try:
+                output = await _run_desktop_cmd(
+                    "pgrep -f 'Xvfb %s' > /dev/null && echo ok || true" % display,
+                    display=display,
+                )
+                if output.strip().endswith("ok"):
+                    logger.info("Agent desktop %s ready after %.1fs", display, elapsed)
+                    return display
+            except DesktopExecError:
+                pass
 
-    # Poll until ready
-    elapsed = 0.0
-    while elapsed < _STARTUP_TIMEOUT_S:
-        await asyncio.sleep(_POLL_INTERVAL_S)
-        elapsed += _POLL_INTERVAL_S
-        try:
-            output = await _run_desktop_cmd(
-                "pgrep -f 'Xvfb %s' > /dev/null && echo ok || true" % display,
-                display=display,
-            )
-            if output.strip().endswith("ok"):
-                logger.info("Agent desktop %s ready after %.1fs", display, elapsed)
-                return display
-        except DesktopExecError:
-            pass
-
-    raise DesktopExecError(
-        "Agent desktop %s did not start within %ds" % (display, _STARTUP_TIMEOUT_S)
-    )
+        raise DesktopExecError(
+            "Agent desktop %s did not start within %ds" % (display, _STARTUP_TIMEOUT_S)
+        )
+    except Exception:
+        # Clean up the allocated display on any failure
+        await release_display(agent_id)
+        raise

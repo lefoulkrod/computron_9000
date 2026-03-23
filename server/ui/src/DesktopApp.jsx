@@ -133,27 +133,18 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 });
             }
         },
-        // Sub-agent streaming content/thinking
+        // Sub-agent streaming content/thinking — single dispatch per flush
         onAgentContent: ({ agentId, content, thinking }) => {
-            if (content) {
-                agentDispatch({
-                    type: 'APPEND_ACTIVITY',
-                    agentId,
-                    entry: { type: 'content', content, timestamp: Date.now() },
-                });
-                agentDispatch({ type: 'UPDATE_CONTENT_SNIPPET', agentId, content });
-            }
-            if (thinking) {
-                agentDispatch({
-                    type: 'APPEND_ACTIVITY',
-                    agentId,
-                    entry: { type: 'thinking', thinking, timestamp: Date.now() },
-                });
-            }
+            agentDispatch({
+                type: 'APPEND_STREAM_CHUNK',
+                agentId,
+                content: content || null,
+                thinking: thinking || null,
+            });
         },
-        // Agent context usage (iteration info)
-        onAgentContextUsage: ({ agentId, iteration, maxIterations }) => {
-            agentDispatch({ type: 'UPDATE_ITERATION', agentId, iteration, maxIterations });
+        // Agent context usage (iteration + context window fill)
+        onAgentContextUsage: ({ agentId, iteration, maxIterations, contextUsage }) => {
+            agentDispatch({ type: 'UPDATE_ITERATION', agentId, iteration, maxIterations, contextUsage });
         },
         // Agent file output
         onAgentFileOutput: ({ agentId, ...fileEvent }) => {
@@ -309,7 +300,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 <div className={styles.mainContent}>
                     {selectedAgent ? (
                         /* Expanded agent activity view */
-                        <AgentActivityView onNudge={(text) => handleSend(text, null, null)} />
+                        <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
                     ) : hasSubAgentNodes ? (
                         /* Network overview + chat */
                         <div className={styles.networkWithChat}>
@@ -360,6 +351,11 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     )}
                 </div>
             </div>
+
+            {/* Desktop overlay — shown in network/agent views (simple chat uses inline panel) */}
+            {showDesktop && (hasSubAgentNodes || selectedAgent) && (
+                <DesktopPreview visible={true} onClose={() => setClosedPanels(_closePanel('desktop'))} overlay />
+            )}
 
             {/* File preview overlay — available in all layouts */}
             {filePreview && (

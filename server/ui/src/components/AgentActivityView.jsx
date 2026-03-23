@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
+import useAutoScroll from '../hooks/useAutoScroll.js';
 import { formatAgentName } from './AgentCard.jsx';
 import { formatElapsed } from '../utils/agentUtils.js';
-import ChevronIcon from './icons/ChevronIcon.jsx';
+import ContextUsageBadge from './ContextUsageBadge.jsx';
+import CollapsibleThinking from './CollapsibleThinking.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
 import FileOutput from './FileOutput.jsx';
 import BrowserPreview from './BrowserPreview.jsx';
@@ -24,29 +26,9 @@ function _buildBreadcrumb(agents, agentId) {
     return trail;
 }
 
-/**
- * Render a single activity log entry.
- */
-function ThinkingEntry({ text }) {
-    const [expanded, setExpanded] = useState(true);
-    return (
-        <div className={`${styles.thinkBlock} ${expanded ? styles.thinkExpanded : ''}`}>
-            <div className={styles.thinkHeader} onClick={() => setExpanded((e) => !e)}>
-                <span>{expanded ? 'Hide thoughts' : 'Show thoughts'}</span>
-                <ChevronIcon size={12} direction={expanded ? 'up' : 'down'} />
-            </div>
-            {expanded && (
-                <div className={styles.thinkBody}>
-                    <MarkdownContent>{text}</MarkdownContent>
-                </div>
-            )}
-        </div>
-    );
-}
-
-function ActivityEntry({ entry }) {
+function ActivityEntry({ entry, onPreview }) {
     if (entry.type === 'thinking') {
-        return <ThinkingEntry text={entry.thinking} />;
+        return <CollapsibleThinking text={entry.thinking} compact />;
     }
 
     if (entry.type === 'content') {
@@ -69,27 +51,26 @@ function ActivityEntry({ entry }) {
     }
 
     if (entry.type === 'file_output') {
-        return (
-            <FileOutput item={entry} />
-        );
+        return null; // rendered in the preview pane instead
     }
 
     return null;
 }
 
-export default function AgentActivityView({ onNudge }) {
+export default function AgentActivityView({ onNudge, onPreview }) {
     const { agents, selectedAgentId } = useAgentState();
     const dispatch = useAgentDispatch();
-    const scrollRef = useRef(null);
-
     const agent = selectedAgentId ? agents[selectedAgentId] : null;
 
-    // Auto-scroll when agent is running
+    const { ref: scrollRef, onScroll: handleScroll, resetScroll } = useAutoScroll(
+        [agent?.activityLog?.length, agent?.status],
+        agent?.status === 'running',
+    );
+
+    // Reset scroll lock when switching agents
     useEffect(() => {
-        if (agent?.status === 'running' && scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [agent?.activityLog?.length, agent?.status]);
+        resetScroll();
+    }, [selectedAgentId, resetScroll]);
 
     if (!agent) return null;
 
@@ -123,13 +104,15 @@ export default function AgentActivityView({ onNudge }) {
                     <span className={styles.title}>{formatAgentName(agent.name)}</span>
                     <div className={styles.meta}>
                         {agent.startedAt && <span>{formatElapsed(agent.startedAt)}</span>}
-                        {agent.iteration !== null && agent.maxIterations > 0 && (
-                            <span>iter {agent.iteration}/{agent.maxIterations}</span>
+                        {agent.iteration !== null && (
+                            <span>
+                                iter {agent.iteration}{agent.maxIterations ? `/${agent.maxIterations}` : ''}
+                            </span>
                         )}
+                        <ContextUsageBadge contextUsage={agent.contextUsage} />
                         {agent.childIds.length > 0 && (
                             <span>{agent.childIds.length} sub-agent{agent.childIds.length !== 1 ? 's' : ''}</span>
                         )}
-                        {agent.activeTool && <span>{agent.activeTool}</span>}
                     </div>
                 </div>
             </div>
@@ -137,15 +120,15 @@ export default function AgentActivityView({ onNudge }) {
             {/* Two-pane body */}
             <div className={styles.body}>
                 {/* Activity stream */}
-                <div className={styles.activity} ref={scrollRef}>
+                <div className={styles.activity} ref={scrollRef} onScroll={handleScroll}>
                     {agent.instruction && (
                         <div className={styles.instruction}>
                             <span className={styles.instructionLabel}>Instruction</span>
-                            {agent.instruction}
+                            <MarkdownContent>{agent.instruction}</MarkdownContent>
                         </div>
                     )}
                     {agent.activityLog.map((entry, i) => (
-                        <ActivityEntry key={i} entry={entry} />
+                        <ActivityEntry key={i} entry={entry} onPreview={onPreview} />
                     ))}
                     {agent.status === 'running' && (
                         <span className={styles.cursor} />
@@ -157,24 +140,27 @@ export default function AgentActivityView({ onNudge }) {
                     {agent.browserSnapshot && (
                         <BrowserPreview
                             snapshot={agent.browserSnapshot}
-                            onClose={() => {}}
                         />
                     )}
                     {agent.terminalLines.length > 0 && (
                         <TerminalPanel
                             lines={agent.terminalLines}
-                            onClose={() => {}}
                         />
                     )}
                     {agent.desktopActive && (
-                        <DesktopPreview visible={true} onClose={() => {}} />
+                        <DesktopPreview visible={true} />
                     )}
                     {agent.generationPreview && (
                         <GenerationPreview
                             preview={agent.generationPreview}
-                            onClose={() => {}}
                         />
                     )}
+                    {agent.activityLog
+                        .filter((e) => e.type === 'file_output')
+                        .map((entry, i) => (
+                            <FileOutput key={`file-${i}`} item={entry} onPreview={onPreview} />
+                        ))
+                    }
                 </div>
             </div>
 

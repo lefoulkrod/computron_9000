@@ -12,7 +12,7 @@ const DesktopIcon = () => (
   </svg>
 );
 
-export default function Header({ dark, onToggleTheme, onNewConversation, audio, muted, onToggleMute, onAudioEnded, compact, onOpenSettings, onOpenDesktop }) {
+export default function Header({ dark, onToggleTheme, onNewConversation, audio, muted, onToggleMute, onAudioEnded, onOpenDesktop }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -60,16 +60,6 @@ export default function Header({ dark, onToggleTheme, onNewConversation, audio, 
           >
             <PlusIcon />
           </button>
-          {compact && onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              className={styles.iconButton}
-              aria-label="Settings"
-              title="Settings"
-            >
-              <i className="bi bi-gear" style={{ fontSize: '14px' }} />
-            </button>
-          )}
         </div>
       </div>
     </div>

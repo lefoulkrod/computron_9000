@@ -17,12 +17,16 @@ from sdk.events._models import (
 logger = logging.getLogger(__name__)
 
 
+_MAX_TERMINAL_EVENTS_PER_AGENT = 50
+
+
 class AgentEventBufferHook:
     """Buffers structural agent events during a turn for persistence.
 
     Subscribes to the event dispatcher and captures lifecycle events,
     browser screenshots, terminal output, and file outputs. Only keeps
-    the last screenshot per agent to limit size.
+    the last screenshot per agent to limit size, and caps terminal
+    events per agent.
 
     The buffered events are retrieved via ``get_events()`` at turn end
     and passed to the persistence layer.
@@ -31,6 +35,7 @@ class AgentEventBufferHook:
     def __init__(self) -> None:
         self._events: list[dict[str, Any]] = []
         self._last_screenshots: dict[str, dict[str, Any]] = {}
+        self._terminal_counts: dict[str, int] = {}
 
     def handle_event(self, event: AssistantResponse) -> None:
         """Called by the dispatcher for every published event."""
@@ -71,17 +76,20 @@ class AgentEventBufferHook:
             }
 
         elif isinstance(payload, TerminalOutputPayload) and agent_id:
-            self._events.append({
-                "type": "terminal_output",
-                "agent_id": agent_id,
-                "cmd_id": payload.cmd_id,
-                "cmd": payload.cmd,
-                "status": payload.status,
-                "stdout": payload.stdout,
-                "stderr": payload.stderr,
-                "exit_code": payload.exit_code,
-                "timestamp": event.timestamp.isoformat(),
-            })
+            count = self._terminal_counts.get(agent_id, 0)
+            if count < _MAX_TERMINAL_EVENTS_PER_AGENT:
+                self._events.append({
+                    "type": "terminal_output",
+                    "agent_id": agent_id,
+                    "cmd_id": payload.cmd_id,
+                    "cmd": payload.cmd,
+                    "status": payload.status,
+                    "stdout": payload.stdout,
+                    "stderr": payload.stderr,
+                    "exit_code": payload.exit_code,
+                    "timestamp": event.timestamp.isoformat(),
+                })
+                self._terminal_counts[agent_id] = count + 1
 
         elif isinstance(payload, FileOutputPayload) and agent_id:
             self._events.append({

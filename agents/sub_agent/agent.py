@@ -114,7 +114,7 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
         options=model_options.to_options() if model_options else {},
         max_iterations=effective_max_iterations,
     )
-    with agent_span(agent_name):
+    with agent_span(agent_name, instruction=instructions):
         history = ConversationHistory([
             {"role": "system", "content": agent.instruction},
             {"role": "user", "content": instructions},

@@ -122,9 +122,8 @@
     border-right: 1px solid var(--button);
 }
 .chatArea {
-    width: 28%;
+    width: 40%;
     min-width: 320px;
-    max-width: 480px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -148,8 +147,8 @@
     overflow: hidden;
 }
 .simpleChat.withPanels .previewColumn {
-    flex: 0 0 45%;
-    max-width: 45%;
+    flex: 0 0 60%;
+    max-width: 60%;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;

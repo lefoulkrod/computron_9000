@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import AgentCard from './AgentCard.jsx';
 import { useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
 import styles from './AgentNetwork.module.css';
@@ -71,11 +71,19 @@ export default function AgentNetwork() {
         dispatch({ type: 'SELECT_AGENT', agentId });
     }, [dispatch]);
 
-    // Redraw connectors on layout changes
+    // Topology fingerprint — only changes when agents are added/removed or re-parented
+    const topoKey = useMemo(() => {
+        return Object.values(agents)
+            .map((a) => `${a.id}:${a.parentId || ''}`)
+            .sort()
+            .join('|');
+    }, [agents]);
+
+    // Redraw connectors only on topology or resize changes
     useEffect(() => {
         if (!containerRef.current || !svgRef.current) return;
         _drawConnectors(containerRef.current, svgRef.current, agents);
-    }, [agents, tick]);
+    }, [topoKey, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Observe resize to redraw connectors
     useEffect(() => {
@@ -85,16 +93,18 @@ export default function AgentNetwork() {
         return () => observer.disconnect();
     }, []);
 
-    // Build per-root trees for layout
-    const trees = _buildTrees(agents);
-    const agentList = Object.values(agents);
-    let runningCount = 0, completeCount = 0, errorCount = 0;
-    for (const a of agentList) {
-        if (a.status === 'running') runningCount++;
-        else if (a.status === 'success') completeCount++;
-        else if (a.status === 'error') errorCount++;
-    }
-    const agentCount = agentList.length;
+    // Build per-root trees for layout (memoized on topology)
+    const trees = useMemo(() => _buildTrees(agents), [topoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    const { agentCount, runningCount, completeCount, errorCount } = useMemo(() => {
+        const list = Object.values(agents);
+        let running = 0, complete = 0, error = 0;
+        for (const a of list) {
+            if (a.status === 'running') running++;
+            else if (a.status === 'success') complete++;
+            else if (a.status === 'error') error++;
+        }
+        return { agentCount: list.length, runningCount: running, completeCount: complete, errorCount: error };
+    }, [agents]);
 
     // Update elapsed time every second for running agents
     useEffect(() => {

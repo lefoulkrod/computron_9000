@@ -89,10 +89,6 @@ function _handleStreamEvent(data, callbacks) {
         callbacks.onGenerationPreview({ ...data.event, agentId });
     }
 
-    if (type === 'skill_applied') {
-        if (callbacks.onSkillApplied) callbacks.onSkillApplied(data.event);
-    }
-
     if (type === 'file_output') {
         if (callbacks.onAgentFileOutput) {
             callbacks.onAgentFileOutput({ ...data.event, agentId });
@@ -107,6 +103,11 @@ function _handleStreamEvent(data, callbacks) {
                 agentId,
                 iteration: data.event.iteration || null,
                 maxIterations: data.event.max_iterations || null,
+                contextUsage: {
+                    context_used: data.event.context_used,
+                    context_limit: data.event.context_limit,
+                    fill_ratio: data.event.fill_ratio,
+                },
             });
         }
     }
@@ -203,12 +204,13 @@ export default function useStreamingChat(callbacks) {
         setMessages((prev) => [
             ...prev,
             userMsg,
-            { id: placeholderId, role: 'assistant', placeholder: true, tempId: placeholderId },
+            { id: placeholderId, role: 'assistant', placeholder: true },
         ]);
 
         const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
 
         let rafId = null;
+        let agentRafId = null;
         try {
             const controller = new AbortController();
             abortControllerRef.current = controller;
@@ -241,7 +243,7 @@ export default function useStreamingChat(callbacks) {
                 setMessages((prev) => {
                     const updated = [...prev];
                     let idx = updated.findIndex(
-                        (m) => m.role === 'assistant' && (m.id === currentAssistantId || m.tempId === currentAssistantId)
+                        (m) => m.role === 'assistant' && (m.id === currentAssistantId)
                     );
                     if (idx === -1) {
                         updated.push({
@@ -252,7 +254,7 @@ export default function useStreamingChat(callbacks) {
                     } else {
                         updated[idx] = {
                             ...updated[idx], placeholder: false,
-                            tempId: undefined, streaming: true, ...init,
+                            streaming: true, ...init,
                         };
                     }
                     return updated;
@@ -264,6 +266,34 @@ export default function useStreamingChat(callbacks) {
             let pendingContent = '';
             let pendingThinking = '';
 
+            // Per-agent buffers for sub-agent tokens (same idea as root buffering)
+            const agentPending = {};  // { [agentId]: { content: '', thinking: '' } }
+
+            const flushAgentBuffers = () => {
+                agentRafId = null;
+                for (const [aid, buf] of Object.entries(agentPending)) {
+                    if (!buf.content && !buf.thinking) continue;
+                    if (callbacks.onAgentContent) {
+                        callbacks.onAgentContent({
+                            agentId: aid,
+                            content: buf.content || null,
+                            thinking: buf.thinking || null,
+                        });
+                    }
+                    buf.content = '';
+                    buf.thinking = '';
+                }
+            };
+
+            const bufferAgentToken = (agentId, content, thinking) => {
+                if (!agentPending[agentId]) agentPending[agentId] = { content: '', thinking: '' };
+                if (content) agentPending[agentId].content += content;
+                if (thinking) agentPending[agentId].thinking += thinking;
+                if (agentRafId === null) {
+                    agentRafId = requestAnimationFrame(flushAgentBuffers);
+                }
+            };
+
             const flushStreamBuffer = () => {
                 rafId = null;
                 if (!pendingContent && !pendingThinking) return;
@@ -274,14 +304,13 @@ export default function useStreamingChat(callbacks) {
                 setMessages((prev) => {
                     const updated = [...prev];
                     const i = updated.findIndex(
-                        (m) => m.role === 'assistant' && (m.id === currentAssistantId || m.tempId === currentAssistantId)
+                        (m) => m.role === 'assistant' && (m.id === currentAssistantId)
                     );
                     if (i === -1) return prev;
                     const next = { ...updated[i] };
                     // Clear placeholder so content renders during streaming
                     if (next.placeholder) {
                         next.placeholder = false;
-                        next.tempId = undefined;
                         next.streaming = true;
                     }
                     if (currentAgentName) next.agent_name = currentAgentName;
@@ -371,13 +400,13 @@ export default function useStreamingChat(callbacks) {
                         if (data.delta && !dataField && !toolCallEvent && !fileOutputEvent
                             && !contextUsageEvent && data.final !== true) {
                             if (depth > 0 && data.agent_id) {
-                                // Route sub-agent tokens to agent state
-                                if (callbacks.onAgentContent && (hasResponse || hasThinking)) {
-                                    callbacks.onAgentContent({
-                                        agentId: data.agent_id,
-                                        content: hasResponse ? contentField : null,
-                                        thinking: hasThinking ? data.thinking : null,
-                                    });
+                                // Buffer sub-agent tokens and flush per frame
+                                if (hasResponse || hasThinking) {
+                                    bufferAgentToken(
+                                        data.agent_id,
+                                        hasResponse ? contentField : null,
+                                        hasThinking ? data.thinking : null,
+                                    );
                                 }
                                 continue;
                             }
@@ -392,16 +421,16 @@ export default function useStreamingChat(callbacks) {
                             continue;
                         }
 
-                        // ── Non-streaming events ──────────────────────────
+                        // ── Non-streaming sub-agent events ────────────────
                         // Tool calls, context usage, screenshots, final marker.
-                        // Sub-agent non-streaming content also routes to agent state.
-                        if (depth > 0 && data.agent_id && !data.final) {
-                            if ((hasResponse || hasThinking) && callbacks.onAgentContent) {
-                                callbacks.onAgentContent({
-                                    agentId: data.agent_id,
-                                    content: hasResponse ? contentField : null,
-                                    thinking: hasThinking ? data.thinking : null,
-                                });
+                        // Sub-agent content routes to agent state via buffer.
+                        if (depth > 0 && data.agent_id) {
+                            if (hasResponse || hasThinking) {
+                                bufferAgentToken(
+                                    data.agent_id,
+                                    hasResponse ? contentField : null,
+                                    hasThinking ? data.thinking : null,
+                                );
                             }
                             continue;
                         }
@@ -487,6 +516,7 @@ export default function useStreamingChat(callbacks) {
             }
             // Stream ended — flush any remaining buffered tokens
             flushStreamBuffer();
+            flushAgentBuffers();
         } catch (err) {
             if (rafId !== null) cancelAnimationFrame(rafId);
             if (err.name === 'AbortError') return;
@@ -494,7 +524,7 @@ export default function useStreamingChat(callbacks) {
             setMessages((prev) => {
                 const updated = [...prev];
                 const pIndex = updated.findIndex(
-                    (m) => m.role === 'assistant' && (m.id === placeholderId || m.tempId === placeholderId || m.placeholder)
+                    (m) => m.role === 'assistant' && (m.id === placeholderId || m.placeholder)
                 );
                 const errorMsg = {
                     id: placeholderId, role: 'assistant',
@@ -508,6 +538,7 @@ export default function useStreamingChat(callbacks) {
                 return [...prev, errorMsg];
             });
         } finally {
+            if (agentRafId !== null) cancelAnimationFrame(agentRafId);
             abortControllerRef.current = null;
             setIsStreaming(false);
         }

@@ -246,6 +246,7 @@ async def run_turn(
         if fn:
             fn(agent.name)
 
+    parallel_cfg = _get_parallel_config()
     final_content: str | None = None
     iteration = 0
     try:
@@ -320,7 +321,6 @@ async def run_turn(
                 tool_names = [tc.function.name for tc in tool_calls]
                 logger.debug("Executing %d tool call(s) for '%s': %s", len(tool_calls), agent.name, tool_names)
 
-                parallel_cfg = _get_parallel_config()
                 if parallel_cfg.enabled and len(tool_calls) > 1:
                     logger.info(
                         "Running %d tool calls in parallel for '%s' (max_concurrent=%d)",
@@ -334,9 +334,15 @@ async def run_turn(
 
                     tasks = [asyncio.create_task(_run_parallel(tc)) for tc in tool_calls]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for result in results:
+                    for tc, result in zip(tool_calls, results):
                         if isinstance(result, Exception):
                             logger.error("Parallel tool call failed: %s", result)
+                            history.append({
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "name": tc.function.name,
+                                "content": "Error: %s" % result,
+                            })
                         else:
                             _tc, tool_result = result
                             history.append(tool_result)

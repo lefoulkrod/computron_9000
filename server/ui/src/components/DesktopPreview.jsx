@@ -78,14 +78,26 @@ function DesktopLightbox({ interactive, onToggle, onClose }) {
     );
 }
 
-export default function DesktopPreview({ visible, onClose }) {
+export default function DesktopPreview({ visible, onClose, overlay }) {
     const [interactive, setInteractive] = useState(false);
     const [expanded, setExpanded] = useState(false);
 
     if (!visible) return null;
 
-    const vncUrl = _buildVncUrl(interactive);
     const toggle = () => setInteractive((v) => !v);
+
+    // Overlay mode: render lightbox directly (used from header button in network/agent views)
+    if (overlay) {
+        return (
+            <DesktopLightbox
+                interactive={interactive}
+                onToggle={toggle}
+                onClose={onClose}
+            />
+        );
+    }
+
+    const vncUrl = _buildVncUrl(interactive);
 
     return (
         <>

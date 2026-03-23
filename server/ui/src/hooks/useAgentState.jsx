@@ -27,10 +27,10 @@ function _makeAgent(id, name, parentId, instruction, startedAt) {
         terminalLines: [],
         desktopActive: false,
         generationPreview: null,
-        lastContent: '',
         activeTool: null,
         iteration: null,
         maxIterations: null,
+        contextUsage: null,
     };
 }
 
@@ -68,6 +68,37 @@ function _agentReducer(state, action) {
                 agents: {
                     ...state.agents,
                     [agentId]: { ...agent, status, activeTool: null },
+                },
+            };
+        }
+
+        case 'APPEND_STREAM_CHUNK': {
+            // Merge content and thinking into their respective last entries
+            // in a single state update. This avoids interleaving fragments.
+            const { agentId, content, thinking } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            let log = [...agent.activityLog];
+
+            const mergeOrAppend = (type, key, text) => {
+                if (!text) return;
+                const lastIdx = log.length - 1;
+                if (lastIdx >= 0 && log[lastIdx].type === type) {
+                    log[lastIdx] = { ...log[lastIdx], [key]: (log[lastIdx][key] || '') + text };
+                } else {
+                    log.push({ type, [key]: text, timestamp: Date.now() });
+                }
+            };
+
+            // Thinking first, then content — matches the model's output order
+            mergeOrAppend('thinking', 'thinking', thinking);
+            mergeOrAppend('content', 'content', content);
+
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: { ...agent, activityLog: log },
                 },
             };
         }
@@ -157,20 +188,6 @@ function _agentReducer(state, action) {
             };
         }
 
-        case 'UPDATE_CONTENT_SNIPPET': {
-            const { agentId, content } = action;
-            const agent = state.agents[agentId];
-            if (!agent) return state;
-            const snippet = content.length > 80 ? content.slice(-80) : content;
-            return {
-                ...state,
-                agents: {
-                    ...state.agents,
-                    [agentId]: { ...agent, lastContent: snippet },
-                },
-            };
-        }
-
         case 'UPDATE_ACTIVE_TOOL': {
             const { agentId, toolName } = action;
             const agent = state.agents[agentId];
@@ -185,14 +202,14 @@ function _agentReducer(state, action) {
         }
 
         case 'UPDATE_ITERATION': {
-            const { agentId, iteration, maxIterations } = action;
+            const { agentId, iteration, maxIterations, contextUsage } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
             return {
                 ...state,
                 agents: {
                     ...state.agents,
-                    [agentId]: { ...agent, iteration, maxIterations },
+                    [agentId]: { ...agent, iteration, maxIterations, contextUsage },
                 },
             };
         }

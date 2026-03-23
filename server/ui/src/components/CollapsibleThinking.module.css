@@ -1,0 +1,50 @@
+.block {
+    margin: 0;
+    border-left: 2px solid var(--button);
+    padding-left: 0.75em;
+}
+
+.header {
+    cursor: pointer;
+    padding: 0.2em 0;
+    color: var(--text);
+    opacity: 0.45;
+    font-size: 0.8em;
+    font-weight: 500;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
+    transition: opacity 0.15s;
+}
+.header:hover {
+    opacity: 0.7;
+}
+.header > svg {
+    margin-left: 0;
+}
+
+.body {
+    padding: 0.2em 0 0;
+    opacity: 0.65;
+    font-size: 0.92em;
+}
+.body :last-child {
+    margin-bottom: 0;
+}
+
+/* Expanded state — body is hidden by default via conditional render,
+   but keep class for any future CSS transitions */
+.expanded {}
+
+/* Compact variant — smaller and more subdued for activity view */
+.compact .header {
+    opacity: 0.4;
+    font-size: 0.72em;
+}
+
+.compact .body {
+    opacity: 0.5;
+    font-size: 0.78em;
+    line-height: 1.4;
+}

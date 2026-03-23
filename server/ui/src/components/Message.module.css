@@ -1,5 +1,5 @@
 .message {
-  margin-bottom: 1.125rem;
+  margin-bottom: 0.25rem;
   display: flex;
 }
 
@@ -15,9 +15,9 @@
   background: var(--primary);
   color: var(--text);
   margin-right: auto;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   border: none;
-  border-bottom: 1px solid var(--secondary);
+  border-bottom: none;
   border-radius: 0;
   width: 100%;
   max-width: 100%;
@@ -27,7 +27,7 @@
   background: var(--secondary);
   color: var(--text);
   margin-left: auto;
-  padding: 0.75rem 1rem;
+  padding: 0.3rem 0.6rem;
   border: 1px solid var(--button);
 }
 
@@ -154,52 +154,9 @@
 }
 
 
-.collapsibleThink {
-  margin: 0;
-  border-left: 2px solid var(--button);
-  padding-left: 0.75em;
-}
-
-.collapsibleThinkHeader {
-  cursor: pointer;
-  padding: 0.2em 0;
-  color: var(--text);
-  opacity: 0.45;
-  font-size: 0.8em;
-  font-weight: 500;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  gap: 0.35em;
-  transition: opacity 0.15s;
-}
-
-.collapsibleThinkHeader:hover {
-  opacity: 0.7;
-}
-
-.collapsibleThinkHeader>svg {
-  margin-left: 0;
-}
-
-.collapsibleThinkContent {
-  padding: 0.2em 0 0;
-  display: none;
-  opacity: 0.65;
-  font-size: 0.92em;
-}
-
-.collapsibleThinkContent :last-child {
-  margin-bottom: 0;
-}
-
-.expanded .collapsibleThinkContent {
-  display: block;
-}
-
 
 .messageHeader {
-  margin-bottom: 0.75em;
+  margin-bottom: 0.35em;
   font-size: 0.9em;
   font-family: var(--font-mono);
   color: rgba(0, 0, 0, 0.45);
@@ -217,68 +174,6 @@
 
 :global(.dark-theme) .agentLabel {
   color: rgba(255, 255, 255, 0.75);
-}
-
-.contextBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  margin-left: 0.5em;
-  padding: 0.1em 0.45em;
-  border-radius: 4px;
-  font-size: 0.8em;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.4;
-  vertical-align: middle;
-}
-
-.contextPie {
-  flex-shrink: 0;
-}
-
-.contextPieTrack {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.5;
-  opacity: 0.2;
-}
-
-.contextPieFill {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-}
-
-.contextBadge_low {
-  background: rgba(76, 175, 80, 0.15);
-  color: #388e3c;
-}
-
-.contextBadge_medium {
-  background: rgba(255, 152, 0, 0.15);
-  color: #e65100;
-}
-
-.contextBadge_high {
-  background: rgba(244, 67, 54, 0.15);
-  color: #c62828;
-}
-
-:global(.dark-theme) .contextBadge_low {
-  background: rgba(76, 175, 80, 0.2);
-  color: #81c784;
-}
-
-:global(.dark-theme) .contextBadge_medium {
-  background: rgba(255, 152, 0, 0.2);
-  color: #ffb74d;
-}
-
-:global(.dark-theme) .contextBadge_high {
-  background: rgba(244, 67, 54, 0.2);
-  color: #ef9a9a;
 }
 
 
