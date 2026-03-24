@@ -2,43 +2,61 @@ import { createContext, useContext, useReducer } from 'react';
 import { mergeTerminalEvent } from '../utils/agentUtils.js';
 
 /**
- * Initial state for the agent tree.
+ * State for the agent tree. This powers the network graph and agent
+ * detail views. Each agent gets its own node with activity log,
+ * browser screenshots, terminal output, etc.
+ *
+ * Data arrives here via:
+ *   backend stream → useStreamingChat → DesktopApp callbacks → dispatch
+ *
+ * The tree builds up as agent_started events arrive and updates as
+ * content tokens, tool calls, and screenshots flow in.
  */
 const _INITIAL_STATE = {
-    agents: {},
-    rootId: null,
-    selectedAgentId: null,
+    agents: {},             // all agent nodes, keyed by ID
+    rootId: null,           // the top-level agent
+    selectedAgentId: null,  // which card the user clicked into
 };
 
 /**
- * Create a fresh agent node.
+ * Create a fresh agent node with all the data an agent card or
+ * detail view might need.
  */
 function _makeAgent(id, name, parentId, instruction, startedAt) {
     return {
         id,
         name,
         parentId,
-        status: 'running',
-        childIds: [],
-        startedAt,
+        status: 'running',       // running | success | error | stopped
+        childIds: [],            // sub-agents spawned by this agent
+        startedAt,               // for elapsed time display
         instruction: instruction || '',
-        activityLog: [],
-        browserSnapshot: null,
-        terminalLines: [],
+        activityLog: [],         // everything the agent did: thinking, content, tool calls
+        browserSnapshot: null,   // latest screenshot (shown as card thumbnail too)
+        terminalLines: [],       // bash output
         desktopActive: false,
         generationPreview: null,
-        activeTool: null,
-        iteration: null,
-        maxIterations: null,
-        contextUsage: null,
+        activeTool: null,        // what tool is running right now
+        iteration: null,         // current loop iteration
+        maxIterations: null,     // budget limit
+        contextUsage: null,      // how full the context window is
     };
 }
 
 /**
- * Reducer for agent tree state.
+ * All agent state changes go through this reducer. The action names
+ * map pretty directly to what happened:
+ *
+ *   AGENT_STARTED/COMPLETED → agent appeared or finished
+ *   APPEND_STREAM_CHUNK     → new text from a sub-agent
+ *   APPEND_ACTIVITY         → tool call or file output happened
+ *   UPDATE_*                → preview data changed (screenshot, terminal, etc.)
+ *   SELECT_AGENT            → user clicked a card
+ *   RESET                   → new conversation
  */
 function _agentReducer(state, action) {
     switch (action.type) {
+        // New agent appeared — create its node and wire it to its parent.
         case 'AGENT_STARTED': {
             const { agentId, agentName, parentAgentId, instruction, timestamp } = action;
             const agent = _makeAgent(agentId, agentName, parentAgentId, instruction, timestamp);
@@ -55,7 +73,10 @@ function _agentReducer(state, action) {
             return {
                 ...state,
                 agents,
-                rootId: state.rootId || (parentAgentId ? state.rootId : agentId),
+                // Always update rootId when a new root agent starts (no parent).
+                // Each turn creates a fresh root span with a new ID, so the
+                // simple chat view needs to follow the latest one.
+                rootId: parentAgentId ? state.rootId : agentId,
             };
         }
 
@@ -72,9 +93,11 @@ function _agentReducer(state, action) {
             };
         }
 
+        // Append streamed text to an agent's activity log. Thinking and
+        // content are merged in one update to keep them from getting
+        // interleaved. If the last log entry is the same type, we just
+        // extend it instead of creating a new one.
         case 'APPEND_STREAM_CHUNK': {
-            // Merge content and thinking into their respective last entries
-            // in a single state update. This avoids interleaving fragments.
             const { agentId, content, thinking } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
@@ -103,14 +126,14 @@ function _agentReducer(state, action) {
             };
         }
 
+        // Add a one-off entry (tool call, file output) to the activity log.
+        // Consecutive content/thinking entries get merged together.
         case 'APPEND_ACTIVITY': {
             const { agentId, entry } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
             const log = agent.activityLog;
             const last = log.length > 0 ? log[log.length - 1] : null;
-
-            // Merge consecutive content or thinking tokens into one entry
             if (last && last.type === entry.type && (entry.type === 'content' || entry.type === 'thinking')) {
                 const key = entry.type === 'content' ? 'content' : 'thinking';
                 const merged = { ...last, [key]: (last[key] || '') + (entry[key] || '') };
@@ -179,11 +202,16 @@ function _agentReducer(state, action) {
             const { agentId, preview } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
+            // Merge with existing preview if same gen_id, otherwise replace
+            const existing = agent.generationPreview;
+            const merged = (existing && existing.gen_id === preview.gen_id)
+                ? { ...existing, ...preview }
+                : preview;
             return {
                 ...state,
                 agents: {
                     ...state.agents,
-                    [agentId]: { ...agent, generationPreview: preview },
+                    [agentId]: { ...agent, generationPreview: merged },
                 },
             };
         }

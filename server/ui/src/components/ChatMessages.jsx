@@ -2,6 +2,10 @@ import Message from './Message.jsx';
 import useAutoScroll from '../hooks/useAutoScroll.js';
 import styles from './ChatMessages.module.css';
 
+/**
+ * Scrollable message list. Sticks to the bottom as new text arrives,
+ * but stops auto-scrolling if the user scrolls up.
+ */
 export default function ChatMessages({ messages, onPreview }) {
     const { ref, onScroll } = useAutoScroll([messages]);
 

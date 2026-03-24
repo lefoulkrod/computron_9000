@@ -1,6 +1,7 @@
 /**
- * Merge a terminal output event into an existing lines array.
- * Returns a new array (does not mutate input). Caps at maxLines.
+ * Merge a terminal output event into the lines array.
+ * If we already have output for this command, append to it.
+ * Otherwise add a new entry. Keeps at most maxLines.
  */
 export function mergeTerminalEvent(prev, event, maxLines = 50) {
     const lines = [...prev];

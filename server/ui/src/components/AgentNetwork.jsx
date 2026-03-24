@@ -1,11 +1,14 @@
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import AgentCard from './AgentCard.jsx';
 import { useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
 import styles from './AgentNetwork.module.css';
 
 /**
- * Build individual trees for each root agent.
- * Returns an array of trees, where each tree is an array of levels.
+ * Build individual trees for each root agent (BFS by level).
+ * Returns an array of trees — each tree is an array of levels,
+ * where each level is an array of agent **IDs** (not full objects).
+ * This keeps the memo stable across data updates — fresh agent
+ * objects are looked up at render time, not cached here.
  */
 function _buildTrees(agents) {
     const rootIds = Object.keys(agents).filter((id) => agents[id].parentId === null);
@@ -18,7 +21,7 @@ function _buildTrees(agents) {
             for (const id of queue) {
                 const agent = agents[id];
                 if (!agent) continue;
-                level.push(agent);
+                level.push(id);
                 for (const childId of agent.childIds) {
                     nextQueue.push(childId);
                 }
@@ -32,6 +35,9 @@ function _buildTrees(agents) {
 
 /**
  * Draw SVG bezier connectors between parent and child cards.
+ * Uses actual rendered DOM positions (getBoundingClientRect) so
+ * connectors stay accurate as cards resize or the window changes.
+ * Called on topology changes and ResizeObserver ticks.
  */
 function _drawConnectors(containerEl, svgEl, agents) {
     if (!containerEl || !svgEl) return;
@@ -60,6 +66,13 @@ function _drawConnectors(containerEl, svgEl, agents) {
     svgEl.innerHTML = paths;
 }
 
+/**
+ * Shows all agents as a tree of cards with lines connecting parents
+ * to children. Click a card to see its full activity.
+ *
+ * The tree layout and line drawing only recalculate when agents are
+ * added/removed. A 1-second timer updates elapsed times on running cards.
+ */
 export default function AgentNetwork() {
     const { agents } = useAgentState();
     const dispatch = useAgentDispatch();
@@ -71,7 +84,7 @@ export default function AgentNetwork() {
         dispatch({ type: 'SELECT_AGENT', agentId });
     }, [dispatch]);
 
-    // Topology fingerprint — only changes when agents are added/removed or re-parented
+    // Only changes when agents are added/removed (not on every status update)
     const topoKey = useMemo(() => {
         return Object.values(agents)
             .map((a) => `${a.id}:${a.parentId || ''}`)
@@ -146,9 +159,9 @@ export default function AgentNetwork() {
                         <div key={treeIdx} className={styles.tree}>
                             {tree.map((level, depth) => (
                                 <div key={depth} className={styles.level}>
-                                    {level.map((agent) => (
-                                        <div key={agent.id} data-agent-id={agent.id} className={styles.nodeWrap}>
-                                            <AgentCard agent={agent} onClick={handleSelect} />
+                                    {level.map((agentId) => (
+                                        <div key={agentId} data-agent-id={agentId} className={styles.nodeWrap}>
+                                            <AgentCard agent={agents[agentId]} onClick={handleSelect} />
                                         </div>
                                     ))}
                                 </div>

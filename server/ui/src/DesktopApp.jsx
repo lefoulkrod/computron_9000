@@ -17,11 +17,12 @@ import Sidebar from './components/Sidebar.jsx';
 import FlyoutPanel from './components/FlyoutPanel.jsx';
 import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
-import { mergeTerminalEvent } from './utils/agentUtils.js';
 import { AgentStateProvider, useAgentState, useAgentDispatch, hasSubAgents } from './hooks/useAgentState.jsx';
 import { useToast } from './components/ToastProvider.jsx';
 import styles from './App.module.css';
 
+// Track which preview panels the user has closed (by name).
+// _reopenPanel shows it again, _closePanel hides it.
 function _reopenPanel(name) {
     return (prev) => {
         if (!prev.has(name)) return prev;
@@ -35,9 +36,17 @@ function _closePanel(name) {
     return (prev) => new Set(prev).add(name);
 }
 
+/**
+ * Main app shell. Preview data (browser screenshots, terminal output, etc.)
+ * lives in the agent reducer — one source of truth for all views. The
+ * simple chat preview column reads from the root agent's node, same as
+ * the agent detail view reads from any selected agent's node.
+ */
 function DesktopAppInner({ dark, onToggleTheme }) {
     const agentDispatch = useAgentDispatch();
-    const [browserSnapshot, setBrowserSnapshot] = useState(null);
+    const agentState = useAgentState();
+
+    // ── UI-only state (not duplicated in the reducer) ───────────────
     const [filePreview, setFilePreview] = useState(null);
     const [attachment, setAttachment] = useState(null);
     const [flyoutPanel, setFlyoutPanel] = useState(null);
@@ -46,52 +55,46 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [toolsRefreshSignal, setToolsRefreshSignal] = useState(0);
     const [pendingAudio, setPendingAudio] = useState(null);
     const [muted, setMuted] = useState(false);
-    const [terminalLines, setTerminalLines] = useState([]);
-    const [generationPreview, setGenerationPreview] = useState(null);
-    const [desktopActive, setDesktopActive] = useState(false);
-    // Skills panel removed — skill extraction dropped in multi-agent overhaul
     const [closedPanels, setClosedPanels] = useState(new Set());
     const [nudgeToast, setNudgeToast] = useState(null);
 
     const modelSettings = useModelSettings();
     const { addToast } = useToast();
 
-    const _streamCallbacksRef = useRef(null);
-    _streamCallbacksRef.current = {
+    // ── Read preview data from root agent in the reducer ────────────
+    const rootAgent = agentState.rootId ? agentState.agents[agentState.rootId] : null;
+    const browserSnapshot = rootAgent?.browserSnapshot || null;
+    const terminalLines = rootAgent?.terminalLines || [];
+    const desktopActive = rootAgent?.desktopActive || false;
+    const generationPreview = rootAgent?.generationPreview || null;
+
+    // ── Stream callbacks ──────────────────────────────────────────────
+    // Called by useStreamingChat when events arrive from the backend.
+    // Preview events dispatch once to the agent reducer — no dual state.
+    //
+    // We use a ref so the streaming hook keeps a stable reference and
+    // doesn't restart the connection on re-render. The closedPanels
+    // updates need fresh state, so we read via the ref on each call.
+    const _callbacks = useRef({
         onBrowserSnapshot: (snapshot) => {
-            // Update global state (backward compat for simple chat)
-            setBrowserSnapshot(snapshot);
+            agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId: snapshot.agentId, snapshot });
             setClosedPanels(_reopenPanel('browser'));
-            // Update per-agent state
-            if (snapshot.agentId) {
-                agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId: snapshot.agentId, snapshot });
-            }
         },
         onTerminalOutput: (event) => {
-            // Update global state
-            setTerminalLines((prev) => mergeTerminalEvent(prev, event));
+            agentDispatch({ type: 'UPDATE_TERMINAL', agentId: event.agentId, event });
             setClosedPanels(_reopenPanel('terminal'));
-            // Update per-agent state
-            if (event.agentId) {
-                agentDispatch({ type: 'UPDATE_TERMINAL', agentId: event.agentId, event });
-            }
         },
         onToolCreated: () => setToolsRefreshSignal((s) => s + 1),
         onMemoryChanged: () => setMemoryRefreshSignal((s) => s + 1),
         onAudioPlayback: (audio) => setPendingAudio(audio),
         onNudgeSent: (text) => setNudgeToast(text || 'Nudge sent'),
         onDesktopActive: (agentId) => {
-            setDesktopActive(true);
+            agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId });
             setClosedPanels(_reopenPanel('desktop'));
-            if (agentId) {
-                agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId });
-            }
         },
         onGenerationPreview: (event) => {
-            setGenerationPreview((prev) => {
-                if (!prev || prev.gen_id !== event.gen_id) return event;
-                return { ...prev, ...event };
-            });
+            agentDispatch({ type: 'UPDATE_GENERATION_PREVIEW', agentId: event.agentId, preview: event });
+            // Show generation panel, hide file panel (they share the same slot)
             setClosedPanels((prev) => {
                 if (!prev.has('generation') && prev.has('file')) return prev;
                 const next = new Set(prev);
@@ -99,11 +102,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 next.add('file');
                 return next;
             });
-            if (event.agentId) {
-                agentDispatch({ type: 'UPDATE_GENERATION_PREVIEW', agentId: event.agentId, preview: event });
-            }
         },
-        // Agent lifecycle events
+        // When an agent starts or finishes, add/update it in the tree.
         onAgentEvent: (event) => {
             if (event.type === 'agent_started') {
                 agentDispatch({
@@ -122,18 +122,17 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 });
             }
         },
-        // Agent tool call events
+        // When an agent uses a tool, show it on the card and log it.
         onAgentToolCall: ({ name, agentId }) => {
-            if (agentId) {
-                agentDispatch({ type: 'UPDATE_ACTIVE_TOOL', agentId, toolName: name });
-                agentDispatch({
-                    type: 'APPEND_ACTIVITY',
-                    agentId,
-                    entry: { type: 'tool_call', name, timestamp: Date.now() },
-                });
-            }
+            agentDispatch({ type: 'UPDATE_ACTIVE_TOOL', agentId, toolName: name });
+            agentDispatch({
+                type: 'APPEND_ACTIVITY',
+                agentId,
+                entry: { type: 'tool_call', name, timestamp: Date.now() },
+            });
         },
-        // Sub-agent streaming content/thinking — single dispatch per flush
+        // Sub-agent text tokens, batched ~60x/sec. We merge content and
+        // thinking in one update so they don't get jumbled together.
         onAgentContent: ({ agentId, content, thinking }) => {
             agentDispatch({
                 type: 'APPEND_STREAM_CHUNK',
@@ -148,29 +147,12 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         },
         // Agent file output
         onAgentFileOutput: ({ agentId, ...fileEvent }) => {
-            if (agentId) {
-                agentDispatch({
-                    type: 'APPEND_ACTIVITY',
-                    agentId,
-                    entry: { type: 'file_output', ...fileEvent, timestamp: Date.now() },
-                });
-            }
+            agentDispatch({
+                type: 'APPEND_ACTIVITY',
+                agentId,
+                entry: { type: 'file_output', ...fileEvent, timestamp: Date.now() },
+            });
         },
-    };
-    const _stableCallbacks = useRef({
-        onBrowserSnapshot: (...args) => _streamCallbacksRef.current.onBrowserSnapshot(...args),
-        onTerminalOutput: (...args) => _streamCallbacksRef.current.onTerminalOutput(...args),
-        onToolCreated: (...args) => _streamCallbacksRef.current.onToolCreated(...args),
-        onMemoryChanged: (...args) => _streamCallbacksRef.current.onMemoryChanged(...args),
-        onAudioPlayback: (...args) => _streamCallbacksRef.current.onAudioPlayback(...args),
-        onNudgeSent: (...args) => _streamCallbacksRef.current.onNudgeSent(...args),
-        onDesktopActive: (...args) => _streamCallbacksRef.current.onDesktopActive(...args),
-        onGenerationPreview: (...args) => _streamCallbacksRef.current.onGenerationPreview(...args),
-        onAgentEvent: (...args) => _streamCallbacksRef.current.onAgentEvent(...args),
-        onAgentToolCall: (...args) => _streamCallbacksRef.current.onAgentToolCall(...args),
-        onAgentContent: (...args) => _streamCallbacksRef.current.onAgentContent(...args),
-        onAgentContextUsage: (...args) => _streamCallbacksRef.current.onAgentContextUsage(...args),
-        onAgentFileOutput: (...args) => _streamCallbacksRef.current.onAgentFileOutput(...args),
     }).current;
 
     const {
@@ -180,7 +162,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         stopGeneration,
         loadConversation,
         newConversation: chatNewConversation,
-    } = useStreamingChat(_stableCallbacks);
+    } = useStreamingChat(_callbacks);
 
     useEffect(() => {
         if (!nudgeToast) return;
@@ -203,7 +185,11 @@ function DesktopAppInner({ dark, onToggleTheme }) {
             const res = await fetch('/api/desktop/start', { method: 'POST' });
             const data = await res.json();
             if (data.running) {
-                setDesktopActive(true);
+                // Desktop started outside an agent span — dispatch directly
+                // to the root agent node so the preview panel appears.
+                if (agentState.rootId) {
+                    agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: agentState.rootId });
+                }
                 setClosedPanels(_reopenPanel('desktop'));
             } else {
                 addToast(data.error || 'Desktop is not available', { type: 'error' });
@@ -211,36 +197,34 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         } catch {
             addToast('Could not reach the server', { type: 'error' });
         }
-    }, [desktopActive, closedPanels, addToast]);
+    }, [desktopActive, closedPanels, addToast, agentState.rootId, agentDispatch]);
 
     const newConversation = useCallback(async () => {
         await chatNewConversation();
-        setBrowserSnapshot(null);
         setFilePreview(null);
-        setTerminalLines([]);
-        setGenerationPreview(null);
-        setDesktopActive(false);
         setClosedPanels(new Set());
         setToolsPanelKey((k) => k + 1);
         agentDispatch({ type: 'RESET' });
     }, [chatNewConversation, agentDispatch]);
 
-    // Determine view mode
-    const agentState = useAgentState();
+    // ── Which layout to show ───────────────────────────────────────────
+    // Three possible views:
+    //
+    //   1. Agent detail — user clicked a card → full-screen activity view
+    //   2. Agent network — sub-agents exist → tree graph + chat side by side
+    //   3. Simple chat — no sub-agents → classic chat + preview panels
+    //
+    // Flow: simple chat → network (when first sub-agent spawns)
+    //       → detail (click a card) → back to network ("← Agents" button)
     const hasSubAgentNodes = hasSubAgents(agentState);
     const selectedAgent = agentState.selectedAgentId;
 
-    // Preview panel visibility (for simple chat mode — no sub-agents)
+    // Which preview panels are visible (simple chat + desktop overlay)
     const showBrowser = browserSnapshot && !closedPanels.has('browser');
     const showDesktop = desktopActive && !closedPanels.has('desktop');
     const showTerminal = terminalLines.length > 0 && !closedPanels.has('terminal');
     const showGeneration = generationPreview && !closedPanels.has('generation');
     const hasAnyPanel = showBrowser || showDesktop || showTerminal || showGeneration;
-
-    // View modes:
-    // 1. selectedAgent → expanded agent activity view (no chat panel)
-    // 2. hasSubAgentNodes → network overview + chat panel
-    // 3. default → simple chat with preview panels (like today)
 
     return (
         <div className={styles.appShell}>
@@ -319,7 +303,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             </div>
                         </div>
                     ) : (
-                        /* Simple chat with preview panels */
+                        /* Simple chat with preview panels — reads from root agent */
                         <div className={`${styles.simpleChat} ${hasAnyPanel ? styles.withPanels : ''}`}>
                             {hasAnyPanel && (
                                 <div className={styles.previewColumn}>
@@ -352,7 +336,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 </div>
             </div>
 
-            {/* Desktop overlay — shown in network/agent views (simple chat uses inline panel) */}
+            {/* Desktop overlay — in agent views there's no preview column,
+                so the desktop floats on top instead */}
             {showDesktop && (hasSubAgentNodes || selectedAgent) && (
                 <DesktopPreview visible={true} onClose={() => setClosedPanels(_closePanel('desktop'))} overlay />
             )}
@@ -375,6 +360,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     );
 }
 
+/** Wraps the app in the agent state provider so all children can read/update agent data. */
 export default function DesktopApp(props) {
     return (
         <AgentStateProvider>

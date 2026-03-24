@@ -9,6 +9,13 @@ function formatAgentName(name) {
         .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * One card in the agent network graph. Shows the agent's name, status,
+ * browser thumbnail (if any), and stats. Click to drill into the
+ * agent's full activity view.
+ *
+ * Memoized — only re-renders when something visible changes.
+ */
 function AgentCard({ agent, onClick }) {
     const statusClass = styles[agent.status] || '';
     const toolCallCount = agent.activityLog

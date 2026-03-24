@@ -1,0 +1,19 @@
+.toolBlock {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 0;
+  margin: 2px 0;
+  color: var(--button);
+}
+
+.toolIcon {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.toolName {
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+  color: var(--button);
+}

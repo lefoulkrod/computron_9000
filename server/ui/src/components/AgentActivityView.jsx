@@ -4,7 +4,7 @@ import useAutoScroll from '../hooks/useAutoScroll.js';
 import { formatAgentName } from './AgentCard.jsx';
 import { formatElapsed } from '../utils/agentUtils.js';
 import ContextUsageBadge from './ContextUsageBadge.jsx';
-import CollapsibleThinking from './CollapsibleThinking.jsx';
+import AgentOutput from './AgentOutput.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
 import FileOutput from './FileOutput.jsx';
 import BrowserPreview from './BrowserPreview.jsx';
@@ -26,37 +26,14 @@ function _buildBreadcrumb(agents, agentId) {
     return trail;
 }
 
-function ActivityEntry({ entry, onPreview }) {
-    if (entry.type === 'thinking') {
-        return <CollapsibleThinking text={entry.thinking} compact />;
-    }
-
-    if (entry.type === 'content') {
-        return (
-            <div className={styles.contentBlock}>
-                <MarkdownContent>{entry.content}</MarkdownContent>
-            </div>
-        );
-    }
-
-    if (entry.type === 'tool_call') {
-        return (
-            <div className={styles.toolBlock}>
-                <svg className={styles.toolIcon} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
-                </svg>
-                <span className={styles.toolName}>{entry.name}</span>
-            </div>
-        );
-    }
-
-    if (entry.type === 'file_output') {
-        return null; // rendered in the preview pane instead
-    }
-
-    return null;
-}
-
+/**
+ * Full-screen view of a single agent's work. Two panes:
+ *   Left: activity stream (thinking, text, tool calls) — auto-scrolls
+ *   Right: preview panels (browser, terminal, files) scoped to this agent
+ *
+ * The nudge bar at the bottom always sends to the root agent.
+ * "← Agents" goes back to the network graph.
+ */
 export default function AgentActivityView({ onNudge, onPreview }) {
     const { agents, selectedAgentId } = useAgentState();
     const dispatch = useAgentDispatch();
@@ -127,9 +104,10 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                             <MarkdownContent>{agent.instruction}</MarkdownContent>
                         </div>
                     )}
-                    {agent.activityLog.map((entry, i) => (
-                        <ActivityEntry key={i} entry={entry} onPreview={onPreview} />
-                    ))}
+                    <AgentOutput
+                        entries={agent.activityLog}
+                        showFileOutputs={false}
+                    />
                     {agent.status === 'running' && (
                         <span className={styles.cursor} />
                     )}
