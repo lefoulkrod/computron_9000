@@ -104,8 +104,7 @@ function _handleStreamEvent(data, callbacks) {
         }
     }
 
-    // context_usage events are handled inline by the message component,
-    // not as a side-effect callback. Pass iteration info to agent state.
+    // Context usage → agent card badges (iteration count, context fill)
     if (type === 'context_usage') {
         if (callbacks.onAgentContextUsage && agentId) {
             callbacks.onAgentContextUsage({
@@ -143,7 +142,6 @@ function _historyToMessages(rawMessages) {
                     role: 'assistant',
                     entries: [{ type: 'content', content }],
                     streaming: false,
-                    agent_name: msg.agent_name || null,
                 });
             }
         }
@@ -158,15 +156,9 @@ function _historyToMessages(rawMessages) {
  * POSTs to /api/chat and reads the response as a stream of JSON lines.
  * Each line is either a text token or an event (screenshot, tool call, etc.).
  *
- * Text tokens are collected into a buffer and painted to the screen ~60x/sec
- * (once per animation frame) to keep things smooth.
- *
- * A new chat bubble starts when:
- *  - The response switches between root and sub-agent
- *  - The agent starts a new thinking/tool-loop cycle
- *
- * Sub-agent tokens don't go into the chat — they go to the agent reducer
- * where the network/detail views pick them up.
+ * Root agent tokens are buffered and flushed into an ordered entries[]
+ * array on the assistant message (~60fps via requestAnimationFrame).
+ * Sub-agent tokens go to the agent reducer for the network/detail views.
  */
 export default function useStreamingChat(callbacks) {
     const [messages, setMessages] = useState([]);
@@ -284,12 +276,13 @@ export default function useStreamingChat(callbacks) {
             // Consecutive entries of the same type get merged (like the
             // agent reducer's APPEND_STREAM_CHUNK), so streaming tokens
             // don't create hundreds of tiny entries.
+            // The assistant message is always the last item in the array.
             const appendEntry = (type, key, text) => {
                 if (!text) return;
                 setMessages((prev) => {
+                    const i = prev.length - 1;
+                    if (i < 0 || prev[i].id !== assistantId) return prev;
                     const updated = [...prev];
-                    const i = updated.findIndex((m) => m.id === assistantId);
-                    if (i === -1) return prev;
                     const msg = { ...updated[i] };
                     const entries = [...(msg.entries || [])];
                     const last = entries.length > 0 ? entries[entries.length - 1] : null;
@@ -331,9 +324,9 @@ export default function useStreamingChat(callbacks) {
                 flushStreamBuffer();
                 if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
                 setMessages((prev) => {
+                    const i = prev.length - 1;
+                    if (i < 0 || prev[i].id !== assistantId) return prev;
                     const updated = [...prev];
-                    const i = updated.findIndex((m) => m.id === assistantId);
-                    if (i === -1) return prev;
                     const msg = { ...updated[i] };
                     msg.entries = [...(msg.entries || []), entry];
                     msg.placeholder = false;
@@ -344,6 +337,10 @@ export default function useStreamingChat(callbacks) {
             };
 
             // ── Process JSONL lines ────────────────────────────────
+            // The backend streams one JSON object per line (JSONL).
+            // reader.read() gives us arbitrary byte chunks, so we
+            // accumulate into a buffer and extract complete lines
+            // (up to each \n) one at a time.
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -360,19 +357,15 @@ export default function useStreamingChat(callbacks) {
 
                         // Extract fields from the JSONL event
                         const contentField = typeof data.content === 'string' ? data.content : '';
-                        const hasResponse = typeof contentField === 'string' && contentField.length > 0;
+                        const hasResponse = contentField.length > 0;
                         const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
-                        const agentName = data.agent_name || null;
                         const depth = typeof data.depth === 'number' ? data.depth : 0;
-                        const toolCallEvent = data.event && data.event.type === 'tool_call' ? data.event : null;
-                        const fileOutputEvent = data.event && data.event.type === 'file_output' ? data.event : null;
-                        const contextUsageEvent = data.event && data.event.type === 'context_usage' ? data.event : null;
+                        const eventType = data.event?.type || null;
 
                         // ── Text tokens ─────────────────────────────────
                         //   Root agent (depth 0) → buffer → entries
                         //   Sub-agent (depth > 0) → buffer → agent tree
-                        if (data.delta && !toolCallEvent && !fileOutputEvent
-                            && !contextUsageEvent && data.final !== true) {
+                        if (data.delta && !data.event && data.final !== true) {
                             if (depth > 0 && data.agent_id) {
                                 if (hasResponse || hasThinking) {
                                     bufferAgentToken(
@@ -404,34 +397,14 @@ export default function useStreamingChat(callbacks) {
                         }
 
                         // ── Root agent non-text events ───────────────────
-                        // Tool calls, file outputs, context usage for the
-                        // root agent. Append as entries in chronological order.
-                        if (toolCallEvent) {
-                            appendEventEntry({ type: 'tool_call', name: toolCallEvent.name, timestamp: Date.now() });
+                        // Tool calls and file outputs get appended as entries
+                        // in chronological order. Other events (context_usage,
+                        // etc.) are already handled by _handleStreamEvent.
+                        if (eventType === 'tool_call') {
+                            appendEventEntry({ type: 'tool_call', name: data.event.name, timestamp: Date.now() });
                         }
-                        if (fileOutputEvent) {
-                            appendEventEntry({ type: 'file_output', ...fileOutputEvent, timestamp: Date.now() });
-                        }
-                        if (contextUsageEvent) {
-                            setMessages((prev) => {
-                                const updated = [...prev];
-                                const i = updated.findIndex((m) => m.id === assistantId);
-                                if (i === -1) return prev;
-                                updated[i] = { ...updated[i], contextUsage: contextUsageEvent };
-                                return updated;
-                            });
-                        }
-
-                        // Store agent name for display
-                        if (agentName) {
-                            setMessages((prev) => {
-                                const updated = [...prev];
-                                const i = updated.findIndex((m) => m.id === assistantId);
-                                if (i === -1) return prev;
-                                if (updated[i].agent_name === agentName) return prev;
-                                updated[i] = { ...updated[i], agent_name: agentName };
-                                return updated;
-                            });
+                        if (eventType === 'file_output') {
+                            appendEventEntry({ type: 'file_output', ...data.event, timestamp: Date.now() });
                         }
 
                         // Any remaining thinking/content on a non-delta line
@@ -443,9 +416,9 @@ export default function useStreamingChat(callbacks) {
                         if (data.final === true) {
                             flushStreamBuffer();
                             setMessages((prev) => {
+                                const i = prev.length - 1;
+                                if (i < 0 || prev[i].id !== assistantId) return prev;
                                 const updated = [...prev];
-                                const i = updated.findIndex((m) => m.id === assistantId);
-                                if (i === -1) return prev;
                                 updated[i] = { ...updated[i], streaming: false, placeholder: false };
                                 return updated;
                             });

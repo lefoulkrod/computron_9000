@@ -299,6 +299,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     isStreaming={isStreaming}
                                     attachment={attachment}
                                     onPreview={(item) => setFilePreview(item)}
+                                    rootAgent={rootAgent}
                                 />
                             </div>
                         </div>
@@ -320,6 +321,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     onStop={stopGeneration}
                                     isStreaming={isStreaming}
                                     attachment={attachment}
+                                    rootAgent={rootAgent}
                                     onPreview={(item) => {
                                         setFilePreview(item);
                                         setClosedPanels((prev) => {

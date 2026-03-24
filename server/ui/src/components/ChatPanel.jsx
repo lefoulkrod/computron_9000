@@ -7,23 +7,19 @@ import styles from './ChatPanel.module.css';
 
 /**
  * Chat panel for talking to the root agent. Shows the agent name and
- * context usage in the header (pulled from the latest assistant message),
- * the scrollable message list, and the input bar.
+ * context usage in the header (from the agent reducer), the scrollable
+ * message list, and the input bar.
  */
-export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview }) {
-    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.placeholder);
-    const agentName = lastAssistant?.agent_name;
-    const contextUsage = lastAssistant?.contextUsage;
-
+export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent }) {
     return (
         <div className={styles.panel}>
             <div className={styles.header}>
-                {agentName ? (
-                    <span className={styles.agentName}>{formatAgentName(agentName)}</span>
+                {rootAgent?.name ? (
+                    <span className={styles.agentName}>{formatAgentName(rootAgent.name)}</span>
                 ) : (
                     <span>Chat</span>
                 )}
-                <ContextUsageBadge contextUsage={contextUsage} />
+                <ContextUsageBadge contextUsage={rootAgent?.contextUsage} />
             </div>
             <ChatMessages messages={messages} onPreview={onPreview} />
             <ChatInput
