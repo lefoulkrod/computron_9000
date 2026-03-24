@@ -300,7 +300,7 @@ export default function useStreamingChat(callbacks) {
             };
 
             // Flush buffered root-agent tokens into entries
-            const flushStreamBuffer = () => {
+            const flushRootBuffer = () => {
                 rafId = null;
                 if (!pendingContent && !pendingThinking) return;
                 const contentChunk = pendingContent;
@@ -312,16 +312,16 @@ export default function useStreamingChat(callbacks) {
                 if (contentChunk) appendEntry('content', 'content', contentChunk);
             };
 
-            const scheduleStreamFlush = () => {
+            const scheduleRootFlush = () => {
                 if (rafId === null) {
-                    rafId = requestAnimationFrame(flushStreamBuffer);
+                    rafId = requestAnimationFrame(flushRootBuffer);
                 }
             };
 
             // Append a non-text entry (tool call, file output). Flush
             // buffered tokens first so everything stays in order.
             const appendEventEntry = (entry) => {
-                flushStreamBuffer();
+                flushRootBuffer();
                 if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
                 setMessages((prev) => {
                     const i = prev.length - 1;
@@ -362,29 +362,9 @@ export default function useStreamingChat(callbacks) {
                         const depth = typeof data.depth === 'number' ? data.depth : 0;
                         const eventType = data.event?.type || null;
 
-                        // ── Text tokens ─────────────────────────────────
-                        //   Root agent (depth 0) → buffer → entries
-                        //   Sub-agent (depth > 0) → buffer → agent tree
-                        if (data.delta && !data.event && data.final !== true) {
-                            if (depth > 0 && data.agent_id) {
-                                if (hasResponse || hasThinking) {
-                                    bufferAgentToken(
-                                        data.agent_id,
-                                        hasResponse ? contentField : null,
-                                        hasThinking ? data.thinking : null,
-                                    );
-                                }
-                                continue;
-                            }
-                            if (hasResponse) pendingContent += contentField;
-                            if (hasThinking) pendingThinking += data.thinking;
-                            if (hasResponse || hasThinking) scheduleStreamFlush();
-                            continue;
-                        }
-
-                        // ── Sub-agent non-text events ────────────────────
-                        // Already handled by _handleStreamEvent. Buffer any
-                        // text for the agent tree.
+                        // ── Sub-agent events ─────────────────────────────
+                        // Non-text events already handled by _handleStreamEvent.
+                        // Buffer any text tokens for the agent tree.
                         if (depth > 0 && data.agent_id) {
                             if (hasResponse || hasThinking) {
                                 bufferAgentToken(
@@ -393,6 +373,14 @@ export default function useStreamingChat(callbacks) {
                                     hasThinking ? data.thinking : null,
                                 );
                             }
+                            continue;
+                        }
+
+                        // ── Root agent text tokens ───────────────────────
+                        if (data.delta && !data.event && data.final !== true) {
+                            if (hasResponse) pendingContent += contentField;
+                            if (hasThinking) pendingThinking += data.thinking;
+                            if (hasResponse || hasThinking) scheduleRootFlush();
                             continue;
                         }
 
@@ -410,11 +398,11 @@ export default function useStreamingChat(callbacks) {
                         // Any remaining thinking/content on a non-delta line
                         if (hasThinking) pendingThinking += data.thinking;
                         if (hasResponse) pendingContent += contentField;
-                        if (hasThinking || hasResponse) scheduleStreamFlush();
+                        if (hasThinking || hasResponse) scheduleRootFlush();
 
                         // Final marker — flush and mark done
                         if (data.final === true) {
-                            flushStreamBuffer();
+                            flushRootBuffer();
                             setMessages((prev) => {
                                 const i = prev.length - 1;
                                 if (i < 0 || prev[i].id !== assistantId) return prev;
@@ -429,7 +417,7 @@ export default function useStreamingChat(callbacks) {
                 }
             }
             // Stream ended — flush any remaining buffered tokens
-            flushStreamBuffer();
+            flushRootBuffer();
             flushAgentBuffers();
         } catch (err) {
             if (rafId !== null) cancelAnimationFrame(rafId);
