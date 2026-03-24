@@ -211,8 +211,7 @@ export default function useStreamingChat(callbacks) {
 
         // IDs for pending animation frame flushes. Declared here so the
         // finally block can cancel them if the stream errors or aborts.
-        let rafId = null;       // root agent buffer
-        let agentRafId = null;  // sub-agent buffer
+        let agentRafId = null;
         try {
             const controller = new AbortController();
             abortControllerRef.current = controller;
@@ -239,12 +238,15 @@ export default function useStreamingChat(callbacks) {
             // ── Token buffering ───────────────────────────────────────
             // Tokens arrive one word at a time. Updating React on every
             // single one would be way too slow. Instead we collect them
-            // and flush once per screen paint (~60fps). Two buffers:
-            //   - pendingContent/pendingThinking → root agent entries
-            //   - agentPending[agentId] → sub-agent activity logs
-            let pendingContent = '';
-            let pendingThinking = '';
-
+            // and flush once per screen paint (~60fps).
+            //
+            // ALL agent tokens (root and sub) go through the same path:
+            //   bufferAgentToken → flushAgentBuffers → onAgentContent
+            //   → agent reducer (APPEND_STREAM_CHUNK)
+            //
+            // The chat view reads the root agent's activityLog from the
+            // reducer — same source as the activity view. No separate
+            // buffer for root agent tokens.
             const agentPending = {};  // { [agentId]: { content: '', thinking: '' } }
 
             const flushAgentBuffers = () => {
@@ -272,70 +274,6 @@ export default function useStreamingChat(callbacks) {
                 }
             };
 
-            // Append or merge an entry into the message's entries array.
-            // Consecutive entries of the same type get merged (like the
-            // agent reducer's APPEND_STREAM_CHUNK), so streaming tokens
-            // don't create hundreds of tiny entries.
-            // The assistant message is always the last item in the array.
-            const appendEntry = (type, key, text) => {
-                if (!text) return;
-                setMessages((prev) => {
-                    const i = prev.length - 1;
-                    if (i < 0 || prev[i].id !== assistantId) return prev;
-                    const updated = [...prev];
-                    const msg = { ...updated[i] };
-                    const entries = [...(msg.entries || [])];
-                    const last = entries.length > 0 ? entries[entries.length - 1] : null;
-                    if (last && last.type === type) {
-                        entries[entries.length - 1] = { ...last, [key]: (last[key] || '') + text };
-                    } else {
-                        entries.push({ type, [key]: text, timestamp: Date.now() });
-                    }
-                    msg.entries = entries;
-                    msg.placeholder = false;
-                    msg.streaming = true;
-                    updated[i] = msg;
-                    return updated;
-                });
-            };
-
-            // Flush buffered root-agent tokens into entries
-            const flushRootBuffer = () => {
-                rafId = null;
-                if (!pendingContent && !pendingThinking) return;
-                const contentChunk = pendingContent;
-                const thinkingChunk = pendingThinking;
-                pendingContent = '';
-                pendingThinking = '';
-                // Thinking first, then content — matches model output order
-                if (thinkingChunk) appendEntry('thinking', 'thinking', thinkingChunk);
-                if (contentChunk) appendEntry('content', 'content', contentChunk);
-            };
-
-            const scheduleRootFlush = () => {
-                if (rafId === null) {
-                    rafId = requestAnimationFrame(flushRootBuffer);
-                }
-            };
-
-            // Append a non-text entry (tool call, file output). Flush
-            // buffered tokens first so everything stays in order.
-            const appendEventEntry = (entry) => {
-                flushRootBuffer();
-                if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-                setMessages((prev) => {
-                    const i = prev.length - 1;
-                    if (i < 0 || prev[i].id !== assistantId) return prev;
-                    const updated = [...prev];
-                    const msg = { ...updated[i] };
-                    msg.entries = [...(msg.entries || []), entry];
-                    msg.placeholder = false;
-                    msg.streaming = true;
-                    updated[i] = msg;
-                    return updated;
-                });
-            };
-
             // ── Process JSONL lines ────────────────────────────────
             // The backend streams one JSON object per line (JSONL).
             // reader.read() gives us arbitrary byte chunks, so we
@@ -359,50 +297,33 @@ export default function useStreamingChat(callbacks) {
                         const contentField = typeof data.content === 'string' ? data.content : '';
                         const hasResponse = contentField.length > 0;
                         const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
-                        const depth = typeof data.depth === 'number' ? data.depth : 0;
-                        const eventType = data.event?.type || null;
 
-                        // ── Sub-agent events ─────────────────────────────
-                        // Non-text events already handled by _handleStreamEvent.
-                        // Buffer any text tokens for the agent tree.
-                        if (depth > 0 && data.agent_id) {
-                            if (hasResponse || hasThinking) {
-                                bufferAgentToken(
-                                    data.agent_id,
-                                    hasResponse ? contentField : null,
-                                    hasThinking ? data.thinking : null,
-                                );
-                            }
-                            continue;
+                        // Set agentId on the assistant message so the chat
+                        // view can look up this agent's activityLog.
+                        if (data.event?.type === 'agent_started' && !data.event.parent_agent_id) {
+                            setMessages((prev) => {
+                                const i = prev.length - 1;
+                                if (i < 0 || prev[i].id !== assistantId) return prev;
+                                const updated = [...prev];
+                                updated[i] = { ...updated[i], agentId: data.event.agent_id };
+                                return updated;
+                            });
                         }
 
-                        // ── Root agent text tokens ───────────────────────
-                        if (data.delta && !data.event && data.final !== true) {
-                            if (hasResponse) pendingContent += contentField;
-                            if (hasThinking) pendingThinking += data.thinking;
-                            if (hasResponse || hasThinking) scheduleRootFlush();
-                            continue;
+                        // ── Text tokens ──────────────────────────────────
+                        // All agents (root and sub) go through the same
+                        // buffer → onAgentContent → agent reducer path.
+                        if (data.agent_id && (hasResponse || hasThinking)) {
+                            bufferAgentToken(
+                                data.agent_id,
+                                hasResponse ? contentField : null,
+                                hasThinking ? data.thinking : null,
+                            );
                         }
-
-                        // ── Root agent non-text events ───────────────────
-                        // Tool calls and file outputs get appended as entries
-                        // in chronological order. Other events (context_usage,
-                        // etc.) are already handled by _handleStreamEvent.
-                        if (eventType === 'tool_call') {
-                            appendEventEntry({ type: 'tool_call', name: data.event.name, timestamp: Date.now() });
-                        }
-                        if (eventType === 'file_output') {
-                            appendEventEntry({ type: 'file_output', ...data.event, timestamp: Date.now() });
-                        }
-
-                        // Any remaining thinking/content on a non-delta line
-                        if (hasThinking) pendingThinking += data.thinking;
-                        if (hasResponse) pendingContent += contentField;
-                        if (hasThinking || hasResponse) scheduleRootFlush();
 
                         // Final marker — flush and mark done
                         if (data.final === true) {
-                            flushRootBuffer();
+                            flushAgentBuffers();
                             setMessages((prev) => {
                                 const i = prev.length - 1;
                                 if (i < 0 || prev[i].id !== assistantId) return prev;
@@ -417,10 +338,8 @@ export default function useStreamingChat(callbacks) {
                 }
             }
             // Stream ended — flush any remaining buffered tokens
-            flushRootBuffer();
             flushAgentBuffers();
         } catch (err) {
-            if (rafId !== null) cancelAnimationFrame(rafId);
             if (err.name === 'AbortError') return;
             // Replace the placeholder (or append) with an error message
             setMessages((prev) => {
