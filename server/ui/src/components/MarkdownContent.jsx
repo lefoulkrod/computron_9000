@@ -8,6 +8,7 @@ import { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import remend from 'remend';
 import 'katex/dist/katex.min.css';
+import styles from './MarkdownContent.module.css';
 import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
 
 // Extend sanitize schema to allow KaTeX/MathML output and preserve code language classes
@@ -82,13 +83,15 @@ export default function MarkdownContent({ children, streaming }) {
     let content = _preprocessContent(children || '');
     if (streaming) content = remend(content);
     return (
-        <ReactMarkdown
-            urlTransform={_urlTransform}
-            remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-            rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, _sanitizeSchema]]}
-            components={_markdownComponents}
-        >
-            {content}
-        </ReactMarkdown>
+        <div className={styles.markdown}>
+            <ReactMarkdown
+                urlTransform={_urlTransform}
+                remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
+                rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, _sanitizeSchema]]}
+                components={_markdownComponents}
+            >
+                {content}
+            </ReactMarkdown>
+        </div>
     );
 }

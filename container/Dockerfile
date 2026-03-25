@@ -3,7 +3,8 @@ FROM docker.io/ubuntu:22.04
 # ── Environment ───────────────────────────────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    DISPLAY=:99
 
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone
@@ -28,7 +29,7 @@ RUN apt-get update && \
       python3.12 python3.12-venv python3.12-dev && \
     # Desktop environment + VNC stack
     apt-get install -y --no-install-recommends \
-      xfce4 xfce4-terminal dbus-x11 \
+      xfce4 xfce4-terminal mousepad dbus-x11 \
       xvfb x11vnc websockify novnc \
       xdotool xclip scrot wmctrl tini \
       python3-pyatspi at-spi2-core libatk-adaptor \
@@ -155,7 +156,11 @@ RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
   </property>\n\
 </channel>\n' \
       > /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
-    chown -R computron:computron /home/computron/.config
+    chown -R computron:computron /home/computron/.config && \
+    # Ensure DISPLAY=:99 in all interactive/login shells (belt-and-suspenders
+    # on top of the container ENV, since --network=host exposes host display).
+    printf 'export DISPLAY=:99\n' > /etc/profile.d/display.sh && \
+    chmod 644 /etc/profile.d/display.sh
 
 # ── Desktop scripts ───────────────────────────────────────────────────────────
 COPY container/entrypoint.sh /opt/entrypoint.sh

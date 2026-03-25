@@ -12,8 +12,14 @@ import styles from './ChatMessages.module.css';
  * loaded conversation history where no agent state exists.
  */
 export default function ChatMessages({ messages, onPreview }) {
-    const { agents } = useAgentState();
-    const { ref, onScroll } = useAutoScroll([messages]);
+    const { agents, rootId } = useAgentState();
+    // Scroll when messages change OR when the root agent's content grows.
+    // We track the last entry's text length so scroll fires as tokens
+    // stream in, not just when new entries are added.
+    const rootLog = rootId ? agents[rootId]?.activityLog : null;
+    const lastEntry = rootLog?.length ? rootLog[rootLog.length - 1] : null;
+    const scrollKey = lastEntry ? (lastEntry.content?.length || lastEntry.thinking?.length || 0) : 0;
+    const { ref, onScroll } = useAutoScroll([messages, rootLog?.length, scrollKey]);
 
     return (
         <div className={styles.chatMessages} id="chatMessages" ref={ref} onScroll={onScroll}>

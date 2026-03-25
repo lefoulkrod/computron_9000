@@ -1,0 +1,24 @@
+.container {
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.text {
+    color: var(--muted);
+}
+
+.cursor {
+    display: inline-block;
+    width: 6px;
+    height: 13px;
+    background: var(--muted);
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    opacity: 0.6;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 0.6; }
+    51%, 100% { opacity: 0; }
+}

@@ -1,5 +1,5 @@
 .block {
-    margin: 0;
+    margin: 0 0 0.5em 0;
     border-left: 2px solid var(--muted);
     padding-left: 0.75em;
 }

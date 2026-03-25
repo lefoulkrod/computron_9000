@@ -312,15 +312,3 @@
   object-fit: contain;
 }
 
-/* Tidy markdown spacing */
-.bubble :where(p, ul, ol, pre, blockquote, table) {
-  margin: 0.5em 0;
-}
-
-.bubble :first-child {
-  margin-top: 0;
-}
-
-.bubble :last-child {
-  margin-bottom: 0;
-}
