@@ -58,10 +58,10 @@ function UserMessage({ content, images, files }) {
     );
 }
 
-export default React.memo(function Message(props) {
+export default function Message(props) {
     return props.role === 'assistant' ? (
         <AssistantMessage {...props} />
     ) : (
         <UserMessage {...props} />
     );
-});
+}

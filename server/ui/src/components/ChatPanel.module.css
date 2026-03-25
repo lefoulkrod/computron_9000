@@ -7,7 +7,7 @@
 
 .header {
     padding: 8px 12px;
-    border-bottom: 1px solid var(--button);
+    border-bottom: 1px solid var(--muted);
     font-size: 12px;
     font-weight: 600;
     flex-shrink: 0;

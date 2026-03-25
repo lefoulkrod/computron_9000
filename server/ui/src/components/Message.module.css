@@ -28,7 +28,7 @@
   color: var(--text);
   margin-left: auto;
   padding: 0.3rem 0.6rem;
-  border: 1px solid var(--button);
+  border: 1px solid var(--muted);
 }
 
 .bubble {

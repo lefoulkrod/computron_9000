@@ -1,7 +1,7 @@
 .sidebar {
     width: 44px;
     background: var(--secondary);
-    border-right: 1px solid var(--button);
+    border-right: 1px solid var(--muted);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -20,12 +20,12 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: var(--button);
+    color: var(--muted);
     border: 1px solid transparent;
     padding: 0;
 }
 .icon:hover {
-    background: var(--button);
+    background: var(--muted);
     color: var(--text);
 }
 .icon.active {
@@ -37,6 +37,6 @@
 .sep {
     width: 20px;
     height: 1px;
-    background: var(--button);
+    background: var(--muted);
     margin: 3px 0;
 }

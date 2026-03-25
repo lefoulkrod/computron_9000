@@ -21,9 +21,9 @@
 
 .backBtn {
     background: none;
-    border: 1px solid var(--button);
+    border: 1px solid var(--muted);
     border-radius: 5px;
-    color: var(--button);
+    color: var(--muted);
     font-size: 10px;
     padding: 2px 8px;
     cursor: pointer;
@@ -35,7 +35,7 @@
 
 .breadcrumb {
     font-size: 9px;
-    color: var(--button);
+    color: var(--muted);
 }
 .breadcrumbCurrent {
     color: var(--text);
@@ -70,7 +70,7 @@
 
 .meta {
     font-size: 10px;
-    color: var(--button);
+    color: var(--muted);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -98,7 +98,7 @@
     padding: 8px 10px;
     margin-bottom: 8px;
     background: var(--secondary);
-    border: 1px solid var(--button);
+    border: 1px solid var(--muted);
     border-radius: 7px;
     font-size: 11px;
     color: var(--text);
@@ -120,7 +120,7 @@
     gap: 8px;
     padding: 6px 10px;
     background: var(--secondary);
-    border: 1px solid var(--button);
+    border: 1px solid var(--muted);
     border-radius: 6px;
 }
 .fileIcon {
@@ -136,7 +136,7 @@
 }
 .fileMeta {
     font-size: 8px;
-    color: var(--button);
+    color: var(--muted);
 }
 
 /* Streaming cursor */
@@ -157,7 +157,7 @@
 /* Preview panels (right pane — 60%) */
 .previews {
     flex: 1;
-    border-left: 1px solid var(--button);
+    border-left: 1px solid var(--muted);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -169,7 +169,7 @@
 .nudgeBar {
     flex-shrink: 0;
     padding: 8px 16px;
-    border-top: 1px solid var(--button);
+    border-top: 1px solid var(--muted);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -177,13 +177,13 @@
 }
 .nudgeLabel {
     font-size: 9px;
-    color: var(--button);
+    color: var(--muted);
     flex-shrink: 0;
 }
 .nudgeInput {
     flex: 1;
     background: var(--secondary);
-    border: 1px solid var(--button);
+    border: 1px solid var(--muted);
     border-radius: 6px;
     padding: 6px 10px;
     color: var(--text);
@@ -195,5 +195,5 @@
 }
 .nudgeHint {
     font-size: 8px;
-    color: var(--button);
+    color: var(--muted);
 }

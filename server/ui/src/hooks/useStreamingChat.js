@@ -300,12 +300,14 @@ export default function useStreamingChat(callbacks) {
 
                         // Set agentId on the assistant message so the chat
                         // view can look up this agent's activityLog.
+                        // Also clear the placeholder — the agent exists now
+                        // and entries will come from the reducer.
                         if (data.event?.type === 'agent_started' && !data.event.parent_agent_id) {
                             setMessages((prev) => {
                                 const i = prev.length - 1;
                                 if (i < 0 || prev[i].id !== assistantId) return prev;
                                 const updated = [...prev];
-                                updated[i] = { ...updated[i], agentId: data.event.agent_id };
+                                updated[i] = { ...updated[i], agentId: data.event.agent_id, placeholder: false, streaming: true };
                                 return updated;
                             });
                         }

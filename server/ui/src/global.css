@@ -3,7 +3,7 @@
 :root {
   --primary: #fafafa;         /* app background */
   --secondary: #f3f3f3;       /* surfaces/cards */
-  --button: #ababab;          /* muted accents */
+  --muted: #ababab;          /* borders, muted text, chrome */
   --text: #222;               /* foreground text */
   --radius: 0.5rem;
   --header-height: 4.75rem;
@@ -16,7 +16,7 @@
 .dark-theme {
   --primary: #0b0b0c;
   --secondary: #1b1b1d;       /* darker card for contrast */
-  --button: #3a3a3c;
+  --muted: #3a3a3c;
   --text: #f3f3f3;
   --radius: 0.5rem;
   --header-height: 4.75rem;
@@ -48,7 +48,7 @@ i {
 }
 
 button {
-  background: var(--button);
+  background: var(--muted);
   border-radius: var(--radius);
   color: var(--text);
   border: 1px solid transparent;
@@ -77,5 +77,5 @@ button:focus-visible {
 
 /* Subtle custom scrollbars */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb { background: var(--button); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-track { background: transparent; }

@@ -17,7 +17,7 @@
   width: 100%;
   box-sizing: border-box;
   margin-bottom: 0.4rem;
-  border: 1px solid var(--button);
+  border: 1px solid var(--muted);
   border-radius: var(--radius);
   background: var(--primary);
   color: var(--text);
@@ -32,7 +32,7 @@
 }
 
 .customInput::placeholder {
-  color: var(--button);
+  color: var(--muted);
 }
 
 .customInput:focus {
@@ -75,7 +75,7 @@
   padding: 0.2rem 0.4rem;
   font-size: 0.75rem;
   border-radius: 5px;
-  border: 1px solid var(--button);
+  border: 1px solid var(--muted);
   background: var(--primary);
   color: var(--text);
   cursor: pointer;
@@ -90,7 +90,7 @@
   justify-content: center;
   border-radius: 6px;
   background: none;
-  color: var(--button);
+  color: var(--muted);
   border: none;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
@@ -117,7 +117,7 @@
   height: 120px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--button);
+  border: 1px solid var(--muted);
   pointer-events: none;
 }
 
@@ -137,7 +137,7 @@
   border-radius: 5px;
   background: var(--secondary);
   color: var(--text);
-  border: 1px solid var(--button);
+  border: 1px solid var(--muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -149,7 +149,7 @@
 }
 
 .removeAttachment:hover {
-  background: var(--button);
+  background: var(--muted);
 }
 
 /* Generic file chip for non-image attachments */

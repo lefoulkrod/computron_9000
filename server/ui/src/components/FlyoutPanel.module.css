@@ -5,7 +5,7 @@
     bottom: 0;
     width: 270px;
     background: var(--secondary);
-    border-right: 1px solid var(--button);
+    border-right: 1px solid var(--muted);
     z-index: 15;
     display: flex;
     flex-direction: column;
@@ -14,7 +14,7 @@
 
 .header {
     padding: 12px 14px;
-    border-bottom: 1px solid var(--button);
+    border-bottom: 1px solid var(--muted);
     display: flex;
     align-items: center;
     font-size: 12px;
@@ -29,7 +29,7 @@
     margin-left: auto;
     background: none;
     border: none;
-    color: var(--button);
+    color: var(--muted);
     cursor: pointer;
     font-size: 16px;
     padding: 0 4px;

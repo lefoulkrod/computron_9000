@@ -1,6 +1,6 @@
 .panel {
     margin-top: 0.75rem;
-    border: 1px solid var(--button);
+    border: 1px solid var(--muted);
     border-radius: var(--radius);
     background: var(--secondary);
     overflow: hidden;
@@ -15,7 +15,7 @@
     padding: 0.5rem 0.75rem;
     cursor: pointer;
     user-select: none;
-    border-bottom: 1px solid var(--button);
+    border-bottom: 1px solid var(--muted);
     transition: background 0.15s;
 }
 
@@ -37,7 +37,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--button);
+    background: var(--muted);
     border-radius: 999px;
     min-width: 1.2em;
     padding: 0 0.35em;
@@ -74,7 +74,7 @@
     align-items: start;
     gap: 0.1rem 0.5rem;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--button);
+    border-bottom: 1px solid var(--muted);
     position: relative;
 }
 
