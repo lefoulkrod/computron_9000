@@ -58,6 +58,7 @@ vision:
   think: false
   options:
     num_ctx: 60000
+    num_predict: 512
     temperature: 0.3
     top_k: 20
 

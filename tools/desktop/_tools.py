@@ -147,6 +147,30 @@ def _format_a11y_tree(elements: list[dict]) -> str:
     return "\n".join(lines)
 
 
+async def _type_text(text: str) -> None:
+    """Type text into the focused window.
+
+    Uses xclip + Ctrl+V for text containing non-ASCII characters (emoji,
+    Unicode) since xdotool cannot handle multi-byte sequences. Falls back
+    to xdotool type for plain ASCII which works more reliably across
+    terminal emulators that may not support Ctrl+V paste.
+    """
+    if text.isascii():
+        for i in range(0, len(text), 50):
+            chunk = text[i : i + 50]
+            await _run_desktop_cmd(
+                "xdotool type --clearmodifiers --delay 8 -- %s"
+                % shlex.quote(chunk),
+            )
+    else:
+        # Pipe through xclip then paste — handles any Unicode.
+        await _run_desktop_cmd(
+            "printf %%s %s | xclip -selection clipboard"
+            % shlex.quote(text),
+        )
+        await _run_desktop_cmd("xdotool key --clearmodifiers ctrl+v")
+
+
 async def _observe(tool_name: str = "observe", args: str = "") -> str:
     """Capture the accessibility tree as the desktop observation."""
     t0 = asyncio.get_event_loop().time()
@@ -174,13 +198,43 @@ async def read_screen() -> str:
 
 
 _DESCRIBE_PROMPT = (
-    "Describe this desktop screenshot precisely. "
-    "List every window visible with its title and whether it is active. "
-    "List all readable text, UI elements, buttons, menus, toolbars, "
-    "dialog boxes, and the taskbar contents. "
-    "Be specific and exhaustive — an AI agent needs this to understand "
-    "what is on screen beyond the interactive elements."
+    "An AI agent needs to understand this desktop to decide its next action. "
+    "For each window: title (active/inactive), one-sentence content summary. "
+    "Then list any errors, dialogs, or prompts. "
+    "Then list key text showing current state. "
+    "Bullet points only. Maximum 300 words."
 )
+
+
+def _log_describe_panel(
+    model: str,
+    prompt: str,
+    description: str,
+    elapsed_ms: float,
+) -> None:
+    """Emit a Rich panel summarising a describe_screen call."""
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+
+    from rich.panel import Panel
+    from rich.text import Text
+
+    body = Text()
+    body.append("PROMPT:\n", style="bold yellow")
+    body.append(prompt)
+    body.append("\n\nRESPONSE:\n", style="bold green")
+    body.append(description)
+
+    title = "[bold cyan]describe_screen[/bold cyan]  [dim]%s[/dim]" % model
+    subtitle = "[bold]%.0fms[/bold]  %d chars" % (elapsed_ms, len(description))
+
+    _get_console().print(Panel(
+        body,
+        title=title,
+        subtitle=subtitle,
+        border_style="dim",
+        expand=False,
+    ))
 
 
 async def describe_screen() -> str:
@@ -194,6 +248,7 @@ async def describe_screen() -> str:
         Text description of the desktop from the vision model.
     """
     await ensure_desktop_running()
+    t0 = asyncio.get_event_loop().time()
 
     cfg = load_config()
     if cfg.desktop.vision_model is None:
@@ -217,7 +272,7 @@ async def describe_screen() -> str:
                 "content": _DESCRIBE_PROMPT,
                 "images": [Image(value=encoded)],
             }],
-            options={"temperature": 0.1, "num_predict": 2048},
+            options={"temperature": 0.1, "num_predict": 512},
             think=False,
         )
     except Exception as exc:
@@ -232,6 +287,9 @@ async def describe_screen() -> str:
 
     if not answer:
         return "Error: Vision model returned an empty response."
+
+    elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
+    _log_describe_panel(cfg.desktop.vision_model, _DESCRIBE_PROMPT, answer, elapsed_ms)
 
     return answer
 
@@ -302,10 +360,10 @@ async def mouse_drag(x1: int, y1: int, x2: int, y2: int) -> str:
 
 
 async def keyboard_type(text: str) -> str:
-    """Type text on the desktop using the clipboard.
+    """Type text on the desktop.
 
-    Uses clipboard paste (xclip + Ctrl+V) for reliable input — handles
-    Unicode, special characters, and is faster than keystroke simulation.
+    Uses xdotool keystroke simulation for ASCII text and clipboard paste
+    (xclip + Ctrl+V) for Unicode/special characters.
 
     Args:
         text: The text to type.
@@ -314,15 +372,7 @@ async def keyboard_type(text: str) -> str:
         Observation of the desktop after typing.
     """
     await ensure_desktop_running()
-    # Use xdotool type with a short delay — works universally across
-    # terminals, text editors, and GUI apps. Chunk long text to avoid
-    # dropped characters.
-    for i in range(0, len(text), 50):
-        chunk = text[i : i + 50]
-        await _run_desktop_cmd(
-            "xdotool type --clearmodifiers --delay 8 -- %s"
-            % shlex.quote(chunk),
-        )
+    await _type_text(text)
     await asyncio.sleep(_SETTLE_DELAY_S)
     preview = text if len(text) <= 40 else text[:37] + "..."
     return await _observe("keyboard_type", args=repr(preview))
@@ -455,12 +505,7 @@ async def _execute_desktop_action(
     if action == "type":
         content = response.raw.get("type_content", "")
         if content:
-            for i in range(0, len(content), 50):
-                chunk = content[i : i + 50]
-                await _run_desktop_cmd(
-                    "xdotool type --clearmodifiers --delay 8 -- %s"
-                    % shlex.quote(chunk),
-                )
+            await _type_text(content)
         return "typed %r" % (content[:40] if len(content) > 40 else content)
 
     if action == "hotkey":
