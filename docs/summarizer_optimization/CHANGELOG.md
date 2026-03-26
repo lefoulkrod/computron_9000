@@ -2,6 +2,20 @@
 
 A record of how the Computron 9000 context compaction system evolved through systematic experimentation.
 
+## 2026-03-25 — Thinking excerpts in serialization (Experiment 27)
+
+**Change**: When an assistant message has no visible content (just tool calls), include a truncated excerpt of the `thinking` field (up to 200 chars) in the serialized summarizer input. This gives the summarizer context about *why* a tool was called.
+
+**Why**: Multi-agent conversations produce sub-agent compactions where coding agents read large files with empty assistant content — all analysis lives in the `thinking` field. Without it, the summarizer sees bare `[Called: read_file(path)]` entries and extracts noise from truncated file contents. The PAUSE_BUTTON_FIXER sub-agent produced a summary mentioning "charset meta tag" and "ctx.drawImage" instead of the actual task (fixing a pause button on iOS PWA). With thinking excerpts, the summary correctly captures the task objective and what the agent was looking for.
+
+**Results**:
+- PAUSE_BUTTON_FIXER: useless summary → functional (task objective preserved)
+- 10 recent production compactions: no regressions, sub-agent summaries 30-70% more informative
+- Real eval (34 records): fact 3.79 (+0.03), state 3.42 (+0.24), process 2.88 (+0.06)
+- Full conversations (2): fact 4.00, state 4.00, process 3.00, hallucination 5.00
+
+---
+
 ## 2026-03-22 — Dynamic chunk sizing (Experiment 26)
 
 **Change**: Chunk threshold now scales with the summarizer's `num_ctx` config instead of being hardcoded at 20k chars. With `num_ctx: 32768`, the threshold is ~78k chars, allowing large compactions to run as a single pass instead of being split into 7+ chunks and merged.

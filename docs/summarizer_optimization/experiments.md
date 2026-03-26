@@ -33,6 +33,7 @@ PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 
 | 23 | Message group–based keep_recent | **Keep** | Replaced `keep_recent=6` (raw messages) with `keep_recent_groups=2` (assistant message groups). Prevents splitting tool calls from their results at the compaction boundary. Fixed hallucination bug (record `1577ab25`) and summary bloat on re-compaction (record `014e818a`). |
 | 24 | Include tool call arguments and skip trivial results | **Keep** | Include file paths/commands/URLs from tool call args in serialization. Skip trivial results (`{'success': True}`, empty stdout). Fact retention 2.90→3.85, process suppression 2.27→2.82. Coding summaries -43% size. |
 | 26 | Dynamic chunk sizing + num_ctx bump | **Keep** | Chunk threshold scales with `num_ctx` instead of hardcoded 20k. Bumped num_ctx 8192→32768. 335-message compaction: broken format → proper sections in single pass. 40s vs 7-chunk merge. |
+| 27 | Include thinking excerpts in serialization | **Keep** | When assistant content is empty, include truncated thinking (200 chars) so summarizer knows *why* tools were called. Fixes coding sub-agent compactions where all intent was in thinking. PAUSE_BUTTON_FIXER: useless → functional. Fact retention 2.90→3.79, state 2.83→3.42, process 2.27→2.88. |
 
 ## Removed (not needed)
 

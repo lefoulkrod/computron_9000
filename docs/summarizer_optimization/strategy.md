@@ -45,6 +45,8 @@ Key prompt rules:
 
 2. **Per-result cap** (`_TOOL_RESULT_CAP = 200`) — tool results over 200 chars are truncated (head only). Intentionally aggressive: assistant messages already contain the distilled findings. In production, tool results are ~96% of input chars but carry little unique signal beyond what the assistant summarized.
 
+3. **Thinking excerpts** (`_THINKING_CAP = 200`) — when an assistant message has no visible content (common in coding conversations where the assistant makes tool calls silently), the `thinking` field is truncated and included as context. This tells the summarizer *why* a tool was called (e.g., "reading file to find pause button implementation") rather than leaving it as a bare `[Called: read_file(...)]`.
+
 For long conversations, the input is split into chunks, each summarized independently, then merged in a final pass. The chunk threshold scales with the summarizer's `num_ctx` setting (60% of `num_ctx × 4` chars). With `num_ctx: 32768`, the threshold is ~78k chars — most compactions run as a single pass.
 
 ### Model
@@ -89,27 +91,28 @@ Full-fidelity conversations are stored in `full_conversations/` — complete mes
 
 The runner simulates compaction using the current `keep_recent_groups` boundary logic, runs the summarizer, and evaluates with deterministic checks + LLM judge (including a hallucination score).
 
-### Current baseline (2026-03-22, gemma3:27b, num_ctx=32768)
+### Current baseline (2026-03-25, gemma3:27b, num_ctx=32768, thinking excerpts)
 
 ```
-Real compaction records (33 records):
+Real compaction records (34 records):
   Has all sections:       100%
   Required facts found:   98%
-  Fact retention:         3.76/5
-  Current state:          3.18/5
-  Process suppression:    2.82/5
+  Fact retention:         3.79/5
+  Current state:          3.42/5
+  Process suppression:    2.88/5
 
 Full conversations (2 records):
-  Fact retention:         3.50/5
-  Current state:          3.50/5
-  Process suppression:    2.00/5
-  Hallucination:          4.50/5
+  Fact retention:         4.00/5
+  Current state:          4.00/5
+  Process suppression:    3.00/5
+  Hallucination:          5.00/5
 
 Synthetic scenarios (12):
   Pass rate:              8/12 (67%)
 ```
 
 Previous baselines:
+- 2026-03-22 (num_ctx=32768): fact 3.76, state 3.18, process 2.82
 - 2026-03-21 (num_ctx=8192): fact 3.85, state 3.36, process 2.82
 - 2026-03-20 (gemma3:27b initial): fact 3.70, state 3.77, process 2.77
 - 2026-03-19 (mistral:7b): fact ~2.8, state ~2.8, process ~2.3

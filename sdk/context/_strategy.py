@@ -32,6 +32,13 @@ _console = Console(stderr=True)
 # but carry little unique signal beyond what the assistant summarized.
 _TOOL_RESULT_CAP = 200
 
+# Maximum chars of the ``thinking`` field to include when the assistant
+# message has no visible content.  In coding conversations the assistant
+# often makes tool calls with empty content — all analysis lives in
+# ``thinking``.  Including an excerpt gives the summarizer context about
+# *why* a tool was called (e.g. "reading file to find pause button").
+_THINKING_CAP = 200
+
 
 # Approximate characters per token for estimating chunk boundaries.
 _CHARS_PER_TOKEN = 4
@@ -549,6 +556,19 @@ def _serialize_messages(messages: list[dict]) -> str:
 
         if role == "assistant":
             tool_calls = msg.get("tool_calls")
+            # When the assistant message has no visible content, its
+            # ``thinking`` field often contains the only statement of
+            # intent (e.g. "reading this file to find the pause button").
+            # Include a truncated excerpt so the summarizer knows *why*
+            # a tool was called.
+            thinking = ""
+            if not content:
+                raw_thinking = msg.get("thinking") or ""
+                if raw_thinking:
+                    thinking = raw_thinking[:_THINKING_CAP]
+                    if len(raw_thinking) > _THINKING_CAP:
+                        thinking += "..."
+
             if tool_calls:
                 tool_parts = []
                 for tc in tool_calls:
@@ -562,10 +582,16 @@ def _serialize_messages(messages: list[dict]) -> str:
                 tools_str = ", ".join(tool_parts)
                 if content:
                     entries.append(f"Assistant: {content}\n  [Called: {tools_str}]")
+                elif thinking:
+                    entries.append(
+                        f"Assistant (context: {thinking})\n  [Called: {tools_str}]",
+                    )
                 else:
                     entries.append(f"Assistant: [Called: {tools_str}]")
             elif content:
                 entries.append(f"Assistant: {content}")
+            elif thinking:
+                entries.append(f"Assistant (context: {thinking})")
 
         elif role == "tool":
             tool_name = msg.get("tool_name", "unknown")
