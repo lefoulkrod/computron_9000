@@ -2,6 +2,21 @@
 
 A record of how the Computron 9000 context compaction system evolved through systematic experimentation.
 
+## 2026-03-25 — Tool result clearing pre-compaction (Experiment 28)
+
+**Change**: New `ToolClearingStrategy` that runs before LLM summarization. At 50% context fill, replaces old tool result content with `[tool result cleared]` and truncates large tool-call argument values (>200 chars). Only clears tool results that have a subsequent assistant message (meaning the assistant already processed and summarized the data). Configurable threshold — set to 0.0 to disable.
+
+**Why**: Tool results are 67-100% of context window usage but become redundant once the assistant processes them. A 160-message browser flight search used 174% of a 32k context — with clearing, it fits at 28% without any LLM summarization. This delays or entirely avoids the expensive 20-40s summarizer call.
+
+**Results**:
+- Browser conversation (160 msgs, 32k ctx): 174% → 28% fill — compaction completely avoided
+- Coding conversation (161 msgs, 32k ctx): 57% → 22% fill — more headroom
+- 100% of must_contain fact patterns survive clearing (46/46)
+- LLM probe test (kimi-k2.5:cloud): equivalent responses on cleared vs uncleared history
+- No regression on real eval or full conversation eval
+
+---
+
 ## 2026-03-25 — Thinking excerpts in serialization (Experiment 27)
 
 **Change**: When an assistant message has no visible content (just tool calls), include a truncated excerpt of the `thinking` field (up to 200 chars) in the serialized summarizer input. This gives the summarizer context about *why* a tool was called.

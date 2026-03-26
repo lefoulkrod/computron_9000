@@ -74,6 +74,15 @@ class ConversationHistory:
             raise IndexError(msg % (index, len(self._messages)))
         self._messages.insert(index, message)
 
+    def get_mutable(self, index: int) -> dict[str, Any]:
+        """Return a direct reference to the message at *index* for in-place mutation.
+
+        Unlike ``messages`` (which returns copies), the returned dict IS the
+        internal message — changes to it modify the history directly. Use
+        this for lightweight mutations like clearing tool result content.
+        """
+        return self._messages[index]
+
     def clear(self) -> None:
         """Remove all messages."""
         self._messages.clear()

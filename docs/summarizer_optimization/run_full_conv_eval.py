@@ -33,7 +33,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from sdk.context._strategy import (
     SummarizeStrategy,
+    _CLEARED_TOOL_RESULT,
+    _ARG_CLEAR_CAP,
+    _SUMMARY_PREFIX,
     _count_kept_by_assistant_groups,
+    _has_following_assistant_roles,
     _serialize_messages,
 )
 from sdk.providers import get_provider
@@ -142,6 +146,30 @@ async def evaluate_conversation(
         "compactable_messages": len(compactable),
         "kept_messages": len(kept),
     }
+
+    # Simulate tool clearing on compactable messages (same as production).
+    compactable = copy.deepcopy(compactable)
+    roles = [m.get("role", "") for m in compactable]
+    for i, m in enumerate(compactable):
+        if roles[i] == "tool":
+            content = m.get("content") or ""
+            if (
+                len(content) > len(_CLEARED_TOOL_RESULT)
+                and _has_following_assistant_roles(roles, i, len(compactable))
+            ):
+                m["content"] = _CLEARED_TOOL_RESULT
+        elif roles[i] == "assistant" and _has_following_assistant_roles(
+            roles, i, len(compactable),
+        ):
+            for tc in m.get("tool_calls") or []:
+                fn = tc.get("function") or tc
+                args = fn.get("arguments")
+                if not isinstance(args, dict):
+                    continue
+                for key, val in args.items():
+                    val_str = str(val)
+                    if len(val_str) > _ARG_CLEAR_CAP:
+                        args[key] = val_str[:_ARG_CLEAR_CAP] + f"... [{len(val_str):,} chars]"
 
     # Serialize and summarize the compactable window
     serialized = _serialize_messages(copy.deepcopy(compactable))

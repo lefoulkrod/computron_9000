@@ -7,7 +7,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 
 from config import load_config
-from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
+from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import (
     AssistantResponse,
     agent_span,
@@ -185,7 +185,7 @@ def _ensure_context_manager(
             history=conversation.history,
             context_limit=num_ctx,
             agent_name=active_agent.name,
-            strategies=[SummarizeStrategy()],
+            strategies=[ToolClearingStrategy(), SummarizeStrategy()],
         )
     return conversation.context_manager
 

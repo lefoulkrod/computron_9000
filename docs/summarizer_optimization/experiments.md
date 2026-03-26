@@ -34,6 +34,7 @@ PYTHONPATH=. uv run python docs/summarizer_optimization/run_scenarios.py --runs 
 | 24 | Include tool call arguments and skip trivial results | **Keep** | Include file paths/commands/URLs from tool call args in serialization. Skip trivial results (`{'success': True}`, empty stdout). Fact retention 2.90→3.85, process suppression 2.27→2.82. Coding summaries -43% size. |
 | 26 | Dynamic chunk sizing + num_ctx bump | **Keep** | Chunk threshold scales with `num_ctx` instead of hardcoded 20k. Bumped num_ctx 8192→32768. 335-message compaction: broken format → proper sections in single pass. 40s vs 7-chunk merge. |
 | 27 | Include thinking excerpts in serialization | **Keep** | When assistant content is empty, include truncated thinking (200 chars) so summarizer knows *why* tools were called. Fixes coding sub-agent compactions where all intent was in thinking. PAUSE_BUTTON_FIXER: useless → functional. Fact retention 2.90→3.79, state 2.83→3.42, process 2.27→2.88. |
+| 28 | Tool result clearing pre-compaction | **Keep** | New `ToolClearingStrategy` at 50% fill clears old tool results and large tool-call args (>200 chars) before LLM summarization triggers. Only clears results with a following assistant message (safe). Frees 60-90% of context, can avoid compaction entirely. Browser flight search: 174%→28% fill at 32k ctx. Zero LLM cost. No quality regression. |
 
 ## Removed (not needed)
 

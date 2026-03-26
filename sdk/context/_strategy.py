@@ -130,6 +130,129 @@ class ContextStrategy(Protocol):
         ...
 
 
+# Stub that replaces cleared tool result content.
+_CLEARED_TOOL_RESULT = "[tool result cleared]"
+
+# Maximum chars for a tool call argument value before it gets truncated
+# during clearing. Short values (file paths, commands, URLs) are naturally
+# under this limit; only bulk data (file contents, large patches) exceeds it.
+_ARG_CLEAR_CAP = 200
+
+
+class ToolClearingStrategy:
+    """Clear old tool results and large tool-call arguments to free context.
+
+    A lightweight, zero-LLM-cost strategy that runs before the expensive
+    ``SummarizeStrategy``. By replacing already-processed tool outputs with
+    short stubs, it can free 60-90% of context and delay or avoid
+    LLM-based summarization entirely.
+
+    Safety rule: only clears tool results that have a subsequent assistant
+    message in the clearable range, meaning the assistant already processed
+    and summarized the result. Tool results at the tail (not yet processed)
+    are left intact.
+
+    Args:
+        threshold: Fill ratio above which clearing activates (0.0–1.0).
+            Set to 0.0 to disable.
+        keep_recent_groups: Number of recent assistant message groups to
+            protect from clearing.
+    """
+
+    def __init__(
+        self,
+        threshold: float = 0.50,
+        keep_recent_groups: int = 2,
+    ) -> None:
+        self._threshold = threshold
+        self._keep_recent_groups = keep_recent_groups
+
+    @property
+    def trigger(self) -> TriggerPoint:
+        return TriggerPoint.BEFORE_MODEL_CALL
+
+    def should_apply(self, history: ConversationHistory, stats: ContextStats) -> bool:
+        if self._threshold <= 0.0:
+            return False
+        return stats.fill_ratio >= self._threshold
+
+    async def apply(self, history: ConversationHistory, stats: ContextStats) -> None:
+        """Clear old tool results and large args in place."""
+        total = len(history)
+
+        # Find first user message (pinned — never touched).
+        pin_end = 0
+        for i in range(total):
+            msg = history.get_mutable(i)
+            if msg.get("role") == "system":
+                continue
+            if msg.get("role") == "user":
+                content = msg.get("content") or ""
+                if not content.startswith(_SUMMARY_PREFIX):
+                    pin_end = i + 1
+                    break
+
+        # Build a lightweight role list for boundary calculation.
+        body = [history.get_mutable(i) for i in range(pin_end, total)]
+        keep_count = _count_kept_by_assistant_groups(
+            body, self._keep_recent_groups,
+        )
+        boundary = pin_end + len(body) - keep_count
+
+        # Pre-scan roles so _has_following_assistant doesn't need the list.
+        roles = [history.get_mutable(i).get("role", "") for i in range(total)]
+
+        results_cleared = 0
+        args_cleared = 0
+
+        for i in range(pin_end, boundary):
+            msg = history.get_mutable(i)
+            role = roles[i]
+
+            if role == "tool":
+                content = msg.get("content") or ""
+                if (
+                    len(content) > len(_CLEARED_TOOL_RESULT)
+                    and _has_following_assistant_roles(roles, i, boundary)
+                ):
+                    msg["content"] = _CLEARED_TOOL_RESULT
+                    results_cleared += 1
+
+            elif role == "assistant":
+                if not _has_following_assistant_roles(roles, i, boundary):
+                    continue
+                for tc in msg.get("tool_calls") or []:
+                    fn = tc.get("function") or tc
+                    args = fn.get("arguments")
+                    if not isinstance(args, dict):
+                        continue
+                    for key, val in args.items():
+                        val_str = str(val)
+                        if len(val_str) > _ARG_CLEAR_CAP:
+                            args[key] = (
+                                val_str[:_ARG_CLEAR_CAP]
+                                + f"... [{len(val_str):,} chars]"
+                            )
+                            args_cleared += 1
+
+        if results_cleared or args_cleared:
+            logger.info(
+                "ToolClearingStrategy: cleared %d tool results, "
+                "%d large args (fill=%.0f%%)",
+                results_cleared, args_cleared, stats.fill_ratio * 100,
+            )
+
+
+def _has_following_assistant_roles(
+    roles: list[str], start: int, end: int,
+) -> bool:
+    """Check if an assistant message exists between *start*+1 and *end*."""
+    for j in range(start + 1, end):
+        if roles[j] == "assistant":
+            return True
+    return False
+
+
 class SummarizeStrategy:
     """Summarizes old conversation history when context fills up.
 
@@ -193,6 +316,8 @@ class SummarizeStrategy:
         cfg = load_config()
         resolved_model, resolved_options = self._resolve_model(cfg)
 
+        import time as _time
+        t0 = _time.monotonic()
         try:
             summary, model_name = await self._summarize(
                 compactable, prior_summary,
@@ -208,6 +333,7 @@ class SummarizeStrategy:
             logger.exception("SummarizeStrategy: LLM call failed, skipping compaction")
             _unload_model(resolved_model)
             return
+        elapsed = _time.monotonic() - t0
 
         # Persist the summarization event for quality evaluation.
         record = SummaryRecord(
@@ -224,6 +350,7 @@ class SummarizeStrategy:
             conversation_id=get_conversation_id() or "",
             agent_name=get_current_agent_name() or "",
             options=resolved_options if isinstance(resolved_options, dict) else {},
+            elapsed_seconds=round(elapsed, 1),
         )
         save_summary_record(record)
 

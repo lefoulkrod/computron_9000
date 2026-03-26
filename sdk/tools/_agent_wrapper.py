@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast, get_args, get_origin
 
 from agents.types import Agent
-from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
+from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_current_agent_id, get_model_options
 from sdk.hooks import default_hooks
 from sdk.turn import StopRequestedError, run_turn
@@ -321,7 +321,7 @@ Returns:
                 history=history,
                 context_limit=num_ctx,
                 agent_name=agent.name,
-                strategies=[SummarizeStrategy()],
+                strategies=[ToolClearingStrategy(), SummarizeStrategy()],
             )
             hooks = default_hooks(
                 agent,

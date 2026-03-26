@@ -86,6 +86,7 @@ class SummaryRecord(BaseModel):
     conversation_id: str = ""
     agent_name: str = ""
     options: dict[str, Any] = Field(default_factory=dict)
+    elapsed_seconds: float | None = None
 
 
 class ConversationSummary(BaseModel):

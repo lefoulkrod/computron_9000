@@ -17,7 +17,7 @@ from sdk import (
 )
 from sdk.turn import StopRequestedError
 from agents.browser import browser_agent_tool
-from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy
+from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_model_options
 from agents.types import Agent
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
@@ -124,7 +124,7 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
             history=history,
             context_limit=num_ctx,
             agent_name=agent.name,
-            strategies=[SummarizeStrategy()],
+            strategies=[ToolClearingStrategy(), SummarizeStrategy()],
         )
         hooks = default_hooks(
             agent,

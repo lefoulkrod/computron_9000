@@ -20,9 +20,17 @@ The summarizer needs to work well across a wide variety of conversation types: w
 
 **File**: `sdk/context/_strategy.py`
 
-### Trigger
+### Two-phase context management
 
-- Activates when context fill ratio >= 75% (`threshold=0.75`)
+Context is managed by two strategies that run in sequence before each LLM call:
+
+1. **`ToolClearingStrategy`** (threshold: 50%) — lightweight, zero-LLM-cost. Replaces old tool result content with `[tool result cleared]` and truncates large tool-call argument values (>200 chars). Only clears results that have a subsequent assistant message (meaning the assistant already processed the data). Can free 60-90% of context, often avoiding LLM summarization entirely. Configurable: set threshold to 0.0 to disable.
+
+2. **`SummarizeStrategy`** (threshold: 75%) — if context is still above 75% after clearing, runs the full LLM summarization pipeline described below.
+
+### Summarization trigger
+
+- Activates when context fill ratio >= 75% (`threshold=0.75`) after clearing
 - Keeps the last 2 assistant message groups verbatim (`keep_recent_groups=2`). A group is an assistant message plus any following tool results, plus any interleaved user messages between groups. The boundary always falls right before an assistant message, so tool call/result pairs are never split.
 - Pins the first user message (original request) — never summarized
 
