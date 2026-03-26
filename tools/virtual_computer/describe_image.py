@@ -26,7 +26,7 @@ _SUPPORTED_IMAGE_TYPES = frozenset({
 
 async def describe_image(
     path: str,
-    prompt: str = "Describe this image in detail.",
+    prompt: str = "Describe this image concisely. List key visual elements and any readable text.",
 ) -> str:
     """Analyze an image file from the virtual computer using the vision model.
 
