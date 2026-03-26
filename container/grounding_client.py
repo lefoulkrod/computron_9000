@@ -75,37 +75,63 @@ def _start_server():
         f.write(str(proc.pid))
 
 
-def _ensure_server():
-    """Make sure the server is running, starting it if needed."""
-    if _health_check():
-        return
+_MAX_START_ATTEMPTS = 3
 
-    if _server_process_alive():
-        deadline = time.time() + STARTUP_TIMEOUT
-        while time.time() < deadline:
-            time.sleep(1)
-            if _health_check():
-                return
-            if not _server_process_alive():
-                raise RuntimeError(
-                    "Grounding server process died during startup (possible OOM)"
-                )
-        raise RuntimeError(
-            f"Grounding server did not become healthy within {STARTUP_TIMEOUT}s"
-        )
 
-    _start_server()
-    deadline = time.time() + STARTUP_TIMEOUT
+def _wait_for_healthy(timeout):
+    """Wait up to *timeout* seconds for the server to become healthy.
+
+    Returns True if the server is healthy, False if the process died.
+
+    Raises RuntimeError if the timeout expires with the process still alive
+    but not healthy.
+    """
+    deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(1)
         if _health_check():
-            return
+            return True
         if not _server_process_alive():
-            raise RuntimeError(
-                "Grounding server process died during startup (possible OOM)"
-            )
+            return False
     raise RuntimeError(
-        f"Grounding server did not start within {STARTUP_TIMEOUT}s"
+        "Grounding server did not become healthy within %ds" % timeout
+    )
+
+
+def _ensure_server():
+    """Make sure the server is running, starting it if needed.
+
+    Retries up to ``_MAX_START_ATTEMPTS`` times if the server process dies
+    during startup (e.g. from an OOM). Each retry cleans up the stale
+    process before re-launching.
+    """
+    if _health_check():
+        return
+
+    # If a process is running but not healthy, wait for it.
+    if _server_process_alive():
+        if _wait_for_healthy(STARTUP_TIMEOUT):
+            return
+        # Process died while we waited — fall through to restart loop.
+
+    for attempt in range(1, _MAX_START_ATTEMPTS + 1):
+        # Clean up any stale process / PID file before starting.
+        _kill_server()
+
+        _start_server()
+        if _wait_for_healthy(STARTUP_TIMEOUT):
+            return
+
+        # Process died during startup (OOM, crash, etc.).
+        if attempt < _MAX_START_ATTEMPTS:
+            print(
+                "[grounding-client] Server died on attempt %d/%d, retrying..."
+                % (attempt, _MAX_START_ATTEMPTS)
+            )
+
+    raise RuntimeError(
+        "Grounding server failed to start after %d attempts (possible OOM)"
+        % _MAX_START_ATTEMPTS
     )
 
 
@@ -142,21 +168,32 @@ def ground_from_path(image_path, task):
 
 
 def _post_ground(body):
-    """POST to /ground and return the parsed response."""
-    req = urllib.request.Request(
-        f"{SERVER_URL}/ground",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    """POST to /ground and return the parsed response.
 
-    try:
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode()
+    If the request fails with a connection error (server crashed), attempts
+    to restart the server and retry once.
+    """
+    for attempt in range(2):
+        req = urllib.request.Request(
+            f"{SERVER_URL}/ground",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
-            error_data = json.loads(error_body)
-            raise RuntimeError(error_data.get("error", error_body))
-        except json.JSONDecodeError:
-            raise RuntimeError(error_body)
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode()
+            try:
+                error_data = json.loads(error_body)
+                raise RuntimeError(error_data.get("error", error_body))
+            except json.JSONDecodeError:
+                raise RuntimeError(error_body)
+        except (urllib.error.URLError, ConnectionError, OSError):
+            if attempt == 0:
+                print("[grounding-client] Server unreachable, restarting...")
+                _kill_server()
+                _ensure_server()
+                continue
+            raise RuntimeError("Grounding server unreachable after restart")
