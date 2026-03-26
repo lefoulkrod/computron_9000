@@ -206,37 +206,6 @@ _DESCRIBE_PROMPT = (
 )
 
 
-def _log_describe_panel(
-    model: str,
-    prompt: str,
-    description: str,
-    elapsed_ms: float,
-) -> None:
-    """Emit a Rich panel summarising a describe_screen call."""
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-
-    from rich.panel import Panel
-    from rich.text import Text
-
-    body = Text()
-    body.append("PROMPT:\n", style="bold yellow")
-    body.append(prompt)
-    body.append("\n\nRESPONSE:\n", style="bold green")
-    body.append(description)
-
-    title = "[bold cyan]describe_screen[/bold cyan]  [dim]%s[/dim]" % model
-    subtitle = "[bold]%.0fms[/bold]  %d chars" % (elapsed_ms, len(description))
-
-    _get_console().print(Panel(
-        body,
-        title=title,
-        subtitle=subtitle,
-        border_style="dim",
-        expand=False,
-    ))
-
-
 async def describe_screen() -> str:
     """Get a vision model description of what is visible on the desktop.
 
@@ -288,8 +257,13 @@ async def describe_screen() -> str:
     if not answer:
         return "Error: Vision model returned an empty response."
 
+    from tools._vision_logging import log_vision_panel
+
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
-    _log_describe_panel(cfg.desktop.vision_model, _DESCRIBE_PROMPT, answer, elapsed_ms)
+    log_vision_panel(
+        "describe_screen", cfg.desktop.vision_model,
+        _DESCRIBE_PROMPT, answer, elapsed_ms,
+    )
 
     return answer
 

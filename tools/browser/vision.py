@@ -6,6 +6,7 @@ UI-TARS grounding server for action prediction (``perform_visual_action``).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 from typing import Any, cast
@@ -55,6 +56,8 @@ async def inspect_page(
     Raises:
         BrowserToolError: If capture or model generation fails.
     """
+    t0 = asyncio.get_event_loop().time()
+
     clean_prompt = prompt.strip()
     if not clean_prompt:
         msg = "Prompt must be a non-empty string."
@@ -108,6 +111,15 @@ async def inspect_page(
     if answer is None:
         msg = "Vision model did not return an answer."
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
+
+    from tools._vision_logging import log_vision_panel
+
+    elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
+    log_vision_panel(
+        "inspect_page", model.model,
+        clean_prompt, answer, elapsed_ms,
+        image_source="%s (%s)" % (view.url, normalized_mode),
+    )
 
     return answer
 

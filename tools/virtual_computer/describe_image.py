@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import mimetypes
@@ -38,6 +39,8 @@ async def describe_image(
     Returns:
         The vision model's textual response.
     """
+    t0 = asyncio.get_event_loop().time()
+
     cfg = load_config()
     container_home = cfg.virtual_computer.container_working_dir.rstrip("/") + "/"
     host_home = cfg.virtual_computer.home_dir
@@ -90,5 +93,14 @@ async def describe_image(
     answer = cast(str | None, getattr(response, "response", None))
     if answer is None:
         return "Error: Vision model did not return a response."
+
+    from tools._vision_logging import log_vision_panel
+
+    elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
+    log_vision_panel(
+        "describe_image", vision.model,
+        prompt, answer, elapsed_ms,
+        image_source=path,
+    )
 
     return answer
