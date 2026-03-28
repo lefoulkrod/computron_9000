@@ -35,10 +35,7 @@ from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
 from conversations._store import (
     delete_conversation as _delete_conversation,
-    delete_turn as _delete_turn,
     list_conversations as _list_conversations,
-    list_turns as _list_turns,
-    load_turn as _load_turn,
 )
 from tools.desktop._lifecycle import is_desktop_running, start_desktop
 from tools.desktop._exec import DesktopExecError
@@ -290,34 +287,6 @@ async def delete_memory_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def list_turns_handler(request: Request) -> Response:
-    """Return turn index entries (paginated)."""
-    limit = int(request.query.get("limit", "50"))
-    offset = int(request.query.get("offset", "0"))
-    outcome = request.query.get("outcome")
-    entries = _list_turns(limit=limit, offset=offset, outcome=outcome)
-    data = [e.model_dump() for e in entries]
-    return web.json_response(data)
-
-
-async def get_turn_handler(request: Request) -> Response:
-    """Return a full turn transcript."""
-    turn_id = request.match_info["id"]
-    record = _load_turn(turn_id)
-    if record is None:
-        return web.json_response({"error": "Turn not found"}, status=404)
-    return web.json_response(record.model_dump())
-
-
-async def delete_turn_handler(request: Request) -> Response:
-    """Delete a turn by ID."""
-    turn_id = request.match_info["id"]
-    found = _delete_turn(turn_id)
-    if not found:
-        return web.json_response({"error": "Turn not found"}, status=404)
-    return web.Response(status=204)
-
-
 async def list_conversations_handler(_request: Request) -> Response:
     """Return past conversation summaries for the conversations panel."""
     summaries = _list_conversations()
@@ -402,11 +371,6 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("GET", "/api/conversations/sessions", list_conversations_handler)
     app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_conversation_handler)
     app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_conversation_handler)
-
-    # Turns API (formerly conversations)
-    app.router.add_route("GET", "/api/conversations", list_turns_handler)
-    app.router.add_route("GET", "/api/conversations/{id}", get_turn_handler)
-    app.router.add_route("DELETE", "/api/conversations/{id}", delete_turn_handler)
 
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.

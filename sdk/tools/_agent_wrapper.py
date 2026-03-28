@@ -6,6 +6,7 @@ produce async tool-call wrappers from agent instances.
 
 import json
 import logging
+import uuid as _uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast, get_args, get_origin
 
@@ -13,7 +14,8 @@ from agents.types import Agent
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_current_agent_id, get_model_options
 from sdk.hooks import default_hooks
-from sdk.turn import StopRequestedError, run_turn
+from sdk.hooks._persistence import PersistenceHook
+from sdk.turn import StopRequestedError, get_conversation_id, run_turn
 
 
 class AgentToolMarker:
@@ -328,6 +330,16 @@ Returns:
                 max_iterations=effective_max_iterations,
                 ctx_manager=ctx_manager,
             )
+
+            # Persist sub-agent history so the full conversation is recoverable.
+            conv_id = get_conversation_id() or "default"
+            short_id = _uuid.uuid4().hex[:8]
+            hooks.append(PersistenceHook(
+                conversation_id=conv_id,
+                history=history,
+                sub_agent_name=name,
+                sub_agent_id=short_id,
+            ))
 
             try:
                 # For string results, single pass without retry

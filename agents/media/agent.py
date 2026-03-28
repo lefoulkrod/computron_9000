@@ -49,6 +49,11 @@ SYSTEM_PROMPT = dedent(
     Do NOT run "pip install torch" — it overwrites the CUDA build.
     Save outputs to /home/computron/. Files there are served by the web server,
     so HTML can reference them as src="/home/computron/…" — never base64-encode.
+    SCRATCHPAD: Use save_to_scratchpad to note key data you'll need in
+    later steps. Scratchpad entries persist for the entire conversation
+    and are shared across all agents. Earlier tool results may be cleared
+    from context.
+
     Provide a brief summary with file paths when done.
     """
 )

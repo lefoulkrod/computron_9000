@@ -82,6 +82,13 @@ SYSTEM_PROMPT = dedent(
     flask-socketio, numpy, pandas, scipy, scikit-learn, matplotlib, pillow,
     and many more are already installed. Do NOT reinstall these.
 
+    SCRATCHPAD: Use save_to_scratchpad to note key findings — file paths,
+    error messages, config values, or data you'll need in later steps.
+    Scratchpad entries persist for the entire conversation and are shared
+    across all agents. Earlier tool results may be cleared from context to
+    save space, so the scratchpad is the reliable way to keep important
+    data available.
+
     Return a concise summary of changes with all file paths when done.
     """
 )

@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from sdk.context import ConversationHistory, SummarizeStrategy
+from sdk.context import ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.context._models import ContextStats
 from sdk.context._strategy import (
+    _ARG_CLEAR_CAP,
+    _CLEARED_TOOL_RESULT,
     _SUMMARY_PREFIX,
     _extract_prior_summary,
     _find_first_user,
@@ -248,3 +250,72 @@ class TestSummaryRecordMetadata:
         assert record.conversation_id == "conv-123"
         assert record.agent_name == "BROWSER"
         assert record.options == {"temperature": 0.3}
+
+
+# ---------------------------------------------------------------------------
+# ToolClearingStrategy: ClearingRecord
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestClearingRecord:
+    """Verify ToolClearingStrategy saves ClearingRecord with cleared content."""
+
+    @pytest.mark.asyncio
+    async def test_saves_clearing_record_on_clear(self):
+        """ClearingRecord should contain original content of cleared items."""
+        big_result = "x" * 5000
+        big_arg_value = "y" * 1000
+        messages = [
+            {"role": "user", "content": "do something"},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"function": {"name": "write_file", "arguments": {"path": "/tmp/f", "content": big_arg_value}}}
+            ]},
+            {"role": "tool", "content": big_result, "tool_name": "write_file"},
+            {"role": "assistant", "content": "wrote the file"},
+            # Recent — should be protected
+            {"role": "user", "content": "now what"},
+            {"role": "assistant", "content": "done"},
+        ]
+        history = _build_history(messages)
+        strategy = ToolClearingStrategy(threshold=0.5, keep_recent_groups=1)
+
+        saved_records = []
+        with patch("sdk.context._strategy.save_clearing_record", side_effect=saved_records.append), \
+             patch("sdk.context._strategy.get_conversation_id", return_value="conv-456"), \
+             patch("sdk.context._strategy.get_current_agent_name", return_value="CODER"):
+            await strategy.apply(history, _make_stats(0.6))
+
+        assert len(saved_records) == 1
+        record = saved_records[0]
+        assert record.conversation_id == "conv-456"
+        assert record.agent_name == "CODER"
+        assert record.results_cleared == 1
+        assert record.args_cleared == 1
+        assert record.total_chars_freed > 0
+
+        # Verify cleared items contain original content
+        result_items = [ci for ci in record.cleared_items if ci.cleared_type == "tool_result"]
+        assert len(result_items) == 1
+        assert result_items[0].original_content == big_result
+        assert result_items[0].tool_name == "write_file"
+
+        arg_items = [ci for ci in record.cleared_items if ci.cleared_type == "tool_arg"]
+        assert len(arg_items) == 1
+        assert arg_items[0].original_content == big_arg_value
+        assert arg_items[0].arg_key == "content"
+
+    @pytest.mark.asyncio
+    async def test_no_record_when_nothing_cleared(self):
+        """No ClearingRecord should be saved when nothing is cleared."""
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        history = _build_history(messages)
+        strategy = ToolClearingStrategy(threshold=0.5, keep_recent_groups=1)
+
+        with patch("sdk.context._strategy.save_clearing_record") as mock_save:
+            await strategy.apply(history, _make_stats(0.6))
+
+        mock_save.assert_not_called()

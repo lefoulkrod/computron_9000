@@ -1,73 +1,10 @@
-"""Pydantic models for conversation and turn persistence."""
+"""Pydantic models for conversation persistence."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from pydantic import BaseModel, Field
-
-
-class ToolCallRecord(BaseModel):
-    """A single tool invocation within a turn."""
-
-    name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    result_summary: str = ""
-    duration_ms: int | None = None
-    success: bool = True
-
-
-class MessageRecord(BaseModel):
-    """A single message (user, assistant, or tool) in a turn."""
-
-    role: str
-    content: str | None = None
-    thinking: str | None = None
-    tool_calls: list[ToolCallRecord] = Field(default_factory=list)
-    agent_name: str | None = None
-    depth: int = 0
-    timestamp: str = ""
-
-
-class TurnMetadata(BaseModel):
-    """Summary metadata for a completed turn."""
-
-    task_summary: str = ""
-    task_category: str = ""
-    outcome: str = "unknown"  # "success" | "failure" | "partial" | "unknown"
-    total_tool_calls: int = 0
-    total_tokens: int = 0
-    agent_chain: list[str] = Field(default_factory=list)
-    duration_seconds: float = 0.0
-    skill_applied: str | None = None
-    analyzed: bool = False
-
-
-class TurnRecord(BaseModel):
-    """Full record of a completed turn (one user request -> agent response)."""
-
-    id: str
-    conversation_id: str = "default"
-    started_at: str = ""
-    ended_at: str = ""
-    model: str = ""
-    agent: str = ""
-    user_message: str = ""
-    messages: list[MessageRecord] = Field(default_factory=list)
-    metadata: TurnMetadata = Field(default_factory=TurnMetadata)
-
-
-class TurnIndexEntry(BaseModel):
-    """Lightweight index entry for fast filtering without loading full transcripts."""
-
-    id: str
-    conversation_id: str = "default"
-    user_message: str = ""
-    task_category: str = ""
-    outcome: str = "unknown"
-    started_at: str = ""
-    skill_applied: str | None = None
-    analyzed: bool = False
 
 
 class SummaryRecord(BaseModel):
@@ -89,14 +26,38 @@ class SummaryRecord(BaseModel):
     elapsed_seconds: float | None = None
 
 
+class ClearedItem(BaseModel):
+    """A single item that was cleared from conversation history."""
+
+    message_index: int
+    role: str  # "tool" or "assistant"
+    tool_name: str = ""
+    cleared_type: str = ""  # "tool_result" or "tool_arg"
+    arg_key: str = ""
+    original_content: str = ""
+    original_chars: int = 0
+
+
+class ClearingRecord(BaseModel):
+    """Record of a single tool clearing event for quality evaluation."""
+
+    id: str
+    created_at: str = ""
+    conversation_id: str = ""
+    agent_name: str = ""
+    fill_ratio: float = 0.0
+    total_chars_freed: int = 0
+    results_cleared: int = 0
+    args_cleared: int = 0
+    threshold: float = 0.0
+    keep_recent_groups: int = 0
+    cleared_items: list[ClearedItem] = Field(default_factory=list)
+
+
 class ConversationSummary(BaseModel):
-    """Summary of a full conversation (all turns)."""
+    """Summary of a conversation for listing in the UI."""
 
     conversation_id: str
-    turn_count: int = 0
     first_message: str = ""
-    outcomes: list[str] = Field(default_factory=list)
     started_at: str = ""
-    ended_at: str = ""
-    total_tool_calls: int = 0
-    analyzed: bool = False
+    turn_count: int = 0

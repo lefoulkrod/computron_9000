@@ -12,6 +12,7 @@ from agents.sub_agent import run_sub_agent
 from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.memory import forget, remember
+from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import output_file, play_audio, run_bash_cmd
 from tools.virtual_computer.describe_image import describe_image
 
@@ -96,6 +97,13 @@ SYSTEM_PROMPT = dedent(
 
         MEMORY — remember(key, value) / forget(key). Store user preferences proactively.
 
+        SCRATCHPAD — save_to_scratchpad(key, value) / recall_from_scratchpad(key).
+        Use for session data: intermediate results, sub-agent outputs, data you'll
+        need in later steps. Persists for the entire conversation and is shared
+        across all agents (sub-agents can read what you write and vice versa).
+        Earlier tool results may be cleared from context to save space — the
+        scratchpad is the reliable way to keep important data available.
+
         Respond in Markdown. Brief rationale before tool calls; short summary after.
         """
 )
@@ -114,6 +122,8 @@ TOOLS = [
     run_sub_agent,
     remember,
     forget,
+    save_to_scratchpad,
+    recall_from_scratchpad,
 ]
 
 __all__ = [

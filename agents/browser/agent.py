@@ -102,6 +102,13 @@ SYSTEM_PROMPT = dedent(
 
     SLIDERS: Drag sliders to the far end of the track unless a specific value is requested.
 
+    SCRATCHPAD: Use save_to_scratchpad to note key findings as you go —
+    prices, URLs, names, dates, error messages, or any data you may need
+    later. Scratchpad entries persist for the entire conversation and are
+    shared across all agents. Earlier tool results may be cleared from
+    context to save space, so the scratchpad is the reliable way to keep
+    important data available.
+
     WHEN STUCK:
     - Ref not found → page may have changed, call browse_page() for fresh refs
     - Can't find element → scroll + browse_page, or browse_page(scope="...")

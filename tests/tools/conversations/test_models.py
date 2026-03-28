@@ -5,135 +5,11 @@ from __future__ import annotations
 import pytest
 
 from conversations._models import (
+    ClearedItem,
+    ClearingRecord,
     ConversationSummary,
-    MessageRecord,
     SummaryRecord,
-    ToolCallRecord,
-    TurnIndexEntry,
-    TurnMetadata,
-    TurnRecord,
 )
-
-
-@pytest.mark.unit
-class TestToolCallRecord:
-    """Tests for ToolCallRecord model."""
-
-    def test_defaults(self) -> None:
-        """Verify default values for optional fields."""
-        record = ToolCallRecord(name="click")
-        assert record.name == "click"
-        assert record.arguments == {}
-        assert record.result_summary == ""
-        assert record.duration_ms is None
-        assert record.success is True
-
-    def test_full_construction(self) -> None:
-        """Verify all fields can be set."""
-        record = ToolCallRecord(
-            name="fill_field",
-            arguments={"ref": "7", "value": "hello"},
-            result_summary="Field filled",
-            duration_ms=150,
-            success=True,
-        )
-        assert record.name == "fill_field"
-        assert record.arguments["ref"] == "7"
-        assert record.duration_ms == 150
-
-
-@pytest.mark.unit
-class TestMessageRecord:
-    """Tests for MessageRecord model."""
-
-    def test_assistant_message(self) -> None:
-        """Assistant message with tool calls."""
-        msg = MessageRecord(
-            role="assistant",
-            content="Let me search for that.",
-            tool_calls=[ToolCallRecord(name="open_url")],
-            agent_name="BROWSER_AGENT",
-            depth=1,
-            timestamp="2026-01-01T00:00:00",
-        )
-        assert msg.role == "assistant"
-        assert len(msg.tool_calls) == 1
-        assert msg.depth == 1
-
-    def test_tool_message(self) -> None:
-        """Tool result message."""
-        msg = MessageRecord(role="tool", content="Page opened successfully")
-        assert msg.role == "tool"
-        assert msg.agent_name is None
-        assert msg.depth == 0
-
-
-@pytest.mark.unit
-class TestTurnMetadata:
-    """Tests for TurnMetadata model."""
-
-    def test_defaults(self) -> None:
-        """Verify sensible defaults."""
-        meta = TurnMetadata()
-        assert meta.outcome == "unknown"
-        assert meta.total_tool_calls == 0
-        assert meta.skill_applied is None
-        assert meta.analyzed is False
-
-
-@pytest.mark.unit
-class TestTurnRecord:
-    """Tests for TurnRecord model."""
-
-    def test_minimal(self) -> None:
-        """Minimal valid record."""
-        record = TurnRecord(id="test-123")
-        assert record.id == "test-123"
-        assert record.messages == []
-        assert record.metadata.outcome == "unknown"
-
-    def test_serialization_roundtrip(self) -> None:
-        """Verify model_dump and model_validate roundtrip."""
-        record = TurnRecord(
-            id="test-456",
-            user_message="find recipes",
-            agent="COMPUTRON_9000",
-            messages=[
-                MessageRecord(role="user", content="find recipes"),
-                MessageRecord(
-                    role="assistant",
-                    content="Searching...",
-                    tool_calls=[ToolCallRecord(name="browser_agent_tool")],
-                ),
-            ],
-            metadata=TurnMetadata(
-                task_summary="Recipe search",
-                outcome="success",
-                total_tool_calls=3,
-            ),
-        )
-        data = record.model_dump()
-        restored = TurnRecord.model_validate(data)
-        assert restored.id == "test-456"
-        assert len(restored.messages) == 2
-        assert restored.metadata.outcome == "success"
-
-
-@pytest.mark.unit
-class TestTurnIndexEntry:
-    """Tests for TurnIndexEntry model."""
-
-    def test_construction(self) -> None:
-        """Verify index entry construction."""
-        entry = TurnIndexEntry(
-            id="abc-123",
-            conversation_id="conv-1",
-            user_message="test",
-            outcome="success",
-        )
-        assert entry.id == "abc-123"
-        assert entry.conversation_id == "conv-1"
-        assert entry.analyzed is False
 
 
 @pytest.mark.unit
@@ -146,14 +22,10 @@ class TestConversationSummary:
             conversation_id="conv-1",
             turn_count=3,
             first_message="hello",
-            outcomes=["success", "success", "partial"],
             started_at="2026-01-01T00:00:00",
-            ended_at="2026-01-01T00:05:00",
         )
         assert summary.conversation_id == "conv-1"
         assert summary.turn_count == 3
-        assert len(summary.outcomes) == 3
-        assert summary.analyzed is False
 
 
 @pytest.mark.unit
@@ -194,3 +66,33 @@ class TestSummaryRecord:
         assert len(restored.input_messages) == 2
         assert restored.prior_summary == "Previous context summary."
         assert restored.fill_ratio == 0.82
+
+
+@pytest.mark.unit
+class TestClearingRecord:
+    """Tests for ClearingRecord model."""
+
+    def test_defaults(self) -> None:
+        """Verify default values."""
+        record = ClearingRecord(id="clr-001")
+        assert record.cleared_items == []
+        assert record.total_chars_freed == 0
+
+    def test_with_items(self) -> None:
+        """Verify construction with cleared items."""
+        record = ClearingRecord(
+            id="clr-002",
+            results_cleared=2,
+            cleared_items=[
+                ClearedItem(
+                    message_index=3,
+                    role="tool",
+                    tool_name="read_page",
+                    cleared_type="tool_result",
+                    original_content="big page",
+                    original_chars=8,
+                ),
+            ],
+        )
+        assert len(record.cleared_items) == 1
+        assert record.cleared_items[0].tool_name == "read_page"

@@ -6,7 +6,6 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
-from config import load_config
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import (
     AgentEvent,
@@ -48,7 +47,6 @@ from agents.desktop import (
 from conversations import load_conversation_history, save_agent_events
 from sdk import (
     PersistenceHook,
-    TurnRecorderHook,
     default_hooks,
     run_turn,
 )
@@ -230,14 +228,6 @@ async def _run_turn(
                 ctx_manager=ctx_manager,
             )
 
-            summary_cfg = load_config().summary
-            hooks.append(TurnRecorderHook(
-                user_message=user_content,
-                agent_name=active_agent.name,
-                model=active_agent.model,
-                conversation_id=conv_id,
-                summary_model=summary_cfg.model if summary_cfg else None,
-            ))
             hooks.append(PersistenceHook(
                 conversation_id=conv_id,
                 history=conversation.history,

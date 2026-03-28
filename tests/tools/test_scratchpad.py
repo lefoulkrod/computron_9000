@@ -1,17 +1,21 @@
-"""Unit tests for the ephemeral scratchpad tools."""
+"""Unit tests for the disk-backed scratchpad tools."""
+
+from unittest.mock import patch
 
 import pytest
 
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.scratchpad.scratchpad import _scratchpad
+from tools.scratchpad.scratchpad import _cache
 
 
 @pytest.fixture(autouse=True)
-def _fresh_scratchpad():
-    """Ensure each test starts with no scratchpad state."""
-    token = _scratchpad.set({})
-    yield
-    _scratchpad.reset(token)
+def _fresh_scratchpad(tmp_path):
+    """Ensure each test starts with no scratchpad state and writes to tmp."""
+    token = _cache.set({})
+    with patch("tools.scratchpad.scratchpad.get_conversation_id", return_value="test-conv"), \
+         patch("tools.scratchpad.scratchpad._scratchpad_path", return_value=tmp_path / "test-conv.json"):
+        yield
+    _cache.reset(token)
 
 
 @pytest.mark.unit
@@ -60,13 +64,13 @@ async def test_overwrite():
 
 
 @pytest.mark.unit
-async def test_lazy_init():
-    """Scratchpad initializes lazily on first access without prior setup."""
-    # Reset to no value at all (not even an empty dict)
-    _scratchpad.set({})
+async def test_persists_to_disk(tmp_path):
+    """Scratchpad writes should flush to a JSON file on disk."""
+    disk_path = tmp_path / "disk-conv.json"
+    with patch("tools.scratchpad.scratchpad._scratchpad_path", return_value=disk_path):
+        await save_to_scratchpad("k", "v")
 
-    result = await save_to_scratchpad("k", "v")
-    assert result["status"] == "ok"
-
-    recall = await recall_from_scratchpad("k")
-    assert recall["value"] == "v"
+    assert disk_path.exists()
+    import json
+    data = json.loads(disk_path.read_text())
+    assert data["k"] == "v"

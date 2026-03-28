@@ -55,6 +55,12 @@ _SYSTEM_PROMPT = dedent(
     FILE OUTPUT — Do NOT call output_file. Instead, include the full paths of every
     file you created in your return summary so COMPUTRON can deliver them.
 
+    SCRATCHPAD: Use save_to_scratchpad to note key data — file paths, error
+    messages, values you'll need in later steps. Scratchpad entries persist
+    for the entire conversation and are shared across all agents. Earlier
+    tool results may be cleared from context, so the scratchpad keeps
+    important data available.
+
     Verify correctness, retry on failure. Return a concise summary with all file paths.
     """
 )

@@ -21,7 +21,6 @@ from ._nudge_hook import NudgeHook
 from ._persistence import PersistenceHook
 from ._scratchpad_hook import ScratchpadHook
 from ._stop_hook import StopHook
-from ._turn_recorder import TurnRecorderHook
 
 __all__ = [
     "BudgetGuard",
@@ -32,6 +31,5 @@ __all__ = [
     "PersistenceHook",
     "ScratchpadHook",
     "StopHook",
-    "TurnRecorderHook",
     "default_hooks",
 ]

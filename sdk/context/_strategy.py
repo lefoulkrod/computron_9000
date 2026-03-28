@@ -15,7 +15,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from config import load_config
-from conversations import SummaryRecord, save_summary_record
+from conversations import ClearedItem, ClearingRecord, SummaryRecord, save_clearing_record, save_summary_record
 from sdk.events import get_current_agent_name
 from sdk.turn import get_conversation_id
 
@@ -161,7 +161,7 @@ class ToolClearingStrategy:
 
     def __init__(
         self,
-        threshold: float = 0.50,
+        threshold: float = 0.70,
         keep_recent_groups: int = 2,
     ) -> None:
         self._threshold = threshold
@@ -204,6 +204,8 @@ class ToolClearingStrategy:
 
         results_cleared = 0
         args_cleared = 0
+        total_chars_freed = 0
+        cleared_items: list[ClearedItem] = []
 
         for i in range(pin_end, boundary):
             msg = history.get_mutable(i)
@@ -215,32 +217,87 @@ class ToolClearingStrategy:
                     len(content) > len(_CLEARED_TOOL_RESULT)
                     and _has_following_assistant_roles(roles, i, boundary)
                 ):
+                    chars_freed = len(content) - len(_CLEARED_TOOL_RESULT)
+                    cleared_items.append(ClearedItem(
+                        message_index=i,
+                        role="tool",
+                        tool_name=msg.get("tool_name", ""),
+                        cleared_type="tool_result",
+                        original_content=content,
+                        original_chars=len(content),
+                    ))
                     msg["content"] = _CLEARED_TOOL_RESULT
                     results_cleared += 1
+                    total_chars_freed += chars_freed
 
             elif role == "assistant":
                 if not _has_following_assistant_roles(roles, i, boundary):
                     continue
                 for tc in msg.get("tool_calls") or []:
                     fn = tc.get("function") or tc
+                    tool_name = fn.get("name", "")
                     args = fn.get("arguments")
                     if not isinstance(args, dict):
                         continue
                     for key, val in args.items():
                         val_str = str(val)
                         if len(val_str) > _ARG_CLEAR_CAP:
-                            args[key] = (
+                            truncated = (
                                 val_str[:_ARG_CLEAR_CAP]
                                 + f"... [{len(val_str):,} chars]"
                             )
+                            chars_freed = len(val_str) - len(truncated)
+                            cleared_items.append(ClearedItem(
+                                message_index=i,
+                                role="assistant",
+                                tool_name=tool_name,
+                                cleared_type="tool_arg",
+                                arg_key=key,
+                                original_content=val_str,
+                                original_chars=len(val_str),
+                            ))
+                            args[key] = truncated
                             args_cleared += 1
+                            total_chars_freed += chars_freed
 
         if results_cleared or args_cleared:
             logger.info(
                 "ToolClearingStrategy: cleared %d tool results, "
-                "%d large args (fill=%.0f%%)",
-                results_cleared, args_cleared, stats.fill_ratio * 100,
+                "%d large args, freed %s chars (fill=%.0f%%)",
+                results_cleared, args_cleared,
+                f"{total_chars_freed:,}", stats.fill_ratio * 100,
             )
+            self._save_record(
+                stats, results_cleared, args_cleared,
+                total_chars_freed, cleared_items,
+            )
+
+    def _save_record(
+        self,
+        stats: ContextStats,
+        results_cleared: int,
+        args_cleared: int,
+        total_chars_freed: int,
+        cleared_items: list[ClearedItem],
+    ) -> None:
+        """Persist a ClearingRecord for offline quality evaluation."""
+        record = ClearingRecord(
+            id=str(uuid.uuid4()),
+            created_at=datetime.now(UTC).isoformat(),
+            conversation_id=get_conversation_id() or "default",
+            agent_name=get_current_agent_name() or "",
+            fill_ratio=stats.fill_ratio,
+            total_chars_freed=total_chars_freed,
+            results_cleared=results_cleared,
+            args_cleared=args_cleared,
+            threshold=self._threshold,
+            keep_recent_groups=self._keep_recent_groups,
+            cleared_items=cleared_items,
+        )
+        try:
+            save_clearing_record(record)
+        except Exception:
+            logger.exception("Failed to save clearing record")
 
 
 def _has_following_assistant_roles(
@@ -347,7 +404,7 @@ class SummarizeStrategy:
             summary_char_count=len(summary),
             messages_compacted=len(compactable),
             fill_ratio=stats.fill_ratio,
-            conversation_id=get_conversation_id() or "",
+            conversation_id=get_conversation_id() or "default",
             agent_name=get_current_agent_name() or "",
             options=resolved_options if isinstance(resolved_options, dict) else {},
             elapsed_seconds=round(elapsed, 1),
