@@ -79,7 +79,7 @@ Per-request model options (model name, think, temperature, max_iterations, etc.)
 | `ollama/sdk/tool_loop.py` | Core `run_tool_call_loop()` — chat loop with tool execution and budget enforcement |
 | `ollama/sdk/run_agent_tools.py` | `make_run_agent_as_tool_function()` factory + result type conversion |
 | `ollama/sdk/events/context.py` | Event publishing, agent spans, stop mechanism, model options context vars |
-| `ollama/sdk/events/models.py` | `AssistantResponse` event model |
+| `ollama/sdk/events/models.py` | `AgentEvent` event model |
 | `ollama/sdk/events/dispatcher.py` | Async event dispatcher with subscriptions |
 | `ollama/sdk/hooks.py` | Unified hook system: `HookContext`, `HookResult`, built-in hooks, `run_hooks()` |
 | `ollama/message_handler.py` | Entry point — wires up Computron agent, manages message history, streams events |

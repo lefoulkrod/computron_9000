@@ -9,7 +9,7 @@ from typing import Any
 
 from agents.types import Agent
 from sdk.context import ConversationHistory
-from sdk.events import AssistantResponse, ToolCallPayload, get_current_agent_name, publish_event
+from sdk.events import AgentEvent, ToolCallPayload, get_current_agent_name, publish_event
 from sdk.providers import ChatDelta, ChatResponse, ProviderError, get_provider
 from sdk.tools import _normalize_tool_result, _prepare_tool_arguments
 
@@ -19,6 +19,7 @@ from ._turn import StopRequestedError
 def _get_parallel_config():
     """Lazy-load parallel config to avoid circular imports at module level."""
     from config import load_config
+
     return load_config().parallel
 
 
@@ -30,11 +31,11 @@ logger = logging.getLogger(__name__)
 
 
 def _publish_final(content: str | None = None) -> None:
-    """Emit a terminal AssistantResponse. Logs but never raises on failure."""
+    """Emit a terminal AgentEvent. Logs but never raises on failure."""
     try:
-        publish_event(AssistantResponse(content=content, final=True))
+        publish_event(AgentEvent(content=content, final=True))
     except Exception:  # pragma: no cover - defensive
-        logger.exception("Failed to publish terminal AssistantResponse event")
+        logger.exception("Failed to publish terminal AgentEvent event")
 
 
 async def _stream_chat_with_retries(
@@ -84,7 +85,7 @@ async def _stream_chat_with_retries(
                     agent.model,
                 )
                 raise
-            delay = min(2 ** attempt, 32)
+            delay = min(2**attempt, 32)
             logger.warning(
                 "provider.chat_stream failed (attempt %s/%s, retryable, backoff %ds): %s | model=%s",
                 attempt,
@@ -122,7 +123,6 @@ async def _execute_tool_call(
     Returns:
         Plain string result for the LLM to read.
     """
-
     # Some models emit function names with Python call syntax, e.g.
     # "browse_page(full_page=True)" instead of "browse_page".  Strip the
     # trailing parenthesised portion and merge any kwargs into arguments.
@@ -149,7 +149,7 @@ async def _execute_tool_call(
                         arguments[k.strip()] = v.strip("\"'")
 
     try:
-        publish_event(AssistantResponse(event=ToolCallPayload(type="tool_call", name=str(tool_name))))
+        publish_event(AgentEvent(event=ToolCallPayload(type="tool_call", name=str(tool_name))))
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
 
@@ -220,7 +220,7 @@ async def run_turn(
     *,
     hooks: list[Any] | None = None,
 ) -> str | None:
-    """Executes a chat loop with the LLM, handling tool calls.
+    """Executes a single turn with the LLM, handling tool calls.
 
     Streaming is handled via publish_event; this function drives the loop
     and mutates *history* in place.
@@ -265,16 +265,21 @@ async def run_turn(
                 response: ChatResponse | None = None
                 streamed_deltas = False
                 async for chunk in _stream_chat_with_retries(
-                    provider, agent=agent, messages=history.messages, tools=tools,
+                    provider,
+                    agent=agent,
+                    messages=history.messages,
+                    tools=tools,
                 ):
                     if isinstance(chunk, ChatDelta):
                         streamed_deltas = True
                         try:
-                            publish_event(AssistantResponse(
-                                content=chunk.content,
-                                thinking=chunk.thinking,
-                                delta=True,
-                            ))
+                            publish_event(
+                                AgentEvent(
+                                    content=chunk.content,
+                                    thinking=chunk.thinking,
+                                    delta=True,
+                                )
+                            )
                         except Exception:  # pragma: no cover - defensive
                             logger.exception("Failed to publish delta event")
                     elif isinstance(chunk, ChatResponse):
@@ -294,9 +299,7 @@ async def run_turn(
                 tool_calls = response.message.tool_calls
                 # Serialize tool calls to plain dicts for history storage so
                 # providers can reconstruct their own types on the next turn.
-                serialized_tool_calls = (
-                    [tc.model_dump() for tc in tool_calls] if tool_calls else None
-                )
+                serialized_tool_calls = [tc.model_dump() for tc in tool_calls] if tool_calls else None
                 assistant_message = {
                     "role": "assistant",
                     "content": content,
@@ -308,9 +311,9 @@ async def run_turn(
                 # Emit full content only if no deltas were streamed (fallback path)
                 if not streamed_deltas:
                     try:
-                        publish_event(AssistantResponse(content=content, thinking=thinking))
+                        publish_event(AgentEvent(content=content, thinking=thinking))
                     except Exception:  # pragma: no cover - defensive
-                        logger.exception("Failed to publish model AssistantResponse event")
+                        logger.exception("Failed to publish model AgentEvent event")
                 if content is not None:
                     final_content = content
 
@@ -324,7 +327,9 @@ async def run_turn(
                 if parallel_cfg.enabled and len(tool_calls) > 1:
                     logger.info(
                         "Running %d tool calls in parallel for '%s' (max_concurrent=%d)",
-                        len(tool_calls), agent.name, parallel_cfg.max_concurrent,
+                        len(tool_calls),
+                        agent.name,
+                        parallel_cfg.max_concurrent,
                     )
                     sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
 
@@ -337,12 +342,14 @@ async def run_turn(
                     for tc, result in zip(tool_calls, results):
                         if isinstance(result, Exception):
                             logger.error("Parallel tool call failed: %s", result)
-                            history.append({
-                                "role": "tool",
-                                "tool_call_id": tc.id,
-                                "name": tc.function.name,
-                                "content": "Error: %s" % result,
-                            })
+                            history.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "name": tc.function.name,
+                                    "content": "Error: %s" % result,
+                                }
+                            )
                         else:
                             _tc, tool_result = result
                             history.append(tool_result)

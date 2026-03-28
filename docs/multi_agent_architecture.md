@@ -62,7 +62,7 @@ The left settings column is replaced by a narrow icon sidebar. Clicking an icon 
 
 ### Task 1: Add `agent_id` to events — DONE ✓
 
-Added `agent_id: str | None = None` to `AssistantResponse`. `publish_event()` enriches it from the context stack. Added `get_current_agent_id()`, `get_current_depth()`, and `get_current_dispatcher()` public APIs.
+Added `agent_id: str | None = None` to `AgentEvent`. `publish_event()` enriches it from the context stack. Added `get_current_agent_id()`, `get_current_depth()`, and `get_current_dispatcher()` public APIs.
 
 ### Task 2: Emit agent lifecycle events — DONE ✓
 
@@ -159,7 +159,7 @@ Slim 36px header with original computron logo, theme toggle, desktop button, new
 - **Resumed conversations don't restore agent network** — When resuming a past conversation that had sub-agents, the chat messages load but the agent network view doesn't appear. The frontend event replay (Task 11 frontend) is not yet wired up.
 
 ### Architecture
-- **`final` event mechanism** — Fragile. The `final=true` flag on `AssistantResponse` was used to close the server stream (`break` in `stream_events`). We removed the `break` to fix the root agent status bug, but the `final` concept is still confusing. The stream should end based on the producer completing (queue sends `None`), not a flag. Consider removing `_publish_final()` entirely and letting the stream close naturally.
+- **`final` event mechanism** — Fragile. The `final=true` flag on `AgentEvent` was used to close the server stream (`break` in `stream_events`). We removed the `break` to fix the root agent status bug, but the `final` concept is still confusing. The stream should end based on the producer completing (queue sends `None`), not a flag. Consider removing `_publish_final()` entirely and letting the stream close naturally.
 - **Skill extraction removal** — Plan says to remove `skills/_extractor.py`, `skills/_registry.py`, `SkillsPanel`, `/api/skills` endpoints, `skill_extraction_loop`, `SkillAppliedPayload`, `_sub_agents.json`, and related ContextVars. Not yet done — deferred to avoid scope creep in the initial implementation.
 - **`ContextUsagePayload` iteration fields** — Added `iteration` and `max_iterations` fields and threaded them through `ContextHook` → `ContextManager.record_response()`. This works but mixes iteration tracking (agent lifecycle concern) with token usage tracking (context management concern). Consider emitting iteration info from a separate event or the lifecycle events instead.
 

@@ -35,11 +35,11 @@ A thin transport layer that bridges Telegram messages to the existing `handle_us
 **Receiving messages:**
 - Long-poll Telegram's `getUpdates` API (no webhook server needed — keeps infra simple)
 - Map each Telegram chat to a Computron conversation ID (e.g. `telegram:{chat_id}`)
-- Call `handle_user_message()` with the text, consuming the `AssistantResponse` async generator
+- Call `handle_user_message()` with the text, consuming the `AgentEvent` async generator
 - Telegram file attachments → Computron `Data` objects (photos, documents, voice)
 
 **Sending responses:**
-- Subscribe to the `AssistantResponse` event stream from `handle_user_message()`
+- Subscribe to the `AgentEvent` event stream from `handle_user_message()`
 - Buffer `content` chunks and send as a single Telegram message on `final=True`
 - Handle event payloads:
   - `FileOutputPayload` → `sendDocument` / `sendAudio` / `sendPhoto` based on content_type

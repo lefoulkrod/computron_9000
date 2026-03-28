@@ -45,7 +45,7 @@ async def _emit_screenshot(page: Page) -> None:
     reduced quality for fast encoding and small payloads.
     """
     from sdk.events import (
-        AssistantResponse,
+        AgentEvent,
         BrowserScreenshotPayload,
         publish_event,
     )
@@ -59,7 +59,7 @@ async def _emit_screenshot(page: Page) -> None:
     except Exception:  # noqa: BLE001
         title = ""
 
-    publish_event(AssistantResponse(event=BrowserScreenshotPayload(
+    publish_event(AgentEvent(event=BrowserScreenshotPayload(
         type="browser_screenshot",
         url=url,
         title=title,

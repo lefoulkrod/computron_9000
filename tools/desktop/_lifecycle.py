@@ -8,7 +8,7 @@ import asyncio
 import logging
 
 from config import load_config
-from sdk.events import AssistantResponse, publish_event
+from sdk.events import AgentEvent, publish_event
 from sdk.events._models import DesktopActivePayload
 from tools.desktop._exec import DesktopExecError, _current_display, _run_desktop_cmd
 
@@ -26,7 +26,7 @@ _display_lock = asyncio.Lock()
 def _notify_ui() -> None:
     """Emit DesktopActivePayload to show the noVNC panel in the UI."""
     config = load_config()
-    publish_event(AssistantResponse(
+    publish_event(AgentEvent(
         event=DesktopActivePayload(
             type="desktop_active",
             resolution=config.desktop.resolution,

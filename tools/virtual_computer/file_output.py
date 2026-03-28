@@ -6,7 +6,7 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from sdk.events import AssistantResponse, FileOutputPayload, publish_event
+from sdk.events import AgentEvent, FileOutputPayload, publish_event
 from config import load_config
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ async def output_file(path: str) -> dict[str, str]:
         content_type=content_type,
         path=path,
     )
-    publish_event(AssistantResponse(event=payload))
+    publish_event(AgentEvent(event=payload))
     logger.info("Emitted file_output event for %s (%s, %d bytes)", filename, content_type, file_size)
 
     return {

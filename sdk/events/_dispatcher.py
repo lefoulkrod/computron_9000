@@ -21,16 +21,16 @@ from contextlib import asynccontextmanager, suppress
 from inspect import iscoroutinefunction
 from typing import Any
 
-from ._models import AssistantResponse
+from ._models import AgentEvent
 
 logger = logging.getLogger(__name__)
 
 
-Handler = Callable[[AssistantResponse], Any]
+Handler = Callable[[AgentEvent], Any]
 
 
 class EventDispatcher:
-    """Manage and fan out AssistantResponse events to subscribers.
+    """Manage and fan out AgentEvent events to subscribers.
 
     Thread-compatible within a single asyncio loop, but designed for use in
     an asyncio context; does not block the loop.
@@ -48,7 +48,7 @@ class EventDispatcher:
         """Register a new subscriber if not already present.
 
         Args:
-            handler: Callable taking an AssistantResponse. May be sync or async.
+            handler: Callable taking an AgentEvent. May be sync or async.
         """
         if handler in self._subscribers:
             return
@@ -64,7 +64,7 @@ class EventDispatcher:
         self._subscribers.clear()
 
     # -- publication -------------------------------------------------------------
-    def publish(self, event: AssistantResponse) -> None:
+    def publish(self, event: AgentEvent) -> None:
         """Publish an event to all current subscribers.
 
         Scheduling rules:
@@ -119,14 +119,14 @@ class EventDispatcher:
                 logger.exception("Unhandled exception while draining task")
 
     async def _run_async_handler(
-        self, handler: Callable[[AssistantResponse], Awaitable[Any]], event: AssistantResponse
+        self, handler: Callable[[AgentEvent], Awaitable[Any]], event: AgentEvent
     ) -> None:
         try:
             await handler(event)
         except Exception:  # pragma: no cover - handler errors are logged, not raised
             logger.exception("Unhandled exception in async event handler")
 
-    def _run_sync_handler(self, handler: Handler, event: AssistantResponse) -> None:
+    def _run_sync_handler(self, handler: Handler, event: AgentEvent) -> None:
         try:
             handler(event)
         except Exception:  # pragma: no cover - handler errors are logged, not raised

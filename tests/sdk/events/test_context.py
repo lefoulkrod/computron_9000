@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from sdk.events import (
-    AssistantResponse,
+    AgentEvent,
     EventDispatcher,
     agent_span,
     publish_event,
@@ -23,9 +23,9 @@ from sdk.events._context import _current_dispatcher
 class _TrackingDispatcher(EventDispatcher):
     def __init__(self) -> None:
         super().__init__()
-        self.published: list[AssistantResponse] = []
+        self.published: list[AgentEvent] = []
 
-    def publish(self, event: AssistantResponse) -> None:
+    def publish(self, event: AgentEvent) -> None:
         self.published.append(event)
 
 
@@ -34,7 +34,7 @@ def test_publish_event_noop_without_dispatcher() -> None:
     """Calling publish_event without a dispatcher should not raise or mutate state."""
     token = _current_dispatcher.set(None)
     try:
-        publish_event(AssistantResponse(content="hi"))
+        publish_event(AgentEvent(content="hi"))
     finally:
         _current_dispatcher.reset(token)
 
@@ -62,7 +62,7 @@ def test_publish_event_delegates_to_dispatcher() -> None:
     d = _TrackingDispatcher()
     token = _current_dispatcher.set(d)
     try:
-        publish_event(AssistantResponse(content="hello"))
+        publish_event(AgentEvent(content="hello"))
         assert len(d.published) == 1
         published = d.published[0]
         assert published.content == "hello"

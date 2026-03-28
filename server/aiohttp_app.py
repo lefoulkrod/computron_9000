@@ -106,18 +106,18 @@ async def cors_and_error_middleware(
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from sdk.events import AssistantResponse
+    from sdk.events import AgentEvent
 
 
 async def stream_events(
     request: Request,
-    events: AsyncIterator[AssistantResponse],  # iterator of AssistantResponse
+    events: AsyncIterator[AgentEvent],  # iterator of AgentEvent
 ) -> StreamResponse:
     """Stream JSONL events to the client.
 
     Args:
         request: Incoming aiohttp request.
-        events: Async iterator yielding `AssistantResponse` instances produced by
+        events: Async iterator yielding `AgentEvent` instances produced by
             `handle_user_message`.
 
     Returns:

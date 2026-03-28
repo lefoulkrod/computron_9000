@@ -9,7 +9,7 @@ Design notes:
 - Binary payloads are represented as base64-encoded strings paired with a
   content type.
 - Event payloads use a discriminator field named "type".
-- All top-level fields on AssistantResponse are optional to support partial,
+- All top-level fields on AgentEvent are optional to support partial,
   streaming-style emissions.
 """
 
@@ -21,7 +21,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
-class AssistantResponseData(BaseModel):
+class AgentEventData(BaseModel):
     """Represents a piece of binary or auxiliary data attached to a response.
 
     Attributes:
@@ -247,7 +247,7 @@ AssistantEventPayload = Annotated[
 ]
 
 
-class AssistantResponse(BaseModel):
+class AgentEvent(BaseModel):
     """Top-level event envelope emitted during message handling.
 
     The envelope supports partial updates for streaming by making all fields optional.
@@ -264,7 +264,7 @@ class AssistantResponse(BaseModel):
 
     content: str | None = None
     thinking: str | None = None
-    data: list[AssistantResponseData] = Field(default_factory=list)
+    data: list[AgentEventData] = Field(default_factory=list)
     event: AssistantEventPayload | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     # Final is a boolean flag indicating terminal/complete event. Default to
@@ -283,8 +283,8 @@ __all__ = [
     "AgentCompletedPayload",
     "AgentStartedPayload",
     "AssistantEventPayload",
-    "AssistantResponse",
-    "AssistantResponseData",
+    "AgentEvent",
+    "AgentEventData",
     "AudioPlaybackPayload",
     "BrowserScreenshotPayload",
     "ContextUsagePayload",

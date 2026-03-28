@@ -1,7 +1,7 @@
 """Public exports for the events package.
 
 This package provides:
-- Event models (AssistantResponse, ToolCallPayload, etc.)
+- Event models (AgentEvent, ToolCallPayload, etc.)
 - Context utilities for publishing events without plumbing dispatcher handles
     through every call site. Low-level helpers like ``publish_event`` and
     ``agent_span`` are available for emission and attribution inside a turn scope.
@@ -25,8 +25,8 @@ from ._models import (
     AgentCompletedPayload,
     AgentStartedPayload,
     AssistantEventPayload,
-    AssistantResponse,
-    AssistantResponseData,
+    AgentEvent,
+    AgentEventData,
     AudioPlaybackPayload,
     BrowserScreenshotPayload,
     ContextUsagePayload,
@@ -42,8 +42,8 @@ __all__ = [
     "AgentCompletedPayload",
     "AgentStartedPayload",
     "AssistantEventPayload",
-    "AssistantResponse",
-    "AssistantResponseData",
+    "AgentEvent",
+    "AgentEventData",
     "AudioPlaybackPayload",
     "BrowserScreenshotPayload",
     "ContextUsagePayload",

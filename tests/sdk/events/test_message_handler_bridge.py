@@ -19,7 +19,7 @@ from server.message_handler import handle_user_message
 from sdk.events import (
     AgentCompletedPayload,
     AgentStartedPayload,
-    AssistantResponse,
+    AgentEvent,
     publish_event,
     agent_span,
 )
@@ -34,16 +34,16 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
 
     async def _fake_tool_loop(**_: Any) -> str | None:
         # Root-level event
-        publish_event(AssistantResponse(content="one", thinking=None))
+        publish_event(AgentEvent(content="one", thinking=None))
         await asyncio.sleep(0)
 
         # Nested agent event: non-final, passes through with content intact
         with agent_span("nested"):
-            publish_event(AssistantResponse(content="secret", thinking="hidden"))
+            publish_event(AgentEvent(content="secret", thinking="hidden"))
         await asyncio.sleep(0)
 
         # Final root-level completion
-        publish_event(AssistantResponse(content="done", thinking=None, final=True))
+        publish_event(AgentEvent(content="done", thinking=None, final=True))
         await asyncio.sleep(0)
 
         return "done"
@@ -52,7 +52,7 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
 
     monkeypatch.setattr(mh, "run_turn", _fake_tool_loop)
 
-    seen: list[AssistantResponse] = []
+    seen: list[AgentEvent] = []
     async for ev in handle_user_message("hi", data=None, options=LLMOptions(model="test-model")):
         seen.append(ev)
         if ev.final:

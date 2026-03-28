@@ -1,4 +1,4 @@
-"""Tests that tool loop publishes AssistantResponse events via the dispatcher.
+"""Tests that tool loop publishes AgentEvent events via the dispatcher.
 
 Covers:
 - Emission of content/thinking events after a model response
@@ -12,7 +12,7 @@ from typing import Any, List
 import pytest
 
 from sdk.context import ConversationHistory
-from sdk.events import AssistantResponse, ToolCallPayload
+from sdk.events import AgentEvent, ToolCallPayload
 from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolCallFunction
 from sdk.turn import run_turn, turn_scope
 from agents.types import Agent
@@ -71,9 +71,9 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
         return {"x": x}
 
     # Capture emitted events via the turn_scope
-    captured: List[AssistantResponse] = []
+    captured: List[AgentEvent] = []
 
-    async def _handler(evt: AssistantResponse) -> None:
+    async def _handler(evt: AgentEvent) -> None:
         captured.append(evt)
 
     history = ConversationHistory([{"role": "system", "content": "ctx"}])

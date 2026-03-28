@@ -16,7 +16,7 @@ from podman.api import stream_frames
 from podman.domain.containers import Container
 from pydantic import BaseModel
 
-from sdk.events import AssistantResponse, TerminalOutputPayload, publish_event
+from sdk.events import AgentEvent, TerminalOutputPayload, publish_event
 from tools._truncation import truncate_args
 from config import load_config
 from tools.virtual_computer.workspace import get_current_workspace_folder
@@ -123,7 +123,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
 
         # Publish a "running" event so the UI shows the command immediately.
         cmd_id = uuid.uuid4().hex
-        publish_event(AssistantResponse(event=TerminalOutputPayload(
+        publish_event(AgentEvent(event=TerminalOutputPayload(
             type="terminal_output",
             cmd_id=cmd_id,
             cmd=cmd,
@@ -191,7 +191,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                         chunk_err = stderr_chunk.decode("utf-8", errors="replace")
                         stderr_parts.append(chunk_err)
                     if chunk_out or chunk_err:
-                        publish_event(AssistantResponse(event=TerminalOutputPayload(
+                        publish_event(AgentEvent(event=TerminalOutputPayload(
                             type="terminal_output",
                             cmd_id=cmd_id,
                             cmd=cmd,
@@ -221,7 +221,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         logger.debug("parsed stderr: %r", stderr)
 
         # Publish the completed event with final output and exit code.
-        publish_event(AssistantResponse(event=TerminalOutputPayload(
+        publish_event(AgentEvent(event=TerminalOutputPayload(
             type="terminal_output",
             cmd_id=cmd_id,
             cmd=cmd,

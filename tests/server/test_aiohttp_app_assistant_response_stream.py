@@ -1,4 +1,4 @@
-"""Tests that the HTTP stream can handle AssistantResponse-like objects directly.
+"""Tests that the HTTP stream can handle AgentEvent-like objects directly.
 
 Includes a regression check that the stream closes cleanly and only the
 expected lines are sent.
@@ -12,15 +12,15 @@ from typing import AsyncIterator
 import pytest
 from pydantic import BaseModel
 
-from sdk.events import AssistantResponse, AssistantResponseData, ToolCallPayload
+from sdk.events import AgentEvent, AgentEventData, ToolCallPayload
 from server.aiohttp_app import create_app
 
 pytestmark = [pytest.mark.unit]
 
 
-async def _fake_events() -> AsyncIterator[AssistantResponse]:
+async def _fake_events() -> AsyncIterator[AgentEvent]:
     # Non-final first chunk
-    yield AssistantResponse(content="hello", thinking=None)
+    yield AgentEvent(content="hello", thinking=None)
 
 
 @pytest.fixture
@@ -32,14 +32,14 @@ def app(monkeypatch):
         final: bool = False
         thinking: str | None = None
         content: str | None = None
-        data: list[AssistantResponseData] | None = None
+        data: list[AgentEventData] | None = None
         event: ToolCallPayload | None = None
 
     class _FinalEvent(BaseModel):
         final: bool
         thinking: str | None
         content: str
-        data: list[AssistantResponseData]
+        data: list[AgentEventData]
         event: ToolCallPayload | None = None
 
     async def _fake_handle_user_message(_msg: str, _data, **_kwargs):  # noqa: D401
@@ -55,7 +55,7 @@ def app(monkeypatch):
             final=True,
             thinking=None,
             content="done",
-            data=[AssistantResponseData(content_type="text/plain", content="dGVzdA==")],
+            data=[AgentEventData(content_type="text/plain", content="dGVzdA==")],
             event=ToolCallPayload(type="tool_call", name="x"),
         )
 

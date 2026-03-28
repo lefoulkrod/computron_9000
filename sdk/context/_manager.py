@@ -6,7 +6,7 @@ from typing import Any
 from rich.console import Console
 from rich.text import Text
 
-from sdk.events import AssistantResponse, ContextUsagePayload, publish_event
+from sdk.events import AgentEvent, ContextUsagePayload, publish_event
 
 from ._history import ConversationHistory
 from ._models import ContextStats, TokenUsage
@@ -70,7 +70,7 @@ class ContextManager:
         if logger.isEnabledFor(logging.DEBUG):
             _log_context_bar(stats, usage, self._agent_name)
         try:
-            publish_event(AssistantResponse(
+            publish_event(AgentEvent(
                 event=ContextUsagePayload(
                     type="context_usage",
                     context_used=stats.context_used,

@@ -76,7 +76,7 @@ run_tool_call_loop()                  ← Main LLM + tool execution loop
 
 **3. Well-designed event model**
 - Discriminated union payloads (`Field(discriminator="type")`) make the schema extensible — new event types can be added without breaking existing consumers.
-- `AssistantResponse` as a uniform envelope with optional fields supports both streaming partials and complete events.
+- `AgentEvent` as a uniform envelope with optional fields supports both streaming partials and complete events.
 - Pydantic validation ensures type safety at serialization boundaries.
 
 **4. Robust turn lifecycle**

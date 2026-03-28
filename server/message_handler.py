@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from config import load_config
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import (
-    AssistantResponse,
+    AgentEvent,
     agent_span,
     get_current_dispatcher,
     set_model_options,
@@ -197,7 +197,7 @@ async def _run_turn(
     user_content: str,
     options: LLMOptions,
     conversation_id: str | None,
-    handler: Callable[[AssistantResponse], object],
+    handler: Callable[[AgentEvent], object],
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
     logger.info(
@@ -269,7 +269,7 @@ async def handle_user_message(
     options: LLMOptions | None = None,
     conversation_id: str | None = None,
     agent: str | None = None,
-) -> AsyncGenerator[AssistantResponse, None]:
+) -> AsyncGenerator[AgentEvent, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
     Args:
@@ -280,7 +280,7 @@ async def handle_user_message(
         agent: Optional agent identifier to use for this turn.
 
     Yields:
-        AssistantResponse: Events from the LLM.
+        AgentEvent: Events from the LLM.
     """
     conversation = _get_conversation(conversation_id)
 
@@ -296,9 +296,9 @@ async def handle_user_message(
 
     try:
         # Bridge published events via a queue so we can stream them to the caller.
-        queue: asyncio.Queue[AssistantResponse | None] = asyncio.Queue()
+        queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
 
-        async def _queue_handler(evt: AssistantResponse) -> None:
+        async def _queue_handler(evt: AgentEvent) -> None:
             # Drop final events from nested agents — only the root agent's
             # final event should reach the client (it signals end-of-stream).
             if evt.final and evt.depth is not None and evt.depth > 0:
@@ -306,7 +306,7 @@ async def handle_user_message(
             try:
                 await queue.put(evt)
             except Exception:  # pragma: no cover - defensive logging
-                logger.exception("Failed to enqueue AssistantResponse in message handler")
+                logger.exception("Failed to enqueue AgentEvent in message handler")
 
         active_agent = _build_agent(agent, options)
 
@@ -338,7 +338,7 @@ async def handle_user_message(
 
     except Exception:
         logger.exception("Error handling user message")
-        yield AssistantResponse(
+        yield AgentEvent(
             content="An error occurred while processing your message.",
             thinking=None,
             final=True,

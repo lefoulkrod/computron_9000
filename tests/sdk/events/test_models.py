@@ -1,6 +1,6 @@
 """Unit tests for events models.
 
-These tests validate the AssistantResponse schema, the discriminated union for
+These tests validate the AgentEvent schema, the discriminated union for
 event payloads, default values, and JSON-serializable output shape.
 """
 
@@ -11,21 +11,21 @@ from datetime import datetime, timedelta
 import pytest
 
 from sdk.events import (
-    AssistantResponse,
-    AssistantResponseData,
+    AgentEvent,
+    AgentEventData,
     ToolCallPayload,
 )
 
 
 @pytest.mark.unit
 def test_assistant_response_defaults():
-    """AssistantResponse should initialize with sensible defaults.
+    """AgentEvent should initialize with sensible defaults.
 
     Validates that optional fields are None/empty and a timestamp is set.
     """
 
     before = datetime.utcnow()
-    resp = AssistantResponse()
+    resp = AgentEvent()
     after = datetime.utcnow()
 
     assert resp.content is None
@@ -39,13 +39,13 @@ def test_assistant_response_defaults():
 
 @pytest.mark.unit
 def test_tool_call_event_embedding():
-    """Embedding a ToolCallPayload inside AssistantResponse should be valid.
+    """Embedding a ToolCallPayload inside AgentEvent should be valid.
 
     Also ensures serialization retains the discriminator for the event payload.
     """
 
     payload = ToolCallPayload(type="tool_call", name="web_search")
-    resp = AssistantResponse(event=payload, content=None)
+    resp = AgentEvent(event=payload, content=None)
 
     assert resp.event is not None
     assert resp.event.type == "tool_call"
@@ -58,10 +58,10 @@ def test_tool_call_event_embedding():
 
 @pytest.mark.unit
 def test_response_data_attachment():
-    """AssistantResponseData items can be attached and serialized."""
+    """AgentEventData items can be attached and serialized."""
 
-    data = AssistantResponseData(content_type="image/png", content="iVBORw0KGgoAAAANSUhEUg==")
-    resp = AssistantResponse(data=[data])
+    data = AgentEventData(content_type="image/png", content="iVBORw0KGgoAAAANSUhEUg==")
+    resp = AgentEvent(data=[data])
 
     assert len(resp.data) == 1
     assert resp.data[0].content_type == "image/png"

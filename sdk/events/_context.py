@@ -1,6 +1,6 @@
 """Context-bound event publishing utilities for the events layer.
 
-This module exposes an asyncio-friendly API to publish AssistantResponse events
+This module exposes an asyncio-friendly API to publish AgentEvent events
 without passing dispatcher handles through every call. It relies on a
 contextvars.ContextVar to track the currently active dispatcher for the
 duration of a single conversation turn.
@@ -26,7 +26,7 @@ if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
 from agents.types import LLMOptions
 
 from ._dispatcher import EventDispatcher
-from ._models import AgentCompletedPayload, AgentStartedPayload, AssistantResponse
+from ._models import AgentCompletedPayload, AgentStartedPayload, AgentEvent
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def agent_span(
 
     Example:
         with agent_span("Browser Agent", instruction="Browse example.com"):
-            publish_event(AssistantResponse(thinking="Navigating..."))
+            publish_event(AgentEvent(thinking="Navigating..."))
     """
     stack = _context_stack.get()
     parent_id = stack[-1][0] if stack else None
@@ -123,7 +123,7 @@ def agent_span(
         agent_name, context_id, parent_id, depth,
     )
 
-    publish_event(AssistantResponse(event=AgentStartedPayload(
+    publish_event(AgentEvent(event=AgentStartedPayload(
         type="agent_started",
         agent_id=context_id,
         agent_name=agent_name or "",
@@ -144,7 +144,7 @@ def agent_span(
             "Agent completed: %s (id=%s, status=%s, depth=%d)",
             agent_name, context_id, status, depth,
         )
-        publish_event(AssistantResponse(event=AgentCompletedPayload(
+        publish_event(AgentEvent(event=AgentCompletedPayload(
             type="agent_completed",
             agent_id=context_id,
             agent_name=agent_name or "",
@@ -153,14 +153,14 @@ def agent_span(
         _context_stack.reset(token)
 
 
-def publish_event(event: AssistantResponse) -> None:
-    """Publish an AssistantResponse via the dispatcher bound to this context.
+def publish_event(event: AgentEvent) -> None:
+    """Publish an AgentEvent via the dispatcher bound to this context.
 
     No-op when no dispatcher is set. The event is enriched with the current
     agent name and depth from the context stack before dispatch.
 
     Args:
-        event: The AssistantResponse instance to publish.
+        event: The AgentEvent instance to publish.
     """
     dispatcher = _current_dispatcher.get()
     if dispatcher is None:
@@ -181,4 +181,4 @@ def publish_event(event: AssistantResponse) -> None:
             )
         )
     except Exception:  # pragma: no cover - defensive logging path
-        logger.exception("Failed to publish AssistantResponse event")
+        logger.exception("Failed to publish AgentEvent event")

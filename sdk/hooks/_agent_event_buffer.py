@@ -8,7 +8,7 @@ from typing import Any
 from sdk.events._models import (
     AgentCompletedPayload,
     AgentStartedPayload,
-    AssistantResponse,
+    AgentEvent,
     BrowserScreenshotPayload,
     FileOutputPayload,
     TerminalOutputPayload,
@@ -37,7 +37,7 @@ class AgentEventBufferHook:
         self._last_screenshots: dict[str, dict[str, Any]] = {}
         self._terminal_counts: dict[str, int] = {}
 
-    def handle_event(self, event: AssistantResponse) -> None:
+    def handle_event(self, event: AgentEvent) -> None:
         """Called by the dispatcher for every published event."""
         if event.event is None:
             return
