@@ -236,5 +236,9 @@ async def test_persist_thinking_false_excludes_thinking_from_history(monkeypatch
     assert assistant_msg["thinking"] is None
 
     # But thinking should still be emitted via events
-    content_events = [e for e in emitted_events if hasattr(e, "thinking") and e.thinking]
-    assert any(e.thinking == "deep thought" for e in content_events)
+    from sdk.events import ContentPayload
+    content_events = [
+        e for e in emitted_events
+        if isinstance(e.payload, ContentPayload) and e.payload.thinking
+    ]
+    assert any(e.payload.thinking == "deep thought" for e in content_events)

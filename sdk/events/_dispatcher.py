@@ -26,7 +26,7 @@ from ._models import AgentEvent
 logger = logging.getLogger(__name__)
 
 
-Handler = Callable[[AgentEvent], Any]
+EventHandler = Callable[[AgentEvent], Any]
 
 
 class EventDispatcher:
@@ -40,11 +40,11 @@ class EventDispatcher:
 
     def __init__(self) -> None:
         """Initialize a dispatcher with no subscribers and empty task set."""
-        self._subscribers: list[Handler] = []
+        self._subscribers: list[EventHandler] = []
         self._tasks: set[asyncio.Task[Any]] = set()
 
     # -- subscription management -------------------------------------------------
-    def subscribe(self, handler: Handler) -> None:
+    def subscribe(self, handler: EventHandler) -> None:
         """Register a new subscriber if not already present.
 
         Args:
@@ -54,7 +54,7 @@ class EventDispatcher:
             return
         self._subscribers.append(handler)
 
-    def unsubscribe(self, handler: Handler) -> None:
+    def unsubscribe(self, handler: EventHandler) -> None:
         """Remove a subscriber if present."""
         with suppress(ValueError):
             self._subscribers.remove(handler)
@@ -72,7 +72,7 @@ class EventDispatcher:
         - sync handlers: scheduled with loop.call_soon
         """
         # Snapshot to avoid mutation during iteration
-        subscribers: Iterable[Handler] = tuple(self._subscribers)
+        subscribers: Iterable[EventHandler] = tuple(self._subscribers)
         if not subscribers:
             return
 
@@ -99,7 +99,7 @@ class EventDispatcher:
             - Only waits for tasks that were in-flight at the moment drain is
               called (snapshot semantics). If new events are published during
               the wait, their tasks will not be awaited by this call.
-            - Handler exceptions are already logged in their respective
+            - EventHandler exceptions are already logged in their respective
               wrappers; drain does not re-raise them.
         """
         if not self._tasks:
@@ -126,7 +126,7 @@ class EventDispatcher:
         except Exception:  # pragma: no cover - handler errors are logged, not raised
             logger.exception("Unhandled exception in async event handler")
 
-    def _run_sync_handler(self, handler: Handler, event: AgentEvent) -> None:
+    def _run_sync_handler(self, handler: EventHandler, event: AgentEvent) -> None:
         try:
             handler(event)
         except Exception:  # pragma: no cover - handler errors are logged, not raised
@@ -134,7 +134,7 @@ class EventDispatcher:
 
     # -- context manager ---------------------------------------------------------
     @asynccontextmanager
-    async def subscription(self, handler: Handler) -> AsyncIterator[None]:
+    async def subscription(self, handler: EventHandler) -> AsyncIterator[None]:
         """Async context manager that subscribes on enter and auto-unsubscribes.
 
         Usage:
@@ -149,4 +149,4 @@ class EventDispatcher:
             self.unsubscribe(handler)
 
 
-__all__ = ["EventDispatcher", "Handler"]
+__all__ = ["EventDispatcher", "EventHandler"]

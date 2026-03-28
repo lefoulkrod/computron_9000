@@ -12,26 +12,28 @@ import pytest
 
 from sdk.events import (
     AgentEvent,
-    AgentEventData,
+    ContentPayload,
     ToolCallPayload,
+    TurnEndPayload,
 )
 
 
 @pytest.mark.unit
-def test_assistant_response_defaults():
-    """AgentEvent should initialize with sensible defaults.
+def test_agent_event_defaults():
+    """AgentEvent should initialize with a payload and sensible defaults.
 
-    Validates that optional fields are None/empty and a timestamp is set.
+    Validates that metadata fields default to None and a timestamp is set.
     """
 
     before = datetime.utcnow()
-    resp = AgentEvent()
+    resp = AgentEvent(payload=ContentPayload(type="content"))
     after = datetime.utcnow()
 
-    assert resp.content is None
-    assert resp.thinking is None
-    assert resp.event is None
-    assert isinstance(resp.data, list) and resp.data == []
+    assert resp.payload.type == "content"
+    assert resp.payload.content is None
+    assert resp.agent_name is None
+    assert resp.agent_id is None
+    assert resp.depth is None
     assert isinstance(resp.timestamp, datetime)
     # timestamp should be within the test window
     assert before - timedelta(seconds=1) <= resp.timestamp <= after + timedelta(seconds=1)
@@ -41,32 +43,41 @@ def test_assistant_response_defaults():
 def test_tool_call_event_embedding():
     """Embedding a ToolCallPayload inside AgentEvent should be valid.
 
-    Also ensures serialization retains the discriminator for the event payload.
+    Also ensures serialization retains the discriminator for the payload.
     """
 
     payload = ToolCallPayload(type="tool_call", name="web_search")
-    resp = AgentEvent(event=payload, content=None)
+    resp = AgentEvent(payload=payload)
 
-    assert resp.event is not None
-    assert resp.event.type == "tool_call"
-    assert resp.event.name == "web_search"
+    assert resp.payload.type == "tool_call"
+    assert resp.payload.name == "web_search"
 
     as_dict = resp.model_dump()
-    assert as_dict["event"]["type"] == "tool_call"
-    assert as_dict["event"]["name"] == "web_search"
+    assert as_dict["payload"]["type"] == "tool_call"
+    assert as_dict["payload"]["name"] == "web_search"
 
 
 @pytest.mark.unit
-def test_response_data_attachment():
-    """AgentEventData items can be attached and serialized."""
+def test_content_payload_fields():
+    """ContentPayload should carry content, thinking, and delta."""
 
-    data = AgentEventData(content_type="image/png", content="iVBORw0KGgoAAAANSUhEUg==")
-    resp = AgentEvent(data=[data])
+    resp = AgentEvent(payload=ContentPayload(
+        type="content",
+        content="hello",
+        thinking="reasoning",
+        delta=True,
+    ))
 
-    assert len(resp.data) == 1
-    assert resp.data[0].content_type == "image/png"
-    assert isinstance(resp.data[0].content, str)
+    assert resp.payload.content == "hello"
+    assert resp.payload.thinking == "reasoning"
+    assert resp.payload.delta is True
 
-    dumped = resp.model_dump()
-    assert dumped["data"][0]["content_type"] == "image/png"
-    assert dumped["data"][0]["content"].startswith("iVBORw0KGgo")
+
+@pytest.mark.unit
+def test_turn_end_payload():
+    """TurnEndPayload signals end of turn."""
+
+    resp = AgentEvent(payload=TurnEndPayload(type="turn_end"))
+
+    as_dict = resp.model_dump()
+    assert as_dict["payload"]["type"] == "turn_end"

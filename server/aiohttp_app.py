@@ -144,7 +144,7 @@ async def stream_events(
     except Exception:  # pragma: no cover - defensive logging
         logger.exception("Error while streaming events")
         try:
-            error_data = {"error": "Server error", "final": True}
+            error_data = {"error": "Server error", "payload": {"type": "turn_end"}}
             await resp.write((json.dumps(error_data) + "\n").encode("utf-8"))
         except ConnectionResetError:
             pass

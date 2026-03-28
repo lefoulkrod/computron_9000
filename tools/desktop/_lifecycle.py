@@ -26,12 +26,10 @@ _display_lock = asyncio.Lock()
 def _notify_ui() -> None:
     """Emit DesktopActivePayload to show the noVNC panel in the UI."""
     config = load_config()
-    publish_event(AgentEvent(
-        event=DesktopActivePayload(
-            type="desktop_active",
-            resolution=config.desktop.resolution,
-        ),
-    ))
+    publish_event(AgentEvent(payload=DesktopActivePayload(
+        type="desktop_active",
+        resolution=config.desktop.resolution,
+    )))
 
 
 async def is_desktop_running() -> bool:

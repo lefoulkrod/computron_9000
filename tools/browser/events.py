@@ -59,7 +59,7 @@ async def _emit_screenshot(page: Page) -> None:
     except Exception:  # noqa: BLE001
         title = ""
 
-    publish_event(AgentEvent(event=BrowserScreenshotPayload(
+    publish_event(AgentEvent(payload=BrowserScreenshotPayload(
         type="browser_screenshot",
         url=url,
         title=title,

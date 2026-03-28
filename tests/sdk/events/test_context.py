@@ -13,6 +13,7 @@ import pytest
 
 from sdk.events import (
     AgentEvent,
+    ContentPayload,
     EventDispatcher,
     agent_span,
     publish_event,
@@ -34,7 +35,7 @@ def test_publish_event_noop_without_dispatcher() -> None:
     """Calling publish_event without a dispatcher should not raise or mutate state."""
     token = _current_dispatcher.set(None)
     try:
-        publish_event(AgentEvent(content="hi"))
+        publish_event(AgentEvent(payload=ContentPayload(type="content", content="hi")))
     finally:
         _current_dispatcher.reset(token)
 
@@ -62,10 +63,10 @@ def test_publish_event_delegates_to_dispatcher() -> None:
     d = _TrackingDispatcher()
     token = _current_dispatcher.set(d)
     try:
-        publish_event(AgentEvent(content="hello"))
+        publish_event(AgentEvent(payload=ContentPayload(type="content", content="hello")))
         assert len(d.published) == 1
         published = d.published[0]
-        assert published.content == "hello"
+        assert published.payload.content == "hello"
         assert published.depth is not None
     finally:
         _current_dispatcher.reset(token)

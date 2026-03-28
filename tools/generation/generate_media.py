@@ -156,7 +156,7 @@ async def generate_media(
             )
 
             # Also emit a FileOutputPayload for the chat message
-            publish_event(AgentEvent(event=FileOutputPayload(
+            publish_event(AgentEvent(payload=FileOutputPayload(
                 type="file_output",
                 filename=host_path.name,
                 content_type=content_type,
@@ -194,7 +194,7 @@ def _publish_preview(
     output_path: str | None = None,
 ) -> None:
     """Publish a GenerationPreviewPayload event."""
-    publish_event(AgentEvent(event=GenerationPreviewPayload(
+    publish_event(AgentEvent(payload=GenerationPreviewPayload(
         type="generation_preview",
         gen_id=gen_id,
         media_type=media_type,

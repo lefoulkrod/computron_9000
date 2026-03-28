@@ -104,7 +104,7 @@ async def create_custom_tool(
             saved = saved.model_copy(update={"script_filename": filename})
 
         logger.info("Created custom tool '%s' (id=%s)", saved.name, saved.id)
-        publish_event(AgentEvent(event=ToolCreatedPayload(type="tool_created", name=saved.name)))
+        publish_event(AgentEvent(payload=ToolCreatedPayload(type="tool_created", name=saved.name)))
         return {"status": "created", "id": saved.id, "name": saved.name, "type": saved.type}
 
     except ValueError as exc:

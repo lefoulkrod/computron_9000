@@ -65,9 +65,9 @@ class TestContextManager:
 
         mock_pub.assert_called_once()
         event = mock_pub.call_args[0][0]
-        assert event.event.type == "context_usage"
-        assert event.event.context_used == 105000
-        assert event.event.context_limit == 128000
+        assert event.payload.type == "context_usage"
+        assert event.payload.context_used == 105000
+        assert event.payload.context_limit == 128000
 
     @pytest.mark.asyncio
     async def test_context_hook_records_response(self):

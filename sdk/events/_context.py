@@ -26,7 +26,7 @@ if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
 from agents.types import LLMOptions
 
 from ._dispatcher import EventDispatcher
-from ._models import AgentCompletedPayload, AgentStartedPayload, AgentEvent
+from ._models import AgentCompletedPayload, AgentEvent, AgentStartedPayload, ContentPayload
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def agent_span(
 
     Example:
         with agent_span("Browser Agent", instruction="Browse example.com"):
-            publish_event(AgentEvent(thinking="Navigating..."))
+            publish_event(AgentEvent(payload=ContentPayload(type="content", thinking="Navigating...")))
     """
     stack = _context_stack.get()
     parent_id = stack[-1][0] if stack else None
@@ -123,7 +123,7 @@ def agent_span(
         agent_name, context_id, parent_id, depth,
     )
 
-    publish_event(AgentEvent(event=AgentStartedPayload(
+    publish_event(AgentEvent(payload=AgentStartedPayload(
         type="agent_started",
         agent_id=context_id,
         agent_name=agent_name or "",
@@ -144,7 +144,7 @@ def agent_span(
             "Agent completed: %s (id=%s, status=%s, depth=%d)",
             agent_name, context_id, status, depth,
         )
-        publish_event(AgentEvent(event=AgentCompletedPayload(
+        publish_event(AgentEvent(payload=AgentCompletedPayload(
             type="agent_completed",
             agent_id=context_id,
             agent_name=agent_name or "",

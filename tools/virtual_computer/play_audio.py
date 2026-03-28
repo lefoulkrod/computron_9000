@@ -61,7 +61,7 @@ async def play_audio(path: str) -> dict[str, str]:
         content_type=content_type,
         content=encoded,
     )
-    publish_event(AgentEvent(event=payload))
+    publish_event(AgentEvent(payload=payload))
     logger.info("Emitted audio_playback event for %s (%s, %d bytes)", host_path.name, content_type, len(raw))
 
     return {"status": "ok", "message": f"Playing '{host_path.name}' ({len(raw)} bytes)."}

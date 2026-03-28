@@ -123,7 +123,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
 
         # Publish a "running" event so the UI shows the command immediately.
         cmd_id = uuid.uuid4().hex
-        publish_event(AgentEvent(event=TerminalOutputPayload(
+        publish_event(AgentEvent(payload=TerminalOutputPayload(
             type="terminal_output",
             cmd_id=cmd_id,
             cmd=cmd,
@@ -191,7 +191,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                         chunk_err = stderr_chunk.decode("utf-8", errors="replace")
                         stderr_parts.append(chunk_err)
                     if chunk_out or chunk_err:
-                        publish_event(AgentEvent(event=TerminalOutputPayload(
+                        publish_event(AgentEvent(payload=TerminalOutputPayload(
                             type="terminal_output",
                             cmd_id=cmd_id,
                             cmd=cmd,
@@ -221,7 +221,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         logger.debug("parsed stderr: %r", stderr)
 
         # Publish the completed event with final output and exit code.
-        publish_event(AgentEvent(event=TerminalOutputPayload(
+        publish_event(AgentEvent(payload=TerminalOutputPayload(
             type="terminal_output",
             cmd_id=cmd_id,
             cmd=cmd,

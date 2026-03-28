@@ -53,7 +53,7 @@ async def output_file(path: str) -> dict[str, str]:
         content_type=content_type,
         path=path,
     )
-    publish_event(AgentEvent(event=payload))
+    publish_event(AgentEvent(payload=payload))
     logger.info("Emitted file_output event for %s (%s, %d bytes)", filename, content_type, file_size)
 
     return {

@@ -5,12 +5,13 @@ imported lazily to avoid circular imports.  Access ``make_run_agent_as_tool_func
 and related names via ``sdk.tools._agent_wrapper`` or the top-level ``sdk`` package.
 """
 
-from ._helpers import _normalize_tool_result, _prepare_tool_arguments
+from ._helpers import _execute_tool_call, _normalize_tool_result, _prepare_tool_arguments
 from ._schema import JSONValue, model_placeholder_shape, model_to_schema
 from ._truncation import truncate_args, truncate_tool_call_args
 
 __all__ = [
     "JSONValue",
+    "_execute_tool_call",
     "_normalize_tool_result",
     "_prepare_tool_arguments",
     "model_placeholder_shape",

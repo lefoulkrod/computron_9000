@@ -39,11 +39,8 @@ class AgentEventBufferHook:
 
     def handle_event(self, event: AgentEvent) -> None:
         """Called by the dispatcher for every published event."""
-        if event.event is None:
-            return
-
         agent_id = event.agent_id
-        payload = event.event
+        payload = event.payload
 
         if isinstance(payload, AgentStartedPayload):
             self._events.append({

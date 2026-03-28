@@ -10,6 +10,8 @@ from config import load_config
 from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
 from sdk.events import (
     AgentEvent,
+    ContentPayload,
+    TurnEndPayload,
     agent_span,
     get_current_dispatcher,
     set_model_options,
@@ -266,7 +268,7 @@ async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None,
     *,
-    options: LLMOptions | None = None,
+    options: LLMOptions,
     conversation_id: str | None = None,
     agent: str | None = None,
 ) -> AsyncGenerator[AgentEvent, None]:
@@ -288,8 +290,6 @@ async def handle_user_message(
     if data:
         user_content = _augment_message_with_attachments(message, data)
 
-    if options is None:
-        options = LLMOptions()
     if not options.model:
         msg = "No model specified. The UI must send a model in the request options."
         raise ValueError(msg)
@@ -299,10 +299,6 @@ async def handle_user_message(
         queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
 
         async def _queue_handler(evt: AgentEvent) -> None:
-            # Drop final events from nested agents — only the root agent's
-            # final event should reach the client (it signals end-of-stream).
-            if evt.final and evt.depth is not None and evt.depth > 0:
-                return
             try:
                 await queue.put(evt)
             except Exception:  # pragma: no cover - defensive logging
@@ -338,8 +334,8 @@ async def handle_user_message(
 
     except Exception:
         logger.exception("Error handling user message")
-        yield AgentEvent(
+        yield AgentEvent(payload=ContentPayload(
+            type="content",
             content="An error occurred while processing your message.",
-            thinking=None,
-            final=True,
-        )
+        ))
+        yield AgentEvent(payload=TurnEndPayload(type="turn_end"))

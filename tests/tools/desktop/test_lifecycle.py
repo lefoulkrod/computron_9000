@@ -91,5 +91,5 @@ async def test_ensure_desktop_running_waits_and_polls():
         await ensure_desktop_running()
         mock_publish.assert_called_once()
         event = mock_publish.call_args[0][0]
-        assert event.event.type == "desktop_active"
-        assert event.event.resolution == "1280x720"
+        assert event.payload.type == "desktop_active"
+        assert event.payload.resolution == "1280x720"

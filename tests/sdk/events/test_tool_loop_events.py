@@ -12,7 +12,7 @@ from typing import Any, List
 import pytest
 
 from sdk.context import ConversationHistory
-from sdk.events import AgentEvent, ToolCallPayload
+from sdk.events import AgentEvent, ContentPayload, ToolCallPayload
 from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolCallFunction
 from sdk.turn import run_turn, turn_scope
 from agents.types import Agent
@@ -95,15 +95,23 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
         )
 
     # Assert: at least two events: one model output and one tool_call
-    assert any(e.content == "partial" and e.thinking == "t" for e in captured)
-    tool_events = [e.event for e in captured if e.event is not None]
     assert any(
-        isinstance(ev, ToolCallPayload) and ev.type == "tool_call" and ev.name == "echo_tool"
+        isinstance(e.payload, ContentPayload) and e.payload.content == "partial" and e.payload.thinking == "t"
+        for e in captured
+    )
+    tool_events = [e.payload for e in captured if isinstance(e.payload, ToolCallPayload)]
+    assert any(
+        ev.type == "tool_call" and ev.name == "echo_tool"
         for ev in tool_events
     )
     # Ensure order: model event occurs before tool_call for the same cycle
-    first_model_idx = next(i for i, e in enumerate(captured) if e.content == "partial")
-    first_tool_idx = next(i for i, e in enumerate(captured) if e.event is not None)
+    first_model_idx = next(
+        i for i, e in enumerate(captured)
+        if isinstance(e.payload, ContentPayload) and e.payload.content == "partial"
+    )
+    first_tool_idx = next(
+        i for i, e in enumerate(captured) if isinstance(e.payload, ToolCallPayload)
+    )
     assert first_model_idx <= first_tool_idx
     # Verify context metadata: tool loop runs in root context (depth 0) when invoked directly
     assert all(e.depth == 0 for e in captured)

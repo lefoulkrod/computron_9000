@@ -1,16 +1,15 @@
-"""Event models for assistant responses and tool call notifications.
+"""Event models for agent events and tool call notifications.
 
-This module defines the public schema for events emitted by the assistant while
-handling a single user message. The schema is intentionally generic and uses a
-discriminated union for event payloads so additional event types can be added
-without breaking existing consumers.
+This module defines the public schema for events emitted by agents while
+handling a single user message (a turn). The schema uses a discriminated
+union on the ``type`` field so additional event types can be added without
+breaking existing consumers.
 
 Design notes:
 - Binary payloads are represented as base64-encoded strings paired with a
   content type.
 - Event payloads use a discriminator field named "type".
-- All top-level fields on AgentEvent are optional to support partial,
-  streaming-style emissions.
+- AgentEvent is a thin envelope: metadata + a single typed payload.
 """
 
 from __future__ import annotations
@@ -21,23 +20,38 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
-class AgentEventData(BaseModel):
-    """Represents a piece of binary or auxiliary data attached to a response.
+class ContentPayload(BaseModel):
+    """LLM-generated text content (natural language and/or chain-of-thought).
 
     Attributes:
-        content_type: The MIME type of the data payload (e.g., "image/png").
-        content: The base64-encoded content bytes.
+        type: Discriminator; always "content".
+        content: Natural-language content produced by the model, if any.
+        thinking: Chain-of-thought or rationale text, if available.
+        delta: When True, content/thinking are incremental token deltas to
+            append. When None, they are complete chunks.
     """
 
-    content_type: str
-    content: str  # base64 encoded payload
+    type: Literal["content"]
+    content: str | None = None
+    thinking: str | None = None
+    delta: bool | None = None
+
+
+class TurnEndPayload(BaseModel):
+    """Signals the end of a turn — the root agent has finished responding.
+
+    Attributes:
+        type: Discriminator; always "turn_end".
+    """
+
+    type: Literal["turn_end"]
 
 
 class ToolCallPayload(BaseModel):
     """Metadata for tool invocation notifications.
 
     Attributes:
-        type: Discriminator for the event payload; always "tool_call" for this model.
+        type: Discriminator; always "tool_call".
         name: The name of the tool being invoked.
     """
 
@@ -49,7 +63,7 @@ class BrowserScreenshotPayload(BaseModel):
     """Metadata for browser screenshot events.
 
     Attributes:
-        type: Discriminator for the event payload; always "browser_screenshot" for this model.
+        type: Discriminator; always "browser_screenshot".
         url: The current URL of the browser page.
         title: The page title.
         screenshot: Base64-encoded PNG screenshot of the viewport.
@@ -65,7 +79,7 @@ class FileOutputPayload(BaseModel):
     """Metadata for file output events.
 
     Attributes:
-        type: Discriminator for the event payload; always "file_output" for this model.
+        type: Discriminator; always "file_output".
         filename: The name of the file (basename for display/download).
         content_type: The MIME type of the file (e.g., "text/csv", "image/png").
         content: Base64-encoded file content (legacy, prefer ``path``).
@@ -151,7 +165,7 @@ class ContextUsagePayload(BaseModel):
         type: Discriminator; always "context_usage".
         context_used: Prompt + completion tokens consumed on the last call.
         context_limit: The model's context window size.
-        fill_ratio: Fraction of the context window consumed (0.0–1.0+).
+        fill_ratio: Fraction of the context window consumed (0.0-1.0+).
     """
 
     type: Literal["context_usage"]
@@ -230,9 +244,10 @@ class AgentCompletedPayload(BaseModel):
     status: Literal["success", "error", "stopped"]
 
 
-# Extend this alias with additional payload models as new event types are introduced.
-AssistantEventPayload = Annotated[
-    ToolCallPayload
+AgentEventPayload = Annotated[
+    ContentPayload
+    | TurnEndPayload
+    | ToolCallPayload
     | BrowserScreenshotPayload
     | FileOutputPayload
     | ToolCreatedPayload
@@ -248,45 +263,34 @@ AssistantEventPayload = Annotated[
 
 
 class AgentEvent(BaseModel):
-    """Top-level event envelope emitted during message handling.
+    """Top-level event envelope emitted during a turn.
 
-    The envelope supports partial updates for streaming by making all fields optional.
+    Carries a single typed payload plus shared metadata for attribution
+    and ordering.
 
     Attributes:
-        content: Natural-language content produced by the model, if any.
-        thinking: Optional chain-of-thought or rationale text, if available.
-        data: Optional list of binary or auxiliary payloads associated with this response.
-        event: Optional structured event metadata (e.g., tool call notifications).
-        timestamp: UTC timestamp when the event instance was created.
-        agent_name: Optional human-readable agent name for attribution (e.g., "Browser Agent").
-        depth: Optional nesting depth (0 = main agent, 1+ = sub-agents).
+        payload: The typed event payload (discriminated on ``type``).
+        timestamp: UTC timestamp when the event was created.
+        agent_name: Human-readable agent name for attribution.
+        agent_id: Hierarchical context id of the emitting agent.
+        depth: Nesting depth (0 = root agent, 1+ = sub-agents).
     """
 
-    content: str | None = None
-    thinking: str | None = None
-    data: list[AgentEventData] = Field(default_factory=list)
-    event: AssistantEventPayload | None = None
+    payload: AgentEventPayload
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    # Final is a boolean flag indicating terminal/complete event. Default to
-    # False so consumers can rely on a boolean value instead of None.
-    final: bool = False
-    # When True, content/thinking are incremental token deltas to append.
-    # When None (default, excluded from JSON), they are complete chunks.
-    delta: bool | None = None
-    # Agent attribution metadata for UI rendering
     agent_name: str | None = None
-    depth: int | None = None
     agent_id: str | None = None
+    depth: int | None = None
 
 
 __all__ = [
     "AgentCompletedPayload",
-    "AgentStartedPayload",
-    "AssistantEventPayload",
     "AgentEvent",
-    "AgentEventData",
+    "AgentEventPayload",
+    "AgentStartedPayload",
     "AudioPlaybackPayload",
     "BrowserScreenshotPayload",
+    "ContentPayload",
     "ContextUsagePayload",
     "DesktopActivePayload",
     "FileOutputPayload",
@@ -294,4 +298,5 @@ __all__ = [
     "TerminalOutputPayload",
     "ToolCallPayload",
     "ToolCreatedPayload",
+    "TurnEndPayload",
 ]

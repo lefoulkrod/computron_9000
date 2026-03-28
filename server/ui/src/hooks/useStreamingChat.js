@@ -43,29 +43,33 @@ function _buildRequestBody(message, fileData, modelSettings, conversationId, age
  * function only deals with "something happened" events.
  */
 function _handleStreamEvent(data, callbacks) {
-    if (!data.event) return;
+    const payload = data.payload;
+    if (!payload) return;
 
-    const { type } = data.event;
+    const { type } = payload;
     const agentId = data.agent_id || null;
+
+    // Content and turn_end are handled in the main loop, not here.
+    if (type === 'content' || type === 'turn_end') return;
 
     // Agent started/finished → adds or updates a node in the agent tree
     if (type === 'agent_started' || type === 'agent_completed') {
-        if (callbacks.onAgentEvent) callbacks.onAgentEvent(data.event);
+        if (callbacks.onAgentEvent) callbacks.onAgentEvent(payload);
     }
 
     // Browser screenshot → shows in preview panel and as card thumbnail
     if (type === 'browser_screenshot') {
         callbacks.onBrowserSnapshot({
-            url: data.event.url,
-            title: data.event.title,
-            screenshot: data.event.screenshot,
+            url: payload.url,
+            title: payload.title,
+            screenshot: payload.screenshot,
             agentId,
         });
     }
 
     // Terminal output → shows in terminal panel
     if (type === 'terminal_output') {
-        callbacks.onTerminalOutput({ ...data.event, agentId });
+        callbacks.onTerminalOutput({ ...payload, agentId });
     }
 
     // New custom tool was created → refresh the tools panel
@@ -75,18 +79,18 @@ function _handleStreamEvent(data, callbacks) {
 
     // Tool call → show on agent card, log it, refresh memory if needed
     if (type === 'tool_call') {
-        if (data.event.name === 'remember' || data.event.name === 'forget') {
+        if (payload.name === 'remember' || payload.name === 'forget') {
             callbacks.onMemoryChanged();
         }
         if (callbacks.onAgentToolCall) {
-            callbacks.onAgentToolCall({ name: data.event.name, agentId });
+            callbacks.onAgentToolCall({ name: payload.name, agentId });
         }
     }
 
     if (type === 'audio_playback') {
         callbacks.onAudioPlayback({
             key: Date.now(),
-            src: `data:${data.event.content_type};base64,${data.event.content}`,
+            src: `data:${payload.content_type};base64,${payload.content}`,
         });
     }
 
@@ -95,12 +99,12 @@ function _handleStreamEvent(data, callbacks) {
     }
 
     if (type === 'generation_preview') {
-        callbacks.onGenerationPreview({ ...data.event, agentId });
+        callbacks.onGenerationPreview({ ...payload, agentId });
     }
 
     if (type === 'file_output') {
         if (callbacks.onAgentFileOutput) {
-            callbacks.onAgentFileOutput({ ...data.event, agentId });
+            callbacks.onAgentFileOutput({ ...payload, agentId });
         }
     }
 
@@ -109,12 +113,12 @@ function _handleStreamEvent(data, callbacks) {
         if (callbacks.onAgentContextUsage && agentId) {
             callbacks.onAgentContextUsage({
                 agentId,
-                iteration: data.event.iteration || null,
-                maxIterations: data.event.max_iterations || null,
+                iteration: payload.iteration || null,
+                maxIterations: payload.max_iterations || null,
                 contextUsage: {
-                    context_used: data.event.context_used,
-                    context_limit: data.event.context_limit,
-                    fill_ratio: data.event.fill_ratio,
+                    context_used: payload.context_used,
+                    context_limit: payload.context_limit,
+                    fill_ratio: payload.fill_ratio,
                 },
             });
         }
@@ -291,21 +295,18 @@ export default function useStreamingChat(callbacks) {
                     try {
                         const data = JSON.parse(line);
 
-                        _handleStreamEvent(data, callbacks);
+                        const payload = data.payload;
 
-                        // Extract fields from the JSONL event
-                        const contentField = typeof data.content === 'string' ? data.content : '';
-                        const hasResponse = contentField.length > 0;
-                        const hasThinking = typeof data.thinking === 'string' && data.thinking.length > 0;
+                        _handleStreamEvent(data, callbacks);
 
                         // Set agentId on the assistant message so the chat
                         // view can look up this agent's activityLog.
-                        if (data.event?.type === 'agent_started' && !data.event.parent_agent_id) {
+                        if (payload?.type === 'agent_started' && !payload.parent_agent_id) {
                             setMessages((prev) => {
                                 const i = prev.length - 1;
                                 if (i < 0 || prev[i].id !== assistantId) return prev;
                                 const updated = [...prev];
-                                updated[i] = { ...updated[i], agentId: data.event.agent_id, streaming: true };
+                                updated[i] = { ...updated[i], agentId: payload.agent_id, streaming: true };
                                 return updated;
                             });
                         }
@@ -313,16 +314,21 @@ export default function useStreamingChat(callbacks) {
                         // ── Text tokens ──────────────────────────────────
                         // All agents (root and sub) go through the same
                         // buffer → onAgentContent → agent reducer path.
-                        if (data.agent_id && (hasResponse || hasThinking)) {
-                            bufferAgentToken(
-                                data.agent_id,
-                                hasResponse ? contentField : null,
-                                hasThinking ? data.thinking : null,
-                            );
+                        if (payload?.type === 'content' && data.agent_id) {
+                            const contentField = payload.content || '';
+                            const hasResponse = contentField.length > 0;
+                            const hasThinking = typeof payload.thinking === 'string' && payload.thinking.length > 0;
+                            if (hasResponse || hasThinking) {
+                                bufferAgentToken(
+                                    data.agent_id,
+                                    hasResponse ? contentField : null,
+                                    hasThinking ? payload.thinking : null,
+                                );
+                            }
                         }
 
-                        // Final marker — flush and mark done
-                        if (data.final === true) {
+                        // Turn end — flush and mark done
+                        if (payload?.type === 'turn_end') {
                             flushAgentBuffers();
                             setMessages((prev) => {
                                 const i = prev.length - 1;

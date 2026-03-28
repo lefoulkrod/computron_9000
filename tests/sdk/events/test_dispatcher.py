@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from sdk.events import AgentEvent, EventDispatcher
+from sdk.events import AgentEvent, ContentPayload, EventDispatcher
 
 
 @pytest.mark.unit
@@ -37,7 +37,7 @@ async def test_publish_to_sync_and_async_handlers(monkeypatch: Any) -> None:
     dispatcher.subscribe(sync_handler)
     dispatcher.subscribe(async_handler)
 
-    evt = AgentEvent(content="hi")
+    evt = AgentEvent(payload=ContentPayload(type="content", content="hi"))
     dispatcher.publish(evt)
 
     # Wait deterministically for async handlers
@@ -60,13 +60,13 @@ async def test_subscription_context_manager_auto_unsubscribes() -> None:
         calls.append("called")
 
     async with dispatcher.subscription(handler):
-        dispatcher.publish(AgentEvent(content="one"))
+        dispatcher.publish(AgentEvent(payload=ContentPayload(type="content", content="one")))
         # Yield once so loop.call_soon scheduled sync handler executes.
         await asyncio.sleep(0)
         await dispatcher.drain()
 
     # After exit, publishing should not call handler again
-    dispatcher.publish(AgentEvent(content="two"))
+    dispatcher.publish(AgentEvent(payload=ContentPayload(type="content", content="two")))
     await asyncio.sleep(0)
     await dispatcher.drain()
 
@@ -102,7 +102,7 @@ async def test_reset_clears_subscribers() -> None:
     dispatcher.subscribe(handler)
     dispatcher.reset()
 
-    dispatcher.publish(AgentEvent(content="ignored"))
+    dispatcher.publish(AgentEvent(payload=ContentPayload(type="content", content="ignored")))
     await dispatcher.drain()
     assert seen == []
 
@@ -124,7 +124,7 @@ async def test_drain_waits_for_inflight_tasks() -> None:
 
     dispatcher.subscribe(slow)
     dispatcher.subscribe(fast)
-    dispatcher.publish(AgentEvent(content="x"))
+    dispatcher.publish(AgentEvent(payload=ContentPayload(type="content", content="x")))
 
     # Without drain, order might not include slow yet; with drain it must.
     await dispatcher.drain()
@@ -143,7 +143,7 @@ async def test_drain_is_idempotent_when_no_tasks() -> None:
         await asyncio.sleep(0)
 
     dispatcher.subscribe(h)
-    dispatcher.publish(AgentEvent(content="y"))
+    dispatcher.publish(AgentEvent(payload=ContentPayload(type="content", content="y")))
     await dispatcher.drain()
     await dispatcher.drain()  # second call should be a no-op
 
@@ -166,7 +166,7 @@ async def test_drain_does_not_raise_on_handler_error() -> None:
 
     dispatcher.subscribe(bad)
     dispatcher.subscribe(good)
-    dispatcher.publish(AgentEvent(content="err"))
+    dispatcher.publish(AgentEvent(payload=ContentPayload(type="content", content="err")))
     await dispatcher.drain()
 
     assert set(executed) == {"bad", "good"}

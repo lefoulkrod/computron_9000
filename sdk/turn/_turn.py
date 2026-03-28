@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 from sdk.events._context import _current_dispatcher
-from sdk.events._dispatcher import EventDispatcher, Handler
+from sdk.events._dispatcher import EventDispatcher, EventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def drain_nudges() -> list[str]:
 
 @asynccontextmanager
 async def turn_scope(
-    handler: Handler | None = None,
+    handler: EventHandler | None = None,
     conversation_id: str | None = None,
 ) -> AsyncIterator[None]:
     """Set up and tear down everything needed for a single conversation turn.

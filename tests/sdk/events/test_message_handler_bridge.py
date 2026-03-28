@@ -3,7 +3,6 @@
 Covers:
 - The handler yields only events published via dispatcher (no duplicates)
 - Ordering is preserved
-- Nested agent final events are filtered; non-final nested events pass through
 - Agent lifecycle events (agent_started, agent_completed) are emitted by agent_span
 """
 
@@ -20,6 +19,8 @@ from sdk.events import (
     AgentCompletedPayload,
     AgentStartedPayload,
     AgentEvent,
+    ContentPayload,
+    TurnEndPayload,
     publish_event,
     agent_span,
 )
@@ -34,16 +35,16 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
 
     async def _fake_tool_loop(**_: Any) -> str | None:
         # Root-level event
-        publish_event(AgentEvent(content="one", thinking=None))
+        publish_event(AgentEvent(payload=ContentPayload(type="content", content="one")))
         await asyncio.sleep(0)
 
-        # Nested agent event: non-final, passes through with content intact
+        # Nested agent event: passes through with content intact
         with agent_span("nested"):
-            publish_event(AgentEvent(content="secret", thinking="hidden"))
+            publish_event(AgentEvent(payload=ContentPayload(type="content", content="secret", thinking="hidden")))
         await asyncio.sleep(0)
 
-        # Final root-level completion
-        publish_event(AgentEvent(content="done", thinking=None, final=True))
+        # Turn end
+        publish_event(AgentEvent(payload=TurnEndPayload(type="turn_end")))
         await asyncio.sleep(0)
 
         return "done"
@@ -55,22 +56,25 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
     seen: list[AgentEvent] = []
     async for ev in handle_user_message("hi", data=None, options=LLMOptions(model="test-model")):
         seen.append(ev)
-        if ev.final:
+        if ev.payload.type == "turn_end":
             break
 
     # Filter to content events and lifecycle events
-    content_events = [(ev.content, ev.thinking, ev.final) for ev in seen if ev.content is not None]
-    lifecycle_events = [
-        (ev.event.type, ev.event.agent_name)
+    content_events = [
+        (ev.payload.content, ev.payload.thinking)
         for ev in seen
-        if ev.event and isinstance(ev.event, (AgentStartedPayload, AgentCompletedPayload))
+        if ev.payload.type == "content"
+    ]
+    lifecycle_events = [
+        (ev.payload.type, ev.payload.agent_name)
+        for ev in seen
+        if isinstance(ev.payload, (AgentStartedPayload, AgentCompletedPayload))
     ]
 
     # Content events should pass through in order
     assert content_events == [
-        ("one", None, False),
-        ("secret", "hidden", False),
-        ("done", None, True),
+        ("one", None),
+        ("secret", "hidden"),
     ]
 
     # Lifecycle events: root started, nested started, nested completed, root completed
