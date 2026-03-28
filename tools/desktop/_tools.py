@@ -53,7 +53,7 @@ def _log_desktop_panel(
     elapsed_ms: float = 0,
 ) -> None:
     """Emit a Rich panel summarising a desktop tool call and its observation."""
-    if not logger.isEnabledFor(logging.DEBUG):
+    if not logger.isEnabledFor(logging.INFO):
         return
 
     from rich.panel import Panel
@@ -564,6 +564,8 @@ async def perform_visual_action(task: str) -> str:
     if not clean_task:
         return "Error: task must be a non-empty string."
 
+    t0 = asyncio.get_event_loop().time()
+
     # Capture the desktop screenshot.
     try:
         screenshot_bytes = await capture_screenshot()
@@ -582,10 +584,12 @@ async def perform_visual_action(task: str) -> str:
         logger.error("Grounding request failed for %r: %s", clean_task, exc)
         return "Error: Grounding request failed: %s" % exc
 
-    _log_visual_action_panel(clean_task, response)
-
     # Handle "finished" — no action needed.
     if response.action_type == "finished":
+        elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
+        _log_visual_action_panel(
+            clean_task, response, elapsed_ms=elapsed_ms, action_desc="finished",
+        )
         finished_content = response.raw.get("finished_content", "")
         obs = await _observe("perform_visual_action", args="finished")
         if finished_content:
@@ -599,25 +603,36 @@ async def perform_visual_action(task: str) -> str:
         logger.error("Visual action execution failed: %s", exc)
         return "Error: Action execution failed: %s" % exc
 
+    elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
+    _log_visual_action_panel(
+        clean_task, response, elapsed_ms=elapsed_ms, action_desc=action_desc,
+    )
+
     await asyncio.sleep(_SETTLE_DELAY_S)
     return await _observe(
         "perform_visual_action", args="%s → %s" % (clean_task[:50], action_desc),
     )
 
 
-def _log_visual_action_panel(task: str, response: GroundingResponse) -> None:
+def _log_visual_action_panel(
+    task: str,
+    response: GroundingResponse,
+    *,
+    elapsed_ms: float = 0,
+    action_desc: str = "",
+) -> None:
     """Emit a Rich panel summarising the grounding model prediction."""
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-
     from rich.panel import Panel
     from rich.text import Text
 
     body = Text()
     body.append("Task: ", style="bold")
     body.append(task + "\n")
-    body.append("Thought: ", style="bold")
-    body.append((response.thought or "(none)") + "\n", style="italic")
+
+    if response.thought:
+        body.append("Thought: ", style="bold")
+        body.append(response.thought + "\n", style="italic")
+
     body.append("Action: ", style="bold")
     body.append(response.action_type, style="bold green")
 
@@ -625,15 +640,38 @@ def _log_visual_action_panel(task: str, response: GroundingResponse) -> None:
         body.append(" at (%d, %d)" % (response.x, response.y), style="cyan")
 
     # Show extra fields for type/hotkey/scroll.
-    extra = response.raw.get("type_content") or response.raw.get("hotkey") or ""
-    if extra:
-        body.append("\nContent: ", style="bold")
-        preview = extra if len(extra) <= 60 else extra[:57] + "..."
+    type_content = response.raw.get("type_content")
+    hotkey = response.raw.get("hotkey")
+    scroll_dir = response.raw.get("scroll_direction")
+    finished_content = response.raw.get("finished_content")
+
+    if type_content:
+        preview = type_content if len(type_content) <= 60 else type_content[:57] + "..."
+        body.append("\nText: ", style="bold")
         body.append(preview, style="dim")
+    if hotkey:
+        body.append("\nHotkey: ", style="bold")
+        body.append(hotkey, style="dim")
+    if scroll_dir:
+        body.append("\nDirection: ", style="bold")
+        body.append(scroll_dir, style="dim")
+    if finished_content:
+        body.append("\nResult: ", style="bold")
+        body.append(finished_content, style="dim")
+
+    if action_desc:
+        body.append("\nExecuted: ", style="bold")
+        body.append(action_desc, style="green")
+
+    subtitle_parts = []
+    if elapsed_ms > 0:
+        subtitle_parts.append("[bold]%.0fms[/bold]" % elapsed_ms)
+    subtitle = "  ".join(subtitle_parts) if subtitle_parts else None
 
     _get_console().print(Panel(
         body,
         title="[bold magenta]perform_visual_action[/bold magenta]",
+        subtitle=subtitle,
         border_style="magenta",
         expand=False,
     ))

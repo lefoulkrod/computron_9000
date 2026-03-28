@@ -39,7 +39,7 @@ def log_vision_panel(
         elapsed_ms: Wall-clock time in milliseconds.
         image_source: Optional label for the image origin (URL, path, etc.).
     """
-    if not logger.isEnabledFor(logging.DEBUG):
+    if not logger.isEnabledFor(logging.INFO):
         return
 
     from rich.panel import Panel

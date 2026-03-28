@@ -56,7 +56,7 @@ def _log_browser_panel(
     resolution: _LocatorResolution | None = None,
 ) -> None:
     """Emit a single Rich panel summarising a browser tool call."""
-    if not logger.isEnabledFor(logging.DEBUG):
+    if not logger.isEnabledFor(logging.INFO):
         return
 
     from rich.console import Console

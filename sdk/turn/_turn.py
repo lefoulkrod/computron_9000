@@ -7,7 +7,7 @@ async context manager that sets up and tears down everything a turn needs:
 - An event dispatcher bound to a ContextVar so ``publish_event`` works
 - A per-conversation stop event so ``check_stop`` / ``request_stop`` work
 - Conversation liveness tracking (``is_turn_active``)
-- Per-conversation nudge queues (``queue_nudge`` / ``drain_nudges``)
+- Per-conversation nudge queues (``queue_nudge`` / ``drain_nudges``) currently only applied to the root agent.
 """
 
 from __future__ import annotations
@@ -42,9 +42,7 @@ _active_stop_events: dict[str, asyncio.Event] = {}
 
 # Stop event bound to the currently active turn, accessible without passing
 # it through every call frame.
-_stop_event: ContextVar[asyncio.Event | None] = ContextVar(
-    "turn_stop_event", default=None
-)
+_stop_event: ContextVar[asyncio.Event | None] = ContextVar("turn_stop_event", default=None)
 
 # Conversation ID for the current coroutine context, set inside turn_scope()
 # and inherited by sub-agents automatically via ContextVar semantics.

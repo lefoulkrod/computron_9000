@@ -106,47 +106,16 @@
 .mainContent {
     flex: 1;
     display: flex;
-    flex-direction: column;
     overflow: hidden;
 }
 
-/* Network overview + chat side-by-side */
-.networkWithChat {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-}
+/* Left side: network graph or preview panels (whichever is active) */
 .networkArea {
     flex: 1;
     overflow: hidden;
     border-right: 1px solid var(--muted);
 }
-.chatArea {
-    width: 40%;
-    min-width: 320px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--primary);
-}
-.chatHeader {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--muted);
-    font-size: 12px;
-    font-weight: 600;
-}
-.chatInputWrap {
-    border-top: 1px solid var(--muted);
-    padding: 6px 8px;
-}
-
-/* Simple chat (no sub-agents) with optional preview panels */
-.simpleChat {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-}
-.simpleChat.withPanels .previewColumn {
+.previewColumn {
     flex: 0 0 60%;
     max-width: 60%;
     display: flex;
@@ -156,11 +125,17 @@
     padding: 0.5rem;
     border-right: 1px solid var(--muted);
 }
+
+/* Right side: chat — always present, fills remaining space */
 .chatColumn {
     flex: 1;
+    min-width: 320px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+.hidden {
+    display: none;
 }
 
 /* Nudge toast */

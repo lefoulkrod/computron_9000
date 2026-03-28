@@ -432,6 +432,7 @@ class Browser:
         self._container_dir: str = ""
         self._download_listener_pages: set[int] = set()  # page id() tracking
         self._download_tasks: set[asyncio.Task[None]] = set()
+        self._download_event: asyncio.Event = asyncio.Event()
 
         # Auto-attach download listeners to pages created by popups or
         # target=_blank links so file downloads in new tabs are captured.
@@ -502,6 +503,7 @@ class Browser:
                 container_dir=self._container_dir,
             )
             self._pending_downloads.append(info)
+            self._download_event.set()
             logger.info(
                 "Download captured: %s (%s, %d bytes)",
                 info.filename, info.content_type, info.size_bytes,
@@ -1173,6 +1175,7 @@ class Browser:
         *,
         response: Response | None,
         initial_url: str,
+        saw_download_response: bool = False,
     ) -> BrowserInteractionResult:
         """Shared post-action pipeline: downloads, settle, iframe detection, logging."""
         wait_cfg = load_config().tools.browser.waits
@@ -1220,6 +1223,25 @@ class Browser:
             late_downloads = self.drain_downloads()
             if late_downloads:
                 download_info = late_downloads[0]
+
+        # 2b. If we saw a Content-Disposition: attachment response but the
+        # Playwright download event hasn't fired yet, wait for it.  This
+        # only triggers when an attachment header was observed — zero cost
+        # on normal interactions.
+        if download_info is None and saw_download_response:
+            try:
+                await asyncio.wait_for(self._download_event.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.debug("Download grace period expired despite attachment header")
+            if self._download_tasks:
+                await asyncio.gather(*self._download_tasks, return_exceptions=True)
+            grace_downloads = self.drain_downloads()
+            if grace_downloads:
+                download_info = grace_downloads[0]
+                logger.info(
+                    "Late download captured after attachment response: %s",
+                    download_info.filename,
+                )
 
         # 3. Iframe detection (skip if download — page may be a PDF viewer stub)
         frame_transition: str | None = None
@@ -1306,6 +1328,7 @@ class Browser:
         initial_url = getattr(page, "url", "")
 
         self._pending_downloads.clear()
+        self._download_event.clear()
         captured_responses: list[Response] = []
 
         # Track pages opened during this interaction (popups / target=_blank)
@@ -1315,9 +1338,18 @@ class Browser:
         new_page_responses: list[Response] = []
         _np_listeners: list[tuple[Page, Callable[..., Any]]] = []
 
+        _saw_download_response = False
+
         def _on_response(resp: Response) -> None:
+            nonlocal _saw_download_response
             if resp.frame == page.main_frame and resp.request.resource_type == "document":
                 captured_responses.append(resp)
+            # Detect responses that will trigger a download event.  The
+            # browser converts these to downloads asynchronously, so the
+            # Playwright download event fires after a short delay.
+            disposition = resp.headers.get("content-disposition", "")
+            if "attachment" in disposition:
+                _saw_download_response = True
 
         def _on_new_page(new_page: Page) -> None:
             new_pages.append(new_page)
@@ -1380,6 +1412,7 @@ class Browser:
 
         result = await self._finalize_action(
             target_page, response=response, initial_url=initial_url,
+            saw_download_response=_saw_download_response,
         )
         result.action_ms = action_ms
 
@@ -1398,6 +1431,7 @@ class Browser:
 
 _browser: Browser | None = None
 _ephemeral_pw_browser: Any = None  # Playwright Browser for sub-agent contexts
+_ephemeral_pw: Any = None  # Playwright driver instance for ephemeral browser
 _agent_browsers: dict[str, Browser] = {}
 _agent_browser_lock = asyncio.Lock()
 
@@ -1429,6 +1463,15 @@ def _atexit_kill_browser() -> None:
     no-op.  Otherwise it sends SIGTERM to the Playwright driver PID, which
     takes Chromium down with it.
     """
+    # Kill ephemeral driver if it was never stopped.
+    if _ephemeral_pw is not None:
+        try:
+            epid = _ephemeral_pw._connection._transport._proc.pid  # type: ignore[union-attr]
+            logger.debug("atexit: killing ephemeral driver tree (pid %d)", epid)
+            _kill_driver_tree(epid)
+        except Exception:  # noqa: BLE001
+            pass
+
     if _browser is None or _browser._closed:
         return
     pid = _browser._driver_pid
@@ -1477,7 +1520,7 @@ async def get_browser() -> Browser:
         # Lazily launch a separate headless Chromium process for ephemeral
         # contexts.  Persistent contexts (launch_persistent_context) don't
         # expose a Browser object in Playwright, so we need a second process.
-        global _ephemeral_pw_browser
+        global _ephemeral_pw_browser, _ephemeral_pw
         if _ephemeral_pw_browser is None:
             config = load_config()
             channel = config.tools.browser.channel
@@ -1488,8 +1531,8 @@ async def get_browser() -> Browser:
                 "--no-default-browser-check",
                 "--disable-dev-shm-usage",
             ]
-            pw = await async_playwright().start()
-            _ephemeral_pw_browser = await pw.chromium.launch(
+            _ephemeral_pw = await async_playwright().start()
+            _ephemeral_pw_browser = await _ephemeral_pw.chromium.launch(
                 channel=channel,
                 headless=headless,
                 args=launch_args,
@@ -1519,7 +1562,7 @@ async def release_agent_browser(agent_id: str) -> None:
 
 async def close_browser() -> None:
     """Shutdown all browser instances — ephemeral contexts and root singleton."""
-    global _browser, _ephemeral_pw_browser
+    global _browser, _ephemeral_pw_browser, _ephemeral_pw
 
     # Close all ephemeral sub-agent contexts first.
     async with _agent_browser_lock:
@@ -1531,13 +1574,19 @@ async def close_browser() -> None:
         except Exception:  # noqa: BLE001
             logger.warning("Failed to close ephemeral context for '%s'", agent_id)
 
-    # Close the ephemeral Chromium process if it was launched.
+    # Close the ephemeral Chromium process and its Playwright driver.
     if _ephemeral_pw_browser is not None:
         try:
             await _ephemeral_pw_browser.close()
         except Exception:  # noqa: BLE001
             logger.warning("Failed to close ephemeral Chromium process")
         _ephemeral_pw_browser = None
+    if _ephemeral_pw is not None:
+        try:
+            await _ephemeral_pw.stop()
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to stop ephemeral Playwright driver")
+        _ephemeral_pw = None
 
     if _browser is None:
         logger.debug("close_browser called but no browser instance exists")

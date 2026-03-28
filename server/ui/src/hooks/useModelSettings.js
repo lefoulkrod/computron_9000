@@ -26,7 +26,7 @@ export default function useModelSettings() {
     const [topK, setTopK] = useState(() => _loadSavedSettings().topK ?? '');
     const [topP, setTopP] = useState(() => _loadSavedSettings().topP ?? '');
     const [repeatPenalty, setRepeatPenalty] = useState(() => _loadSavedSettings().repeatPenalty ?? '');
-    const [numPredict, setNumPredict] = useState(() => _loadSavedSettings().numPredict ?? '-1');
+    const [numPredict, setNumPredict] = useState(() => _loadSavedSettings().numPredict ?? '');
     const [unlimitedTurns, setUnlimitedTurns] = useState(() => {
         const s = _loadSavedSettings();
         return 'unlimitedTurns' in s ? s.unlimitedTurns : true;

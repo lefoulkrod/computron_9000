@@ -12,25 +12,29 @@ import styles from './AgentNetwork.module.css';
  */
 function _buildTrees(agents) {
     const rootIds = Object.keys(agents).filter((id) => agents[id].parentId === null);
-    return rootIds.map((rootId) => {
-        const levels = [];
-        let queue = [rootId];
-        while (queue.length > 0) {
-            const level = [];
-            const nextQueue = [];
-            for (const id of queue) {
-                const agent = agents[id];
-                if (!agent) continue;
-                level.push(id);
-                for (const childId of agent.childIds) {
-                    nextQueue.push(childId);
+    return rootIds
+        // Only show trees that have sub-agents — single-agent turns
+        // (root with no children) don't need a network visualization.
+        .filter((id) => agents[id].childIds.length > 0)
+        .map((rootId) => {
+            const levels = [];
+            let queue = [rootId];
+            while (queue.length > 0) {
+                const level = [];
+                const nextQueue = [];
+                for (const id of queue) {
+                    const agent = agents[id];
+                    if (!agent) continue;
+                    level.push(id);
+                    for (const childId of agent.childIds) {
+                        nextQueue.push(childId);
+                    }
                 }
+                if (level.length > 0) levels.push(level);
+                queue = nextQueue;
             }
-            if (level.length > 0) levels.push(level);
-            queue = nextQueue;
-        }
-        return levels;
-    });
+            return levels;
+        });
 }
 
 /**
@@ -108,16 +112,20 @@ export default function AgentNetwork() {
 
     // Build per-root trees for layout (memoized on topology)
     const trees = useMemo(() => _buildTrees(agents), [topoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Count only agents visible in the rendered trees (not childless roots
+    // from past turns, which are filtered out of the graph).
     const { agentCount, runningCount, completeCount, errorCount } = useMemo(() => {
-        const list = Object.values(agents);
+        const visibleIds = new Set(trees.flat(2));
         let running = 0, complete = 0, error = 0;
-        for (const a of list) {
+        for (const id of visibleIds) {
+            const a = agents[id];
+            if (!a) continue;
             if (a.status === 'running') running++;
             else if (a.status === 'success') complete++;
             else if (a.status === 'error') error++;
         }
-        return { agentCount: list.length, runningCount: running, completeCount: complete, errorCount: error };
-    }, [agents]);
+        return { agentCount: visibleIds.size, runningCount: running, completeCount: complete, errorCount: error };
+    }, [trees, agents]);
 
     // Update elapsed time every second for running agents
     useEffect(() => {

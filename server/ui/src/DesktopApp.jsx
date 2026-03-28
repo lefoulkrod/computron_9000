@@ -17,7 +17,7 @@ import Sidebar from './components/Sidebar.jsx';
 import FlyoutPanel from './components/FlyoutPanel.jsx';
 import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
-import { AgentStateProvider, useAgentState, useAgentDispatch, hasSubAgents } from './hooks/useAgentState.jsx';
+import { AgentStateProvider, useAgentState, useAgentDispatch } from './hooks/useAgentState.jsx';
 import { useToast } from './components/ToastProvider.jsx';
 import styles from './App.module.css';
 
@@ -55,6 +55,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [toolsRefreshSignal, setToolsRefreshSignal] = useState(0);
     const [pendingAudio, setPendingAudio] = useState(null);
     const [muted, setMuted] = useState(false);
+    const [userDesktopOpen, setUserDesktopOpen] = useState(false);
     const [closedPanels, setClosedPanels] = useState(new Set());
     const [nudgeToast, setNudgeToast] = useState(null);
 
@@ -72,9 +73,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     // Called by useStreamingChat when events arrive from the backend.
     // Preview events dispatch once to the agent reducer — no dual state.
     //
-    // We use a ref so the streaming hook keeps a stable reference and
-    // doesn't restart the connection on re-render. The closedPanels
-    // updates need fresh state, so we read via the ref on each call.
+    // Created once via useRef — the streaming hook keeps a stable reference
+    // and doesn't restart on re-render. All callbacks use dispatch/setState
+    // updaters which are stable across renders. Do NOT read state variables
+    // directly in these callbacks — they would capture a stale closure.
     const _callbacks = useRef({
         onBrowserSnapshot: (snapshot) => {
             agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId: snapshot.agentId, snapshot });
@@ -180,24 +182,19 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     }, [sendMessage, modelSettings]);
 
     const openDesktop = useCallback(async () => {
-        if (desktopActive && !closedPanels.has('desktop')) return;
+        if (userDesktopOpen) return;
         try {
             const res = await fetch('/api/desktop/start', { method: 'POST' });
             const data = await res.json();
             if (data.running) {
-                // Desktop started outside an agent span — dispatch directly
-                // to the root agent node so the preview panel appears.
-                if (agentState.rootId) {
-                    agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: agentState.rootId });
-                }
-                setClosedPanels(_reopenPanel('desktop'));
+                setUserDesktopOpen(true);
             } else {
                 addToast(data.error || 'Desktop is not available', { type: 'error' });
             }
         } catch {
             addToast('Could not reach the server', { type: 'error' });
         }
-    }, [desktopActive, closedPanels, addToast, agentState.rootId, agentDispatch]);
+    }, [userDesktopOpen, addToast]);
 
     const newConversation = useCallback(async () => {
         await chatNewConversation();
@@ -216,7 +213,11 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     //
     // Flow: simple chat → network (when first sub-agent spawns)
     //       → detail (click a card) → back to network ("← Agents" button)
-    const hasSubAgentNodes = hasSubAgents(agentState);
+    // Show network view only when the current root has sub-agents.
+    // Old turns may have had sub-agents, but if the current turn is
+    // root-only we show simple chat with preview panels.
+    const currentRoot = agentState.rootId ? agentState.agents[agentState.rootId] : null;
+    const hasSubAgentNodes = currentRoot ? currentRoot.childIds.length > 0 : false;
     const selectedAgent = agentState.selectedAgentId;
 
     // Which preview panels are visible (simple chat + desktop overlay)
@@ -282,66 +283,55 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
                 {/* Main content area */}
                 <div className={styles.mainContent}>
-                    {selectedAgent ? (
-                        /* Expanded agent activity view */
+                    {/* Agent detail — full-screen activity view */}
+                    {selectedAgent && (
                         <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
-                    ) : hasSubAgentNodes ? (
-                        /* Network overview + chat */
-                        <div className={styles.networkWithChat}>
-                            <div className={styles.networkArea}>
-                                <AgentNetwork />
-                            </div>
-                            <div className={styles.chatArea}>
-                                <ChatPanel
-                                    messages={messages}
-                                    onSend={handleSend}
-                                    onStop={stopGeneration}
-                                    isStreaming={isStreaming}
-                                    attachment={attachment}
-                                    onPreview={(item) => setFilePreview(item)}
-                                    rootAgent={rootAgent}
-                                />
-                            </div>
-                        </div>
-                    ) : (
-                        /* Simple chat with preview panels — reads from root agent */
-                        <div className={`${styles.simpleChat} ${hasAnyPanel ? styles.withPanels : ''}`}>
-                            {hasAnyPanel && (
-                                <div className={styles.previewColumn}>
-                                    {showGeneration && <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />}
-                                    {showBrowser && <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels(_closePanel('browser'))} />}
-                                    {showDesktop && <DesktopPreview visible={showDesktop} onClose={() => setClosedPanels(_closePanel('desktop'))} />}
-                                    {showTerminal && <TerminalPanel lines={terminalLines} onClose={() => setClosedPanels(_closePanel('terminal'))} />}
-                                </div>
-                            )}
-                            <div className={styles.chatColumn}>
-                                <ChatPanel
-                                    messages={messages}
-                                    onSend={handleSend}
-                                    onStop={stopGeneration}
-                                    isStreaming={isStreaming}
-                                    attachment={attachment}
-                                    rootAgent={rootAgent}
-                                    onPreview={(item) => {
-                                        setFilePreview(item);
-                                        setClosedPanels((prev) => {
-                                            const next = new Set(prev);
-                                            next.delete('file');
-                                            next.add('generation');
-                                            return next;
-                                        });
-                                    }}
-                                />
-                            </div>
+                    )}
+
+                    {/* Network graph — shown alongside chat when current root has sub-agents */}
+                    {!selectedAgent && hasSubAgentNodes && (
+                        <div className={styles.networkArea}>
+                            <AgentNetwork />
                         </div>
                     )}
+
+                    {/* Preview panels — shown alongside chat when root has no sub-agents */}
+                    {!selectedAgent && !hasSubAgentNodes && hasAnyPanel && (
+                        <div className={styles.previewColumn}>
+                            {showGeneration && <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />}
+                            {showBrowser && <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels(_closePanel('browser'))} />}
+                            {showDesktop && <DesktopPreview visible={showDesktop} onClose={() => setClosedPanels(_closePanel('desktop'))} />}
+                            {showTerminal && <TerminalPanel lines={terminalLines} onClose={() => setClosedPanels(_closePanel('terminal'))} />}
+                        </div>
+                    )}
+
+                    {/* Chat panel — single instance, always mounted, hidden in detail view */}
+                    <div className={`${styles.chatColumn} ${selectedAgent ? styles.hidden : ''}`}>
+                        <ChatPanel
+                            messages={messages}
+                            onSend={handleSend}
+                            onStop={stopGeneration}
+                            isStreaming={isStreaming}
+                            attachment={attachment}
+                            rootAgent={rootAgent}
+                            onPreview={(item) => {
+                                setFilePreview(item);
+                                setClosedPanels((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete('file');
+                                    next.add('generation');
+                                    return next;
+                                });
+                            }}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* Desktop overlay — in agent views there's no preview column,
-                so the desktop floats on top instead */}
-            {showDesktop && (hasSubAgentNodes || selectedAgent) && (
-                <DesktopPreview visible={true} onClose={() => setClosedPanels(_closePanel('desktop'))} overlay />
+            {/* User's personal desktop overlay — opened via the header button,
+                independent of any agent's desktop. Floats on top of all views. */}
+            {userDesktopOpen && (
+                <DesktopPreview visible={true} onClose={() => setUserDesktopOpen(false)} overlay />
             )}
 
             {/* File preview overlay — available in all layouts */}

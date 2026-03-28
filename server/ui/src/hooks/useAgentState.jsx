@@ -60,6 +60,17 @@ function _agentReducer(state, action) {
         case 'AGENT_STARTED': {
             const { agentId, agentName, parentAgentId, instruction, timestamp } = action;
             const agent = _makeAgent(agentId, agentName, parentAgentId, instruction, timestamp);
+
+            // When a new root agent starts (new turn), carry over persistent
+            // preview state so panels don't vanish between turns.
+            // generationPreview is NOT carried — it's ephemeral to the turn.
+            if (!parentAgentId && state.rootId && state.agents[state.rootId]) {
+                const prev = state.agents[state.rootId];
+                agent.browserSnapshot = prev.browserSnapshot;
+                agent.terminalLines = prev.terminalLines;
+                agent.desktopActive = prev.desktopActive;
+            }
+
             const agents = { ...state.agents, [agentId]: agent };
 
             // Link parent → child
@@ -76,7 +87,10 @@ function _agentReducer(state, action) {
                 // Always update rootId when a new root agent starts (no parent).
                 // Each turn creates a fresh root span with a new ID, so the
                 // simple chat view needs to follow the latest one.
+                // Clear selectedAgentId so we don't stay stuck in an old
+                // agent's detail view when a new turn begins.
                 rootId: parentAgentId ? state.rootId : agentId,
+                selectedAgentId: parentAgentId ? state.selectedAgentId : null,
             };
         }
 
@@ -293,11 +307,4 @@ export function useAgentDispatch() {
         throw new Error('useAgentDispatch must be used within AgentStateProvider');
     }
     return dispatch;
-}
-
-/**
- * Returns true if sub-agents exist in the tree (any agent with a parentId).
- */
-export function hasSubAgents(state) {
-    return Object.values(state.agents).some((a) => a.parentId !== null);
 }
