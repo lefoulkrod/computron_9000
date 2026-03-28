@@ -36,6 +36,9 @@ logs/
 # Environment variables
 .env
 
+# Real conversation data (may contain secrets)
+docs/summarizer_optimization/real_compactions/
+
 # Node projects
 node_modules/
 **/node_modules/
