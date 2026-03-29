@@ -16,6 +16,7 @@ const _INITIAL_STATE = {
     agents: {},             // all agent nodes, keyed by ID
     rootId: null,           // the top-level agent
     selectedAgentId: null,  // which card the user clicked into
+    networkActivated: false, // true once any sub-agent appears; stays true for the conversation
 };
 
 /**
@@ -62,7 +63,8 @@ function _agentReducer(state, action) {
             const agent = _makeAgent(agentId, agentName, parentAgentId, instruction, timestamp);
 
             // When a new root agent starts (new turn), carry over persistent
-            // preview state so panels don't vanish between turns.
+            // preview state so panels don't vanish between turns. Previews are
+            // only replaced by newer data or appended to (terminal).
             // generationPreview is NOT carried — it's ephemeral to the turn.
             if (!parentAgentId && state.rootId && state.agents[state.rootId]) {
                 const prev = state.agents[state.rootId];
@@ -91,6 +93,9 @@ function _agentReducer(state, action) {
                 // agent's detail view when a new turn begins.
                 rootId: parentAgentId ? state.rootId : agentId,
                 selectedAgentId: parentAgentId ? state.selectedAgentId : null,
+                // Once a sub-agent appears, network view stays active for the
+                // rest of the conversation. Only RESET clears this.
+                networkActivated: state.networkActivated || !!parentAgentId,
             };
         }
 

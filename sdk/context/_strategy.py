@@ -161,7 +161,7 @@ class ToolClearingStrategy:
 
     def __init__(
         self,
-        threshold: float = 0.70,
+        threshold: float = 0.0,
         keep_recent_groups: int = 2,
     ) -> None:
         self._threshold = threshold

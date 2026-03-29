@@ -213,11 +213,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     //
     // Flow: simple chat → network (when first sub-agent spawns)
     //       → detail (click a card) → back to network ("← Agents" button)
-    // Show network view only when the current root has sub-agents.
-    // Old turns may have had sub-agents, but if the current turn is
-    // root-only we show simple chat with preview panels.
-    const currentRoot = agentState.rootId ? agentState.agents[agentState.rootId] : null;
-    const hasSubAgentNodes = currentRoot ? currentRoot.childIds.length > 0 : false;
+    // Once any sub-agent has appeared, the network view stays active for
+    // the rest of the conversation — even on subsequent root-only turns.
+    const networkActive = agentState.networkActivated;
     const selectedAgent = agentState.selectedAgentId;
 
     // Which preview panels are visible (simple chat + desktop overlay)
@@ -288,15 +286,15 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
                     )}
 
-                    {/* Network graph — shown alongside chat when current root has sub-agents */}
-                    {!selectedAgent && hasSubAgentNodes && (
+                    {/* Network graph — shown alongside chat once sub-agents have appeared */}
+                    {!selectedAgent && networkActive && (
                         <div className={styles.networkArea}>
                             <AgentNetwork />
                         </div>
                     )}
 
-                    {/* Preview panels — shown alongside chat when root has no sub-agents */}
-                    {!selectedAgent && !hasSubAgentNodes && hasAnyPanel && (
+                    {/* Preview panels — shown alongside chat in simple (non-network) mode */}
+                    {!selectedAgent && !networkActive && hasAnyPanel && (
                         <div className={styles.previewColumn}>
                             {showGeneration && <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />}
                             {showBrowser && <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels(_closePanel('browser'))} />}

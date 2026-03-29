@@ -3,6 +3,7 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    flex: 1;
 }
 
 /* Agent header bar */
@@ -83,7 +84,7 @@
     overflow: hidden;
 }
 
-/* Activity stream (left pane — 40%) */
+/* Activity stream (left pane — 40%, or full width when no previews) */
 .activity {
     flex: 0 0 40%;
     overflow-y: auto;
@@ -92,6 +93,9 @@
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+}
+.activity.activityFull {
+    flex: 1 1 100%;
 }
 
 .instruction {
