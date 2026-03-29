@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #0b0b0c;
+    color: #f3f3f3;
+    width: 900px;
+    min-height: 680px;
+  }
+
+  .view {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .view-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid #2a2a2c;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .back-btn {
+    font-size: 12px;
+    color: #7b8cff;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .header-title {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .header-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 500;
+  }
+
+  .badge-running {
+    background: rgba(74, 222, 128, 0.12);
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.25);
+  }
+
+  .badge-time {
+    background: #1b1b1d;
+    color: #9ca3af;
+    border: 1px solid #2a2a2c;
+  }
+
+  .badge-progress {
+    background: rgba(96, 165, 250, 0.1);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.2);
+  }
+
+  .action-btn {
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid #3a3a3c;
+    background: #1b1b1d;
+    color: #f3f3f3;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .action-btn.danger {
+    border-color: rgba(248, 113, 113, 0.3);
+    color: #f87171;
+  }
+
+  .view-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .task-list-pane {
+    width: 320px;
+    border-right: 1px solid #2a2a2c;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .pane-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 14px 6px;
+  }
+
+  .task-item {
+    padding: 9px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 1px solid #1a1a1c;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .task-item:hover { background: #1b1b1d; }
+  .task-item.selected { background: rgba(123, 140, 255, 0.06); border-left: 2px solid #7b8cff; }
+
+  .task-status-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .icon-done {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+  }
+
+  .icon-running {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+
+  .icon-pending {
+    background: #1b1b1d;
+    color: #4b5563;
+    border: 1px solid #3a3a3c;
+  }
+
+  .icon-failed {
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+  }
+
+  .icon-retry {
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+  }
+
+  .task-info { flex: 1; min-width: 0; }
+
+  .task-name {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    margin-bottom: 3px;
+  }
+
+  .task-meta {
+    font-size: 10px;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .task-agent {
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    color: #7b8cff;
+    font-size: 9.5px;
+  }
+
+  .dep-arrow {
+    font-size: 9px;
+    color: #4b5563;
+  }
+
+  /* Right pane - task detail */
+  .task-detail-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .detail-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid #2a2a2c;
+  }
+
+  .detail-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .detail-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .meta-item {
+    font-size: 11px;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .meta-label { color: #6b7280; }
+
+  .detail-body {
+    padding: 14px 18px;
+    flex: 1;
+  }
+
+  .detail-section {
+    margin-bottom: 18px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #7b8cff;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .instruction-block {
+    background: #1b1b1d;
+    border: 1px solid #2a2a2c;
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #d1d5db;
+  }
+
+  .checkpoint-block {
+    background: rgba(74, 222, 128, 0.05);
+    border: 1px solid rgba(74, 222, 128, 0.15);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #9ca3af;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+  }
+
+  .checkpoint-key {
+    color: #4ade80;
+    font-weight: 500;
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .timeline-event {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 11.5px;
+  }
+
+  .timeline-dot-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 18px;
+    flex-shrink: 0;
+  }
+
+  .timeline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .timeline-line {
+    width: 1px;
+    height: 20px;
+    background: #2a2a2c;
+  }
+
+  .dot-green { background: #4ade80; }
+  .dot-yellow { background: #fbbf24; }
+  .dot-gray { background: #4b5563; }
+  .dot-red { background: #f87171; }
+  .dot-purple { background: #a78bfa; }
+
+  .timeline-time {
+    color: #4b5563;
+    font-size: 10px;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    width: 48px;
+    flex-shrink: 0;
+  }
+
+  .timeline-text { color: #d1d5db; }
+  .timeline-text .hl-green { color: #4ade80; }
+  .timeline-text .hl-yellow { color: #fbbf24; }
+  .timeline-text .hl-red { color: #f87171; }
+  .timeline-text .hl-purple { color: #a78bfa; }
+
+  .dep-graph {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0;
+  }
+
+  .dep-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .dep-node {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+
+  .dep-node.done {
+    background: rgba(74, 222, 128, 0.1);
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.2);
+    text-decoration: line-through;
+    text-decoration-color: rgba(74, 222, 128, 0.4);
+  }
+
+  .dep-node.current {
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.25);
+  }
+
+  .dep-node.waiting {
+    background: #1b1b1d;
+    color: #6b7280;
+    border: 1px solid #2a2a2c;
+  }
+
+  .dep-connector {
+    color: #3a3a3c;
+    font-family: 'Fira Mono', monospace;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="view">
+  <div class="view-header">
+    <button class="back-btn">&larr; Goals</button>
+    <span class="header-title">Find remote Python/ML jobs paying $180k+</span>
+    <div class="header-badges">
+      <span class="badge badge-running">Running</span>
+      <span class="badge badge-time">2h 14m</span>
+      <span class="badge badge-progress">3/7 tasks</span>
+    </div>
+    <button class="action-btn">Pause</button>
+    <button class="action-btn danger">Cancel</button>
+  </div>
+
+  <div class="view-body">
+    <!-- Left: Task list -->
+    <div class="task-list-pane">
+      <div class="pane-label">Tasks</div>
+
+      <div class="task-item">
+        <div class="task-status-icon icon-done">&#10003;</div>
+        <div class="task-info">
+          <div class="task-name">Research target companies and job boards</div>
+          <div class="task-meta">
+            <span class="task-agent">browser</span>
+            <span>&middot; 18min</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="task-status-icon icon-done">&#10003;</div>
+        <div class="task-info">
+          <div class="task-name">Compile job listings matching criteria</div>
+          <div class="task-meta">
+            <span class="task-agent">browser</span>
+            <span>&middot; 24min</span>
+            <span class="dep-arrow">&#8592; task 1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="task-status-icon icon-done">&#10003;</div>
+        <div class="task-info">
+          <div class="task-name">Analyze resume against top 5 listings</div>
+          <div class="task-meta">
+            <span class="task-agent">coder</span>
+            <span>&middot; 8min</span>
+            <span class="dep-arrow">&#8592; task 2</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item selected">
+        <div class="task-status-icon icon-running">&#9654;</div>
+        <div class="task-info">
+          <div class="task-name">Tailor resume + cover letter for each listing</div>
+          <div class="task-meta">
+            <span class="task-agent">coder</span>
+            <span>&middot; running 6min</span>
+            <span class="dep-arrow">&#8592; task 3</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="task-status-icon icon-pending">&middot;</div>
+        <div class="task-info">
+          <div class="task-name">Submit applications on each platform</div>
+          <div class="task-meta">
+            <span class="task-agent">browser</span>
+            <span class="dep-arrow">&#8592; task 4</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="task-status-icon icon-pending">&middot;</div>
+        <div class="task-info">
+          <div class="task-name">Compile results report</div>
+          <div class="task-meta">
+            <span class="task-agent">coder</span>
+            <span class="dep-arrow">&#8592; task 5</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="task-status-icon icon-pending">&middot;</div>
+        <div class="task-info">
+          <div class="task-name" style="color: #a78bfa;">Follow up on applications (3 days)</div>
+          <div class="task-meta">
+            <span class="task-agent">browser</span>
+            <span style="color: #a78bfa;">&#9202; scheduled</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Task detail -->
+    <div class="task-detail-pane">
+      <div class="detail-header">
+        <div class="detail-title">Tailor resume + cover letter for each listing</div>
+        <div class="detail-meta">
+          <div class="meta-item">
+            <span class="meta-label">Agent:</span>
+            <span class="task-agent" style="font-size: 11px;">coder</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Status:</span>
+            <span style="color: #fbbf24;">Running (iteration 4)</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Retries:</span>
+            <span>0/3</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Elapsed:</span>
+            <span>6m 12s</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-body">
+        <div class="detail-section">
+          <div class="section-title">Dependencies</div>
+          <div class="dep-graph">
+            <div class="dep-row">
+              <span class="dep-node done">1. Research companies</span>
+              <span class="dep-connector">&rarr;</span>
+              <span class="dep-node done">2. Compile listings</span>
+              <span class="dep-connector">&rarr;</span>
+              <span class="dep-node done">3. Analyze resume</span>
+              <span class="dep-connector">&rarr;</span>
+              <span class="dep-node current">4. Tailor materials</span>
+            </div>
+            <div class="dep-row" style="margin-left: 270px; margin-top: 2px;">
+              <span class="dep-connector" style="margin-left: 60px;">&#8600;</span>
+              <span class="dep-node waiting">5. Submit apps</span>
+              <span class="dep-connector">&rarr;</span>
+              <span class="dep-node waiting">6. Report</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="section-title">Instruction</div>
+          <div class="instruction-block">
+            Using the resume at <span style="color: #7b8cff;">/home/computron/resume.pdf</span> and the 5 job listings from the scratchpad key <span style="color: #7b8cff;">job_listings</span>, create a tailored resume variant and cover letter for each position. Focus on matching keywords and highlighting relevant experience. Save outputs to <span style="color: #7b8cff;">/home/computron/applications/{company}/</span>.
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="section-title">Checkpoint</div>
+          <div class="checkpoint-block">
+            <span class="checkpoint-key">completed:</span> ["anthropic", "openai", "deepmind"]<br>
+            <span class="checkpoint-key">in_progress:</span> "cohere"<br>
+            <span class="checkpoint-key">remaining:</span> ["meta"]
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="section-title">Timeline</div>
+          <div class="timeline">
+            <div class="timeline-event">
+              <div class="timeline-dot-container">
+                <div class="timeline-dot dot-green"></div>
+                <div class="timeline-line"></div>
+              </div>
+              <span class="timeline-time">14:02</span>
+              <span class="timeline-text">Task <span class="hl-green">started</span> by runner</span>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-dot-container">
+                <div class="timeline-dot dot-green"></div>
+                <div class="timeline-line"></div>
+              </div>
+              <span class="timeline-time">14:04</span>
+              <span class="timeline-text">Checkpoint: <span class="hl-green">anthropic</span> resume + cover letter saved</span>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-dot-container">
+                <div class="timeline-dot dot-green"></div>
+                <div class="timeline-line"></div>
+              </div>
+              <span class="timeline-time">14:05</span>
+              <span class="timeline-text">Checkpoint: <span class="hl-green">openai</span> resume + cover letter saved</span>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-dot-container">
+                <div class="timeline-dot dot-green"></div>
+                <div class="timeline-line"></div>
+              </div>
+              <span class="timeline-time">14:07</span>
+              <span class="timeline-text">Checkpoint: <span class="hl-green">deepmind</span> resume + cover letter saved</span>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-dot-container">
+                <div class="timeline-dot dot-yellow"></div>
+              </div>
+              <span class="timeline-time">14:08</span>
+              <span class="timeline-text">Working on <span class="hl-yellow">cohere</span> &mdash; iteration 4</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

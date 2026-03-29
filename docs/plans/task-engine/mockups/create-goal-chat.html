@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #0b0b0c;
+    color: #f3f3f3;
+    width: 620px;
+    min-height: 650px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .message {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .user-msg {
+    align-self: flex-end;
+    background: #1b1b1d;
+    border: 1px solid #3a3a3c;
+    margin-left: auto;
+  }
+
+  .assistant-msg {
+    align-self: flex-start;
+    background: #0b0b0c;
+  }
+
+  .tool-call {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: #1b1b1d;
+    border: 1px solid #2a2a2c;
+    font-size: 10.5px;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    color: #9ca3af;
+    margin: 4px 0;
+  }
+
+  .tool-icon { color: #7b8cff; font-size: 11px; }
+
+  .goal-created {
+    background: rgba(74, 222, 128, 0.04);
+    border: 1px solid rgba(74, 222, 128, 0.15);
+    border-radius: 9px;
+    padding: 12px 14px;
+    margin: 6px 0;
+    max-width: 95%;
+  }
+
+  .goal-created-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .goal-created-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(74, 222, 128, 0.12);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4ade80;
+    font-size: 12px;
+  }
+
+  .goal-created-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #4ade80;
+  }
+
+  .goal-created-id {
+    font-size: 10px;
+    font-family: 'Fira Mono', monospace;
+    color: #6b7280;
+    margin-left: auto;
+  }
+
+  .task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .task-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    padding: 3px 0;
+  }
+
+  .task-num {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #1b1b1d;
+    border: 1px solid #3a3a3c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9.5px;
+    color: #9ca3af;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .task-desc { color: #d1d5db; flex: 1; }
+
+  .task-agent-badge {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Mono', monospace;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .agent-browser {
+    background: rgba(96, 165, 250, 0.1);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.2);
+  }
+
+  .agent-coder {
+    background: rgba(167, 139, 250, 0.1);
+    color: #a78bfa;
+    border: 1px solid rgba(167, 139, 250, 0.2);
+  }
+
+  .task-dep {
+    font-size: 9px;
+    color: #4b5563;
+    font-family: 'Fira Mono', monospace;
+  }
+
+  .task-schedule {
+    font-size: 9.5px;
+    color: #fbbf24;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .dep-line {
+    width: 1px;
+    height: 8px;
+    background: #3a3a3c;
+    margin-left: 9px;
+  }
+
+  .goal-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(74, 222, 128, 0.1);
+    font-size: 10.5px;
+    color: #6b7280;
+  }
+
+  .goal-footer-btn {
+    font-size: 10.5px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    border: 1px solid rgba(74, 222, 128, 0.2);
+    background: rgba(74, 222, 128, 0.08);
+    color: #4ade80;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+    margin-left: auto;
+  }
+
+  .thinking-block {
+    border-left: 2px solid #3a3a3c;
+    padding: 6px 10px;
+    margin: 6px 0;
+    font-size: 11.5px;
+    color: #6b7280;
+    font-style: italic;
+    line-height: 1.5;
+    max-width: 95%;
+  }
+</style>
+</head>
+<body>
+  <!-- User message -->
+  <div class="message user-msg">
+    Find me a remote Python or ML engineering job that pays at least $180k. Research companies, tailor my resume for each, apply, and follow up in a few days.
+  </div>
+
+  <!-- Thinking -->
+  <div class="thinking-block">
+    This is a multi-step goal that will take extended time. I'll decompose it into tasks with dependencies and schedule the follow-up. Let me create a goal with the task engine...
+  </div>
+
+  <!-- Tool calls -->
+  <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 95%;">
+    <div class="tool-call">
+      <span class="tool-icon">&#9881;</span>
+      create_goal
+    </div>
+    <div class="tool-call">
+      <span class="tool-icon">&#9881;</span>
+      create_task &times;7
+    </div>
+  </div>
+
+  <!-- Goal created card -->
+  <div class="goal-created">
+    <div class="goal-created-header">
+      <div class="goal-created-icon">&#10003;</div>
+      <span class="goal-created-title">Goal Created</span>
+      <span class="goal-created-id">goal_a3f8</span>
+    </div>
+
+    <div class="task-list">
+      <div class="task-row">
+        <div class="task-num">1</div>
+        <span class="task-desc">Research target companies and job boards</span>
+        <span class="task-agent-badge agent-browser">browser</span>
+      </div>
+      <div class="dep-line"></div>
+      <div class="task-row">
+        <div class="task-num">2</div>
+        <span class="task-desc">Compile job listings matching criteria</span>
+        <span class="task-agent-badge agent-browser">browser</span>
+        <span class="task-dep">&larr; 1</span>
+      </div>
+      <div class="dep-line"></div>
+      <div class="task-row">
+        <div class="task-num">3</div>
+        <span class="task-desc">Analyze resume against top listings</span>
+        <span class="task-agent-badge agent-coder">coder</span>
+        <span class="task-dep">&larr; 2</span>
+      </div>
+      <div class="dep-line"></div>
+      <div class="task-row">
+        <div class="task-num">4</div>
+        <span class="task-desc">Tailor resume + cover letter per listing</span>
+        <span class="task-agent-badge agent-coder">coder</span>
+        <span class="task-dep">&larr; 3</span>
+      </div>
+      <div class="dep-line"></div>
+      <div class="task-row">
+        <div class="task-num">5</div>
+        <span class="task-desc">Submit applications on each platform</span>
+        <span class="task-agent-badge agent-browser">browser</span>
+        <span class="task-dep">&larr; 4</span>
+      </div>
+      <div class="dep-line"></div>
+      <div class="task-row">
+        <div class="task-num">6</div>
+        <span class="task-desc">Compile results report</span>
+        <span class="task-agent-badge agent-coder">coder</span>
+        <span class="task-dep">&larr; 5</span>
+      </div>
+      <div class="dep-line"></div>
+      <div class="task-row">
+        <div class="task-num">7</div>
+        <span class="task-desc">Follow up on applications</span>
+        <span class="task-agent-badge agent-browser">browser</span>
+        <span class="task-dep">&larr; 6</span>
+        <span class="task-schedule">&#9202; +3 days</span>
+      </div>
+    </div>
+
+    <div class="goal-footer">
+      <span>7 tasks &middot; estimated 40-60min + 3-day follow-up</span>
+      <button class="goal-footer-btn">Start Now</button>
+    </div>
+  </div>
+
+  <!-- Assistant follow-up -->
+  <div class="message assistant-msg">
+    I've created a goal with 7 tasks. Here's the plan:<br><br>
+    <strong>Immediate (tasks 1-6):</strong> Research companies, find matching listings, analyze your resume fit, create tailored materials, submit applications, and compile a report. Each step feeds into the next.<br><br>
+    <strong>Scheduled (task 7):</strong> Follow-up emails will be sent 3 days after applications are submitted.<br><br>
+    The runner will work through these autonomously. I'll notify you if any task needs your input (e.g., a job portal requiring manual login). You can check progress anytime in the Goals panel.<br><br>
+    Want me to start it now, or would you like to adjust anything first?
+  </div>
+</body>
+</html>

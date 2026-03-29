@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --primary: #0b0b0c;
+    --secondary: #1b1b1d;
+    --muted: #3a3a3c;
+    --text: #f3f3f3;
+    --border: #2a2a2c;
+    --dim: #6b7280;
+    --accent: #7b8cff;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --radius: 9px;
+    --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    --mono: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+    --header-font: 'Share Tech Mono', 'Roboto Mono', 'Consolas', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--primary);
+    color: var(--text);
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+  }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
+    height: 36px;
+    min-height: 36px;
+    background: var(--primary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .app-title {
+    font-family: var(--header-font);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .header-spacer { flex: 1; }
+
+  .runner-indicator {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(74, 222, 128, 0.06);
+    border: 1px solid rgba(74, 222, 128, 0.15);
+    cursor: pointer;
+  }
+
+  .runner-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  .runner-text { font-size: 10.5px; color: var(--green); font-weight: 500; }
+  .runner-count { font-size: 10px; color: var(--dim); padding-left: 6px; border-left: 1px solid var(--border); margin-left: 2px; }
+
+  .model-badge {
+    font-size: 10px; color: var(--dim); padding: 2px 8px;
+    border-radius: 4px; background: var(--secondary); border: 1px solid var(--border);
+    font-family: var(--mono);
+  }
+
+  .theme-btn { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 14px; }
+
+  /* ─── BODY ─── */
+  .body-row { display: flex; flex: 1; overflow: hidden; }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar {
+    width: 44px; min-width: 44px;
+    background: var(--primary); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 8px 0; gap: 4px;
+  }
+
+  .sidebar-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid transparent; background: none;
+    color: var(--dim); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; transition: all 0.12s;
+  }
+
+  .sidebar-btn:hover { background: var(--muted); color: var(--text); }
+  .sidebar-btn.active { background: #1e1e30; border-color: #3a3a5a; color: var(--accent); }
+
+  .sidebar-sep { width: 20px; height: 1px; background: var(--border); margin: 4px 0; }
+
+  /* ─── GOAL DETAIL VIEW (replaces main content) ─── */
+  .goal-detail {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .gd-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .gd-back {
+    font-size: 11.5px;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font);
+    font-weight: 500;
+  }
+
+  .gd-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .gd-badges {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .gd-badge {
+    font-size: 9.5px;
+    padding: 2.5px 7px;
+    border-radius: 5px;
+    font-weight: 500;
+  }
+
+  .gd-badge-running { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+  .gd-badge-time { background: var(--secondary); color: #9ca3af; border: 1px solid var(--border); }
+  .gd-badge-progress { background: rgba(96,165,250,0.1); color: var(--blue); border: 1px solid rgba(96,165,250,0.2); }
+
+  .gd-action {
+    font-size: 10.5px; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid var(--muted); background: var(--secondary);
+    color: var(--text); cursor: pointer; font-family: var(--font);
+  }
+
+  .gd-action.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
+
+  .gd-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ─── TASK LIST (left pane) ─── */
+  .task-list-pane {
+    width: 300px;
+    min-width: 300px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .tl-label {
+    font-size: 9.5px; font-weight: 600; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 10px 12px 5px;
+  }
+
+  .task-item {
+    padding: 8px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    border-bottom: 1px solid #1a1a1c;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .task-item:hover { background: var(--secondary); }
+  .task-item.selected { background: rgba(123,140,255,0.05); border-left: 2px solid var(--accent); }
+
+  .task-icon {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9.5px; flex-shrink: 0; margin-top: 1px;
+  }
+
+  .ti-done { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+  .ti-running { background: rgba(251,191,36,0.12); color: var(--yellow); border: 1px solid rgba(251,191,36,0.25); }
+  .ti-pending { background: var(--secondary); color: #4b5563; border: 1px solid var(--muted); }
+  .ti-scheduled { background: rgba(167,139,250,0.12); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
+
+  .task-info { flex: 1; min-width: 0; }
+  .task-name { font-size: 11.5px; font-weight: 500; line-height: 1.35; margin-bottom: 2px; }
+
+  .task-meta {
+    font-size: 9.5px; color: var(--dim);
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .task-agent {
+    font-family: var(--mono); color: var(--accent); font-size: 9px;
+  }
+
+  .task-dep { color: #4b5563; }
+
+  /* ─── TASK DETAIL (right pane) ─── */
+  .task-detail-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .td-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .td-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .td-meta {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 10.5px;
+    color: #9ca3af;
+  }
+
+  .td-meta .label { color: var(--dim); }
+
+  .td-body {
+    padding: 12px 16px;
+    flex: 1;
+  }
+
+  .td-section { margin-bottom: 16px; }
+
+  .section-title {
+    font-size: 10px; font-weight: 600; color: var(--accent);
+    margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  /* Dependencies visualization */
+  .dep-chain {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 6px 0;
+  }
+
+  .dep-node {
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .dep-done {
+    background: rgba(74,222,128,0.08);
+    color: var(--green);
+    border: 1px solid rgba(74,222,128,0.2);
+    text-decoration: line-through;
+    text-decoration-color: rgba(74,222,128,0.3);
+  }
+
+  .dep-current {
+    background: rgba(251,191,36,0.08);
+    color: var(--yellow);
+    border: 1px solid rgba(251,191,36,0.2);
+  }
+
+  .dep-waiting {
+    background: var(--secondary);
+    color: var(--dim);
+    border: 1px solid var(--border);
+  }
+
+  .dep-arrow { color: var(--muted); font-size: 10px; }
+
+  /* Instruction block */
+  .instruction-block {
+    background: var(--secondary);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 9px 11px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #d1d5db;
+  }
+
+  .instruction-block .hl { color: var(--accent); }
+
+  /* Checkpoint */
+  .checkpoint-block {
+    background: rgba(74,222,128,0.04);
+    border: 1px solid rgba(74,222,128,0.12);
+    border-radius: 7px;
+    padding: 9px 11px;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: #9ca3af;
+    font-family: var(--mono);
+  }
+
+  .ck-key { color: var(--green); font-weight: 500; }
+
+  /* Timeline */
+  .timeline { display: flex; flex-direction: column; }
+
+  .tl-event {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+
+  .tl-dot-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 16px;
+    flex-shrink: 0;
+  }
+
+  .tl-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tl-line { width: 1px; height: 16px; background: var(--border); }
+
+  .tl-time {
+    color: #4b5563;
+    font-size: 9.5px;
+    font-family: var(--mono);
+    width: 42px;
+    flex-shrink: 0;
+  }
+
+  .tl-text { color: #d1d5db; }
+  .hl-green { color: var(--green); }
+  .hl-yellow { color: var(--yellow); }
+  .hl-red { color: var(--red); }
+
+  /* ─── SELF-CORRECTION CARD ─── */
+  .correction-card {
+    background: rgba(167,139,250,0.04);
+    border: 1px solid rgba(167,139,250,0.15);
+    border-radius: 7px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .cc-header {
+    padding: 6px 10px;
+    background: rgba(167,139,250,0.06);
+    border-bottom: 1px solid rgba(167,139,250,0.12);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--purple);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cc-body {
+    padding: 8px 10px;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: #d1d5db;
+  }
+
+  .cc-label { color: var(--purple); font-weight: 600; font-size: 9.5px; }
+
+  .cc-strategy {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(167,139,250,0.1);
+  }
+
+  .cc-old {
+    color: var(--red);
+    text-decoration: line-through;
+    text-decoration-color: rgba(248,113,113,0.4);
+    font-size: 10px;
+  }
+
+  .cc-new { color: var(--green); font-size: 10px; }
+
+  /* ─── PREVIEW COLUMN (stays on right) ─── */
+  .preview-col {
+    width: 320px;
+    min-width: 320px;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  .preview-card {
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--secondary);
+    overflow: hidden;
+  }
+
+  .preview-label {
+    padding: 5px 10px;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .browser-preview-body { padding: 8px; }
+
+  .browser-url-bar {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 7px; border-radius: 5px;
+    background: var(--primary); border: 1px solid var(--border);
+    font-size: 9.5px; color: var(--dim); font-family: var(--mono);
+    margin-bottom: 5px;
+  }
+
+  .lock-icon { color: var(--green); font-size: 8px; }
+
+  .browser-screenshot {
+    width: 100%; height: 200px; border-radius: 4px;
+    background: #f8f9fa; overflow: hidden; border: 1px solid var(--border);
+  }
+
+  /* Fake resume page */
+  .fake-resume {
+    padding: 12px;
+    font-size: 8.5px;
+    color: #333;
+    line-height: 1.5;
+    height: 100%;
+  }
+
+  .fr-name { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 2px; }
+  .fr-tagline { font-size: 9px; color: #666; margin-bottom: 8px; }
+
+  .fr-section-title {
+    font-size: 9px; font-weight: 700; color: #2563eb;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 2px; margin: 6px 0 3px;
+  }
+
+  .fr-item { margin-bottom: 3px; }
+  .fr-item-title { font-weight: 600; color: #1a1a2e; }
+  .fr-item-sub { color: #666; font-size: 7.5px; }
+  .fr-highlight { background: rgba(74,222,128,0.2); padding: 0 2px; border-radius: 1px; }
+
+  /* Terminal in preview */
+  .terminal-body {
+    padding: 7px 9px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    line-height: 1.5;
+    background: #1a1a1a;
+    max-height: 140px;
+    overflow: hidden;
+  }
+
+  .term-prompt { color: #4caf50; font-weight: 600; }
+  .term-output { color: #c8c8c8; }
+  .term-success { color: var(--green); }
+  .term-dim { color: #555; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ─── HEADER ─── -->
+  <div class="header">
+    <span class="app-title" style="font-family: var(--header-font);">COMPUTRON 9000</span>
+    <div class="header-spacer"></div>
+    <div class="runner-indicator">
+      <div class="runner-dot"></div>
+      <span class="runner-text">1 running</span>
+      <span class="runner-count">2 queued</span>
+    </div>
+    <span class="model-badge">qwen3:32b</span>
+    <button class="theme-btn">&#9789;</button>
+  </div>
+
+  <!-- ─── BODY ─── -->
+  <div class="body-row">
+
+    <!-- ─── SIDEBAR ─── -->
+    <div class="sidebar">
+      <button class="sidebar-btn" title="Agents">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+      </button>
+      <button class="sidebar-btn active" title="Goals">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      </button>
+      <button class="sidebar-btn" title="Settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/></svg>
+      </button>
+      <button class="sidebar-btn" title="Memory">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0110 10c0 5.52-4.48 10-10 10S2 17.52 2 12"/><path d="M12 6v6l4 2"/></svg>
+      </button>
+      <button class="sidebar-btn" title="Conversations">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      </button>
+      <div class="sidebar-sep"></div>
+      <button class="sidebar-btn" title="Tools">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      </button>
+    </div>
+
+    <!-- ─── GOAL DETAIL VIEW (full width, replaces content area) ─── -->
+    <div class="goal-detail">
+      <div class="gd-header">
+        <button class="gd-back">&larr; Goals</button>
+        <span class="gd-title">Find remote Python/ML jobs paying $180k+</span>
+        <div class="gd-badges">
+          <span class="gd-badge gd-badge-running">Running</span>
+          <span class="gd-badge gd-badge-time">2h 14m</span>
+          <span class="gd-badge gd-badge-progress">4/7 tasks</span>
+        </div>
+        <button class="gd-action">Pause</button>
+        <button class="gd-action danger">Cancel</button>
+      </div>
+
+      <div class="gd-body">
+        <!-- Task list pane -->
+        <div class="task-list-pane">
+          <div class="tl-label">Tasks</div>
+
+          <div class="task-item">
+            <div class="task-icon ti-done">&#10003;</div>
+            <div class="task-info">
+              <div class="task-name">Research target companies and job boards</div>
+              <div class="task-meta">
+                <span class="task-agent">browser</span>
+                <span>&middot; 18min</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="task-icon ti-done">&#10003;</div>
+            <div class="task-info">
+              <div class="task-name">Compile job listings matching criteria</div>
+              <div class="task-meta">
+                <span class="task-agent">browser</span>
+                <span>&middot; 24min</span>
+                <span class="task-dep">&larr; 1</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="task-icon ti-done">&#10003;</div>
+            <div class="task-info">
+              <div class="task-name">Analyze resume against top 5 listings</div>
+              <div class="task-meta">
+                <span class="task-agent">coder</span>
+                <span>&middot; 8min</span>
+                <span class="task-dep">&larr; 2</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item selected">
+            <div class="task-icon ti-running">&#9654;</div>
+            <div class="task-info">
+              <div class="task-name">Tailor resume + cover letter for each listing</div>
+              <div class="task-meta">
+                <span class="task-agent">coder</span>
+                <span>&middot; running 6min</span>
+                <span class="task-dep">&larr; 3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="task-icon ti-pending">&middot;</div>
+            <div class="task-info">
+              <div class="task-name">Submit applications on each platform</div>
+              <div class="task-meta">
+                <span class="task-agent">browser</span>
+                <span class="task-dep">&larr; 4</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="task-icon ti-pending">&middot;</div>
+            <div class="task-info">
+              <div class="task-name">Compile results report</div>
+              <div class="task-meta">
+                <span class="task-agent">coder</span>
+                <span class="task-dep">&larr; 5</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <div class="task-icon ti-scheduled">&#9202;</div>
+            <div class="task-info">
+              <div class="task-name" style="color: var(--purple);">Follow up on applications</div>
+              <div class="task-meta">
+                <span class="task-agent">browser</span>
+                <span style="color: var(--purple);">+3 days</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Task detail pane -->
+        <div class="task-detail-pane">
+          <div class="td-header">
+            <div class="td-title">Tailor resume + cover letter for each listing</div>
+            <div class="td-meta">
+              <span><span class="label">Agent:</span> <span class="task-agent" style="font-size:10.5px;">coder</span></span>
+              <span><span class="label">Status:</span> <span style="color:var(--yellow);">Running (iter 4)</span></span>
+              <span><span class="label">Retries:</span> 0/3</span>
+              <span><span class="label">Elapsed:</span> 6m 12s</span>
+            </div>
+          </div>
+
+          <div class="td-body">
+            <!-- Dependencies -->
+            <div class="td-section">
+              <div class="section-title">Dependencies</div>
+              <div class="dep-chain">
+                <span class="dep-node dep-done">1. Research</span>
+                <span class="dep-arrow">&rarr;</span>
+                <span class="dep-node dep-done">2. Listings</span>
+                <span class="dep-arrow">&rarr;</span>
+                <span class="dep-node dep-done">3. Analyze</span>
+                <span class="dep-arrow">&rarr;</span>
+                <span class="dep-node dep-current">4. Tailor</span>
+                <span class="dep-arrow">&rarr;</span>
+                <span class="dep-node dep-waiting">5. Submit</span>
+                <span class="dep-arrow">&rarr;</span>
+                <span class="dep-node dep-waiting">6. Report</span>
+                <span class="dep-arrow">&rarr;</span>
+                <span class="dep-node dep-waiting">7. Follow up</span>
+              </div>
+            </div>
+
+            <!-- Instruction -->
+            <div class="td-section">
+              <div class="section-title">Instruction</div>
+              <div class="instruction-block">
+                Using the resume at <span class="hl">/home/computron/resume.pdf</span> and the 5 job listings from scratchpad key <span class="hl">job_listings</span>, create a tailored resume variant and cover letter for each position. Focus on matching keywords and highlighting relevant experience. Save to <span class="hl">/home/computron/applications/{company}/</span>.
+              </div>
+            </div>
+
+            <!-- Checkpoint -->
+            <div class="td-section">
+              <div class="section-title">Checkpoint</div>
+              <div class="checkpoint-block">
+                <span class="ck-key">completed:</span> ["anthropic", "openai", "deepmind"]<br>
+                <span class="ck-key">in_progress:</span> "cohere"<br>
+                <span class="ck-key">remaining:</span> ["meta"]
+              </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="td-section">
+              <div class="section-title">Timeline</div>
+              <div class="timeline">
+                <div class="tl-event">
+                  <div class="tl-dot-col"><div class="tl-dot" style="background:var(--green);"></div><div class="tl-line"></div></div>
+                  <span class="tl-time">14:02</span>
+                  <span class="tl-text">Task <span class="hl-green">started</span> by runner</span>
+                </div>
+                <div class="tl-event">
+                  <div class="tl-dot-col"><div class="tl-dot" style="background:var(--green);"></div><div class="tl-line"></div></div>
+                  <span class="tl-time">14:04</span>
+                  <span class="tl-text">Checkpoint: <span class="hl-green">anthropic</span> resume saved</span>
+                </div>
+                <div class="tl-event">
+                  <div class="tl-dot-col"><div class="tl-dot" style="background:var(--green);"></div><div class="tl-line"></div></div>
+                  <span class="tl-time">14:05</span>
+                  <span class="tl-text">Checkpoint: <span class="hl-green">openai</span> resume saved</span>
+                </div>
+                <div class="tl-event">
+                  <div class="tl-dot-col"><div class="tl-dot" style="background:var(--green);"></div><div class="tl-line"></div></div>
+                  <span class="tl-time">14:07</span>
+                  <span class="tl-text">Checkpoint: <span class="hl-green">deepmind</span> resume saved</span>
+                </div>
+                <div class="tl-event">
+                  <div class="tl-dot-col"><div class="tl-dot" style="background:var(--yellow);"></div></div>
+                  <span class="tl-time">14:08</span>
+                  <span class="tl-text">Working on <span class="hl-yellow">cohere</span></span>
+                </div>
+              </div>
+
+              <!-- Self-correction example (from an earlier task) -->
+              <div class="correction-card">
+                <div class="cc-header">
+                  <span>&#9888;</span> Self-Correction on Task 5 (previous run)
+                </div>
+                <div class="cc-body">
+                  <div><span class="cc-label">Root cause:</span> Greenhouse portal requires authenticated login</div>
+                  <div class="cc-strategy">
+                    <div><span class="cc-old">Submit all 5 applications directly</span></div>
+                    <div><span class="cc-new">&#10003; Submit 3 direct apps + save 2 for user</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview column (browser showing resume being tailored) -->
+        <div class="preview-col">
+          <div class="preview-card">
+            <div class="preview-label">
+              <span class="tl-dot" style="width:5px;height:5px;background:var(--green);display:inline-block;"></span>
+              Browser &mdash; Task 4 output
+            </div>
+            <div class="browser-preview-body">
+              <div class="browser-url-bar">
+                <span class="lock-icon">&#128274;</span>
+                file:///home/computron/applications/cohere/
+              </div>
+              <div class="browser-screenshot">
+                <div class="fake-resume">
+                  <div class="fr-name">Larry Chen</div>
+                  <div class="fr-tagline">Senior ML Engineer &middot; Python, PyTorch, Distributed Systems</div>
+
+                  <div class="fr-section-title">Experience</div>
+                  <div class="fr-item">
+                    <div class="fr-item-title">Staff ML Engineer — <span class="fr-highlight">NLP Platform</span></div>
+                    <div class="fr-item-sub">Acme Corp &middot; 2022-Present</div>
+                    <div>Led team of 6 building <span class="fr-highlight">large language model</span> serving infrastructure handling 10M+ daily requests. Reduced inference latency by 40% via <span class="fr-highlight">model optimization</span> and custom batching.</div>
+                  </div>
+                  <div class="fr-item">
+                    <div class="fr-item-title">Senior ML Engineer — <span class="fr-highlight">Retrieval Systems</span></div>
+                    <div class="fr-item-sub">DataFlow Inc &middot; 2019-2022</div>
+                    <div>Built <span class="fr-highlight">embedding-based retrieval</span> pipeline. Designed <span class="fr-highlight">RAG</span> architecture serving 50k QPS.</div>
+                  </div>
+
+                  <div class="fr-section-title">Skills</div>
+                  <div>Python, PyTorch, <span class="fr-highlight">Transformers</span>, JAX, CUDA, Kubernetes, <span class="fr-highlight">NLP</span>, <span class="fr-highlight">LLMs</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <div class="preview-label">Terminal</div>
+            <div class="terminal-body">
+              <div><span class="term-prompt">$</span> <span class="term-output">python tailor_resume.py --company cohere</span></div>
+              <div class="term-dim">Loading resume template...</div>
+              <div class="term-dim">Analyzing Cohere job description...</div>
+              <div class="term-output">Keywords matched: <span class="term-success">NLP, LLMs, transformers, RAG</span></div>
+              <div class="term-output">Generating tailored resume...</div>
+              <div class="term-success">&#10003; Saved: applications/cohere/resume.pdf</div>
+              <div class="term-output">Generating cover letter...</div>
+              <div class="term-success">&#10003; Saved: applications/cohere/cover_letter.pdf</div>
+              <div class="term-dim">Progress: 4/5 companies complete</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

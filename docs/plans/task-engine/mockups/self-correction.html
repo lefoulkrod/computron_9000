@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #0b0b0c;
+    color: #f3f3f3;
+    width: 620px;
+    min-height: 700px;
+    padding: 16px;
+  }
+
+  .correction-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .flow-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f87171;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flow-title .icon {
+    font-size: 16px;
+  }
+
+  .flow-subtitle {
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 8px;
+  }
+
+  .card {
+    border-radius: 9px;
+    border: 1px solid #2a2a2c;
+    background: #1b1b1d;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #2a2a2c;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .card-body {
+    padding: 10px 12px;
+  }
+
+  .step-number {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .step-red {
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+  }
+
+  .step-purple {
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+  }
+
+  .step-yellow {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+
+  .step-green {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+  }
+
+  .error-block {
+    background: rgba(248, 113, 113, 0.05);
+    border: 1px solid rgba(248, 113, 113, 0.15);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+  }
+
+  .error-label {
+    color: #f87171;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .error-text { color: #fca5a5; }
+  .error-trace { color: #6b7280; font-size: 10.5px; }
+
+  .analysis-block {
+    background: rgba(167, 139, 250, 0.05);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #d1d5db;
+  }
+
+  .analysis-block strong { color: #a78bfa; font-weight: 600; }
+
+  .strategy-block {
+    background: rgba(251, 191, 36, 0.05);
+    border: 1px solid rgba(251, 191, 36, 0.15);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .strategy-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #d1d5db;
+    padding: 3px 0;
+  }
+
+  .strategy-bullet {
+    color: #fbbf24;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .strategy-old {
+    color: #f87171;
+    text-decoration: line-through;
+    text-decoration-color: rgba(248, 113, 113, 0.5);
+  }
+
+  .strategy-new { color: #4ade80; font-weight: 500; }
+
+  .retry-block {
+    background: rgba(74, 222, 128, 0.05);
+    border: 1px solid rgba(74, 222, 128, 0.15);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #d1d5db;
+  }
+
+  .retry-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 10.5px;
+    color: #6b7280;
+  }
+
+  .retry-meta span { display: flex; align-items: center; gap: 4px; }
+  .retry-meta .hl { color: #4ade80; }
+
+  .connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 0;
+    color: #3a3a3c;
+    font-size: 18px;
+  }
+
+  .task-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(248, 113, 113, 0.04);
+    border-bottom: 1px solid rgba(248, 113, 113, 0.1);
+    margin-bottom: 12px;
+    border-radius: 8px;
+  }
+
+  .task-header-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f87171;
+    font-size: 14px;
+  }
+
+  .task-header-info {
+    flex: 1;
+  }
+
+  .task-header-name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .task-header-meta {
+    font-size: 10.5px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  .retry-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: rgba(167, 139, 250, 0.12);
+    color: #a78bfa;
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+<div class="correction-flow">
+  <div class="task-header">
+    <div class="task-header-icon">!</div>
+    <div class="task-header-info">
+      <div class="task-header-name">Submit applications on each platform</div>
+      <div class="task-header-meta">Task 5 of 7 &middot; Agent: browser &middot; Goal: Find remote Python/ML jobs</div>
+    </div>
+    <span class="retry-badge">Retry 1/3</span>
+  </div>
+
+  <!-- Step 1: Failure -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-number step-red">1</div>
+      <span style="color: #f87171;">Task Failed</span>
+      <span style="color: #4b5563; margin-left: auto; font-weight: 400; font-size: 10px;">14:32:08</span>
+    </div>
+    <div class="card-body">
+      <div class="error-block">
+        <div class="error-label">Error</div>
+        <div class="error-text">Greenhouse application form requires login. Attempted to fill email/password fields but got "Invalid credentials" after 3 retries.</div>
+        <div class="error-trace" style="margin-top: 6px;">
+          Tool: fill_field("email-input", "user@example.com")<br>
+          Tool: click("submit-login")<br>
+          Result: "Invalid credentials. Please try again."<br>
+          Loop detected after 3 identical attempts.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector">&darr;</div>
+
+  <!-- Step 2: Analysis -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-number step-purple">2</div>
+      <span style="color: #a78bfa;">Self-Correction Analysis</span>
+      <span style="color: #4b5563; margin-left: auto; font-weight: 400; font-size: 10px;">14:32:10</span>
+    </div>
+    <div class="card-body">
+      <div class="analysis-block">
+        <strong>Root cause:</strong> The Greenhouse job application portal requires authenticated login with the user's actual credentials, which I don't have access to.<br><br>
+        <strong>Approach that failed:</strong> Tried to directly fill the login form with placeholder credentials.<br><br>
+        <strong>What I know:</strong> 3 of 5 applications are on platforms that allow direct submission without login (company career pages with "Apply with resume" buttons). The remaining 2 (Greenhouse, Lever) require portal accounts.
+      </div>
+    </div>
+  </div>
+
+  <div class="connector">&darr;</div>
+
+  <!-- Step 3: Strategy adjustment -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-number step-yellow">3</div>
+      <span style="color: #fbbf24;">Strategy Adjustment</span>
+      <span style="color: #4b5563; margin-left: auto; font-weight: 400; font-size: 10px;">14:32:12</span>
+    </div>
+    <div class="card-body">
+      <div class="strategy-block">
+        <div class="strategy-item">
+          <span class="strategy-bullet">&bull;</span>
+          <span><span class="strategy-old">Submit all 5 applications directly</span></span>
+        </div>
+        <div class="strategy-item">
+          <span class="strategy-bullet">&bull;</span>
+          <span><span class="strategy-new">Submit 3 direct applications (Anthropic, DeepMind, Meta career pages)</span></span>
+        </div>
+        <div class="strategy-item">
+          <span class="strategy-bullet">&bull;</span>
+          <span><span class="strategy-new">Save Greenhouse/Lever application URLs + prepared materials to scratchpad for user to complete manually</span></span>
+        </div>
+        <div class="strategy-item">
+          <span class="strategy-bullet">&bull;</span>
+          <span><span class="strategy-new">Create a new task: "Notify user about 2 applications requiring manual login"</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector">&darr;</div>
+
+  <!-- Step 4: Retry -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-number step-green">4</div>
+      <span style="color: #4ade80;">Retry with Adjusted Strategy</span>
+      <span style="color: #4b5563; margin-left: auto; font-weight: 400; font-size: 10px;">14:32:15</span>
+    </div>
+    <div class="card-body">
+      <div class="retry-block">
+        Retrying task with modified instruction. The agent will now submit only the 3 direct applications and save the remaining 2 for user action. A notification task has been auto-created as a dependency of the report task.
+        <div class="retry-meta">
+          <span>Backoff: <span class="hl">30s</span></span>
+          <span>Attempt: <span class="hl">2/3</span></span>
+          <span>Instruction: <span class="hl">modified</span></span>
+          <span>New sub-tasks: <span class="hl">+1</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

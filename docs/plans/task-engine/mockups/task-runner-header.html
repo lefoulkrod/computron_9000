@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #0b0b0c;
+    color: #f3f3f3;
+    width: 900px;
+    padding: 0;
+  }
+
+  /* Header bar */
+  .header {
+    height: 36px;
+    background: #0b0b0c;
+    border-bottom: 1px solid #2a2a2c;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .app-title {
+    font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #f3f3f3;
+  }
+
+  .header-spacer { flex: 1; }
+
+  /* Runner indicator */
+  .runner-indicator {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(74, 222, 128, 0.06);
+    border: 1px solid rgba(74, 222, 128, 0.15);
+    cursor: pointer;
+    transition: all 0.16s;
+  }
+
+  .runner-indicator:hover {
+    background: rgba(74, 222, 128, 0.1);
+    border-color: rgba(74, 222, 128, 0.25);
+  }
+
+  .runner-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .runner-text {
+    font-size: 10.5px;
+    color: #4ade80;
+    font-weight: 500;
+  }
+
+  .runner-count {
+    font-size: 10px;
+    color: #6b7280;
+    padding-left: 4px;
+    border-left: 1px solid #2a2a2c;
+    margin-left: 2px;
+  }
+
+  .model-badge {
+    font-size: 10px;
+    color: #6b7280;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #1b1b1d;
+    border: 1px solid #2a2a2c;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+  }
+
+  .theme-btn {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px;
+  }
+
+  /* Expanded dropdown */
+  .runner-dropdown {
+    position: absolute;
+    top: 38px;
+    right: 90px;
+    width: 340px;
+    background: #1b1b1d;
+    border: 1px solid #3a3a3c;
+    border-radius: 9px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 100;
+    overflow: hidden;
+  }
+
+  .dropdown-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2a2c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .dropdown-title {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .dropdown-action {
+    font-size: 10px;
+    color: #7b8cff;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .dropdown-items {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .dropdown-item {
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #1a1a1c;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .dropdown-item:hover { background: #222224; }
+
+  .item-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-active { background: #4ade80; box-shadow: 0 0 4px rgba(74, 222, 128, 0.4); }
+  .status-queued { background: #fbbf24; }
+  .status-scheduled { background: #a78bfa; }
+
+  .item-info { flex: 1; min-width: 0; }
+
+  .item-name {
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .item-meta {
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 1px;
+  }
+
+  .item-agent {
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    font-size: 9.5px;
+    color: #7b8cff;
+  }
+
+  .item-progress {
+    font-size: 10px;
+    color: #4ade80;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .dropdown-footer {
+    padding: 8px 14px;
+    border-top: 1px solid #2a2a2c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #6b7280;
+  }
+
+  .footer-link {
+    color: #7b8cff;
+    cursor: pointer;
+    font-size: 10.5px;
+  }
+
+  /* Idle state variant */
+  .runner-idle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: #1b1b1d;
+    border: 1px solid #2a2a2c;
+    cursor: pointer;
+  }
+
+  .idle-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4b5563;
+  }
+
+  .idle-text {
+    font-size: 10.5px;
+    color: #6b7280;
+  }
+
+  .section-divider {
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #4b5563;
+    font-size: 10px;
+  }
+
+  .section-divider::before,
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #2a2a2c;
+  }
+
+  .header-section {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding-left: 2px;
+  }
+</style>
+</head>
+<body>
+  <!-- Active state -->
+  <div class="header-section">
+    <div class="label">Header &mdash; Runner Active</div>
+    <div class="header">
+      <span class="app-title">COMPUTRON 9000</span>
+      <div class="header-spacer"></div>
+      <div class="runner-indicator">
+        <div class="runner-dot"></div>
+        <span class="runner-text">1 running</span>
+        <span class="runner-count">2 queued</span>
+      </div>
+      <span class="model-badge">qwen3:32b</span>
+      <button class="theme-btn">&#9789;</button>
+    </div>
+
+    <!-- Dropdown shown -->
+    <div class="runner-dropdown">
+      <div class="dropdown-header">
+        <span class="dropdown-title">Task Runner</span>
+        <button class="dropdown-action">View All Goals &rarr;</button>
+      </div>
+      <div class="dropdown-items">
+        <div class="dropdown-item">
+          <div class="item-status status-active"></div>
+          <div class="item-info">
+            <div class="item-name">Tailor resume + cover letter for each listing</div>
+            <div class="item-meta">
+              <span class="item-agent">coder</span> &middot; 6m 12s &middot; iteration 4
+            </div>
+          </div>
+          <span class="item-progress">3/5</span>
+        </div>
+        <div class="dropdown-item">
+          <div class="item-status status-queued"></div>
+          <div class="item-info">
+            <div class="item-name">Submit applications on each platform</div>
+            <div class="item-meta">
+              <span class="item-agent">browser</span> &middot; waiting on task 4
+            </div>
+          </div>
+        </div>
+        <div class="dropdown-item">
+          <div class="item-status status-queued"></div>
+          <div class="item-info">
+            <div class="item-name">Compile results report</div>
+            <div class="item-meta">
+              <span class="item-agent">coder</span> &middot; waiting on task 5
+            </div>
+          </div>
+        </div>
+        <div class="dropdown-item">
+          <div class="item-status status-scheduled"></div>
+          <div class="item-info">
+            <div class="item-name">Check HN for AI agent framework posts</div>
+            <div class="item-meta">
+              <span class="item-agent">browser</span> &middot; next run in 14min
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dropdown-footer">
+        <span>3 goals &middot; 12 total tasks</span>
+        <span class="footer-link">Open Goals Panel</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Idle state -->
+  <div class="header-section">
+    <div class="label">Header &mdash; Runner Idle</div>
+    <div class="header">
+      <span class="app-title">COMPUTRON 9000</span>
+      <div class="header-spacer"></div>
+      <div class="runner-idle">
+        <div class="idle-dot"></div>
+        <span class="idle-text">Runner idle</span>
+      </div>
+      <span class="model-badge">qwen3:32b</span>
+      <button class="theme-btn">&#9789;</button>
+    </div>
+  </div>
+
+  <div class="section-divider">Notification toast when task completes</div>
+
+  <!-- Toast notification -->
+  <div style="padding: 12px; display: flex; justify-content: flex-end;">
+    <div style="
+      background: #1b1b1d;
+      border: 1px solid rgba(74, 222, 128, 0.25);
+      border-radius: 9px;
+      padding: 10px 14px;
+      max-width: 340px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    ">
+      <div style="
+        width: 20px; height: 20px; border-radius: 50%;
+        background: rgba(74, 222, 128, 0.12);
+        border: 1px solid rgba(74, 222, 128, 0.3);
+        display: flex; align-items: center; justify-content: center;
+        color: #4ade80; font-size: 11px; flex-shrink: 0;
+      ">&#10003;</div>
+      <div>
+        <div style="font-size: 12px; font-weight: 500; margin-bottom: 2px;">Goal completed</div>
+        <div style="font-size: 11px; color: #9ca3af;">Set up Twitter bot for daily ML paper summaries</div>
+        <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">5/5 tasks &middot; 47 minutes</div>
+      </div>
+      <button style="background: none; border: none; color: #4b5563; font-size: 14px; cursor: pointer; margin-left: 8px;">&times;</button>
+    </div>
+  </div>
+
+  <!-- Error toast -->
+  <div style="padding: 0 12px 12px; display: flex; justify-content: flex-end;">
+    <div style="
+      background: #1b1b1d;
+      border: 1px solid rgba(248, 113, 113, 0.25);
+      border-radius: 9px;
+      padding: 10px 14px;
+      max-width: 340px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    ">
+      <div style="
+        width: 20px; height: 20px; border-radius: 50%;
+        background: rgba(248, 113, 113, 0.12);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        display: flex; align-items: center; justify-content: center;
+        color: #f87171; font-size: 12px; flex-shrink: 0;
+      ">!</div>
+      <div>
+        <div style="font-size: 12px; font-weight: 500; color: #f87171; margin-bottom: 2px;">Task needs attention</div>
+        <div style="font-size: 11px; color: #9ca3af;">Submit applications: 2 portals require manual login</div>
+        <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">Retries exhausted &middot; user action required</div>
+      </div>
+      <button style="background: none; border: none; color: #4b5563; font-size: 14px; cursor: pointer; margin-left: 8px;">&times;</button>
+    </div>
+  </div>
+</body>
+</html>
