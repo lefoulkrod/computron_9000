@@ -19,7 +19,7 @@ from sdk import (
 )
 from sdk.turn import StopRequestedError, get_conversation_id
 from agents.browser import browser_agent_tool
-from sdk.context import ContextManager, ConversationHistory, NudgeCompactionStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_model_options
 from agents.types import Agent
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
@@ -132,7 +132,7 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
             history=history,
             context_limit=num_ctx,
             agent_name=agent.name,
-            strategies=[ToolClearingStrategy(), NudgeCompactionStrategy()],
+            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
         )
         hooks = default_hooks(
             agent,

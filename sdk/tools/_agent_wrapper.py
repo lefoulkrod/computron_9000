@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast, get_args, get_origin
 
 from agents.types import Agent
-from sdk.context import ContextManager, ConversationHistory, NudgeCompactionStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_current_agent_id, get_model_options
 from sdk.hooks import default_hooks
 from sdk.hooks._persistence import PersistenceHook
@@ -323,7 +323,7 @@ Returns:
                 history=history,
                 context_limit=num_ctx,
                 agent_name=agent.name,
-                strategies=[ToolClearingStrategy(), NudgeCompactionStrategy()],
+                strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
             )
             hooks = default_hooks(
                 agent,

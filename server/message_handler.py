@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
-from sdk.context import ContextManager, ConversationHistory, NudgeCompactionStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events import (
     AgentEvent,
     ContentPayload,
@@ -185,7 +185,7 @@ def _ensure_context_manager(
             history=conversation.history,
             context_limit=num_ctx,
             agent_name=active_agent.name,
-            strategies=[ToolClearingStrategy(), NudgeCompactionStrategy()],
+            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
         )
     return conversation.context_manager
 
