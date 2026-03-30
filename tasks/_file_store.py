@@ -364,7 +364,7 @@ class FileTaskStore:
                 (r.completed_at for r in runs if r.completed_at), default=None
             )
             anchor = last_completed or goal.created_at
-            if cron_has_fired_since(goal.cron, anchor):
+            if cron_has_fired_since(goal.cron, anchor, goal.timezone):
                 result.append(goal)
         return result
 

@@ -229,6 +229,7 @@ class GoalsConfig(BaseModel):
     max_retries: int = 3
     retry_backoff_base: int = 30
     shutdown_timeout: int = 60
+    timezone: str = "UTC"  # Default timezone for goals (IANA name)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
     # LLM options for task execution
     model: str = ""  # empty = use server default
