@@ -9,6 +9,7 @@ async def create_goal(
     description: str,
     tasks: list[dict[str, Any]],
     cron: str | None = None,
+    timezone: str | None = None,
 ) -> str:
     """Create a goal with all its tasks in a single call.
 
@@ -33,6 +34,8 @@ async def create_goal(
               depends on.
         cron: Cron expression for recurring goals (e.g. '0 */2 * * *').
             Omit for one-shot goals, which spawn a run immediately.
+        timezone: IANA timezone name (e.g. 'America/Chicago', 'UTC').
+            Uses the config default if not specified.
     """
     if not description or not description.strip():
         return "Error: description is required and cannot be empty."
@@ -68,7 +71,12 @@ async def create_goal(
                 )
 
     store = get_store()
-    goal = store.create_goal(description=description.strip(), cron=cron, auto_run=False)
+    goal = store.create_goal(
+        description=description.strip(),
+        cron=cron,
+        timezone=timezone,
+        auto_run=False,
+    )
 
     key_to_id: dict[str, str] = {}
     from tasks._models import _new_id
@@ -101,7 +109,8 @@ async def create_goal(
         lines.append(f"  - [{key}] {task.description} (id={task.id}, agent={task.agent}{deps_note})")
 
     task_lines = "\n".join(lines)
-    return f"Created goal '{goal.description}' (id={goal.id}) with {len(created_tasks)} task(s):\n{task_lines}"
+    tz_note = f", timezone={goal.timezone}" if goal.timezone else ""
+    return f"Created goal '{goal.description}' (id={goal.id}{tz_note}) with {len(created_tasks)} task(s):\n{task_lines}"
 
 
 async def list_goals(status: str | None = None) -> str:
@@ -114,7 +123,7 @@ async def list_goals(status: str | None = None) -> str:
     goals = store.list_goals(status=status)
     if not goals:
         return "No goals found."
-    lines = [f"- {g.description} (id={g.id}, status={g.status}, cron={g.cron})" for g in goals]
+    lines = [f"- {g.description} (id={g.id}, status={g.status}, cron={g.cron}, timezone={g.timezone})" for g in goals]
     return "\n".join(lines)
 
 

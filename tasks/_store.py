@@ -14,7 +14,13 @@ class TaskStore(Protocol):
     file-based to SQLite (or another backend) by implementing this protocol.
     """
 
-    def create_goal(self, description: str, cron: str | None = None, auto_run: bool = True) -> Goal:
+    def create_goal(
+        self,
+        description: str,
+        cron: str | None = None,
+        timezone: str | None = None,
+        auto_run: bool = True,
+    ) -> Goal:
         """Create a new goal. One-shot goals (no cron) auto-spawn a run unless auto_run=False."""
         ...
 

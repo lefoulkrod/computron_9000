@@ -63,9 +63,9 @@ class FileTaskStore:
         return json.loads(path.read_text(encoding="utf-8"))
 
 
-    def create_goal(self, description: str, cron: str | None = None, auto_run: bool = True) -> Goal:
+    def create_goal(self, description: str, cron: str | None = None, timezone: str | None = None, auto_run: bool = True) -> Goal:
         """Create a new goal. One-shot goals (no cron) auto-spawn a run unless auto_run=False."""
-        goal = Goal(description=description, cron=cron)
+        goal = Goal(description=description, cron=cron, timezone=timezone or "UTC")
         data = goal.model_dump()
         data["tasks"] = []
         self._write_json(self._goal_path(goal.id), data)

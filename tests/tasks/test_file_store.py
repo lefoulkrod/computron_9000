@@ -26,6 +26,23 @@ class TestGoalCRUD:
         assert retrieved.id == goal.id
         assert retrieved.description == goal.description
 
+
+    def test_create_goal_with_timezone(self, store):
+        """Create a goal with a specific timezone."""
+        goal = store.create_goal("test goal", cron="0 * * * *", timezone="America/Chicago")
+        assert goal.timezone == "America/Chicago"
+
+        retrieved = store.get_goal(goal.id)
+        assert retrieved.timezone == "America/Chicago"
+
+    def test_create_goal_timezone_defaults_to_utc(self, store):
+        """Goal timezone defaults to UTC when not specified."""
+        goal = store.create_goal("test goal")
+        assert goal.timezone == "UTC"
+
+        retrieved = store.get_goal(goal.id)
+        assert retrieved.timezone == "UTC"
+
     def test_list_goals(self, store):
         """List all goals."""
         store.create_goal("goal 1")

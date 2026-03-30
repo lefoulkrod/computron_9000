@@ -188,3 +188,14 @@ class TestListTools:
         goal_id = _extract_id(await create_goal("goal", tasks=[_TASK]))
         result = await list_tasks(goal_id)
         assert "task 1" in result
+
+    async def test_timezone_default_to_utc(self):
+        """Goal timezone defaults to UTC."""
+        result = await create_goal("goal with tz", tasks=[_TASK])
+        assert "timezone=UTC" in result
+
+    async def test_timezone_parameter(self):
+        """Goal timezone is set when provided."""
+        result = await create_goal("goal with tz", tasks=[_TASK], cron="0 * * * *", timezone="America/Chicago")
+        assert "timezone=America/Chicago" in result
+

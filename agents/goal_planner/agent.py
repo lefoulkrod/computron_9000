@@ -20,7 +20,16 @@ SYSTEM_PROMPT = dedent("""
     WORKFLOW:
     1. Think through the full task graph before calling create_goal.
     2. Call create_goal ONCE with the goal description and ALL tasks in a
-       single call. Add a cron expression if the goal is recurring.
+       single call.
+    3. Add a cron expression if the goal is recurring. When specifying cron,
+       also provide the timezone (e.g., "America/Chicago", "UTC") so the
+       schedule is interpreted correctly.
+
+    CRON AND TIMEZONE:
+    - Use standard 5-field cron syntax: minute hour day-of-month month day-of-week
+    - The timezone parameter is an IANA timezone name like "America/Chicago",
+      "America/New_York", "Europe/London", "UTC", etc.
+    - If omitted, defaults to UTC.
 
     TASK GRAPH RULES:
     - Assign each task a short, descriptive key (e.g. "fetch_data", "analyze").
