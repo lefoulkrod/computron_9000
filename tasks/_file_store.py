@@ -27,9 +27,10 @@ class FileTaskStore:
                 └── {run_id}.json
     """
 
-    def __init__(self, base_dir: Path) -> None:
+    def __init__(self, base_dir: Path, default_timezone: str = "UTC") -> None:
         self._base = base_dir
         self._base.mkdir(parents=True, exist_ok=True)
+        self._default_timezone = default_timezone
 
 
     def _goal_path(self, goal_id: str) -> Path:
@@ -65,7 +66,7 @@ class FileTaskStore:
 
     def create_goal(self, description: str, cron: str | None = None, timezone: str | None = None, auto_run: bool = True) -> Goal:
         """Create a new goal. One-shot goals (no cron) auto-spawn a run unless auto_run=False."""
-        goal = Goal(description=description, cron=cron, timezone=timezone or "UTC")
+        goal = Goal(description=description, cron=cron, timezone=timezone or self._default_timezone)
         data = goal.model_dump()
         data["tasks"] = []
         self._write_json(self._goal_path(goal.id), data)

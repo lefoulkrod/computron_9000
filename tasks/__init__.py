@@ -18,10 +18,10 @@ from tasks._store import TaskStore
 _store: TaskStore | None = None
 
 
-def init_store(goals_dir: Path) -> FileTaskStore:
+def init_store(goals_dir: Path, default_timezone: str = "UTC") -> FileTaskStore:
     """Initialize the global task store. Call once at startup."""
     global _store  # noqa: PLW0603
-    _store = FileTaskStore(goals_dir)
+    _store = FileTaskStore(goals_dir, default_timezone=default_timezone)
     return _store
 
 

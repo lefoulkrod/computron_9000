@@ -406,7 +406,7 @@ async def _start_task_runner(app: web.Application) -> None:
     from tasks._executor import TaskExecutor
     from tasks._runner import TaskRunner
 
-    store = init_store(goals_dir)
+    store = init_store(goals_dir, default_timezone=config.goals.timezone)
     executor = TaskExecutor(store)
 
     notifier = None
