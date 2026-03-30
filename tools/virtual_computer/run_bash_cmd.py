@@ -9,7 +9,7 @@ import json
 import logging
 import re
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from podman import PodmanClient
 from podman.api import stream_frames
@@ -155,6 +155,10 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         # Bridge sync streaming iterator -> async via queue in a thread
         queue: asyncio.Queue[tuple[bytes | None, bytes | None] | None] = asyncio.Queue()
 
+        # Shared reference so the timeout handler can close the response and
+        # unblock the thread (closing the socket interrupts iter_content).
+        _exec_resp: list[Any] = []
+
         def _stream_sync() -> None:
             """Run in a thread: start exec, read frames, push to queue."""
             start_resp = api_client.post(
@@ -163,12 +167,20 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                 stream=True,
             )
             start_resp.raise_for_status()
+            _exec_resp.append(start_resp)
             # APIResponse proxies attribute access to the underlying
             # requests.Response, so stream_frames works at runtime.
-            for frame in stream_frames(start_resp, demux=True):  # type: ignore[arg-type]
-                loop.call_soon_threadsafe(queue.put_nowait, frame)  # type: ignore[arg-type]
+            try:
+                for frame in stream_frames(start_resp, demux=True):  # type: ignore[arg-type]
+                    loop.call_soon_threadsafe(queue.put_nowait, frame)  # type: ignore[arg-type]
+            except Exception:
+                # Connection was closed (e.g. on timeout); exit cleanly.
+                pass
             # Sentinel to signal stream ended
-            loop.call_soon_threadsafe(queue.put_nowait, None)
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except RuntimeError:
+                pass  # Event loop already closed
 
         stdout_parts: list[str] = []
         stderr_parts: list[str] = []
@@ -205,6 +217,10 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                 timeout=timeout,
             )
         except TimeoutError:
+            # Close the exec response to unblock _stream_sync's iter_content
+            # call so the thread can exit instead of leaking until process shutdown.
+            if _exec_resp:
+                _exec_resp[0].close()
             logger.exception("Timeout after %s seconds running bash command: %s", timeout, cmd)
             msg = f"Timeout after {timeout} seconds running bash command: {cmd}"
             raise RunBashCmdError(msg) from None

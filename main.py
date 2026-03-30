@@ -37,7 +37,14 @@ def main() -> None:
     async def _shutdown_executor(_app: aiohttp.web.Application) -> None:  # pragma: no cover
         import asyncio
         loop = asyncio.get_running_loop()
-        await loop.shutdown_default_executor()
+        try:
+            await asyncio.wait_for(loop.shutdown_default_executor(), timeout=5.0)
+        except asyncio.TimeoutError:
+            # Some thread (e.g. a Docker exec stream) is stuck on blocking I/O.
+            # Python's _python_exit atexit handler would join it indefinitely, so
+            # force-quit now to avoid requiring multiple Ctrl+C presses.
+            logger.warning("Executor threads did not finish within 5s; forcing exit")
+            os._exit(0)
 
     app.on_shutdown.append(_run_shutdown_callbacks)
     app.on_cleanup.append(_shutdown_executor)
