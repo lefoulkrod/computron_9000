@@ -3,7 +3,16 @@
 from ._history import ConversationHistory
 from ._manager import ContextManager
 from ._models import ContextStats, TokenUsage
-from ._strategy import ContextStrategy, SummarizeStrategy, ToolClearingStrategy, TriggerPoint
+from ._strategy import (
+    ContextStrategy,
+    LLMCompactionStrategy,
+    NudgeCompactionStrategy,
+    ToolClearingStrategy,
+    TriggerPoint,
+)
+
+# Backwards compat alias
+SummarizeStrategy = LLMCompactionStrategy
 from ._token_tracker import ChatResponseTokenCounter, OllamaTokenCounter, TokenCounter, TokenTracker
 
 __all__ = [
@@ -13,6 +22,8 @@ __all__ = [
     "ContextStrategy",
     "ConversationHistory",
     "OllamaTokenCounter",
+    "LLMCompactionStrategy",
+    "NudgeCompactionStrategy",
     "SummarizeStrategy",
     "ToolClearingStrategy",
     "TokenCounter",
