@@ -9,15 +9,17 @@ the sub-agent returns.
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from textwrap import dedent
 
 from sdk import (
+    PersistenceHook,
     default_hooks,
     run_turn,
 )
-from sdk.turn import StopRequestedError
+from sdk.turn import StopRequestedError, get_conversation_id
 from agents.browser import browser_agent_tool
-from sdk.context import ContextManager, ConversationHistory, SummarizeStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_model_options
 from agents.types import Agent
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
@@ -130,13 +132,24 @@ async def run_sub_agent(instructions: str, agent_name: str = "SUB_AGENT") -> str
             history=history,
             context_limit=num_ctx,
             agent_name=agent.name,
-            strategies=[ToolClearingStrategy(), SummarizeStrategy()],
+            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
         )
         hooks = default_hooks(
             agent,
             max_iterations=effective_max_iterations,
             ctx_manager=ctx_manager,
         )
+
+        # Persist sub-agent history so the full conversation is recoverable.
+        conv_id = get_conversation_id() or "default"
+        short_id = _uuid.uuid4().hex[:8]
+        hooks.append(PersistenceHook(
+            conversation_id=conv_id,
+            history=history,
+            sub_agent_name=agent_name,
+            sub_agent_id=short_id,
+        ))
+
         try:
             result_text = await run_turn(
                 history=history,

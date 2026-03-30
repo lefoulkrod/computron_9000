@@ -25,12 +25,37 @@ from ._models import ContextStats
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
 
-# Maximum chars per tool result in the serialized summarization input.
-# Tool results are aggressively capped because the assistant messages
-# already contain the distilled findings. In typical conversations,
-# tool outputs (page snapshots, bash output) are 96% of input chars
-# but carry little unique signal beyond what the assistant summarized.
+# Default cap on tool result chars in serialized summarization input.
+# Overridden per tool type below — code tools need more content since
+# the assistant messages are often empty and all signal is in the result.
 _TOOL_RESULT_CAP = 200
+
+# Per-tool-type result caps.
+# Code tools: the file/grep/bash output IS the data — assistant messages
+#   are typically empty (content=0) so the tool result is the only signal.
+# Browser tools: page snapshots are large but mostly navigation noise;
+#   the assistant already synthesizes findings in its content. A moderate
+#   cap captures structured data (prices, ratings) without including menus.
+# Default (unknown tools): conservative 200 chars.
+_TOOL_RESULT_CAPS: dict[str, int] = {
+    # Code — higher cap than default. Agent messages typically already synthesize
+    # file contents, so the tool result is supplementary context. 1500 chars
+    # captures the module docstring, imports, and first class definition.
+    "read_file": 1500,
+    "grep": 1500,
+    "run_bash_cmd": 1500,
+    "list_dir": 800,
+    "apply_text_patch": 400,
+    "replace_in_file": 400,
+    "write_file": 300,
+    # Browser — moderate cap, assistant synthesizes page content
+    "open_url": 500,
+    "read_page": 800,
+    "browse_page": 500,
+    "scroll_page": 400,
+    "click": 200,
+    "fill_field": 200,
+}
 
 # Maximum chars of the ``thinking`` field to include when the assistant
 # message has no visible content.  In coding conversations the assistant
@@ -56,7 +81,8 @@ _CALL_TIMEOUT = 180
 
 _SUMMARIZE_PROMPT = (
     "You are a summarizer. Condense the following conversation into a factual "
-    "reference document that the assistant can use to continue working.\n"
+    "reference document that the assistant can use to continue working. The "
+    "conversation may be browser research, code analysis, or both.\n"
     "\n"
     "You MUST use EXACTLY this structure with these exact headings. Do not use "
     "any other format. Do not write prose or commentary. Start your response "
@@ -65,40 +91,47 @@ _SUMMARIZE_PROMPT = (
     "## Completed Work\n"
     "List every fact, finding, and result produced so far as bullet points.\n"
     "Focus on RESULTS and FINDINGS, not the steps taken to get them.\n"
+    "For code tasks: document what key files CONTAIN (APIs, class definitions, "
+    "critical logic, function signatures), not just that files were read.\n"
+    "For research tasks: document what was found at each source.\n"
     "\n"
     "## Key Data\n"
-    "List all specific reference data the user needs to act on the results:\n"
-    "URLs/links, prices, ratings, dates, addresses, phone numbers, file paths,\n"
-    "code snippets, error messages, version numbers, etc.\n"
-    "Format as a structured list. If no key data was gathered, write \"None\".\n"
+    "List all specific reference data needed to continue the work:\n"
+    "- Research: URLs/links, prices, ratings, dates, addresses, phone numbers, "
+    "version numbers\n"
+    "- Code: file paths, function/method signatures, class definitions, API "
+    "contracts, import paths, error messages, test results, shell command output\n"
+    "Format as a structured list grouped by type. If no key data was gathered, "
+    "write \"None\".\n"
     "\n"
     "## Current State\n"
     "Describe what is happening RIGHT NOW at the end of the conversation.\n"
-    "What page or application is open? What was the assistant doing in its\n"
-    "last message? What did the user most recently ask for? Include any\n"
-    "in-progress work, unresolved errors, or pending actions.\n"
-    "If not applicable, write \"None\".\n"
+    "What was the assistant doing in its last message? What did the user most "
+    "recently ask for? Include any in-progress work, unresolved errors, or "
+    "pending actions. If not applicable, write \"None\".\n"
     "\n"
     "RULES:\n"
     "- Your output MUST start with '## Completed Work' and contain all three "
     "sections above. No other format is acceptable.\n"
-    "- Preserve FACTS and DATA, not process. Omit HOW results were obtained "
-    "(clicks, navigation, scrolling, filter adjustments, retries, error recovery). "
-    "Do not describe tool calls, UI interactions, or troubleshooting steps.\n"
-    "  WRONG: 'Navigated to Google Flights, set origin to AUS, applied nonstop "
-    "filter, clicked search'\n"
-    "  RIGHT: 'Searched Google Flights for nonstop AUS→ORD Apr 10-12. Best "
-    "options: American $634, United $714, Delta $558'\n"
-    "- MUST INCLUDE URLs needed to revisit results or continue work (product pages, "
-    "booking pages, data sources, file paths). Omit intermediate navigation URLs "
-    "(search engines, category listings, filter pages).\n"
-    "- MUST INCLUDE all prices, ratings, quantities, dates, and numerical data "
-    "found. These are the primary value of the research.\n"
+    "- Preserve FACTS and DATA, not process.\n"
+    "  Browser WRONG: 'Navigated to Google Flights, applied nonstop filter, "
+    "clicked search'\n"
+    "  Browser RIGHT: 'Searched Google Flights nonstop AUS→ORD Apr 10-12. "
+    "Best: American $634, United $714, Delta $558'\n"
+    "  Code WRONG: 'Read sdk/events/_dispatcher.py'\n"
+    "  Code RIGHT: 'EventDispatcher (sdk/events/_dispatcher.py): async pub/sub, "
+    "subscribe(handler)/unsubscribe()/publish(event) methods, supports async "
+    "context manager'\n"
+    "- For code: preserve key signatures, field names, and behavioural details "
+    "found in file contents — these are the primary value of code analysis.\n"
+    "- For research: MUST INCLUDE URLs needed to revisit results. Omit "
+    "intermediate navigation URLs (search engines, category listings).\n"
+    "- MUST INCLUDE all prices, ratings, quantities, dates, and numerical data.\n"
     "- If the input contains a prior summary, merge ALL its facts into yours — "
-    "every URL, price, name, date, and detail from the prior summary MUST appear "
-    "in your output. Do not summarize the summary; expand it with new facts.\n"
-    "- Never drop specific details (numbers, names, URLs, paths, code) in favor of "
-    "vague descriptions like 'highly-rated' or 'well-known'.\n"
+    "every URL, price, name, date, path, and signature MUST appear in your "
+    "output. Do not summarize the summary; expand it with new facts.\n"
+    "- Never drop specific details (numbers, names, URLs, paths, signatures) in "
+    "favor of vague descriptions like 'highly-rated' or 'well-known'.\n"
     "- Be concise but exhaustive in facts.\n"
     "- Do NOT echo these instructions — replace them with actual content."
 )
@@ -310,7 +343,7 @@ def _has_following_assistant_roles(
     return False
 
 
-class SummarizeStrategy:
+class LLMCompactionStrategy:
     """Summarizes old conversation history when context fills up.
 
     When the context fill ratio exceeds *threshold*, sends the oldest
@@ -381,13 +414,13 @@ class SummarizeStrategy:
             )
         except TimeoutError:
             logger.warning(
-                "SummarizeStrategy: compaction timed out after %ds, skipping",
+                "LLMCompactionStrategy: compaction timed out after %ds, skipping",
                 _CALL_TIMEOUT,
             )
             _unload_model(resolved_model)
             return
         except Exception:
-            logger.exception("SummarizeStrategy: LLM call failed, skipping compaction")
+            logger.exception("LLMCompactionStrategy: LLM call failed, skipping compaction")
             _unload_model(resolved_model)
             return
         elapsed = _time.monotonic() - t0
@@ -416,7 +449,7 @@ class SummarizeStrategy:
         start = (1 if history.system_message is not None else 0) + pin_offset
         end = start + len(compactable)
 
-        _log_summary(stats, len(compactable), summary)
+        _log_compaction(stats, len(compactable), summary)
 
         # Replace compactable messages with summary.
         history.drop_range(start, end)
@@ -526,6 +559,133 @@ class SummarizeStrategy:
         return summary_cfg.model, summary_cfg.options
 
 
+_NUDGE_MESSAGE = (
+    "[System] Context is filling up and older messages will be compacted. "
+    "Before that happens, emit a detailed summary of your key findings so "
+    "far — what you've learned, data gathered, architecture patterns, "
+    "important details. This is NOT a request to stop — after summarizing, "
+    "continue working on your task as normal."
+)
+
+# Marker prefix so the strategy can identify its own nudge in history.
+_NUDGE_PREFIX = "[System] Context is filling up"
+
+
+class NudgeCompactionStrategy:
+    """Compacts context by asking the agent to self-summarize.
+
+    Two-phase approach that leverages the agent's own model (already loaded,
+    full context available) instead of an external summarizer:
+
+    Phase 1 (nudge): When fill ratio exceeds *threshold*, injects a user
+    message asking the agent to summarize its findings. Returns immediately
+    so the normal turn loop sends the nudge to the model.
+
+    Phase 2 (compact): On the next trigger, the agent's synthesis response
+    is in history. Replaces old messages (up to and including the nudge)
+    with the agent's response as the compaction summary.
+
+    Args:
+        threshold: Fill ratio above which compaction activates (0.0–1.0).
+        keep_recent_groups: Number of recent assistant message groups to
+            preserve from compaction.
+    """
+
+    def __init__(
+        self,
+        threshold: float = 0.75,
+        keep_recent_groups: int = 2,
+    ) -> None:
+        self._threshold = threshold
+        self._keep_recent_groups = keep_recent_groups
+        self._nudge_pending = False
+
+    @property
+    def trigger(self) -> TriggerPoint:
+        return TriggerPoint.BEFORE_MODEL_CALL
+
+    def should_apply(self, history: ConversationHistory, stats: ContextStats) -> bool:
+        if self._nudge_pending:
+            # Always run phase 2 if a nudge is waiting to be compacted.
+            return True
+        if self._threshold <= 0.0:
+            return False
+        return stats.fill_ratio >= self._threshold
+
+    async def apply(self, history: ConversationHistory, stats: ContextStats) -> None:
+        """Inject nudge or compact based on current phase."""
+        if not self._nudge_pending:
+            # Phase 1: inject nudge, let the model respond on the next iteration.
+            self._nudge_pending = True
+            history.append({"role": "user", "content": _NUDGE_MESSAGE})
+            logger.info(
+                "NudgeCompactionStrategy: nudge injected (fill=%.0f%%)",
+                stats.fill_ratio * 100,
+            )
+            return
+
+        # Phase 2: the model has responded to the nudge. Find the synthesis
+        # and use it as the compaction summary.
+        self._nudge_pending = False
+
+        non_system = history.non_system_messages
+        first_user_idx, has_pinned = _find_first_user(non_system)
+        pin_offset = 1 if has_pinned else 0
+
+        body = non_system[pin_offset:]
+        keep_count = _count_kept_by_assistant_groups(
+            body, self._keep_recent_groups,
+        )
+        if keep_count >= len(body):
+            return
+
+        compactable = body[:-keep_count] if keep_count > 0 else body
+        if not compactable:
+            return
+
+        # Find the agent's synthesis — the last assistant message in the
+        # compactable range (should be the response to our nudge).
+        synthesis = ""
+        for msg in reversed(compactable):
+            if msg.get("role") == "assistant" and msg.get("content"):
+                synthesis = msg["content"]
+                break
+
+        if not synthesis:
+            logger.warning("NudgeCompactionStrategy: no synthesis found, skipping")
+            return
+
+        # Determine the range to drop within the full history list.
+        start = (1 if history.system_message is not None else 0) + pin_offset
+        end = start + len(compactable)
+
+        _log_compaction(stats, len(compactable), synthesis)
+
+        # Replace compacted messages with the agent's own synthesis.
+        history.drop_range(start, end)
+        history.insert(start, {
+            "role": "assistant",
+            "content": _SUMMARY_PREFIX + synthesis,
+        })
+
+        # Persist the compaction event for quality evaluation.
+        record = SummaryRecord(
+            id=str(uuid.uuid4()),
+            created_at=datetime.now(UTC).isoformat(),
+            model="nudge",
+            input_messages=compactable,
+            input_char_count=sum(len(m.get("content") or "") for m in compactable),
+            prior_summary=_extract_prior_summary(compactable),
+            summary_text=synthesis,
+            summary_char_count=len(synthesis),
+            messages_compacted=len(compactable),
+            fill_ratio=stats.fill_ratio,
+            conversation_id=get_conversation_id() or "default",
+            agent_name=get_current_agent_name() or "",
+        )
+        save_summary_record(record)
+
+
 def _unload_model(model: str) -> None:
     """Unload a model from Ollama to free VRAM."""
     import subprocess
@@ -538,7 +698,7 @@ def _unload_model(model: str) -> None:
         logger.debug("Failed to unload model %s", model)
 
 
-def _log_summary(
+def _log_compaction(
     stats: ContextStats,
     msg_count: int,
     summary: str,
@@ -740,18 +900,15 @@ def _serialize_messages(messages: list[dict]) -> str:
 
         if role == "assistant":
             tool_calls = msg.get("tool_calls")
-            # When the assistant message has no visible content, its
-            # ``thinking`` field often contains the only statement of
-            # intent (e.g. "reading this file to find the pause button").
-            # Include a truncated excerpt so the summarizer knows *why*
-            # a tool was called.
+            # Include a truncated thinking excerpt — it often contains
+            # synthesized findings and reasoning that the visible content
+            # lacks (e.g. "found the Agent class has 8 fields...").
             thinking = ""
-            if not content:
-                raw_thinking = msg.get("thinking") or ""
-                if raw_thinking:
-                    thinking = raw_thinking[:_THINKING_CAP]
-                    if len(raw_thinking) > _THINKING_CAP:
-                        thinking += "..."
+            raw_thinking = msg.get("thinking") or ""
+            if raw_thinking:
+                thinking = raw_thinking[:_THINKING_CAP]
+                if len(raw_thinking) > _THINKING_CAP:
+                    thinking += "..."
 
             if tool_calls:
                 tool_parts = []
@@ -764,25 +921,32 @@ def _serialize_messages(messages: list[dict]) -> str:
                     else:
                         tool_parts.append(name)
                 tools_str = ", ".join(tool_parts)
-                if content:
+                if content and thinking:
+                    entries.append(
+                        f"Assistant: {content}\n  (thinking: {thinking})\n  [Called: {tools_str}]",
+                    )
+                elif content:
                     entries.append(f"Assistant: {content}\n  [Called: {tools_str}]")
                 elif thinking:
                     entries.append(
-                        f"Assistant (context: {thinking})\n  [Called: {tools_str}]",
+                        f"Assistant (thinking: {thinking})\n  [Called: {tools_str}]",
                     )
                 else:
                     entries.append(f"Assistant: [Called: {tools_str}]")
+            elif content and thinking:
+                entries.append(f"Assistant: {content}\n  (thinking: {thinking})")
             elif content:
                 entries.append(f"Assistant: {content}")
             elif thinking:
-                entries.append(f"Assistant (context: {thinking})")
+                entries.append(f"Assistant (thinking: {thinking})")
 
         elif role == "tool":
             tool_name = msg.get("tool_name", "unknown")
             if _is_trivial_tool_result(content):
                 continue
-            if len(content) > _TOOL_RESULT_CAP:
-                content = content[:_TOOL_RESULT_CAP] + "..."
+            cap = _TOOL_RESULT_CAPS.get(tool_name, _TOOL_RESULT_CAP)
+            if len(content) > cap:
+                content = content[:cap] + "..."
             entries.append(f"Tool ({tool_name}): {content}")
 
         elif role == "user":

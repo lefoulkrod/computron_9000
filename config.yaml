@@ -63,11 +63,11 @@ vision:
     top_k: 20
 
 summary:
-  model: gemma3:27b
+  model: kimi-k2.5:cloud
   think: false
   options:
     num_ctx: 32768
-    num_predict: 2048
+    num_predict: 8192
     temperature: 0.3
     top_k: 20
 
