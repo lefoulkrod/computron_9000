@@ -4,16 +4,26 @@ import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
 
-const AGENTS = [
-    { id: 'computron', label: 'Computron' },
-    { id: 'browser', label: 'Browser' },
-    { id: 'coder', label: 'Coder' },
-    { id: 'desktop', label: 'Desktop' },
-];
+function _formatLabel(id) {
+    return id.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
 
 function ChatInput({ onSend, onStop, isStreaming, attachment }) {
     const [message, setMessage] = useState('');
     const [selectedAgent, setSelectedAgent] = useState('computron');
+    const [agents, setAgents] = useState([{ id: 'computron', label: 'Computron' }]);
+
+    useEffect(() => {
+        fetch('/api/agents')
+            .then(r => r.json())
+            .then(data => {
+                if (data.agents) {
+                    setAgents(data.agents.map(id => ({ id, label: _formatLabel(id) })));
+                    if (data.default) setSelectedAgent(data.default);
+                }
+            })
+            .catch(() => {});
+    }, []);
     const [fileData, setFileData] = useState(null);
     const [filePreview, setFilePreview] = useState(null);
     const [fileName, setFileName] = useState(null);
@@ -140,7 +150,7 @@ function ChatInput({ onSend, onStop, isStreaming, attachment }) {
                         value={selectedAgent}
                         onChange={(e) => setSelectedAgent(e.target.value)}
                     >
-                        {AGENTS.map((a) => (
+                        {agents.map((a) => (
                             <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                     </select>

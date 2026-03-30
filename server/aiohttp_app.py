@@ -25,6 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
+from server._task_routes import register_task_routes
 from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
@@ -372,6 +373,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_conversation_handler)
     app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_conversation_handler)
 
+    # Task engine routes
+    register_task_routes(app)
+
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.
     cfg = load_config()
@@ -384,7 +388,45 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
         app.router.add_static("/assets", UI_DIST_DIR / "assets", show_index=False)
     if STATIC_DIR.exists():
         app.router.add_static("/static", STATIC_DIR, show_index=False)
+
+    # Task runner lifecycle
+    app.on_startup.append(_start_task_runner)
+    app.on_cleanup.append(_stop_task_runner)
+
     return app
+
+
+async def _start_task_runner(app: web.Application) -> None:
+    """Initialize the task store and start the background runner."""
+    config = load_config()
+    if not config.goals.enabled:
+        return
+    goals_dir = Path(config.goals.goals_dir or Path(config.settings.home_dir) / "goals")
+    from tasks import init_store
+    from tasks._executor import TaskExecutor
+    from tasks._runner import TaskRunner
+
+    store = init_store(goals_dir)
+    executor = TaskExecutor(store)
+
+    notifier = None
+    if config.goals.notifications.enabled:
+        from tasks._notifier import TelegramNotifier
+
+        notifier = TelegramNotifier(config.goals.notifications)
+        if not notifier.enabled:
+            notifier = None
+
+    runner = TaskRunner(store, executor, config.goals, notifier=notifier)
+    app["task_runner"] = runner
+    await runner.start()
+
+
+async def _stop_task_runner(app: web.Application) -> None:
+    """Gracefully stop the background task runner."""
+    runner = app.get("task_runner")
+    if runner:
+        await runner.stop()
 
 
 __all__ = ["create_app"]

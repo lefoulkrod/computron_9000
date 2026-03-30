@@ -8,6 +8,7 @@ from textwrap import dedent
 from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
+from agents.goal_planner import goal_planner_tool
 from agents.sub_agent import run_sub_agent
 from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
@@ -124,6 +125,7 @@ TOOLS = [
     forget,
     save_to_scratchpad,
     recall_from_scratchpad,
+    goal_planner_tool,
 ]
 
 __all__ = [

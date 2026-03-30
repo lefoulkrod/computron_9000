@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import GoalsIcon from './goals/GoalsIcon.jsx';
 import styles from './Sidebar.module.css';
 
 const PANELS = [
     { id: 'agents', icon: 'M12 5a3 3 0 100-6 3 3 0 000 6zM5 19a3 3 0 100-6 3 3 0 000 6zM19 19a3 3 0 100-6 3 3 0 000 6z', lines: 'M12 8L5 16M12 8l7 8', label: 'Agents' },
+    { id: 'goals', component: GoalsIcon, label: 'Goals' },
     { id: 'settings', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6z', path: 'M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z', label: 'Settings' },
     { id: 'memory', path: 'M12 2a7 7 0 017 7c0 5-7 13-7 13S5 14 5 9a7 7 0 017-7z', icon: 'M12 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5z', label: 'Memory' },
     { id: 'sep' },
@@ -37,7 +39,7 @@ export default function Sidebar({ activePanel, onPanelToggle }) {
                         title={panel.label}
                         onClick={() => onPanelToggle(isActive ? null : panel.id)}
                     >
-                        <SidebarIcon path={panel.path} icon={panel.icon} lines={panel.lines} />
+                        {panel.component ? <panel.component /> : <SidebarIcon path={panel.path} icon={panel.icon} lines={panel.lines} />}
                     </button>
                 );
             })}

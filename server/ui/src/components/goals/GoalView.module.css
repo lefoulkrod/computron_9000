@@ -1,0 +1,300 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    flex: 1;
+    background: var(--primary);
+}
+
+.header {
+    padding: 10px 16px 12px;
+    border-bottom: 1px solid var(--secondary);
+    flex-shrink: 0;
+}
+
+.backRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.backBtn {
+    background: none;
+    border: 1px solid var(--muted);
+    border-radius: 5px;
+    color: var(--muted);
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.backBtn:hover {
+    color: var(--text);
+    border-color: #3a3a4c;
+}
+
+.titleRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.title {
+    font-size: 15px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.cronBadge {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: var(--secondary);
+    color: var(--muted);
+    border: 1px solid var(--muted);
+}
+
+.actionBtn {
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--muted);
+    background: var(--secondary);
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.actionBtn:hover {
+    background: var(--primary);
+}
+
+.danger {
+    border-color: rgba(248, 113, 113, 0.3);
+    color: #f87171;
+}
+
+.danger:hover {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+.body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* ── Left pane with tabs ── */
+
+.leftPane {
+    width: 280px;
+    border-right: 1px solid var(--muted);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.tabBar {
+    display: flex;
+    border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, transparent);
+    flex-shrink: 0;
+}
+
+.tab {
+    flex: 1;
+    text-align: center;
+    padding: 9px 0;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    cursor: pointer;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.tab:hover {
+    color: var(--text);
+}
+
+.tabActive {
+    color: #7b8cff;
+    border-bottom-color: #7b8cff;
+}
+
+.tabContent {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* ── Run items ── */
+
+.runItem {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.runItem:hover {
+    background: var(--secondary);
+}
+
+.selected {
+    background: rgba(123, 140, 255, 0.06);
+    border-left: 2px solid #7b8cff;
+}
+
+.runInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.runLabel {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.runTime {
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+.deleteRunBtn {
+    font-size: 10px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+}
+
+.runItem:hover .deleteRunBtn {
+    opacity: 1;
+}
+
+.deleteRunBtn:hover {
+    color: #f87171;
+}
+
+/* ── Task definition items ── */
+
+.taskDefItem {
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.taskDefItem:hover {
+    background: var(--secondary);
+}
+
+.taskNum {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--muted);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--muted) 70%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.taskDefInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.taskDefHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.taskDefName {
+    font-size: 12px;
+    font-weight: 500;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.agentBadge {
+    font-family: var(--font-mono);
+    color: #7b8cff;
+    font-size: 9.5px;
+    flex-shrink: 0;
+}
+
+.taskDefMeta {
+    font-size: 10px;
+    color: var(--muted);
+}
+
+.depArrow {
+    color: var(--muted);
+    margin-right: 3px;
+}
+
+.depName {
+    color: color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+/* ── Shared ── */
+
+.emptyMsg {
+    padding: 20px 14px;
+    font-size: 12px;
+    opacity: 0.4;
+    text-align: center;
+}
+
+.detailPane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.placeholder {
+    padding: 40px 20px;
+    text-align: center;
+    opacity: 0.4;
+    font-size: 13px;
+}
