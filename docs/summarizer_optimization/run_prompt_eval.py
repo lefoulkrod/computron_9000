@@ -262,6 +262,11 @@ def serialize(messages: list[dict], caps: dict[str, int], default_cap: int = 200
 
 _CAPS_OLD: dict[str, int] = {}  # all default to 200
 
+# Production caps: code tools at 1500, browser tools at 400-800.
+# Higher caps (6k, 40k) were tested and broke kimi: the model starts treating
+# the large file dumps as an in-progress task to continue rather than a
+# conversation to summarize. Agent messages already synthesize key signatures,
+# so raw file content beyond ~1500 chars adds noise, not signal.
 _CAPS_NEW: dict[str, int] = {
     "read_file": 1500, "grep": 1500, "run_bash_cmd": 1500, "list_dir": 800,
     "apply_text_patch": 400, "replace_in_file": 400, "write_file": 300,
@@ -292,7 +297,7 @@ def call_kimi(prompt: str, user_content: str) -> tuple[str, float, str]:
             {"role": "user", "content": user_content},
         ],
         "stream": False,
-        "options": {"num_predict": 8192, "temperature": 0.3},
+        "options": {"num_ctx": 131072, "num_predict": 8192, "temperature": 0.3},
     }, timeout=300)
     elapsed = time.monotonic() - t0
     if resp.status_code != 200:
@@ -301,7 +306,7 @@ def call_kimi(prompt: str, user_content: str) -> tuple[str, float, str]:
     return data["message"]["content"], elapsed, data.get("done_reason", "?")
 
 
-def load_records(record_filter: str | None) -> list[tuple[str, dict]]:
+def load_records(record_filter: str | None, include_nudge: bool = False) -> list[tuple[str, dict]]:
     pattern = os.path.expanduser("~/.computron_9000/conversations/*/summaries/*.json")
     records = []
     for path in sorted(glob.glob(pattern)):
@@ -310,8 +315,10 @@ def load_records(record_filter: str | None) -> list[tuple[str, dict]]:
             continue
         with open(path) as f:
             data = json.load(f)
-        # Skip nudge records — they have no LLM-generated baseline to compare against
-        if data.get("model") == "nudge":
+        is_nudge = data.get("model") == "nudge"
+        # Skip nudge records unless explicitly requested — they have no LLM-generated
+        # baseline to compare against, but are useful for evaluating code task caps.
+        if is_nudge and not include_nudge:
             continue
         # Skip very small records
         if (data.get("messages_compacted") or 0) < 10:
@@ -321,7 +328,7 @@ def load_records(record_filter: str | None) -> list[tuple[str, dict]]:
 
 
 def run(args: argparse.Namespace) -> None:
-    records = load_records(args.record)
+    records = load_records(args.record, include_nudge=args.include_nudge)
     if not records:
         print("No matching records found.")
         return
@@ -352,7 +359,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"{'─' * 72}")
             print(summary)
 
-        if not args.skip_baseline and "A-baseline" in results:
+        if not args.skip_baseline and "A-baseline" in results and orig_model != "nudge":
             orig_summary = record.get("summary_text", "(none)")
             print(f"\n{'─' * 72}")
             print(f"  ORIGINAL ({orig_model}) — {len(orig_summary)} chars")
@@ -364,6 +371,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Summarizer prompt/truncation eval")
     parser.add_argument("--record", help="Filter to records matching this string (id or path substring)")
     parser.add_argument("--skip-baseline", action="store_true", help="Skip config A (baseline)")
+    parser.add_argument("--include-nudge", action="store_true",
+                        help="Include nudge records (no LLM baseline, but useful for code task cap evaluation)")
     run(parser.parse_args())
 
 

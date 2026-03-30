@@ -59,10 +59,10 @@ the cloud model then regurgitated its input. Fixed by setting `num_predict: 8192
 **Baseline caps (before):**
 - All tools: 200 chars
 
-**New caps:**
+**New caps (final):**
 | Tool | Old | New | Reason |
 |------|-----|-----|--------|
-| `read_file` | 200 | 1500 | File content IS the data |
+| `read_file` | 200 | 1500 | Captures docstring + first class def; higher caps break kimi (see Exp 3) |
 | `grep` | 200 | 1500 | Match content IS the data |
 | `run_bash_cmd` | 200 | 1500 | Output IS the data |
 | `list_dir` | 200 | 800 | Directory structure needed |
@@ -72,6 +72,35 @@ the cloud model then regurgitated its input. Fixed by setting `num_predict: 8192
 | `scroll_page` | 200 | 400 | Slight bump |
 | `apply_text_patch` | 200 | 400 | Show result |
 | `replace_in_file` | 200 | 400 | Show result |
+
+**File read dedup analysis (2026-03-29):** Checked all 6 real SummaryRecords for repeated
+reads of the same file within a single compaction window. Result: 0 savings across all records —
+no file was read more than once per window. Dedup provides no measurable benefit on current data.
+
+---
+
+## Experiment 3 — Higher file read caps (FAILED, 2026-03-29)
+
+**Hypothesis:** Increasing `read_file` cap to 40k (or even 6k) would improve code summaries
+since real files are 6k-36k chars and 1500 only captures the first ~4% of content.
+
+**Cap candidates tested (on record `203cf4d9`, TEST_RIG_CREATOR, 14 msgs, 6 reads):**
+| Config | read_file cap | Input size | Output | Time | Result |
+|--------|--------------|------------|--------|------|--------|
+| B | 200 | 3,748 chars | 3,328 chars | 24.7s | Excellent — full signatures |
+| C-6k | 6,000 | 36,090 chars | 78 chars | 4.4s | **BROKEN** — continuation text |
+| D-40k | 40,000 | 154,866 chars | 24,224 chars | 87.7s | **BROKEN** — kimi makes tool calls |
+
+**Root cause:** When the input contains large blocks of raw code, kimi treats the input as
+an in-progress coding task to continue rather than a conversation to summarize. It starts
+generating tool calls (read_file, etc.) at any cap above ~3k chars per file.
+
+**Key finding:** Agent messages ALREADY synthesize file contents — class signatures, method
+names, and behavioral details appear in the assistant's text, not just the raw tool results.
+Config B with 200-char caps extracts `IKChain(bones, solver=None)`, `FABRIKSolver(max_iterations=10, tolerance=0.01)`, etc. because the agent described these when it read the files.
+
+**Result:** Kept `read_file` at 1500 chars. Cap increase is counterproductive with kimi.
+The prompt change (Experiment 2) remains the primary quality improvement. ✅
 
 **Eval data:**
 - `52862e3f` — BROWSER_AGENT, 68 msgs, pure browser (click/open_url/read_page)

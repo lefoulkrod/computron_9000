@@ -38,7 +38,9 @@ _TOOL_RESULT_CAP = 200
 #   cap captures structured data (prices, ratings) without including menus.
 # Default (unknown tools): conservative 200 chars.
 _TOOL_RESULT_CAPS: dict[str, int] = {
-    # Code — high cap, content is primary data source
+    # Code — higher cap than default. Agent messages typically already synthesize
+    # file contents, so the tool result is supplementary context. 1500 chars
+    # captures the module docstring, imports, and first class definition.
     "read_file": 1500,
     "grep": 1500,
     "run_bash_cmd": 1500,
