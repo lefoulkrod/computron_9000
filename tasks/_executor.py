@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from agents.types import Agent, LLMOptions
 from config import load_config
 from sdk import PersistenceHook, default_hooks, run_turn
-from sdk.context import ConversationHistory
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events._context import agent_span, get_current_dispatcher, set_model_options
 from sdk.events._models import FileOutputPayload
 from sdk.turn import turn_scope
@@ -68,7 +68,14 @@ class TaskExecutor:
             {"role": "system", "content": agent.instruction},
             {"role": "user", "content": instruction},
         ])
-        hooks = default_hooks(agent, max_iterations=agent.max_iterations)
+        num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
+        ctx_manager = ContextManager(
+            history=history,
+            context_limit=num_ctx,
+            agent_name=agent.name,
+            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
+        )
+        hooks = default_hooks(agent, max_iterations=agent.max_iterations, ctx_manager=ctx_manager)
         hooks.append(
             PersistenceHook(conversation_id=conversation_id, history=history)
         )
