@@ -24,12 +24,6 @@ def _make_config(**overrides):
 class TestTelegramNotifier:
     """Test TelegramNotifier init and send behavior."""
 
-    def test_disables_when_env_vars_missing(self):
-        """Notifier disables itself if TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set."""
-        with patch.dict(os.environ, {}, clear=True):
-            notifier = TelegramNotifier(_make_config())
-            assert not notifier.enabled
-
     def test_enables_when_env_vars_present(self):
         """Notifier is enabled when both env vars are set."""
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "123"}):

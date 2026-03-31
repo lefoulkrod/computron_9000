@@ -31,16 +31,6 @@ async def handle_list_goals(request: web.Request) -> web.Response:
     return web.json_response({"goals": [g.model_dump() for g in goals]})
 
 
-async def handle_create_goal(request: web.Request) -> web.Response:
-    """Create a new goal (and auto-spawn a run if one-shot)."""
-    body = await request.json()
-    store = get_store()
-    goal = store.create_goal(
-        description=body["description"], cron=body.get("cron")
-    )
-    return web.json_response(goal.model_dump(), status=201)
-
-
 async def handle_get_goal(request: web.Request) -> web.Response:
     """Get full goal detail including tasks and runs with task_results."""
     goal_id = request.match_info["goal_id"]
@@ -136,7 +126,6 @@ async def handle_runner_resume(request: web.Request) -> web.Response:
 def register_task_routes(app: web.Application) -> None:
     """Register all task engine HTTP routes on the application."""
     app.router.add_route("GET", "/api/goals", handle_list_goals)
-    app.router.add_route("POST", "/api/goals", handle_create_goal)
     app.router.add_route("GET", "/api/goals/{goal_id}", handle_get_goal)
     app.router.add_route("DELETE", "/api/goals/{goal_id}", handle_delete_goal)
     app.router.add_route("POST", "/api/goals/{goal_id}/pause", handle_pause_goal)
