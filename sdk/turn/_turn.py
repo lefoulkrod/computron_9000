@@ -151,10 +151,14 @@ async def turn_scope(
         else:
             yield None
     finally:
-        await dispatcher.drain()
-        _current_dispatcher.reset(dispatcher_token)
-        _stop_event.reset(stop_token)
-        _conversation_id.reset(conversation_token)
-        _active_conversations.discard(sid)
-        _active_stop_events.pop(sid, None)
-        _nudge_queues.pop(sid, None)
+        try:
+            await dispatcher.drain()
+        except Exception:
+            logger.exception("Error draining event dispatcher for conversation '%s'", sid)
+        finally:
+            _current_dispatcher.reset(dispatcher_token)
+            _stop_event.reset(stop_token)
+            _conversation_id.reset(conversation_token)
+            _active_conversations.discard(sid)
+            _active_stop_events.pop(sid, None)
+            _nudge_queues.pop(sid, None)
