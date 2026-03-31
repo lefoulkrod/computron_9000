@@ -209,6 +209,41 @@ class ParallelConfig(BaseModel):
     max_concurrent: int = 4
 
 
+class LoopDetectionConfig(BaseModel):
+    """Configuration for loop detection."""
+
+    exact_threshold: int = 5
+    similarity_threshold: float = 0.85
+    result_repetition_threshold: int = 3
+    cycle_threshold: int = 2
+
+
+class CognitiveDebtConfig(BaseModel):
+    """Configuration for cognitive debt tracking."""
+
+    warning_threshold: float = 0.3
+    concerning_threshold: float = 0.6
+    critical_threshold: float = 0.85
+
+
+class InterventionConfig(BaseModel):
+    """Configuration for intervention system."""
+
+    auto_nudge: bool = True
+    auto_pause: bool = True
+    max_debt_before_stop: float = 0.95
+
+
+class ProgressAwareTerminationConfig(BaseModel):
+    """Configuration for progress-aware termination system."""
+
+    enabled: bool = True
+    loop_detection: LoopDetectionConfig = Field(default_factory=LoopDetectionConfig)
+    cognitive_debt: CognitiveDebtConfig = Field(default_factory=CognitiveDebtConfig)
+    intervention: InterventionConfig = Field(default_factory=InterventionConfig)
+    metrics: dict[str, Any] = Field(default_factory=lambda: {"window_size": 20, "emit_metrics_events": True})
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -224,6 +259,9 @@ class AppConfig(BaseModel):
     summary: SummaryConfig | None = None
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
+    progress_aware_termination: ProgressAwareTerminationConfig = Field(
+        default_factory=ProgressAwareTerminationConfig
+    )
 
 
 logger = logging.getLogger(__name__)

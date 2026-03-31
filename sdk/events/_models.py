@@ -244,6 +244,62 @@ class AgentCompletedPayload(BaseModel):
     status: Literal["success", "error", "stopped"]
 
 
+class ProgressMetricsPayload(BaseModel):
+    """Emits current progress metrics during execution.
+
+    Attributes:
+        type: Discriminator; always "progress_metrics".
+        progress_score: Current progress score (0.0-1.0).
+        cognitive_debt: Current cognitive debt score (0.0-1.0).
+        debt_level: Current debt severity level.
+        recent_tool_calls: Summary of recent tool calls.
+        suggestion: Optional suggestion for the user.
+    """
+
+    type: Literal["progress_metrics"]
+    progress_score: float
+    cognitive_debt: float
+    debt_level: Literal["none", "warning", "concerning", "critical"]
+    recent_tool_calls: list[dict[str, Any]] | None = None
+    suggestion: str | None = None
+
+
+class LoopDetectedPayload(BaseModel):
+    """Emitted when a loop pattern is detected.
+
+    Attributes:
+        type: Discriminator; always "loop_detected".
+        detection_type: Type of loop detected.
+        confidence: Confidence score for the detection.
+        affected_tools: Tools involved in the loop.
+        recommendation: Recommendation for breaking the loop.
+        severity: Severity level of the loop.
+    """
+
+    type: Literal["loop_detected"]
+    detection_type: Literal["exact", "similar", "result_repetition", "cycle"]
+    confidence: float
+    affected_tools: list[str]
+    recommendation: str
+    severity: Literal["low", "medium", "high"]
+
+
+class InterventionPayload(BaseModel):
+    """Emitted when system intervenes in execution.
+
+    Attributes:
+        type: Discriminator; always "intervention".
+        intervention_type: Type of intervention applied.
+        reason: Reason for the intervention.
+        debt_at_intervention: Debt score when intervention was triggered.
+    """
+
+    type: Literal["intervention"]
+    intervention_type: Literal["nudge", "pause", "escalate", "stop"]
+    reason: str
+    debt_at_intervention: float
+
+
 AgentEventPayload = Annotated[
     ContentPayload
     | TurnEndPayload
@@ -257,7 +313,10 @@ AgentEventPayload = Annotated[
     | ContextUsagePayload
     | DesktopActivePayload
     | AgentStartedPayload
-    | AgentCompletedPayload,
+    | AgentCompletedPayload
+    | ProgressMetricsPayload
+    | LoopDetectedPayload
+    | InterventionPayload,
     Field(discriminator="type"),
 ]
 
@@ -295,6 +354,9 @@ __all__ = [
     "DesktopActivePayload",
     "FileOutputPayload",
     "GenerationPreviewPayload",
+    "InterventionPayload",
+    "LoopDetectedPayload",
+    "ProgressMetricsPayload",
     "TerminalOutputPayload",
     "ToolCallPayload",
     "ToolCreatedPayload",

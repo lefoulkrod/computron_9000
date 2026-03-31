@@ -89,3 +89,26 @@ llm:
 parallel:
   enabled: true
   max_concurrent: 4
+
+progress_aware_termination:
+  enabled: true
+  
+  loop_detection:
+    exact_threshold: 5
+    similarity_threshold: 0.85
+    result_repetition_threshold: 3
+    cycle_threshold: 2
+    
+  cognitive_debt:
+    warning_threshold: 0.3
+    concerning_threshold: 0.6
+    critical_threshold: 0.85
+    
+  intervention:
+    auto_nudge: true
+    auto_pause: true
+    max_debt_before_stop: 0.95
+    
+  metrics:
+    window_size: 20
+    emit_metrics_events: true
