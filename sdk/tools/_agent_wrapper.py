@@ -314,10 +314,16 @@ Returns:
             agent.name, func_name, effective_max_iterations, instructions,
         )
         with agent_span(agent.name, instruction=instructions):
-            history = ConversationHistory([
-                {"role": "system", "content": agent.instruction},
-                {"role": "user", "content": instructions},
-            ])
+            conv_id = get_conversation_id() or "default"
+            short_id = _uuid.uuid4().hex[:8]
+            instance_id = f"{conv_id}/{name}_{short_id}"
+            history = ConversationHistory(
+                [
+                    {"role": "system", "content": agent.instruction},
+                    {"role": "user", "content": instructions},
+                ],
+                instance_id=instance_id,
+            )
             num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
             ctx_manager = ContextManager(
                 history=history,
@@ -332,8 +338,6 @@ Returns:
             )
 
             # Persist sub-agent history so the full conversation is recoverable.
-            conv_id = get_conversation_id() or "default"
-            short_id = _uuid.uuid4().hex[:8]
             hooks.append(PersistenceHook(
                 conversation_id=conv_id,
                 history=history,

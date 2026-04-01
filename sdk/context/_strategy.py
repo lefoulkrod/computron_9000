@@ -301,12 +301,13 @@ class ToolClearingStrategy:
                 f"{total_chars_freed:,}", stats.fill_ratio * 100,
             )
             self._save_record(
-                stats, results_cleared, args_cleared,
+                history, stats, results_cleared, args_cleared,
                 total_chars_freed, cleared_items,
             )
 
     def _save_record(
         self,
+        history: ConversationHistory,
         stats: ContextStats,
         results_cleared: int,
         args_cleared: int,
@@ -326,6 +327,7 @@ class ToolClearingStrategy:
             threshold=self._threshold,
             keep_recent_groups=self._keep_recent_groups,
             cleared_items=cleared_items,
+            source_history=history.instance_id,
         )
         try:
             save_clearing_record(record)
@@ -441,6 +443,7 @@ class LLMCompactionStrategy:
             agent_name=get_current_agent_name() or "",
             options=resolved_options if isinstance(resolved_options, dict) else {},
             elapsed_seconds=round(elapsed, 1),
+            source_history=history.instance_id,
         )
         save_summary_record(record)
 

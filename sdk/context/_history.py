@@ -15,8 +15,13 @@ class ConversationHistory:
     can use the ``.messages`` property.
     """
 
-    def __init__(self, messages: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        messages: list[dict[str, Any]] | None = None,
+        instance_id: str = "",
+    ) -> None:
         self._messages: list[dict[str, Any]] = list(messages) if messages else []
+        self.instance_id = instance_id
 
     # -- read-only access --------------------------------------------------
 
