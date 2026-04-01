@@ -329,6 +329,22 @@ class TestReadyTaskResults:
         ready = store.get_ready_task_results()
         assert len(ready) == 0
 
+    def test_failed_dep_cascades_to_downstream(self, store):
+        """update_run_status cascades failures to pending tasks with failed deps."""
+        goal = store.create_goal("goal")
+        t1 = store.create_task(goal.id, "t1", "p", "coder", None, [])
+        t2 = store.create_task(goal.id, "t2", "p", "coder", None, [t1.id])
+        run = store.spawn_run(goal.id)
+        results = {tr.task_id: tr for tr in store.get_task_results(run.id)}
+
+        store.mark_task_result_failed(results[t1.id].id, "boom")
+        store.update_run_status(run.id)
+
+        updated = {tr.task_id: tr for tr in store.get_task_results(run.id)}
+        assert updated[t2.id].status == "failed"
+        run_after = store.get_run(run.id)
+        assert run_after.status == "failed"
+
 
 @pytest.mark.unit
 class TestCompletedResultsForTasks:
@@ -373,6 +389,27 @@ class TestRecovery:
 
         run_after = store.get_run(run.id)
         assert run_after.status == "pending"
+
+    def test_reset_stale_running_cascades_failures(self, store):
+        """Pending tasks blocked by a failed dep are cascaded to failed on reset."""
+        goal = store.create_goal("goal", cron="* * * * *")
+        t1 = store.create_task(goal.id, "t1", "p", "coder", None, [])
+        t2 = store.create_task(goal.id, "t2", "p", "coder", None, [t1.id])
+        run = store.spawn_run(goal.id)
+        results = {tr.task_id: tr for tr in store.get_task_results(run.id)}
+
+        # Exhaust t1 retries so it stays failed
+        store.mark_task_result_failed(results[t1.id].id, "error")
+
+        # Simulate restart — cascade should fail t2 and close the run
+        store.reset_stale_running()
+
+        updated = {tr.task_id: tr for tr in store.get_task_results(run.id)}
+        assert updated[t2.id].status == "failed"
+        assert "dependency" in (updated[t2.id].error or "").lower()
+
+        run_after = store.get_run(run.id)
+        assert run_after.status == "failed"
 
 
 @pytest.mark.unit

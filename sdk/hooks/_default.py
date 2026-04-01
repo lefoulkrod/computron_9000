@@ -9,6 +9,7 @@ from ._context_hook import ContextHook
 from ._logging_hook import LoggingHook
 from ._loop_detector import LoopDetector
 from ._nudge_hook import NudgeHook
+from ._result_cap import ToolResultCapHook
 from ._scratchpad_hook import ScratchpadHook
 from ._stop_hook import StopHook
 
@@ -26,6 +27,7 @@ def default_hooks(
     hooks.append(LoopDetector())
     hooks.append(LoggingHook(agent))
     hooks.append(ScratchpadHook())
+    hooks.append(ToolResultCapHook(agent.options["num_ctx"]))
     if ctx_manager is not None:
         hooks.append(ContextHook(ctx_manager, max_iterations=max_iterations))
     return hooks

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import RunDetail from './RunDetail.jsx';
 import TaskDetail from './TaskDetail.jsx';
-import { StatusIcon, formatTime, formatDuration } from './goalUtils.jsx';
+import { StatusIcon, formatTime, formatDuration, formatCron } from './goalUtils.jsx';
 import styles from './GoalView.module.css';
 
 export default function GoalView({ goal, onBack, onDeleteGoal, onDeleteRun, onPauseGoal, onResumeGoal, onTriggerGoal, fetchDetail }) {
@@ -61,7 +61,12 @@ export default function GoalView({ goal, onBack, onDeleteGoal, onDeleteRun, onPa
                 <div className={styles.titleRow}>
                     <StatusIcon status={goal.status} size={12} />
                     <span className={styles.title}>{goal.description}</span>
-                    {goal.cron && <span className={styles.cronBadge}>{goal.cron}</span>}
+                    {goal.cron && (
+                        <span className={styles.cronBadge}>
+                            {formatCron(goal.cron)}
+                            {goal.timezone && <span className={styles.tzSuffix}>{goal.timezone}</span>}
+                        </span>
+                    )}
                     <div className={styles.actions}>
                         <button className={styles.actionBtn} onClick={() => onTriggerGoal(goal.id)}>Run Now</button>
                         {isActive ? (

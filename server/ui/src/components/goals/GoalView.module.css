@@ -68,6 +68,14 @@
     border: 1px solid var(--muted);
 }
 
+.tzSuffix {
+    margin-left: 6px;
+    padding-left: 6px;
+    border-left: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    opacity: 0.55;
+    font-family: inherit;
+}
+
 .actionBtn {
     font-size: 11px;
     padding: 5px 12px;

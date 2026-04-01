@@ -2,6 +2,78 @@
  * Shared utilities for goal UI components.
  */
 
+const _DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const _DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function _formatTime(hour, min) {
+    const h = parseInt(hour, 10);
+    const m = parseInt(min, 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    const ampm = h < 12 ? 'AM' : 'PM';
+    const h12 = h % 12 || 12;
+    return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function _isSimple(part) {
+    return /^\d+$/.test(part);
+}
+
+/** Convert a 5-part cron expression to a human-readable string. Falls back to the raw expr. */
+export function formatCron(expr) {
+    if (!expr) return null;
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length !== 5) return expr;
+    const [min, hour, dom, month, dow] = parts;
+
+    // Every N minutes: */N * * * *
+    if (/^\*\/\d+$/.test(min) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+        const n = parseInt(min.slice(2), 10);
+        return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+    }
+
+    // Every N hours: 0 */N * * *
+    if (min === '0' && /^\*\/\d+$/.test(hour) && dom === '*' && month === '*' && dow === '*') {
+        const n = parseInt(hour.slice(2), 10);
+        return n === 1 ? 'Every hour' : `Every ${n} hours`;
+    }
+
+    // Need a fixed time for remaining patterns
+    if (!_isSimple(min) || !_isSimple(hour)) return expr;
+    const time = _formatTime(hour, min);
+    if (!time) return expr;
+
+    // Every day: 0 H * * *
+    if (dom === '*' && month === '*' && dow === '*') {
+        return `Daily at ${time}`;
+    }
+
+    // Specific weekday(s): 0 H * * D
+    if (dom === '*' && month === '*' && dow !== '*') {
+        if (dow === '1-5') return `Weekdays at ${time}`;
+        if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
+        if (_isSimple(dow)) {
+            const d = parseInt(dow, 10);
+            if (d >= 0 && d <= 6) return `Every ${_DAYS_FULL[d]} at ${time}`;
+        }
+        // Multiple specific days: 0 H * * 1,3,5
+        if (/^[\d,]+$/.test(dow)) {
+            const days = dow.split(',').map(Number);
+            if (days.every(d => d >= 0 && d <= 6)) {
+                return `${days.map(d => _DAYS_SHORT[d]).join('/')} at ${time}`;
+            }
+        }
+    }
+
+    // Specific day of month: 0 H D * *
+    if (_isSimple(dom) && month === '*' && dow === '*') {
+        const d = parseInt(dom, 10);
+        const suffix = d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
+        return `Monthly on the ${d}${suffix} at ${time}`;
+    }
+
+    return expr;
+}
+
 export function formatTime(iso) {
     if (!iso) return '';
     try {

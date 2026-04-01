@@ -211,7 +211,26 @@ class FileTaskStore:
     def update_run_status(self, run_id: str) -> str:
         """Recompute run status from its task_results."""
         goal_id, run_data, run_path = self._find_run(run_id)
-        statuses = [tr["status"] for tr in run_data.get("task_results", [])]
+        task_results = run_data.get("task_results", [])
+
+        # Cascade failures: if a pending task's dependency has failed, fail it too.
+        # Loop until no more cascades are possible.
+        tasks = {t.id: t for t in self.list_tasks(goal_id)}
+        changed = True
+        while changed:
+            changed = False
+            failed_task_ids = {tr["task_id"] for tr in task_results if tr["status"] == "failed"}
+            for tr in task_results:
+                if tr["status"] != "pending":
+                    continue
+                task = tasks.get(tr["task_id"])
+                if task and any(dep in failed_task_ids for dep in task.depends_on):
+                    tr["status"] = "failed"
+                    tr["error"] = "Blocked: a dependency task failed"
+                    tr["completed_at"] = _utcnow()
+                    changed = True
+
+        statuses = [tr["status"] for tr in task_results]
 
         if all(s == "completed" for s in statuses):
             new_status = "completed"
@@ -371,16 +390,19 @@ class FileTaskStore:
 
 
     def reset_stale_running(self) -> None:
-        """Reset task_results stuck in 'running' back to 'pending'."""
+        """Reset task_results stuck in 'running' back to 'pending', then cascade failures."""
         for goal_dir in self._base.iterdir():
             if not goal_dir.is_dir():
                 continue
             runs_dir = goal_dir / "runs"
             if not runs_dir.exists():
                 continue
+            tasks = {t.id: t for t in self.list_tasks(goal_dir.name)}
             for run_path in runs_dir.glob("*.json"):
                 data = self._read_json(run_path)
                 if not data:
+                    continue
+                if data.get("status") not in ("pending", "running"):
                     continue
                 changed = False
                 for tr in data.get("task_results", []):
@@ -388,8 +410,38 @@ class FileTaskStore:
                         tr["status"] = "pending"
                         tr["started_at"] = None
                         changed = True
+
+                # Cascade failures for pending tasks whose deps have failed.
+                task_results = data.get("task_results", [])
+                cascade = True
+                while cascade:
+                    cascade = False
+                    failed_ids = {tr["task_id"] for tr in task_results if tr["status"] == "failed"}
+                    for tr in task_results:
+                        if tr["status"] != "pending":
+                            continue
+                        task = tasks.get(tr["task_id"])
+                        if task and any(dep in failed_ids for dep in task.depends_on):
+                            tr["status"] = "failed"
+                            tr["error"] = "Blocked: a dependency task failed"
+                            tr["completed_at"] = _utcnow()
+                            changed = True
+                            cascade = True
+
                 if changed:
-                    if data["status"] == "running":
+                    # Recompute run status
+                    statuses = [tr["status"] for tr in task_results]
+                    if all(s == "completed" for s in statuses):
+                        data["status"] = "completed"
+                    elif any(s == "failed" for s in statuses) and not any(
+                        s in ("pending", "running") for s in statuses
+                    ):
+                        data["status"] = "failed"
+                        if not data.get("completed_at"):
+                            data["completed_at"] = _utcnow()
+                    elif any(s == "running" for s in statuses):
+                        data["status"] = "running"
+                    else:
                         data["status"] = "pending"
                     self._write_json(run_path, data)
 

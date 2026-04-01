@@ -1,4 +1,4 @@
-import { StatusIcon } from './goalUtils.jsx';
+import { StatusIcon, formatCron } from './goalUtils.jsx';
 import styles from './GoalsPanel.module.css';
 
 export default function GoalsPanel({ goals, runnerStatus, onSelectGoal }) {
@@ -31,7 +31,7 @@ export default function GoalsPanel({ goals, runnerStatus, onSelectGoal }) {
                             <span className={styles.itemTitle}>{goal.description}</span>
                         </div>
                         <div className={styles.itemMeta}>
-                            {goal.cron && <span className={styles.cron}>{goal.cron}</span>}
+                            {goal.cron && <span className={styles.cron}>{formatCron(goal.cron)}{goal.timezone && <span className={styles.tz}> · {goal.timezone}</span>}</span>}
                             <span className={styles.status}>{goal.status}</span>
                         </div>
                     </li>
