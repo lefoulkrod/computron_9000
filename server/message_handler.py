@@ -97,7 +97,9 @@ def _get_conversation(conversation_id: str | None = None) -> _Conversation:
     """Return the conversation for the given ID, creating one if needed."""
     cid = conversation_id or _DEFAULT_CONVERSATION_ID
     if cid not in _conversations:
-        _conversations[cid] = _Conversation()
+        _conversations[cid] = _Conversation(
+            history=ConversationHistory(instance_id=cid),
+        )
     return _conversations[cid]
 
 
@@ -116,7 +118,9 @@ def resume_conversation(conversation_id: str) -> list[dict] | None:
     if messages is None:
         return None
 
-    conversation = _Conversation(history=ConversationHistory(messages))
+    conversation = _Conversation(
+        history=ConversationHistory(messages, instance_id=conversation_id),
+    )
     _conversations[conversation_id] = conversation
     return messages
 
