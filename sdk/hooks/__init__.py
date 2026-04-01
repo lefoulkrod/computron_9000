@@ -15,6 +15,7 @@ Phase signatures:
 from ._budget_guard import BudgetGuard
 from ._context_hook import ContextHook
 from ._default import default_hooks
+from ._frustration_hook import FrustrationHook  # NEW
 from ._logging_hook import LoggingHook
 from ._loop_detector import LoopDetector
 from ._nudge_hook import NudgeHook
@@ -25,6 +26,7 @@ from ._stop_hook import StopHook
 __all__ = [
     "BudgetGuard",
     "ContextHook",
+    "FrustrationHook",  # NEW
     "LoggingHook",
     "LoopDetector",
     "NudgeHook",

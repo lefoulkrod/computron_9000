@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
+from sdk.adaptation import UserState, detect_frustration  # NEW
 from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events import (
     AgentEvent,
@@ -87,6 +88,7 @@ class _Conversation:
 
     history: ConversationHistory = field(default_factory=ConversationHistory)
     context_manager: ContextManager | None = None
+    user_state: UserState = field(default_factory=UserState)  # NEW
 
 
 # Conversation store keyed by conversation ID.
@@ -202,6 +204,7 @@ async def _run_turn(
     options: LLMOptions,
     conversation_id: str | None,
     handler: Callable[[AgentEvent], object],
+    user_state: UserState | None = None,  # NEW parameter
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
     logger.info(
@@ -230,6 +233,7 @@ async def _run_turn(
                 active_agent,
                 max_iterations=active_agent.max_iterations,
                 ctx_manager=ctx_manager,
+                user_state=user_state,  # NEW
             )
 
             hooks.append(PersistenceHook(
@@ -284,6 +288,22 @@ async def handle_user_message(
     if data:
         user_content = _augment_message_with_attachments(message, data)
 
+    # NEW: Detect frustration and update conversation state
+    frustration_result = detect_frustration(user_content)
+    conversation.user_state.update_frustration(
+        frustration_result.level,
+        frustration_result.score,
+    )
+
+    # Log frustration detection for debugging
+    if frustration_result.is_frustrated():
+        logger.info(
+            "Frustration detected: level=%s score=%.2f patterns=%s",
+            frustration_result.level.name,
+            frustration_result.score,
+            frustration_result.matched_patterns,
+        )
+
     if not options.model:
         msg = "No model specified. The UI must send a model in the request options."
         raise ValueError(msg)
@@ -309,6 +329,7 @@ async def handle_user_message(
                     options=options,
                     conversation_id=conversation_id,
                     handler=_queue_handler,
+                    user_state=conversation.user_state,  # NEW
                 )
             finally:
                 await queue.put(None)

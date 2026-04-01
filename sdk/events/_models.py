@@ -244,6 +244,22 @@ class AgentCompletedPayload(BaseModel):
     status: Literal["success", "error", "stopped"]
 
 
+class UserStatePayload(BaseModel):
+    """Emitted when user emotional state is detected/changed.
+
+    Attributes:
+        type: Discriminator; always "user_state".
+        frustration_level: Current frustration level of the user.
+        frustration_score: Numeric score 0.0-1.0.
+        consecutive_frustrated_turns: Number of consecutive frustrated turns.
+    """
+
+    type: Literal["user_state"]
+    frustration_level: str  # "none", "low", "medium", "high"
+    frustration_score: float
+    consecutive_frustrated_turns: int
+
+
 AgentEventPayload = Annotated[
     ContentPayload
     | TurnEndPayload
@@ -257,7 +273,8 @@ AgentEventPayload = Annotated[
     | ContextUsagePayload
     | DesktopActivePayload
     | AgentStartedPayload
-    | AgentCompletedPayload,
+    | AgentCompletedPayload
+    | UserStatePayload,  # NEW
     Field(discriminator="type"),
 ]
 
@@ -299,4 +316,5 @@ __all__ = [
     "ToolCallPayload",
     "ToolCreatedPayload",
     "TurnEndPayload",
+    "UserStatePayload",  # NEW
 ]

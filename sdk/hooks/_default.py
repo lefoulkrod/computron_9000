@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from sdk.adaptation import UserState  # NEW
+
 from ._budget_guard import BudgetGuard
 from ._context_hook import ContextHook
+from ._frustration_hook import FrustrationHook  # NEW
 from ._logging_hook import LoggingHook
 from ._loop_detector import LoopDetector
 from ._nudge_hook import NudgeHook
@@ -18,12 +21,14 @@ def default_hooks(
     *,
     max_iterations: int = 0,
     ctx_manager: Any | None = None,
+    user_state: UserState | None = None,  # NEW parameter
 ) -> list[Any]:
     """Return the standard set of hooks used by all agents."""
     hooks: list[Any] = [NudgeHook(), StopHook()]
     if max_iterations > 0:
         hooks.append(BudgetGuard(max_iterations))
     hooks.append(LoopDetector())
+    hooks.append(FrustrationHook(user_state))  # NEW
     hooks.append(LoggingHook(agent))
     hooks.append(ScratchpadHook())
     if ctx_manager is not None:

@@ -37,6 +37,7 @@ from ._models import (
     ToolCallPayload,
     ToolCreatedPayload,
     TurnEndPayload,
+    UserStatePayload,  # NEW
 )
 
 __all__ = [
@@ -57,6 +58,7 @@ __all__ = [
     "ToolCallPayload",
     "ToolCreatedPayload",
     "TurnEndPayload",
+    "UserStatePayload",  # NEW
     "agent_span",
     "get_current_agent_id",
     "get_current_agent_name",

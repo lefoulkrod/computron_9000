@@ -92,6 +92,24 @@ class ConversationHistory:
         """Remove all messages."""
         self._messages.clear()
 
+    def append_system_context(self, context: str) -> None:
+        """Append temporary context to the system message.
+
+        This modifies the system message in-place for the current turn only.
+        The context is not persisted to conversation history.
+        """
+        if not self._messages:
+            return
+
+        # Find system message
+        for msg in self._messages:
+            if msg.get("role") == "system":
+                # Append context if not already present
+                current = msg.get("content", "")
+                if context not in current:
+                    msg["content"] = current + "\n\n" + context
+                break
+
     # -- dunder helpers ----------------------------------------------------
 
     def __len__(self) -> int:
