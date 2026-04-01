@@ -6,7 +6,7 @@ event payloads, default values, and JSON-serializable output shape.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -25,9 +25,9 @@ def test_agent_event_defaults():
     Validates that metadata fields default to None and a timestamp is set.
     """
 
-    before = datetime.utcnow()
+    before = datetime.now(timezone.utc)
     resp = AgentEvent(payload=ContentPayload(type="content"))
-    after = datetime.utcnow()
+    after = datetime.now(timezone.utc)
 
     assert resp.payload.type == "content"
     assert resp.payload.content is None
