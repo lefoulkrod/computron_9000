@@ -14,7 +14,7 @@ Design notes:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -277,7 +277,7 @@ class AgentEvent(BaseModel):
     """
 
     payload: AgentEventPayload
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     agent_name: str | None = None
     agent_id: str | None = None
     depth: int | None = None

@@ -44,6 +44,12 @@ from agents.desktop import (
     SYSTEM_PROMPT as _DESKTOP_PROMPT,
     TOOLS as _DESKTOP_TOOLS,
 )
+from agents.goal_planner import (
+    DESCRIPTION as _PLANNER_DESCRIPTION,
+    NAME as _PLANNER_NAME,
+    SYSTEM_PROMPT as _PLANNER_PROMPT,
+    TOOLS as _PLANNER_TOOLS,
+)
 from conversations import load_conversation_history, save_agent_events
 from sdk import (
     PersistenceHook,
@@ -59,6 +65,7 @@ _AGENT_REGISTRY: dict[str, tuple[str, str, str, list]] = {
     "browser": (_BROWSER_NAME, _BROWSER_DESCRIPTION, _BROWSER_PROMPT, _BROWSER_TOOLS),
     "coder": (_CODER_NAME, _CODER_DESCRIPTION, _CODER_PROMPT, _CODER_TOOLS),
     "desktop": (_DESKTOP_NAME, _DESKTOP_DESCRIPTION, _DESKTOP_PROMPT, _DESKTOP_TOOLS),
+    "goal_planner": (_PLANNER_NAME, _PLANNER_DESCRIPTION, _PLANNER_PROMPT, _PLANNER_TOOLS),
 }
 
 # Aliases for convenience (e.g. "computer" -> "coder")

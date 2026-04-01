@@ -209,6 +209,35 @@ class ParallelConfig(BaseModel):
     max_concurrent: int = 4
 
 
+class NotificationsConfig(BaseModel):
+    """Telegram push notification settings for goal run completion/failure."""
+
+    enabled: bool = False
+    on_run_completed: bool = True
+    on_run_failed: bool = True
+    include_files: bool = True
+    max_attachment_size_mb: int = 50
+
+
+class GoalsConfig(BaseModel):
+    """Configuration for the autonomous task engine."""
+
+    enabled: bool = True
+    goals_dir: str = ""  # empty = ~/.computron_9000/goals/
+    poll_interval: int = 5
+    max_concurrent: int = 2
+    max_retries: int = 3
+    retry_backoff_base: int = 30
+    shutdown_timeout: int = 60
+    timezone: str = "UTC"  # Default timezone for goals (IANA name)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
+    # LLM options for task execution
+    model: str = ""  # empty = use server default
+    num_ctx: int = 0  # 0 = use model default
+    think: bool = False
+    max_iterations: int = 0
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -224,6 +253,7 @@ class AppConfig(BaseModel):
     summary: SummaryConfig | None = None
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
+    goals: GoalsConfig = Field(default_factory=GoalsConfig)
 
 
 logger = logging.getLogger(__name__)
