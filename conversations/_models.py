@@ -24,6 +24,7 @@ class SummaryRecord(BaseModel):
     agent_name: str = ""
     options: dict[str, Any] = Field(default_factory=dict)
     elapsed_seconds: float | None = None
+    source_history: str = ""
 
 
 class ClearedItem(BaseModel):
@@ -52,6 +53,7 @@ class ClearingRecord(BaseModel):
     threshold: float = 0.0
     keep_recent_groups: int = 0
     cleared_items: list[ClearedItem] = Field(default_factory=list)
+    source_history: str = ""
 
 
 class ConversationSummary(BaseModel):
