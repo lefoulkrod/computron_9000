@@ -64,10 +64,13 @@ class TaskExecutor:
         agent = self._build_agent(task, options)
         set_model_options(options)
 
-        history = ConversationHistory([
-            {"role": "system", "content": agent.instruction},
-            {"role": "user", "content": instruction},
-        ])
+        history = ConversationHistory(
+            [
+                {"role": "system", "content": agent.instruction},
+                {"role": "user", "content": instruction},
+            ],
+            instance_id=conversation_id,
+        )
         num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
         ctx_manager = ContextManager(
             history=history,
