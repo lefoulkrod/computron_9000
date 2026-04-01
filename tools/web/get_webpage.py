@@ -17,6 +17,7 @@ from tools.web.summarize import (
 )
 from tools.web.types import GetWebpageError, LinkInfo, ReducedWebpage
 from utils.cache import async_lru_cache
+from utils.semantic_cache import semantic_cached
 
 logger = logging.getLogger(__name__)
 config = load_config()
@@ -63,8 +64,8 @@ def _reduce_webpage_context(html: str) -> ReducedWebpage:
     return ReducedWebpage(page_text=page_text, links=links)
 
 
-@async_lru_cache()
-async def get_webpage(url: str) -> ReducedWebpage:
+@semantic_cached(ttl=3600, similarity_threshold=0.90)  # 1 hour TTL, 90% similarity threshold
+async def get_webpage(url: str) -> ReducedWebpage | GetWebpageError:
     """Downloads the web page at the given URL, strips all HTML tags, and returns the cleaned.
 
     text content along with any links found on the page in the order they appear.
@@ -85,7 +86,7 @@ async def get_webpage(url: str) -> ReducedWebpage:
         reduced: ReducedWebpage = _reduce_webpage_context(html) if html else ReducedWebpage(page_text="", links=[])
     except (ValueError, RuntimeError) as exc:
         logger.exception("Error reducing webpage content for %s", url)
-        raise GetWebpageError(exc) from exc
+        return GetWebpageError(exc)
     return reduced
 
 

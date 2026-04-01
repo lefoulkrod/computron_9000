@@ -26,6 +26,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 import asyncio
 
 from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
+from server.cache_metrics import setup_cache_routes
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
@@ -366,6 +367,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
 
     # Desktop API
     app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)
+
+    # Cache metrics API
+    setup_cache_routes(app)
 
     # Sessions API (conversation resume) — must be before {id} wildcard routes
     app.router.add_route("GET", "/api/conversations/sessions", list_conversations_handler)

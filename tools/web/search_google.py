@@ -14,6 +14,7 @@ from aiohttp import ClientError
 from pydantic import BaseModel, Field, ValidationError
 
 from config import load_config
+from utils.semantic_cache import semantic_cached
 
 logger = logging.getLogger(__name__)
 
@@ -183,8 +184,22 @@ async def _perform_request(
         raise GoogleSearchError(msg) from exc
 
 
+@semantic_cached(ttl=1800, similarity_threshold=0.85)  # 30 min TTL, 85% similarity
 async def search_google(query: str, max_results: int = 5) -> GoogleSearchResults:
-    """Search Google using the REST API and return the top results."""
+    """Search Google using the REST API and return the top results.
+
+    Similar queries ("python tutorial" vs "python tutorials") share cached results.
+
+    Args:
+        query: The search query.
+        max_results: Maximum number of results to return.
+
+    Returns:
+        GoogleSearchResults object with results.
+
+    Raises:
+        GoogleSearchError: If search fails or API error occurs.
+    """
     try:
         validated = GoogleSearchInput(query=query, max_results=max_results)
     except ValidationError as exc:
