@@ -27,6 +27,7 @@ class Goal(BaseModel):
     status: Literal["active", "paused"] = "active"
     cron: str | None = None
     timezone: str = "UTC"  # IANA timezone name (e.g., "America/Chicago")
+    last_run_spawned_at: str | None = None
     created_at: str = Field(default_factory=_utcnow)
 
 

@@ -97,6 +97,7 @@ class TaskRunner:
         """Single tick: spawn due runs, pick up ready tasks, clean up finished."""
         for goal in self._store.get_due_recurring_goals():
             run = self._store.spawn_run(goal.id)
+            self._store.stamp_last_run_spawned(goal.id)
             logger.info("Spawned run #%d for goal %s", run.run_number, goal.id)
 
         for task_result, task in self._store.get_ready_task_results():

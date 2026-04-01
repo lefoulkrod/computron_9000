@@ -6,7 +6,7 @@ import styles from './GoalView.module.css';
 
 export default function GoalView({ goal, onBack, onDeleteGoal, onDeleteRun, onPauseGoal, onResumeGoal, onTriggerGoal, fetchDetail }) {
     const [detail, setDetail] = useState(null);
-    const [tab, setTab] = useState('tasks');
+    const [tab, setTab] = useState('runs');
     const [selectedRunId, setSelectedRunId] = useState(null);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
     const lastDetailJson = useRef('');

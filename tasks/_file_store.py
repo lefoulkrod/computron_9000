@@ -188,6 +188,18 @@ class FileTaskStore:
         self._write_json(self._run_path(goal_id, run.id), run_data)
         return run
 
+    def stamp_last_run_spawned(self, goal_id: str) -> None:
+        """Update the goal's last_run_spawned_at timestamp.
+
+        Called by the scheduler when spawning a cron-triggered run so the
+        anchor survives run deletion. Manual triggers should NOT call this.
+        """
+        path = self._goal_path(goal_id)
+        data = self._read_json(path)
+        if data:
+            data["last_run_spawned_at"] = _utcnow()
+            self._write_json(path, data)
+
     def get_run(self, run_id: str) -> Run | None:
         """Return a run by ID, or None if not found."""
         try:
@@ -383,7 +395,7 @@ class FileTaskStore:
             last_completed = max(
                 (r.completed_at for r in runs if r.completed_at), default=None
             )
-            anchor = last_completed or goal.created_at
+            anchor = last_completed or goal.last_run_spawned_at or goal.created_at
             if cron_has_fired_since(goal.cron, anchor, goal.timezone):
                 result.append(goal)
         return result
