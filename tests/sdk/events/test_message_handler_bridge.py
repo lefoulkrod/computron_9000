@@ -52,7 +52,6 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
     import server.message_handler as mh
 
     monkeypatch.setattr(mh, "run_turn", _fake_tool_loop)
-
     seen: list[AgentEvent] = []
     async for ev in handle_user_message("hi", data=None, options=LLMOptions(model="test-model")):
         seen.append(ev)
