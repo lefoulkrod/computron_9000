@@ -61,7 +61,7 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Write tests for new features/bugs; descriptive names, Google-style docstrings
 - Place tests in `tests/` mirroring source structure
 - Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
-- Always run unit tests after changes to backend code
+- Only run tests when instructed or before committing.
 - Only run quality checks when asked
 - NEVER PATCH AROUND TEST FAILURES
   - Do not introduce logic changes that bypass failing tests.
@@ -74,4 +74,3 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Vite for bundling, Vitest for testing
 - CSS Modules for styling (`*.module.css` per component)
 - Function components with hooks (no class components)
-- Markdown rendering via react-markdown with remark-gfm, remark-breaks, remark-math, rehype-katex
