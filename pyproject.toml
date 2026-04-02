@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "A modern, extensible AI assistant platform with a responsive chat UI and Python backend."
 requires-python = ">=3.12"
 dependencies = [
-    "litellm",
     "aiohttp",
     "pydantic",
+    "pyyaml",
     "playwright==1.52.0",
     "beautifulsoup4",
     "podman==5.4.0.1",
