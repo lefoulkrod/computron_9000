@@ -27,7 +27,9 @@ def default_hooks(
     hooks.append(LoopDetector())
     hooks.append(LoggingHook(agent))
     hooks.append(ScratchpadHook())
-    hooks.append(ToolResultCapHook(agent.options["num_ctx"]))
+    num_ctx = (agent.options or {}).get("num_ctx", 0)
+    if num_ctx > 0:
+        hooks.append(ToolResultCapHook(num_ctx))
     if ctx_manager is not None:
         hooks.append(ContextHook(ctx_manager, max_iterations=max_iterations))
     return hooks
