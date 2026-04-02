@@ -460,6 +460,14 @@ ui-clean: ui-clean-build
 
 
 # =============================================
+# 📊 Evaluation Tools
+# =============================================
+# Start the compaction evaluation web app
+eval port='8081':
+    PYTHONPATH=. PORT={{port}} uv run python -m tools.compaction_eval.app
+
+
+# =============================================
 # 🧹 Cleanup
 # =============================================
 # Clean Python cache files

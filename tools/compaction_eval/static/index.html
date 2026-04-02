@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compaction Eval</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+</head>
+<body x-data="evalApp()" x-init="init()">
+
+    <!-- Top bar -->
+    <div class="topbar">
+        <h1>Compaction Eval</h1>
+        <label>Model
+            <select x-model="settings.model" @change="saveSettings()">
+                <option value="">-- select --</option>
+                <template x-for="m in models" :key="m">
+                    <option :value="m" x-text="m"></option>
+                </template>
+            </select>
+        </label>
+        <label>num_ctx <input type="number" x-model.number="settings.num_ctx" @change="saveSettings()" step="1000"></label>
+        <label>num_predict <input type="number" x-model.number="settings.num_predict" @change="saveSettings()" step="256"></label>
+        <label>temperature <input type="number" x-model.number="settings.temperature" @change="saveSettings()" step="0.1" min="0" max="2"></label>
+    </div>
+
+    <div class="main">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <input type="text" placeholder="Filter by conversation or agent..." x-model="filter" @input="filterRecords()">
+            </div>
+            <div class="record-list">
+                <template x-for="r in filteredRecords" :key="r.id">
+                    <div class="record-item" :class="{ active: selected?.id === r.id }" @click="selectRecord(r)">
+                        <div class="agent" x-text="r.agent_name"></div>
+                        <div class="meta">
+                            <span x-text="r.conversation_id.substring(0, 12) + '...'"></span> &middot;
+                            <span x-text="new Date(r.created_at).toLocaleString()"></span>
+                        </div>
+                        <div class="meta">
+                            fill: <span x-text="r.fill_ratio"></span> &middot;
+                            <span x-text="r.messages_compacted"></span> msgs &middot;
+                            <span x-text="r.input_char_count?.toLocaleString()"></span> chars &rarr;
+                            <span x-text="r.summary_char_count?.toLocaleString()"></span> chars &middot;
+                            <span x-text="r.elapsed_seconds + 's'"></span>
+                        </div>
+                    </div>
+                </template>
+                <div x-show="filteredRecords.length === 0" class="empty">No records found</div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <div x-show="!selected" class="empty" style="padding-top: 100px;">
+                Select a compaction record to view
+            </div>
+
+            <template x-if="selected">
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                    <!-- Tabs -->
+                    <div class="tabs">
+                        <div class="tab" :class="{ active: tab === 'viewer' }" @click="tab = 'viewer'">Viewer</div>
+                        <div class="tab" :class="{ active: tab === 'facts' }" @click="tab = 'facts'">Facts</div>
+                        <div class="tab" :class="{ active: tab === 'judge' }" @click="tab = 'judge'">Judge</div>
+                        <div class="tab" :class="{ active: tab === 'compare' }" @click="tab = 'compare'">Compare</div>
+                        <div class="tab" :class="{ active: tab === 'probe' }" @click="tab = 'probe'">Probe</div>
+                    </div>
+
+                    <!-- Viewer tab -->
+                    <div class="tab-panel" x-show="tab === 'viewer'" style="display: flex; flex-direction: column;">
+                        <div class="split-view" style="flex: 1; min-height: 0;">
+                            <div class="split-pane">
+                                <h3>Source Messages (serialized)</h3>
+                                <pre x-text="detail?.serialized_input || 'Loading...'"></pre>
+                            </div>
+                            <div class="split-pane">
+                                <h3>Summary</h3>
+                                <pre x-text="detail?.summary_text || 'Loading...'"></pre>
+                            </div>
+                        </div>
+                        <div class="metadata" x-show="detail">
+                            model: <span x-text="detail?.model"></span>
+                            elapsed: <span x-text="detail?.elapsed_seconds + 's'"></span>
+                            fill_ratio: <span x-text="detail?.fill_ratio?.toFixed(3)"></span>
+                            compacted: <span x-text="detail?.messages_compacted + ' msgs'"></span>
+                            input: <span x-text="detail?.input_char_count?.toLocaleString() + ' chars'"></span>
+                            summary: <span x-text="detail?.summary_char_count?.toLocaleString() + ' chars'"></span>
+                            ratio: <span x-text="detail ? (detail.summary_char_count / detail.input_char_count * 100).toFixed(1) + '%' : ''"></span>
+                            source: <span x-text="detail?.source_history || 'n/a'"></span>
+                            <template x-if="detail?.prior_summary">
+                                <span>has prior summary</span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Facts tab -->
+                    <div class="tab-panel" x-show="tab === 'facts'">
+                        <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center;">
+                            <button class="btn" @click="runFactExtraction()" :disabled="factsLoading">Extract Facts</button>
+                            <div x-show="factsLoading" class="loading"><div class="spinner"></div> Extracting facts...</div>
+                        </div>
+                        <div x-show="factsError" class="error" x-text="factsError"></div>
+                        <div x-show="factsResult?.raw_response" class="error">
+                            Failed to parse LLM response:
+                            <pre x-text="factsResult?.raw_response"></pre>
+                        </div>
+                        <template x-if="factsResult?.facts?.length > 0">
+                            <div>
+                                <div class="metadata" style="margin-bottom: 12px;">
+                                    <span x-text="factsResult.facts.length + ' facts extracted'"></span>
+                                    <span x-text="factsResult.facts.filter(f => f.preserved).length + ' preserved'"></span>
+                                    <span x-text="factsResult.facts.filter(f => f.preserved === false).length + ' dropped'"></span>
+                                    elapsed: <span x-text="factsResult.elapsed_seconds + 's'"></span>
+                                </div>
+                                <table class="facts-table">
+                                    <thead>
+                                        <tr><th>Status</th><th>Category</th><th>Fact</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="(fact, i) in factsResult.facts" :key="i">
+                                            <tr :class="fact.preserved === true ? 'preserved' : fact.preserved === false ? 'dropped' : ''">
+                                                <td>
+                                                    <span class="badge" :class="fact.preserved === true ? 'badge-preserved' : fact.preserved === false ? 'badge-dropped' : 'badge-category'"
+                                                          x-text="fact.preserved === true ? 'kept' : fact.preserved === false ? 'dropped' : '?'"></span>
+                                                </td>
+                                                <td><span class="badge badge-category" x-text="fact.category"></span></td>
+                                                <td x-text="fact.text"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Judge tab -->
+                    <div class="tab-panel" x-show="tab === 'judge'">
+                        <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center;">
+                            <button class="btn" @click="runJudge()" :disabled="judgeLoading">Run Judge</button>
+                            <div x-show="judgeLoading" class="loading"><div class="spinner"></div> Judging summary...</div>
+                        </div>
+                        <div x-show="judgeError" class="error" x-text="judgeError"></div>
+                        <div x-show="judgeResult?.raw_response" class="error">
+                            Failed to parse LLM response:
+                            <pre x-text="judgeResult?.raw_response"></pre>
+                        </div>
+                        <template x-if="judgeResult && !judgeResult.error">
+                            <div>
+                                <div class="metadata" style="margin-bottom: 12px;">
+                                    elapsed: <span x-text="judgeResult.elapsed_seconds + 's'"></span>
+                                </div>
+                                <div class="scores-grid">
+                                    <template x-for="dim in ['completeness', 'accuracy', 'conciseness', 'usefulness']" :key="dim">
+                                        <div class="score-card" x-show="judgeResult[dim]">
+                                            <h4 x-text="dim"></h4>
+                                            <div class="score" :class="'score-' + judgeResult[dim]?.score" x-text="judgeResult[dim]?.score + '/5'"></div>
+                                            <div class="reasoning" x-text="judgeResult[dim]?.reasoning"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Compare tab -->
+                    <div class="tab-panel" x-show="tab === 'compare'">
+                        <div class="compare-controls">
+                            <div>
+                                <label>Model</label>
+                                <select x-model="compareModel">
+                                    <option value="">-- use global --</option>
+                                    <template x-for="m in models" :key="m">
+                                        <option :value="m" x-text="m"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label>temperature</label>
+                                <input type="number" x-model.number="compareTemp" step="0.1" min="0" max="2" style="width:70px">
+                            </div>
+                            <div>
+                                <label>num_ctx</label>
+                                <input type="number" x-model.number="compareCtx" step="1000" style="width:90px">
+                            </div>
+                            <div>
+                                <label>num_predict</label>
+                                <input type="number" x-model.number="comparePredict" step="256" style="width:90px">
+                            </div>
+                            <button class="btn" @click="runRecompact()" :disabled="compareLoading">Generate</button>
+                            <div x-show="compareLoading" class="loading"><div class="spinner"></div> Recompacting...</div>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="color: var(--text-dim); font-size: 11px;">Custom prompt (leave blank for production prompt)</label>
+                            <textarea class="compare-controls" x-model="comparePrompt" rows="3"
+                                      style="width:100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-family: inherit; font-size: 12px; resize: vertical;"></textarea>
+                        </div>
+                        <div x-show="compareError" class="error" x-text="compareError"></div>
+                        <div class="split-view" style="min-height: 400px;">
+                            <div class="split-pane">
+                                <h3>Original (<span x-text="detail?.model"></span>, <span x-text="detail?.elapsed_seconds + 's'"></span>)</h3>
+                                <pre x-text="detail?.summary_text || ''"></pre>
+                            </div>
+                            <div class="split-pane">
+                                <h3 x-text="compareVariants.length > 0 ? 'Variant (' + compareVariants[compareVariants.length-1].model + ', ' + compareVariants[compareVariants.length-1].elapsed + 's)' : 'Variant (run to compare)'"></h3>
+                                <pre x-text="compareVariants.length > 0 ? compareVariants[compareVariants.length-1].text : ''"></pre>
+                            </div>
+                        </div>
+                        <template x-if="compareVariants.length > 1">
+                            <div style="margin-top: 12px;">
+                                <h4 style="color: var(--text-dim); font-size: 11px; margin-bottom: 8px;">All variants</h4>
+                                <template x-for="(v, i) in compareVariants" :key="i">
+                                    <div class="metadata" style="margin-bottom: 4px; cursor: pointer;" @click="selectedVariant = i">
+                                        #<span x-text="i + 1"></span>:
+                                        model: <span x-text="v.model"></span>
+                                        elapsed: <span x-text="v.elapsed + 's'"></span>
+                                        chars: <span x-text="v.text.length.toLocaleString()"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Probe tab -->
+                    <div class="tab-panel" x-show="tab === 'probe'">
+                        <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center;">
+                            <button class="btn" @click="runProbe()" :disabled="probeLoading">Generate Probes</button>
+                            <div x-show="probeLoading" class="loading"><div class="spinner"></div> Generating and testing probes...</div>
+                        </div>
+                        <div x-show="probeError" class="error" x-text="probeError"></div>
+                        <div x-show="probeResult?.raw_response" class="error">
+                            Failed to parse LLM response:
+                            <pre x-text="probeResult?.raw_response"></pre>
+                        </div>
+                        <template x-if="probeResult?.probes?.length > 0">
+                            <div>
+                                <div class="metadata" style="margin-bottom: 12px;">
+                                    <span x-text="probeResult.probes.length + ' probes'"></span>
+                                    <span x-text="probeResult.probes.filter(p => p.model_answer && !p.model_answer.toUpperCase().includes('INSUFFICIENT')).length + ' answered'"></span>
+                                    <span x-text="probeResult.probes.filter(p => p.model_answer && p.model_answer.toUpperCase().includes('INSUFFICIENT')).length + ' insufficient'"></span>
+                                    elapsed: <span x-text="probeResult.elapsed_seconds + 's'"></span>
+                                </div>
+                                <table class="probe-table">
+                                    <thead>
+                                        <tr><th style="width:30%">Question</th><th style="width:35%">Expected Answer</th><th style="width:35%">Model Answer</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="(p, i) in probeResult.probes" :key="i">
+                                            <tr :class="p.model_answer && p.model_answer.toUpperCase().includes('INSUFFICIENT') ? 'insufficient' : ''">
+                                                <td x-text="p.question"></td>
+                                                <td x-text="p.expected_answer"></td>
+                                                <td x-text="p.model_answer || '—'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
