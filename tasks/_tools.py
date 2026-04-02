@@ -4,6 +4,117 @@ from typing import Any
 
 from tasks import get_store
 
+# Agents valid for use in task definitions (subset of the full agent registry)
+_TASK_AGENTS = sorted({"computron", "browser", "coder"})
+
+
+async def begin_goal(
+    description: str,
+    cron: str | None = None,
+    timezone: str | None = None,
+) -> dict[str, Any] | str:
+    """Begin building a new goal draft.
+
+    Returns a draft dict to pass to add_task and commit_goal.
+
+    Args:
+        description: What this goal accomplishes.
+        cron: Optional cron expression for recurring goals (e.g. '0 10 * * *').
+        timezone: IANA timezone name (e.g. 'America/Chicago'). Defaults to UTC.
+    """
+    if not description or not description.strip():
+        return "Error: description is required."
+    if cron:
+        try:
+            from croniter import croniter
+
+            croniter(cron)
+        except (ValueError, KeyError):
+            return f"Error: Invalid cron expression '{cron}'."
+    if timezone:
+        try:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+            ZoneInfo(timezone)
+        except (ZoneInfoNotFoundError, KeyError):
+            return f"Error: Unknown timezone '{timezone}'. Use an IANA timezone name (e.g. 'America/Chicago', 'UTC')."
+    draft: dict[str, Any] = {"description": description.strip(), "tasks": []}
+    if cron:
+        draft["cron"] = cron
+    if timezone:
+        draft["timezone"] = timezone
+    return draft
+
+
+async def add_task(
+    draft: dict[str, Any],
+    key: str,
+    description: str,
+    instruction: str,
+    agent: str = "computron",
+    depends_on: list[str] | None = None,
+) -> dict[str, Any] | str:
+    """Add a task to a goal draft and return the updated draft.
+
+    Omit depends_on to automatically depend on the previous task (sequential).
+    Pass depends_on=[] to run immediately with no dependencies (parallel).
+
+    Args:
+        draft: Current goal draft from begin_goal or a previous add_task.
+        key: Unique short identifier for this task (e.g. 'fetch_data').
+        description: Short human-readable description.
+        instruction: Full self-contained agent prompt.
+        agent: 'computron' (default), 'browser', or 'coder'.
+        depends_on: Keys of tasks this task depends on. Omit to depend on the
+            previous task. Pass [] for no dependencies (parallel execution).
+    """
+    if not isinstance(draft, dict) or "tasks" not in draft:
+        return "Error: invalid draft. Start with begin_goal."
+    if not key or not key.strip():
+        return "Error: key is required."
+    key = key.strip()
+    existing_keys = [t["key"] for t in draft["tasks"]]
+    if key in existing_keys:
+        return f"Error: duplicate key '{key}'. Existing keys: {existing_keys}."
+    if not description or not description.strip():
+        return f"Error: description is required for task '{key}'."
+    if not instruction or not instruction.strip():
+        return f"Error: instruction is required for task '{key}'."
+    if agent not in _TASK_AGENTS:
+        return f"Error: unknown agent '{agent}' for task '{key}'. Valid agents: {_TASK_AGENTS}."
+
+    # Default to previous task if depends_on is omitted and one exists
+    resolved_deps = [existing_keys[-1]] if depends_on is None and existing_keys else (depends_on or [])
+
+    for dep in resolved_deps:
+        if dep not in existing_keys:
+            return f"Error: depends_on '{dep}' not found. Known keys: {existing_keys}."
+
+    task: dict[str, Any] = {
+        "key": key,
+        "description": description.strip(),
+        "instruction": instruction.strip(),
+        "agent": agent,
+        "depends_on": resolved_deps,
+    }
+    return {**draft, "tasks": [*draft["tasks"], task]}
+
+
+async def commit_goal(draft: dict[str, Any]) -> str:
+    """Validate and save a completed goal draft to disk.
+
+    Args:
+        draft: The goal draft built with begin_goal and add_task.
+    """
+    if not isinstance(draft, dict):
+        return "Error: invalid draft."
+    return await create_goal(
+        description=draft.get("description", ""),
+        tasks=draft.get("tasks", []),
+        cron=draft.get("cron"),
+        timezone=draft.get("timezone"),
+    )
+
 
 async def create_goal(
     description: str,
@@ -17,6 +128,27 @@ async def create_goal(
     this submission. ``depends_on`` lists keys of tasks that must complete
     before this one starts. Tasks without ``depends_on`` run in parallel
     immediately.
+
+    Example::
+
+        create_goal(
+            description="Research and summarize today's AI news",
+            tasks=[
+                {
+                    "key": "research",
+                    "description": "Find today's top AI news stories",
+                    "instruction": "Browse news sites and find the top 5 AI stories published today. Return headlines, sources, and URLs.",
+                    "agent": "browser",
+                },
+                {
+                    "key": "summarize",
+                    "description": "Write a summary of the research",
+                    "instruction": "Summarize the AI news stories from the research task into a concise briefing.",
+                    "agent": "coder",
+                    "depends_on": ["research"],
+                },
+            ],
+        )
 
     Args:
         description: What this goal accomplishes.
@@ -159,4 +291,4 @@ async def trigger_goal(goal_id: str) -> str:
     return f"Triggered run #{run.run_number} (id={run.id}) for goal '{goal.description}'."
 
 
-__all__ = ["create_goal", "list_goals", "list_tasks", "trigger_goal"]
+__all__ = ["add_task", "begin_goal", "commit_goal", "create_goal", "list_goals", "list_tasks", "trigger_goal"]

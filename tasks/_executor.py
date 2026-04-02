@@ -57,7 +57,7 @@ class TaskExecutor:
             raise ValueError(msg)
 
         instruction = self._build_instruction(task_result, task, goal)
-        conversation_id = f"task_{task_result.id}"
+        conversation_id = f"goals/{run.goal_id}/{run.id}/{task_result.id}"
         self._store.set_conversation_id(task_result.id, conversation_id)
 
         options = self._llm_options
@@ -100,7 +100,7 @@ class TaskExecutor:
 
     def _build_agent(self, task: Task, options: LLMOptions) -> Agent:
         """Construct an Agent from registry or inline config."""
-        from server.message_handler import _resolve_agent
+        from agents._registry import resolve_agent as _resolve_agent
 
         if task.agent_config:
             config = task.agent_config

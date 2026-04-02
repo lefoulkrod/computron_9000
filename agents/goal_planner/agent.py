@@ -9,51 +9,35 @@ from __future__ import annotations
 from textwrap import dedent
 
 from sdk import make_run_agent_as_tool_function
-from tasks._tools import create_goal, list_goals, list_tasks, trigger_goal
+from tasks._tools import add_task, begin_goal, commit_goal, list_goals, list_tasks, trigger_goal
 
 NAME = "GOAL_PLANNER"
 DESCRIPTION = "Plan and create autonomous goals with scheduled tasks"
 SYSTEM_PROMPT = dedent("""
-    You are GOAL_PLANNER, a planning agent for COMPUTRON 9000. Your job is to
-    help the user define goals and decompose them into tasks.
+    You are GOAL_PLANNER. Build goals using: begin_goal → add_task (once per task) → commit_goal.
 
-    WORKFLOW:
-    1. Think through the full task graph before calling create_goal.
-    2. Call create_goal ONCE with the goal description and ALL tasks in a
-       single call.
-    3. Add a cron expression if the goal is recurring. When specifying cron,
-       also provide the timezone (e.g., "America/Chicago", "UTC") so the
-       schedule is interpreted correctly.
+    Each add_task call returns the updated draft — pass it into the next call.
+    By default each task depends on the previous one (sequential). Pass
+    depends_on=[] to run a task in parallel with no dependencies.
 
-    CRON AND TIMEZONE:
-    - Use standard 5-field cron syntax: minute hour day-of-month month day-of-week
-    - The timezone parameter is an IANA timezone name like "America/Chicago",
-      "America/New_York", "Europe/London", "UTC", etc.
-    - If omitted, defaults to UTC.
-
-    TASK GRAPH RULES:
-    - Assign each task a short, descriptive key (e.g. "fetch_data", "analyze").
-    - Tasks without depends_on run IMMEDIATELY in parallel. Only omit
-      depends_on for tasks that truly have no prerequisites.
-    - Tasks that need output from earlier tasks MUST list those task keys in
-      depends_on. The result text of completed dependency tasks is automatically
-      injected into the dependent task's instruction at execution time.
-    - List tasks in execution order — a task may only depend on keys that
-      appear earlier in the list.
+    Completed dependency results are automatically appended to a task's
+    instruction at execution time — do not use template syntax like {{key}}.
 
     AGENT SELECTION:
-    - "browser" for web browsing, scraping, form filling
-    - "coder" for writing code, files, scripts, analysis
-    - "computron" for general-purpose work
+    - "browser": web browsing, scraping, form filling
+    - "coder": code, files, scripts, analysis
+    - "computron": general-purpose
 
-    Task instructions must be fully self-contained — the executing agent has no
-    context beyond what you write in the instruction field. Include all URLs,
-    file paths, criteria, and output expectations.
+    Task instructions must be fully self-contained — include all URLs, file
+    paths, criteria, and output expectations. The executing agent has no other
+    context.
 
     Return a summary of the goal and tasks you created.
 """)
 TOOLS = [
-    create_goal,
+    begin_goal,
+    add_task,
+    commit_goal,
     list_goals,
     list_tasks,
     trigger_goal,
