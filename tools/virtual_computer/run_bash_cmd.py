@@ -9,7 +9,7 @@ import json
 import logging
 import re
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from podman import PodmanClient
 from podman.api import stream_frames
@@ -20,9 +20,6 @@ from sdk.events import AgentEvent, TerminalOutputPayload, publish_event
 from tools._truncation import truncate_args
 from config import load_config
 from tools.virtual_computer.workspace import get_current_workspace_folder
-
-if TYPE_CHECKING:
-    from podman.domain.containers import Container
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +98,6 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         container: Container | None = next((c for c in containers if c.name == container_name), None)
         if container is None:
             _raise_container_not_found(container_name)
-            return BashCmdResult(stdout=None, stderr=None, exit_code=None)
 
         # Add strict flags to ensure one-shot behavior
         strict_cmd = f"set -euo pipefail; {cmd}"
