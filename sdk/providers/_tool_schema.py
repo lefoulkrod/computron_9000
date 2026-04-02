@@ -7,8 +7,9 @@ for tool definitions (unlike Ollama which accepts raw callables).
 import inspect
 import logging
 import re
+import types
 from collections.abc import Callable
-from typing import Any, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ def _python_type_to_json_schema(annotation: Any) -> dict[str, Any]:
         return {"type": "object"}
 
     # Handle Optional (Union[X, None])
-    if origin is type(int | None):
+    if origin is Union or origin is types.UnionType:
         args = [a for a in get_args(annotation) if a is not type(None)]
         if len(args) == 1:
             return _python_type_to_json_schema(args[0])
