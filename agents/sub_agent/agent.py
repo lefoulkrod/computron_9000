@@ -54,7 +54,7 @@ _SYSTEM_PROMPT = dedent(
     In HTML/web content, reference assets by container path
     (e.g. src="/home/computron/workspace/sprite.png"), never base64.
 
-    FILE OUTPUT — Do NOT call output_file. Instead, include the full paths of every
+    FILE OUTPUT — Do NOT call send_file. Instead, include the full paths of every
     file you created in your return summary so COMPUTRON can deliver them.
 
     SCRATCHPAD: Use save_to_scratchpad to note key data — file paths, error

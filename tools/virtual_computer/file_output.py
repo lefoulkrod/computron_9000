@@ -12,8 +12,8 @@ from config import load_config
 logger = logging.getLogger(__name__)
 
 
-async def output_file(path: str) -> dict[str, str]:
-    """Deliver a file to the user as a downloadable card.
+async def send_file(path: str) -> dict[str, str]:
+    """Send a file to the user. Use this whenever the user should receive a file.
 
     Args:
         path: Absolute path inside the container (e.g. ``/home/computron/report.csv``).

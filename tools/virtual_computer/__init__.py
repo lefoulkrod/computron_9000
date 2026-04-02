@@ -54,7 +54,7 @@ from .stat_ops import exists, is_dir, is_file
 #   -> agents.__init__ -> agents.media -> tools.virtual_computer
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "describe_image": (".describe_image", "describe_image"),
-    "output_file": (".file_output", "output_file"),
+    "send_file": (".file_output", "send_file"),
     "play_audio": (".play_audio", "play_audio"),
     "run_bash_cmd": (".run_bash_cmd", "run_bash_cmd"),
     "BashCmdResult": (".run_bash_cmd", "BashCmdResult"),
@@ -107,7 +107,7 @@ __all__ = [
     "list_dir",
     "make_dirs",
     "move_path",
-    "output_file",
+    "send_file",
     "path_exists",
     "play_audio",
     "prepend_to_file",
