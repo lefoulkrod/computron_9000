@@ -142,20 +142,21 @@ async def recompact(
     prior_summary: str | None,
     options: dict[str, Any] | None = None,
     custom_prompt: str | None = None,
+    objective: str = "",
 ) -> dict[str, Any]:
     """Re-run compaction with different model/params."""
-    from sdk.context._strategy import _SUMMARIZE_PROMPT
+    from sdk.context._strategy import _build_summarize_prompt
 
-    system_prompt = custom_prompt or _SUMMARIZE_PROMPT
+    system_prompt = custom_prompt or _build_summarize_prompt(objective)
     conversation_text = serialize_messages(input_messages)
 
     user_content = conversation_text
     if prior_summary:
         user_content = (
-            "EXISTING SUMMARY (from a previous compaction — merge all these "
-            "facts into your output, do not drop any):\n\n"
+            "PRIOR SUMMARY (from a previous compaction — integrate into "
+            "your output, re-condensing where possible):\n\n"
             + prior_summary
-            + "\n\n---\n\nNEW CONVERSATION to merge:\n\n"
+            + "\n\n---\n\nNEW MESSAGES since last compaction:\n\n"
             + conversation_text
         )
 

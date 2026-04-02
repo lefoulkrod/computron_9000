@@ -132,6 +132,7 @@ async def recompact_handler(request: web.Request) -> web.Response:
         prior_summary=record.prior_summary,
         options=_parse_options(body),
         custom_prompt=body.get("custom_prompt"),
+        objective=body.get("objective", ""),
     )
     return web.json_response(result)
 

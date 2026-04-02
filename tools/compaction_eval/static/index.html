@@ -167,35 +167,14 @@
 
                     <!-- Compare tab -->
                     <div class="tab-panel" x-show="tab === 'compare'">
-                        <div class="compare-controls">
-                            <div>
-                                <label>Model</label>
-                                <select x-model="compareModel">
-                                    <option value="">-- use global --</option>
-                                    <template x-for="m in models" :key="m">
-                                        <option :value="m" x-text="m"></option>
-                                    </template>
-                                </select>
-                            </div>
-                            <div>
-                                <label>temperature</label>
-                                <input type="number" x-model.number="compareTemp" step="0.1" min="0" max="2" style="width:70px">
-                            </div>
-                            <div>
-                                <label>num_ctx</label>
-                                <input type="number" x-model.number="compareCtx" step="1000" style="width:90px">
-                            </div>
-                            <div>
-                                <label>num_predict</label>
-                                <input type="number" x-model.number="comparePredict" step="256" style="width:90px">
-                            </div>
-                            <button class="btn" @click="runRecompact()" :disabled="compareLoading">Generate</button>
-                            <div x-show="compareLoading" class="loading"><div class="spinner"></div> Recompacting...</div>
-                        </div>
                         <div style="margin-bottom: 12px;">
                             <label style="color: var(--text-dim); font-size: 11px;">Custom prompt (leave blank for production prompt)</label>
-                            <textarea class="compare-controls" x-model="comparePrompt" rows="3"
+                            <textarea x-model="comparePrompt" rows="3"
                                       style="width:100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-family: inherit; font-size: 12px; resize: vertical;"></textarea>
+                        </div>
+                        <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center;">
+                            <button class="btn" @click="runRecompact()" :disabled="compareLoading">Generate</button>
+                            <div x-show="compareLoading" class="loading"><div class="spinner"></div> Recompacting...</div>
                         </div>
                         <div x-show="compareError" class="error" x-text="compareError"></div>
                         <div class="split-view" style="min-height: 400px;">

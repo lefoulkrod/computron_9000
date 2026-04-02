@@ -31,10 +31,6 @@ function evalApp() {
         judgeError: '',
 
         // Compare tab
-        compareModel: '',
-        compareTemp: 0.3,
-        compareCtx: 32768,
-        comparePredict: 8192,
         comparePrompt: '',
         compareVariants: [],
         compareLoading: false,
@@ -200,19 +196,11 @@ function evalApp() {
         // -- Compare --
 
         async runRecompact() {
-            const model = this.compareModel || this._getModel();
-            if (!model) { this.compareError = 'Select a model first'; return; }
+            if (!this._getModel()) { this.compareError = 'Select a model first'; return; }
             this.compareLoading = true;
             this.compareError = '';
             try {
-                const body = {
-                    record_id: this.selected.id,
-                    conversation_id: this.selected.conversation_id,
-                    model: model,
-                };
-                if (this.compareCtx) body.num_ctx = this.compareCtx;
-                if (this.comparePredict) body.num_predict = this.comparePredict;
-                if (this.compareTemp !== '' && this.compareTemp !== undefined) body.temperature = this.compareTemp;
+                const body = this._baseBody();
                 if (this.comparePrompt.trim()) body.custom_prompt = this.comparePrompt.trim();
 
                 const resp = await fetch('/api/recompact', {
@@ -225,7 +213,7 @@ function evalApp() {
                     this.compareError = result.error;
                 } else {
                     this.compareVariants.push({
-                        model: model,
+                        model: this._getModel(),
                         text: result.summary_text,
                         elapsed: result.elapsed_seconds,
                     });

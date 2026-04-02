@@ -84,6 +84,7 @@ _SUMMARIZE_PROMPT = (
     "reference document that the assistant can use to continue working. The "
     "conversation may be browser research, code analysis, or both.\n"
     "\n"
+    "{objective_line}"
     "You MUST use EXACTLY this structure with these exact headings. Do not use "
     "any other format. Do not write prose or commentary. Start your response "
     "with '## Completed Work'.\n"
@@ -106,14 +107,16 @@ _SUMMARIZE_PROMPT = (
     "\n"
     "## Current State\n"
     "Describe what is happening RIGHT NOW at the end of the conversation.\n"
-    "What was the assistant doing in its last message? What did the user most "
-    "recently ask for? Include any in-progress work, unresolved errors, or "
+    "What was the assistant doing? What does it still need to do to complete "
+    "the objective? Include any in-progress work, unresolved errors, or "
     "pending actions. If not applicable, write \"None\".\n"
     "\n"
     "RULES:\n"
     "- Your output MUST start with '## Completed Work' and contain all three "
     "sections above. No other format is acceptable.\n"
-    "- Preserve FACTS and DATA, not process.\n"
+    "- Preserve FACTS and DATA, not process. Drop operational details "
+    "(navigation steps, scroll positions, viewport positions, failed commands, "
+    "file line numbers) unless they indicate an active blocker.\n"
     "  Browser WRONG: 'Navigated to Google Flights, applied nonstop filter, "
     "clicked search'\n"
     "  Browser RIGHT: 'Searched Google Flights nonstop AUS→ORD Apr 10-12. "
@@ -127,14 +130,27 @@ _SUMMARIZE_PROMPT = (
     "- For research: MUST INCLUDE URLs needed to revisit results. Omit "
     "intermediate navigation URLs (search engines, category listings).\n"
     "- MUST INCLUDE all prices, ratings, quantities, dates, and numerical data.\n"
-    "- If the input contains a prior summary, merge ALL its facts into yours — "
-    "every URL, price, name, date, path, and signature MUST appear in your "
-    "output. Do not summarize the summary; expand it with new facts.\n"
+    "- If the input contains a prior summary, RE-CONDENSE it together with the "
+    "new information into a single tight summary. Integrate and deduplicate — "
+    "do NOT copy the prior summary verbatim. The output should be shorter or "
+    "the same length unless significant new facts were added.\n"
     "- Never drop specific details (numbers, names, URLs, paths, signatures) in "
     "favor of vague descriptions like 'highly-rated' or 'well-known'.\n"
     "- Be concise but exhaustive in facts.\n"
     "- Do NOT echo these instructions — replace them with actual content."
 )
+
+def _build_summarize_prompt(objective: str = "") -> str:
+    """Build the summarizer system prompt, optionally injecting the objective."""
+    if objective:
+        objective_line = (
+            f'THE AGENT\'S OBJECTIVE: "{objective}"\n'
+            "Prioritize information the agent needs to complete this objective.\n\n"
+        )
+    else:
+        objective_line = ""
+    return _SUMMARIZE_PROMPT.format(objective_line=objective_line)
+
 
 _SUMMARY_PREFIX = "[Conversation summary — earlier messages were compacted]\n\n"
 
@@ -390,6 +406,13 @@ class LLMCompactionStrategy:
         first_user_idx, has_pinned = _find_first_user(non_system)
         pin_offset = 1 if has_pinned else 0
 
+        # Extract the objective from the pinned first user message.
+        objective = ""
+        if has_pinned:
+            content = non_system[first_user_idx].get("content", "")
+            if isinstance(content, str):
+                objective = content
+
         body = non_system[pin_offset:]
         keep_count = _count_kept_by_assistant_groups(
             body, self._keep_recent_groups,
@@ -412,7 +435,7 @@ class LLMCompactionStrategy:
         t0 = _time.monotonic()
         try:
             summary, model_name = await self._summarize(
-                compactable, prior_summary,
+                compactable, prior_summary, objective,
             )
         except TimeoutError:
             logger.warning(
@@ -468,6 +491,7 @@ class LLMCompactionStrategy:
         self,
         messages: list[dict],
         prior_summary: str | None = None,
+        objective: str = "",
     ) -> tuple[str, str]:
         """Summarize messages, chunking if necessary.
 
@@ -487,7 +511,9 @@ class LLMCompactionStrategy:
         # Serialize to check total size.
         serialized = _serialize_messages(copy.deepcopy(messages))
         if len(serialized) <= chunk_threshold:
-            return await self._call_summarizer(serialized, prior_summary)
+            return await self._call_summarizer(
+                serialized, prior_summary, objective,
+            )
 
         # Split messages into chunks and summarize each independently.
         chunks = _split_into_chunks(messages, chunk_target)
@@ -502,7 +528,9 @@ class LLMCompactionStrategy:
             chunk_text = _serialize_messages(copy.deepcopy(chunk))
             # Include prior summary context only in the first chunk.
             ps = prior_summary if i == 0 else None
-            summary, model_name = await self._call_summarizer(chunk_text, ps)
+            summary, model_name = await self._call_summarizer(
+                chunk_text, ps, objective,
+            )
             chunk_summaries.append(summary)
 
         # Merge chunk summaries in a final pass.
@@ -511,12 +539,15 @@ class LLMCompactionStrategy:
             for i, s in enumerate(chunk_summaries)
         )
         final_summary, model_name = await self._call_summarizer(
-            merged_input, prior_summary=None,
+            merged_input, prior_summary=None, objective=objective,
         )
         return final_summary, model_name
 
     async def _call_summarizer(
-        self, conversation_text: str, prior_summary: str | None = None,
+        self,
+        conversation_text: str,
+        prior_summary: str | None = None,
+        objective: str = "",
     ) -> tuple[str, str]:
         """Call the summarization LLM and return (summary_text, model_name)."""
         cfg = load_config()
@@ -527,18 +558,19 @@ class LLMCompactionStrategy:
         user_content = ""
         if prior_summary:
             user_content += (
-                "EXISTING SUMMARY (from a previous compaction — merge all these "
-                "facts into your output, do not drop any):\n\n"
+                "PRIOR SUMMARY (from a previous compaction — integrate into "
+                "your output, re-condensing where possible):\n\n"
                 + prior_summary
-                + "\n\n---\n\nNEW CONVERSATION to merge:\n\n"
+                + "\n\n---\n\nNEW MESSAGES since last compaction:\n\n"
             )
         user_content += conversation_text
 
+        system_prompt = _build_summarize_prompt(objective)
         response = await asyncio.wait_for(
             provider.chat(
                 model=model,
                 messages=[
-                    {"role": "system", "content": _SUMMARIZE_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
                 ],
                 think=False,
