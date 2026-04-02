@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
-from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation, generate_conversation_title
+from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
@@ -33,10 +33,11 @@ from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
-from conversations._store import (
+from conversations import (
     delete_conversation as _delete_conversation,
     list_conversations as _list_conversations,
     save_conversation_title,
+    generate_title_from_first_message,
 )
 from tools.desktop._lifecycle import is_desktop_running, start_desktop
 from tools.desktop._exec import DesktopExecError
@@ -365,7 +366,8 @@ async def generate_title_handler(request: Request) -> Response:
         return web.json_response({"error": "No user message found in conversation"}, status=400)
     
     try:
-        title = await generate_conversation_title(first_user_message)
+        # Generate title using the refactored function
+        title = generate_title_from_first_message(first_user_message)
         # Save the generated title
         save_conversation_title(conversation_id, title)
         return web.json_response({"title": title})

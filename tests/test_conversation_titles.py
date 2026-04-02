@@ -48,7 +48,7 @@ def test_conversation_summary_model_dump():
 @pytest.mark.asyncio
 async def test_generate_conversation_title():
     """Test the title generation function (requires running Ollama)."""
-    from server.message_handler import generate_conversation_title
+    from conversations._title_generation import generate_conversation_title
     
     # Test with a simple message
     title = await generate_conversation_title("What is the capital of France?")

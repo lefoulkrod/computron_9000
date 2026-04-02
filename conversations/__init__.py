@@ -22,6 +22,9 @@ from ._store import (
     save_sub_agent_history,
     save_summary_record,
 )
+from ._title_generation import (
+    generate_title_from_first_message,
+)
 
 __all__ = [
     "ClearedItem",
@@ -39,6 +42,8 @@ __all__ = [
     "save_agent_events",
     "save_clearing_record",
     "save_conversation_history",
+    "save_conversation_title",
     "save_sub_agent_history",
     "save_summary_record",
+    "generate_title_from_first_message",
 ]

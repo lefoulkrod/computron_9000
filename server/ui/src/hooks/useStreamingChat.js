@@ -179,9 +179,6 @@ export default function useStreamingChat(callbacks) {
     const sendMessage = useCallback(async (message, fileData, modelSettings, agent) => {
         if (!message && !fileData) return;
 
-        // Track if this is the first message (for title generation)
-        const isFirstMessage = messages.length === 0;
-
         // If already streaming, send as a nudge (fire-and-forget)
         if (isStreamingRef.current) {
             const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
@@ -340,11 +337,6 @@ export default function useStreamingChat(callbacks) {
                                 updated[i] = { ...updated[i], streaming: false, placeholder: false };
                                 return updated;
                             });
-                            
-                            // Trigger title generation after first message exchange completes
-                            if (isFirstMessage) {
-                                _triggerTitleGeneration(conversationIdRef.current);
-                            }
                         }
                     } catch (e) {
                         // ignore parse errors for partial/incomplete lines
@@ -405,32 +397,6 @@ export default function useStreamingChat(callbacks) {
         } catch (_) {
             return false;
         }
-    }, []);
-
-    /**
-     * Trigger title generation for a conversation.
-     * Called after the first message exchange completes successfully.
-     */
-    const _triggerTitleGeneration = useCallback((conversationId) => {
-        // Wait a short delay to avoid race conditions with persistence
-        setTimeout(async () => {
-            try {
-                const resp = await fetch(`/api/conversations/sessions/${conversationId}/generate-title`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                });
-                if (!resp.ok) {
-                    const error = await resp.text();
-                    console.warn('Failed to generate title:', error);
-                } else {
-                    const data = await resp.json();
-                    console.log('Generated title:', data.title);
-                }
-            } catch (err) {
-                // Silently fail - title generation is non-critical
-                console.warn('Title generation failed:', err);
-            }
-        }, 500);
     }, []);
 
     /** Clear messages, generate a fresh conversation ID, and delete backend history. */
