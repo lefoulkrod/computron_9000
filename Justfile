@@ -11,7 +11,7 @@ default:
 
 
 # =============================================
-# � Variables
+# 📦 Variables
 # =============================================
 # Centralize UI directory path to avoid repetition
 UI_DIR := "server/ui"
