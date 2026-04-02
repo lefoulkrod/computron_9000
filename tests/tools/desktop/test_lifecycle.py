@@ -77,12 +77,18 @@ async def test_ensure_desktop_running_waits_and_polls():
     mock_cfg = MagicMock()
     mock_cfg.desktop.resolution = "1280x720"
 
-    # First call returns False, second returns True (simulates startup delay)
+    # First call returns False (initial check + processes-alive check returns False),
+    # then True on second poll iteration.
     with (
         patch(
             "tools.desktop._lifecycle.is_desktop_running",
             new_callable=AsyncMock,
-            side_effect=[False, False, True],
+            side_effect=[False, True],
+        ),
+        patch(
+            "tools.desktop._lifecycle._are_desktop_processes_alive",
+            new_callable=AsyncMock,
+            return_value=False,
         ),
         patch("tools.desktop._lifecycle.load_config", return_value=mock_cfg),
         patch("tools.desktop._lifecycle.publish_event") as mock_publish,
@@ -93,3 +99,34 @@ async def test_ensure_desktop_running_waits_and_polls():
         event = mock_publish.call_args[0][0]
         assert event.payload.type == "desktop_active"
         assert event.payload.resolution == "1280x720"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ensure_desktop_running_restarts_zombie_xvfb():
+    """ensure_desktop_running() restarts when Xvfb is alive but unresponsive."""
+    _lifecycle._ui_notified = False
+    mock_cfg = MagicMock()
+    mock_cfg.desktop.resolution = "1280x720"
+
+    with (
+        patch(
+            "tools.desktop._lifecycle.is_desktop_running",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "tools.desktop._lifecycle._are_desktop_processes_alive",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "tools.desktop._lifecycle._restart_desktop",
+            new_callable=AsyncMock,
+        ) as mock_restart,
+        patch("tools.desktop._lifecycle.load_config", return_value=mock_cfg),
+        patch("tools.desktop._lifecycle.publish_event") as mock_publish,
+    ):
+        await ensure_desktop_running()
+        mock_restart.assert_awaited_once()
+        mock_publish.assert_called_once()

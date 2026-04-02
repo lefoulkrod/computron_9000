@@ -33,10 +33,19 @@ def _notify_ui() -> None:
 
 
 async def is_desktop_running() -> bool:
-    """Check whether the desktop environment is fully running."""
+    """Check whether the desktop environment is fully running.
+
+    Verifies that Xvfb and x11vnc processes exist AND the X server
+    responds to connections (a long-running Xvfb can stop responding
+    while the process stays alive).
+    """
     try:
         output = await _run_desktop_cmd(
-            "pgrep -x Xvfb > /dev/null && pgrep -x x11vnc > /dev/null && echo ok || true",
+            "pgrep -x Xvfb > /dev/null"
+            " && pgrep -x x11vnc > /dev/null"
+            " && xdotool getmouselocation > /dev/null 2>&1"
+            " && echo ok || true",
+            timeout=5,
         )
         result = output.strip().endswith("ok")
         if not result:
@@ -47,13 +56,43 @@ async def is_desktop_running() -> bool:
         return False
 
 
+async def _are_desktop_processes_alive() -> bool:
+    """Check if Xvfb and x11vnc processes exist (no X health check)."""
+    try:
+        output = await _run_desktop_cmd(
+            "pgrep -x Xvfb > /dev/null && pgrep -x x11vnc > /dev/null && echo ok || true",
+            timeout=5,
+        )
+        return output.strip().endswith("ok")
+    except DesktopExecError:
+        return False
+
+
+async def _restart_desktop() -> None:
+    """Kill stale desktop processes and start fresh."""
+    logger.warning("Restarting desktop environment (Xvfb unresponsive)")
+    try:
+        await stop_desktop()
+    except DesktopExecError:
+        pass
+    await start_desktop()
+
+
 async def ensure_desktop_running() -> None:
     """Wait for the desktop environment to be ready and notify the UI.
 
     The desktop starts automatically with the container. This function
     polls until it's up, then emits a DesktopActivePayload event.
+    If Xvfb processes are alive but not responding to X11 connections,
+    the desktop is restarted.
     """
     if await is_desktop_running():
+        _notify_ui()
+        return
+
+    # Processes alive but X not responding → zombie Xvfb, restart it.
+    if await _are_desktop_processes_alive():
+        await _restart_desktop()
         _notify_ui()
         return
 
@@ -65,12 +104,7 @@ async def ensure_desktop_running() -> None:
         await asyncio.sleep(_POLL_INTERVAL_S)
         elapsed += _POLL_INTERVAL_S
         try:
-            output = await _run_desktop_cmd(
-                "pgrep -x Xvfb > /dev/null && pgrep -x x11vnc > /dev/null && echo ok || echo waiting",
-            )
-            result = output.strip()
-            logger.debug("Desktop check at %.1fs: %s", elapsed, result)
-            if result.endswith("ok"):
+            if await is_desktop_running():
                 logger.info("Desktop environment ready after %.1fs", elapsed)
                 _notify_ui()
                 return
