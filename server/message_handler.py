@@ -47,6 +47,7 @@ from agents.desktop import (
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
+    load_conversation_metadata,
     save_agent_events,
     save_conversation_title,
 )
@@ -267,18 +268,25 @@ async def _run_turn(
 
 
 async def _generate_title_if_first_turn(conversation_id: str) -> None:
-    """Generate title if this is the first turn of the conversation."""
+    """Generate title if no title exists in metadata."""
     try:
+        # Check if title already exists
+        metadata = load_conversation_metadata(conversation_id)
+        if metadata.get("title"):
+            return  # Title already exists, skip
+
+        # Load history to get first message
         history = load_conversation_history(conversation_id)
         if not history:
             return
 
-        user_msgs = [m for m in history if m.get("role") == "user"]
-        # Only generate if exactly 1 user message (first turn)
-        if len(user_msgs) != 1:
-            return
+        # Find first user message
+        first_msg = ""
+        for msg in history:
+            if msg.get("role") == "user":
+                first_msg = msg.get("content", "")
+                break
 
-        first_msg = user_msgs[0].get("content", "")
         if not first_msg:
             return
 
