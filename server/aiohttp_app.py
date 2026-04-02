@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
-from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
+from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation, generate_conversation_title
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
@@ -36,6 +36,7 @@ from tools.memory import load_memory, set_key_hidden
 from conversations._store import (
     delete_conversation as _delete_conversation,
     list_conversations as _list_conversations,
+    save_conversation_title,
 )
 from tools.desktop._lifecycle import is_desktop_running, start_desktop
 from tools.desktop._exec import DesktopExecError
@@ -66,6 +67,12 @@ class ChatRequest(BaseModel):
     options: LLMOptions | None = None
     conversation_id: str | None = None
     agent: str | None = None
+
+
+class GenerateTitleRequest(BaseModel):
+    """Request model for generating a conversation title."""
+
+    conversation_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +343,37 @@ async def desktop_start_handler(_request: Request) -> Response:
         )
 
 
+async def generate_title_handler(request: Request) -> Response:
+    """Generate a title for a conversation based on its first message."""
+    conversation_id = request.match_info.get("conversation_id")
+    if not conversation_id:
+        return web.json_response({"error": "conversation_id is required"}, status=400)
+    
+    # Load conversation history to get the first message
+    messages = resume_conversation(conversation_id)
+    if messages is None:
+        return web.json_response({"error": "Conversation not found"}, status=404)
+    
+    # Find first user message
+    first_user_message = None
+    for msg in messages:
+        if msg.get("role") == "user" and msg.get("content"):
+            first_user_message = msg["content"]
+            break
+    
+    if not first_user_message:
+        return web.json_response({"error": "No user message found in conversation"}, status=400)
+    
+    try:
+        title = await generate_conversation_title(first_user_message)
+        # Save the generated title
+        save_conversation_title(conversation_id, title)
+        return web.json_response({"title": title})
+    except Exception as exc:
+        logger.exception("Error generating title for conversation %s", conversation_id)
+        return web.json_response({"error": str(exc)}, status=500)
+
+
 # ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
@@ -371,6 +409,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("GET", "/api/conversations/sessions", list_conversations_handler)
     app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_conversation_handler)
     app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_conversation_handler)
+    app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/generate-title", generate_title_handler)
 
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.
