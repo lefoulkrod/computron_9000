@@ -23,7 +23,7 @@ from ._store import (
     save_summary_record,
 )
 from ._title_generation import (
-    generate_title_from_first_message,
+    generate_conversation_title,
 )
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "ConversationSummary",
     "SummaryRecord",
     "delete_conversation",
+    "generate_conversation_title",
     "list_clearing_records",
     "list_conversations",
     "list_summary_records",
@@ -45,5 +46,4 @@ __all__ = [
     "save_conversation_title",
     "save_sub_agent_history",
     "save_summary_record",
-    "generate_title_from_first_message",
 ]

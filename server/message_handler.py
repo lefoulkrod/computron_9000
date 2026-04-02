@@ -15,7 +15,6 @@ from sdk.events import (
     get_current_dispatcher,
     set_model_options,
 )
-from sdk.providers import get_provider
 from sdk.turn import turn_scope
 from agents.types import Agent, Data, LLMOptions
 from tools.memory import load_memory
@@ -45,7 +44,6 @@ from agents.desktop import (
     SYSTEM_PROMPT as _DESKTOP_PROMPT,
     TOOLS as _DESKTOP_TOOLS,
 )
-from config import load_config
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
@@ -98,6 +96,9 @@ class _Conversation:
 
 # Conversation store keyed by conversation ID.
 _conversations: dict[str, _Conversation] = {}
+
+# Track background tasks to avoid garbage collection (RUF006)
+_background_tasks: set[asyncio.Task] = set()
 
 
 def _get_conversation(conversation_id: str | None = None) -> _Conversation:
@@ -367,4 +368,6 @@ async def handle_user_message(
     finally:
         # After turn completes, kick off title generation if first turn (fire-and-forget)
         if conversation_id:
-            asyncio.create_task(_generate_title_if_first_turn(conversation_id))
+            task = asyncio.create_task(_generate_title_if_first_turn(conversation_id))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)

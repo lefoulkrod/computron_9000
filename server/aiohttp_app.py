@@ -23,8 +23,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from aiohttp.web_request import Request
     from aiohttp.web_response import Response, StreamResponse
 
-import asyncio
-
 from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
@@ -35,11 +33,11 @@ from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
 from conversations import (
     delete_conversation as _delete_conversation,
+    generate_conversation_title,
     list_conversations as _list_conversations,
     save_conversation_title,
-    generate_title_from_first_message,
 )
-from tools.desktop._lifecycle import is_desktop_running, start_desktop
+from tools.desktop._lifecycle import start_desktop
 from tools.desktop._exec import DesktopExecError
 
 logger = logging.getLogger(__name__)
@@ -366,8 +364,8 @@ async def generate_title_handler(request: Request) -> Response:
         return web.json_response({"error": "No user message found in conversation"}, status=400)
     
     try:
-        # Generate title using the refactored function
-        title = generate_title_from_first_message(first_user_message)
+        # Generate title using the async function
+        title = await generate_conversation_title(first_user_message)
         # Save the generated title
         save_conversation_title(conversation_id, title)
         return web.json_response({"title": title})

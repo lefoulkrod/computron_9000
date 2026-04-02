@@ -98,49 +98,4 @@ def _truncate_for_title(message: str, max_length: int = 50) -> str:
     return clean
 
 
-def generate_title_from_first_message(first_message: str) -> str:
-    """Main entry point for generating a title from the first message.
-    
-    This is a synchronous wrapper around the async generate_conversation_title.
-    For use when async context is not available.
-    
-    Args:
-        first_message: The first message from the user.
-        
-    Returns:
-        A generated title string.
-    """
-    import asyncio
-    try:
-        return asyncio.run(generate_conversation_title(first_message))
-    except Exception:
-        logger.exception("Failed to generate title")
-        return _truncate_for_title(first_message)
-
-
-def should_generate_title_for_turn_end(conversation_id: str, messages: list[dict]) -> bool:
-    """Check if title should be generated for this turn_end event.
-    
-    Returns True only on the first turn (exactly 1 user message and 1 assistant message),
-    indicating we should generate a title. Returns False otherwise.
-    
-    Args:
-        conversation_id: The conversation ID (for logging).
-        messages: The conversation history messages.
-        
-    Returns:
-        True if this is the first turn and title should be generated.
-    """
-    user_count = sum(1 for m in messages if m.get("role") == "user")
-    assistant_count = sum(1 for m in messages if m.get("role") == "assistant")
-    
-    # Only generate title on first turn: exactly 1 user and 1 assistant message
-    should_generate = user_count == 1 and assistant_count == 1
-    
-    if should_generate:
-        logger.debug("Should generate title for conversation %s: first turn complete", conversation_id)
-    
-    return should_generate
-
-
 
