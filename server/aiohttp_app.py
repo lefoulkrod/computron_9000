@@ -23,8 +23,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from aiohttp.web_request import Request
     from aiohttp.web_response import Response, StreamResponse
 
-import asyncio
-
 from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
