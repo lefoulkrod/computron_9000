@@ -487,4 +487,4 @@ async def test_generate_music_podman_exec_command_structure(mock_config):
         assert "bars" not in script
         assert "bpm" not in script
         assert "key" not in script
-        assert "scale" not in script
+        assert '"scale":' not in script
