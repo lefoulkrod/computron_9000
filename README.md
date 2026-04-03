@@ -1,22 +1,21 @@
 # COMPUTRON_9000
 
-COMPUTRON_9000 is a self-hosted AI assistant with a Python/aiohttp backend, React frontend, and Ollama for LLM inference. It can browse the web, write and run code, control your desktop, generate media, and more — all running on your own hardware or with a remote Ollama instance.
+COMPUTRON_9000 is a self-hosted AI assistant with a Python/aiohttp backend, React frontend, and Ollama or Anthropic for LLM inference. It can browse the web, write and run code, control your desktop, generate media, and more — all running on your own hardware or with a remote Ollama instance.
 
 ![COMPUTRON_9000 Logo](image.png)
 
 ## Features
 
-- Modern, responsive chat UI (desktop and mobile)
 - Multiple specialized agents:
   - **Browser agent** — full browser automation with human-like interactions (clicking, typing, scrolling, drag-and-drop, form filling, navigation). Uses a numbered-ref system for reliable element targeting and a structured DOM walker for page understanding.
   - **Desktop agent** — controls your Linux desktop via accessibility tree inspection, screenshots, mouse/keyboard actions, and vision-based visual grounding (UI-TARS model)
   - **Coding agent** — writes and executes Python code in a sandboxed Podman container
 - Create, save, and reuse custom tools the assistant writes itself (persisted across restarts)
+- **Autonomous task engine** — define goals with multi-step task pipelines that run in the background on a schedule or on-demand. Supports cron scheduling, task dependencies, parallel execution, automatic retries, and Telegram notifications.
 - Persistent memory across sessions
 - Conversation history with automatic context compaction (summarization)
 - Sub-agent delegation for complex multi-step tasks
 - Configurable browser headless/headed mode
-- Rich terminal logging with context panels
 
 ## Hardware Requirements
 
@@ -50,11 +49,6 @@ cd computron_9000
 # One-command setup: creates venv, installs deps, checks Ollama, installs Playwright
 just setup
 
-# Pull the required Ollama models
-ollama pull gpt-oss:120b       # main chat model
-ollama pull qwen2.5vl:32b      # vision model (browser screenshots)
-ollama pull gemma3:27b          # conversation summarizer
-
 # Start the app
 just run
 ```
@@ -82,10 +76,36 @@ Copy `.env.example` to `.env` and populate as needed:
 | `LLM_API_KEY` | Anthropic API key (when using `anthropic` provider) |
 | `HF_TOKEN` | HuggingFace token for gated models (Flux.1-schnell) |
 | `GITHUB_TOKEN/USER` | GitHub publishing (repos, Pages) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for goal run notifications (via [@BotFather](https://t.me/BotFather)) |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID to receive notifications |
+
+## Task Engine (Goals)
+
+The task engine runs multi-step agent workflows autonomously in the background. Goals are created through the chat interface or the Goals panel in the sidebar.
+
+**Key concepts:**
+- **Goal** — a unit of work with one or more tasks (e.g. "Research and summarize today's AI news")
+- **Task** — a single agent prompt with a designated agent (`computron`, `browser`, or `coder`), optional dependencies on other tasks
+- **Run** — one execution of a goal's task pipeline. One-shot goals run immediately; recurring goals run on a cron schedule.
+
+**Configuration** in `config.yaml`:
+```yaml
+goals:
+  enabled: true
+  poll_interval: 5       # seconds between runner ticks
+  max_concurrent: 2      # max tasks running in parallel
+  max_retries: 3         # retries per failed task
+  timezone: America/Chicago
+  model: "qwen3:32b-cloud"
+  notifications:
+    enabled: true        # requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env
+```
+
+**Telegram notifications:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in your `.env` file to receive notifications when goal runs complete or fail. Create a bot via [@BotFather](https://t.me/BotFather).
 
 ## Virtual Computer (Podman)
 
-The sandboxed container provides code execution, media generation, and desktop environment tooling. Files are shared via a mounted volume at `~/.computron_9000/container_home/`.
+The sandboxed container provides code execution, media generation, and desktop environment tooling. Files are shared via a mounted volume configured by `virtual_computer.home_dir` in `config.yaml` (default: `~/.computron_9000/container_home/`).
 
 ```sh
 just container-build     # build the container image
