@@ -57,9 +57,11 @@ export default function ConversationsPanel({ onLoadConversation }) {
                 <li key={convo.conversation_id} className={shared.item}>
                     <div className={shared.itemMain}>
                         <span className={shared.name}>
-                            {convo.first_message
-                                ? convo.first_message.slice(0, 60) + (convo.first_message.length > 60 ? '…' : '')
-                                : '(empty)'}
+                            {convo.title
+                                ? convo.title.slice(0, 60) + (convo.title.length > 60 ? '…' : '')
+                                : convo.first_message
+                                    ? convo.first_message.slice(0, 60) + (convo.first_message.length > 60 ? '…' : '')
+                                    : '(empty)'}
                         </span>
                     </div>
                     <p className={shared.desc}>

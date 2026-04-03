@@ -109,23 +109,22 @@ const _makeNative = (fn, nativeName) => {
 """
 
 # ---------------------------------------------------------------------------
-# The only patch needed for real Chrome: Playwright forces
-# navigator.webdriver = true via CDP regardless of browser channel.
+# The only patch needed for real Chrome: remove the webdriver property so
+# navigator.webdriver is undefined, matching a real non-automated browser.
+# --disable-blink-features=AutomationControlled prevents Playwright from
+# injecting navigator.webdriver=true via CDP, so deleting the native C++
+# getter (which returns false with that flag) leaves the property fully absent.
+# Redefining it as false is detectable — fp-collect checks for the property's
+# existence, not just its value.
 # ---------------------------------------------------------------------------
 
 _CHROME_CHANNEL_PATCHES_JS = r"""
-// webdriver flag — real Chrome returns false (not undefined) when not automated.
-// Delete the existing property first so Object.getOwnPropertyDescriptor inspections
-// and prototype enumeration (as used by CreepJS) see our clean descriptor.
+// webdriver flag — delete it entirely so navigator.webdriver is undefined.
+// In a real non-automated Chrome the property does not exist at all.
+// --disable-blink-features=AutomationControlled prevents Playwright from
+// re-injecting it, so it is safe to leave it absent.
 delete Navigator.prototype.webdriver;
-const _wdGetter = _makeNative(() => false, 'get webdriver');
-Object.defineProperty(Navigator.prototype, 'webdriver', {
-  get: _wdGetter, configurable: true, enumerable: true,
-});
-// Also define on the navigator instance to cover direct instance property checks
-Object.defineProperty(navigator, 'webdriver', {
-  get: _wdGetter, configurable: true, enumerable: true,
-});
+delete navigator.webdriver;
 """
 
 # ---------------------------------------------------------------------------
@@ -136,15 +135,10 @@ Object.defineProperty(navigator, 'webdriver', {
 # ---------------------------------------------------------------------------
 
 _CHROMIUM_ONLY_PATCHES_JS = r"""
-// 1) webdriver flag — same as Chrome channel patch above
+// 1) webdriver flag — delete it entirely so navigator.webdriver is undefined.
+// See comment on _CHROME_CHANNEL_PATCHES_JS for rationale.
 delete Navigator.prototype.webdriver;
-const _wdGetter = _makeNative(() => false, 'get webdriver');
-Object.defineProperty(Navigator.prototype, 'webdriver', {
-  get: _wdGetter, configurable: true, enumerable: true,
-});
-Object.defineProperty(navigator, 'webdriver', {
-  get: _wdGetter, configurable: true, enumerable: true,
-});
+delete navigator.webdriver;
 
 // 2) outerWidth/outerHeight — must not exceed screen dimensions
 // (Playwright's maximized window can exceed the emulated screen size, which is impossible in a real browser)

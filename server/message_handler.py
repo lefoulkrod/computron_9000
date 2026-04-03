@@ -21,7 +21,12 @@ from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
 from agents._registry import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
-from conversations import load_conversation_history, save_agent_events
+from conversations import (
+    generate_conversation_title,
+    load_conversation_history,
+    save_agent_events,
+    save_conversation_title,
+)
 from sdk import (
     PersistenceHook,
     default_hooks,
@@ -45,6 +50,9 @@ class _Conversation:
 
 # Conversation store keyed by conversation ID.
 _conversations: dict[str, _Conversation] = {}
+
+# Track background tasks to avoid garbage collection (RUF006)
+_background_tasks: set[asyncio.Task] = set()
 
 
 def _get_conversation(conversation_id: str | None = None) -> _Conversation:
@@ -156,6 +164,7 @@ async def _run_turn(
     options: LLMOptions,
     conversation_id: str | None,
     handler: Callable[[AgentEvent], object],
+    is_new_conversation: bool = False,
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
     logger.info(
@@ -211,6 +220,22 @@ async def _run_turn(
             except Exception:
                 logger.exception("Failed to save agent events for '%s'", conv_id)
 
+        # Generate a title for new conversations after the first successful turn
+        if is_new_conversation and conversation_id:
+            task = asyncio.create_task(_generate_title(conversation_id, user_content))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+
+
+async def _generate_title(conversation_id: str, first_message: str) -> None:
+    """Generate and save a title for a new conversation."""
+    try:
+        title = await generate_conversation_title(first_message)
+        save_conversation_title(conversation_id, title)
+        logger.info("Generated title for conversation %s: %r", conversation_id, title)
+    except Exception:
+        logger.exception("Failed to generate title for conversation %s", conversation_id)
+
 
 async def handle_user_message(
     message: str,
@@ -232,6 +257,8 @@ async def handle_user_message(
     Yields:
         AgentEvent: Events from the LLM.
     """
+    cid = conversation_id or _DEFAULT_CONVERSATION_ID
+    is_new_conversation = cid not in _conversations
     conversation = _get_conversation(conversation_id)
 
     user_content = message
@@ -263,6 +290,7 @@ async def handle_user_message(
                     options=options,
                     conversation_id=conversation_id,
                     handler=_queue_handler,
+                    is_new_conversation=is_new_conversation,
                 )
             finally:
                 await queue.put(None)

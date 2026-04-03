@@ -2,6 +2,7 @@
 
 import json
 import struct
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -76,3 +77,32 @@ class TestStripStreamHeaders:
         payload = b"some stderr output"
         framed = _frame(2, payload)
         assert _strip_stream_headers(framed) == payload
+
+
+# ── _run_desktop_cmd timeout ─────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_run_desktop_cmd_timeout():
+    """_run_desktop_cmd raises DesktopExecError when the command times out."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from tools.desktop._exec import DesktopExecError, _run_desktop_cmd
+
+    async def _hang(*args, **kwargs):
+        await asyncio.sleep(999)
+
+    mock_cfg = MagicMock()
+    mock_cfg.desktop.user_display = ":1"
+    mock_cfg.virtual_computer.container_name = "test"
+    mock_cfg.virtual_computer.container_user = "user"
+
+    with (
+        patch("tools.desktop._exec.load_config", return_value=mock_cfg),
+        patch("asyncio.get_running_loop") as mock_loop,
+    ):
+        mock_loop.return_value.run_in_executor = AsyncMock(side_effect=_hang)
+        with pytest.raises(DesktopExecError, match="timed out"):
+            await _run_desktop_cmd("sleep 999", timeout=0.01)

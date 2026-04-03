@@ -39,7 +39,12 @@ def _chrome_contains(needle: str) -> bool:
 
 @pytest.mark.unit
 class TestWebdriverPatch:
-    """navigator.webdriver deep detection defeat — both scripts."""
+    """navigator.webdriver removal — both scripts.
+
+    The property is deleted entirely so navigator.webdriver is undefined,
+    matching a real non-automated browser.  Redefining it as false is
+    detectable by fp-collect which checks for existence, not just value.
+    """
 
     @pytest.mark.parametrize(
         "script", [_CHROMIUM_SCRIPT, _CHROME_SCRIPT], ids=["chromium", "chrome"]
@@ -50,14 +55,15 @@ class TestWebdriverPatch:
     @pytest.mark.parametrize(
         "script", [_CHROMIUM_SCRIPT, _CHROME_SCRIPT], ids=["chromium", "chrome"]
     )
-    def test_returns_false_not_undefined(self, script):
-        assert "() => false" in script
+    def test_deletes_instance_property(self, script):
+        assert "delete navigator.webdriver" in script
 
     @pytest.mark.parametrize(
         "script", [_CHROMIUM_SCRIPT, _CHROME_SCRIPT], ids=["chromium", "chrome"]
     )
-    def test_defines_on_navigator_instance(self, script):
-        assert "Object.defineProperty(navigator, 'webdriver'" in script
+    def test_does_not_redefine_property(self, script):
+        assert "Object.defineProperty(navigator, 'webdriver'" not in script
+        assert "Object.defineProperty(Navigator.prototype, 'webdriver'" not in script
 
 
 # ---------------------------------------------------------------------------

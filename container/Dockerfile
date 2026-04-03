@@ -33,8 +33,6 @@ RUN apt-get update && \
       xvfb x11vnc websockify novnc \
       xdotool xclip scrot wmctrl tini \
       python3-pyatspi at-spi2-core libatk-adaptor \
-      # Browsers
-      firefox chromium-browser \
       # Theme + fonts
       elementary-xfce-icon-theme \
       greybird-gtk-theme \
@@ -42,6 +40,16 @@ RUN apt-get update && \
       fonts-dejavu-core && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# ── Firefox (real .deb, not the snap stub) ────────────────────────────────────
+# Ubuntu 22.04 ships firefox/chromium as snap stubs that don't work in
+# containers.  Use Mozilla's official PPA for a real Firefox package.
+RUN add-apt-repository -y ppa:mozillateam/ppa && \
+    printf 'Package: *\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001\n' \
+      > /etc/apt/preferences.d/mozilla-firefox && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends firefox && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── GitHub CLI ────────────────────────────────────────────────────────────────
 RUN mkdir -p /etc/apt/keyrings && \

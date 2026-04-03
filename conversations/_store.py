@@ -119,8 +119,47 @@ def save_sub_agent_history(
     tmp.replace(path)
 
 
-# -- Conversation listing and deletion -----------------------------------------
+# -- Conversation metadata persistence ---------------------------------------
 
+
+def save_conversation_title(conversation_id: str, title: str) -> None:
+    """Save or update the title for a conversation.
+    
+    Titles are stored in a metadata.json file alongside the conversation history.
+    This allows titles to be persisted independently of the message history.
+    """
+    conv_dir = _get_conv_dir(conversation_id)
+    conv_dir.mkdir(parents=True, exist_ok=True)
+    
+    metadata_path = conv_dir / "metadata.json"
+    metadata: dict[str, Any] = {"title": title}
+    if metadata_path.exists():
+        try:
+            existing = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata = {**existing, "title": title}
+        except Exception:
+            pass
+    
+    tmp = metadata_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    tmp.replace(metadata_path)
+
+
+def load_conversation_metadata(conversation_id: str) -> dict[str, Any]:
+    """Load conversation metadata including title.
+    
+    Returns an empty dict if no metadata exists for the conversation.
+    """
+    path = _get_conv_dir(conversation_id) / "metadata.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+# -- Conversation listing and deletion -----------------------------------------
 
 def list_conversations() -> list[ConversationSummary]:
     """List all conversations by scanning subdirectories."""
@@ -147,9 +186,15 @@ def list_conversations() -> list[ConversationSummary]:
             started_at = datetime.fromtimestamp(
                 history_path.stat().st_mtime, tz=UTC,
             ).isoformat()
+            
+            # Load title from metadata (if available)
+            metadata = load_conversation_metadata(entry.name)
+            title = metadata.get("title", "")
+            
             summaries.append(ConversationSummary(
                 conversation_id=entry.name,
                 first_message=first_msg,
+                title=title,
                 started_at=started_at,
                 turn_count=len(user_msgs),
             ))

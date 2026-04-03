@@ -47,11 +47,15 @@ class DesktopExecError(Exception):
     """Raised when a desktop command fails in the container."""
 
 
+_DEFAULT_TIMEOUT_S = 30.0
+
+
 async def _run_desktop_cmd(
     cmd: str,
     *,
     display: str | None = None,
     user: str | None = None,
+    timeout: float = _DEFAULT_TIMEOUT_S,
 ) -> str:
     """Run a command in the container with DISPLAY set.
 
@@ -61,12 +65,14 @@ async def _run_desktop_cmd(
             ``_current_display`` ContextVar, falling back to the user
             display from config.
         user: Container user to run as. Defaults to config user.
+        timeout: Max seconds to wait for the command.
 
     Returns:
         Combined stdout/stderr output.
 
     Raises:
-        DesktopExecError: If the command fails or container is not found.
+        DesktopExecError: If the command fails, times out, or container
+            is not found.
     """
     config = load_config()
     if display is None:
@@ -95,7 +101,15 @@ async def _run_desktop_cmd(
         return exit_code, decoded
 
     try:
-        exit_code, output = await loop.run_in_executor(None, _exec_sync)
+        exit_code, output = await asyncio.wait_for(
+            loop.run_in_executor(None, _exec_sync),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        logger.error("Desktop command timed out after %ss: %s", timeout, cmd)
+        raise DesktopExecError(
+            "Desktop command timed out after %ss: %s" % (timeout, cmd),
+        )
     except DesktopExecError:
         raise
     except Exception as exc:

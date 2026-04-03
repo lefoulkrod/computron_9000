@@ -11,7 +11,7 @@ default:
 
 
 # =============================================
-# � Variables
+# 📦 Variables
 # =============================================
 # Centralize UI directory path to avoid repetition
 UI_DIR := "server/ui"
@@ -457,6 +457,14 @@ ui-clean-deps:
 
 # Default UI clean preserves node_modules for faster reinstalls
 ui-clean: ui-clean-build
+
+
+# =============================================
+# 📊 Evaluation Tools
+# =============================================
+# Start the compaction evaluation web app
+eval port='8081':
+    PYTHONPATH=. PORT={{port}} uv run python -m tools.compaction_eval.app
 
 
 # =============================================

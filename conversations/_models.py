@@ -61,5 +61,6 @@ class ConversationSummary(BaseModel):
 
     conversation_id: str
     first_message: str = ""
+    title: str = ""  # Auto-generated title (max 60 chars)
     started_at: str = ""
     turn_count: int = 0

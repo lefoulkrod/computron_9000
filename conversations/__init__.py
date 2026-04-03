@@ -14,12 +14,17 @@ from ._store import (
     load_agent_events,
     load_clearing_record,
     load_conversation_history,
+    load_conversation_metadata,
     load_summary_record,
     save_agent_events,
     save_clearing_record,
     save_conversation_history,
+    save_conversation_title,
     save_sub_agent_history,
     save_summary_record,
+)
+from ._title_generation import (
+    generate_conversation_title,
 )
 
 __all__ = [
@@ -28,16 +33,19 @@ __all__ = [
     "ConversationSummary",
     "SummaryRecord",
     "delete_conversation",
+    "generate_conversation_title",
     "list_clearing_records",
     "list_conversations",
     "list_summary_records",
     "load_agent_events",
     "load_clearing_record",
     "load_conversation_history",
+    "load_conversation_metadata",
     "load_summary_record",
     "save_agent_events",
     "save_clearing_record",
     "save_conversation_history",
+    "save_conversation_title",
     "save_sub_agent_history",
     "save_summary_record",
 ]

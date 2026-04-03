@@ -28,7 +28,7 @@ x11vnc -display :99 -forever -nopw -listen 0.0.0.0 -rfbport 5900 -shared -cursor
 # noVNC websocket bridge
 websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &
 
-echo "Desktop ready on :1, VNC on 5900, WebSocket on 6080"
+echo "Desktop ready on :99, VNC on 5900, WebSocket on 6080"
 
 # Keep container alive
 exec sleep infinity
