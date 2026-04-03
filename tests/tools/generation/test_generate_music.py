@@ -55,19 +55,18 @@ async def test_generate_music_function_exists_and_is_async():
 
     expected_params = [
         "prompt",
-        "negative_prompt",
+        "lyrics",
         "duration",
-        "steps",
-        "cfg_scale",
-        "seed",
+        "quality",
     ]
     for param in expected_params:
         assert param in params, f"Missing parameter: {param}"
 
-    # Ensure removed Foundation-1 parameters are not present
-    removed_params = ["bars", "bpm", "key", "scale"]
-    for param in removed_params:
-        assert param not in params, f"Removed parameter should not exist: {param}"
+    # Ensure raw pipeline params are not exposed (presets handle these)
+    hidden_params = ["bars", "bpm", "key", "scale", "negative_prompt",
+                     "steps", "cfg_scale", "seed"]
+    for param in hidden_params:
+        assert param not in params, f"Should not be exposed: {param}"
 
 
 @pytest.mark.unit
@@ -84,7 +83,7 @@ async def test_generate_music_default_parameters(mock_config):
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
             json.dumps({"status": "loading", "message": "Loading model..."}).encode(),
-            json.dumps({"status": "generating", "step": 1, "total_steps": 27}).encode(),
+            json.dumps({"status": "generating", "step": 1, "total_steps": 60}).encode(),
             json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
             b"",  # EOF
         ])
@@ -125,11 +124,9 @@ async def test_generate_music_custom_parameters(mock_config):
              patch.object(Path, "is_file", return_value=True):
             result = await generate_music(
                 prompt="jazz piano",
-                negative_prompt="drums",
+                lyrics="[verse]\nSmooth keys in the night",
                 duration=30,
-                steps=50,
-                cfg_scale=8.5,
-                seed=42,
+                quality="best",
             )
 
         assert result["status"] == "ok"
@@ -137,12 +134,13 @@ async def test_generate_music_custom_parameters(mock_config):
         # Verify the subprocess was called with correct parameters
         call_args = mock_exec.call_args
         assert call_args is not None
-        # The script should contain the parameters
-        # call_args is a tuple (args, kwargs) where args is a tuple
         script_arg = call_args[0][7]  # 7th positional argument is the script
         assert "jazz piano" in script_arg
-        assert "negative_prompt" in script_arg
         assert "duration" in script_arg
+        # "best" vocal preset uses euler scheduler, 80 steps, higher guidance_interval
+        assert "euler" in script_arg
+        assert '"steps": 80' in script_arg
+        assert "guidance_interval" in script_arg
 
 
 @pytest.mark.unit
@@ -183,8 +181,8 @@ async def test_generate_music_publishes_generation_preview_events(mock_config):
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
             json.dumps({"status": "loading", "message": "Loading model..."}).encode(),
-            json.dumps({"status": "generating", "step": 1, "total_steps": 27, "message": "Step 1/27"}).encode(),
-            json.dumps({"status": "generating", "step": 27, "total_steps": 27, "message": "Finalizing..."}).encode(),
+            json.dumps({"status": "generating", "step": 1, "total_steps": 60, "message": "Step 1/60"}).encode(),
+            json.dumps({"status": "generating", "step": 60, "total_steps": 60, "message": "Finalizing..."}).encode(),
             json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
@@ -246,7 +244,7 @@ async def test_generate_music_publishes_file_output_event(mock_config):
 
         payload = file_output_calls[0].args[0].payload
         assert payload.filename == "generated_12345.wav"
-        assert payload.content_type == "audio/wav"
+        assert payload.content_type in ("audio/wav", "audio/x-wav")
 
 
 @pytest.mark.unit
@@ -382,8 +380,8 @@ async def test_generate_music_parses_json_lines_correctly(mock_config):
     """Test that generate_music correctly parses JSONL output from subprocess."""
     events = [
         {"status": "loading", "message": "Loading ACE-Step model..."},
-        {"status": "generating", "step": 10, "total_steps": 27, "message": "Step 10/27"},
-        {"status": "generating", "step": 20, "total_steps": 27, "message": "Step 20/27"},
+        {"status": "generating", "step": 10, "total_steps": 60, "message": "Step 10/60"},
+        {"status": "generating", "step": 20, "total_steps": 60, "message": "Step 20/60"},
         {"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav", "duration": 30.0},
     ]
 
@@ -460,8 +458,7 @@ async def test_generate_music_podman_exec_command_structure(mock_config):
             await generate_music(
                 "ambient synth",
                 duration=60,
-                steps=27,
-                cfg_scale=7.0,
+                quality="fast",
             )
 
         # Verify podman exec was called with correct arguments
@@ -483,8 +480,6 @@ async def test_generate_music_podman_exec_command_structure(mock_config):
         assert "generate_stream" in script
         assert "ambient synth" in script or "ambient" in script.lower()
         assert "duration" in script
-        # Ensure removed Foundation-1 parameters are not in script
-        assert "bars" not in script
-        assert "bpm" not in script
-        assert "key" not in script
-        assert '"scale":' not in script
+        # "fast" instrumental preset uses pingpong scheduler, 25 steps
+        assert "pingpong" in script
+        assert '"steps": 25' in script

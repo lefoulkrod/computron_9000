@@ -109,7 +109,7 @@ ACE-Step works best with descriptive natural language:
 ACE-Step requires approximately 12GB VRAM:
 - Fits on RTX 3060 (12GB) with model CPU offloading
 - Recommended: RTX 3090/3090 Ti (24GB) for faster generation
-- Uses `enable_model_cpu_offload()` for memory efficiency
+- Uses ACEStepPipeline's built-in `cpu_offload=True` for memory efficiency
 
 ## Branch Strategy
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import uuid
 from pathlib import Path
 
@@ -30,27 +31,60 @@ logger = logging.getLogger(__name__)
 _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
 
 
+_QUALITY_PRESETS = {
+    "fast": {
+        "instrumental": {"steps": 25, "scheduler_type": "pingpong", "cfg_scale": 15.0,
+                         "guidance_interval": 0.5, "omega_scale": 10},
+        "vocal":        {"steps": 25, "scheduler_type": "pingpong", "cfg_scale": 15.0,
+                         "guidance_interval": 0.7, "omega_scale": 15},
+    },
+    "quality": {
+        "instrumental": {"steps": 60, "scheduler_type": "euler", "cfg_scale": 15.0,
+                         "guidance_interval": 0.5, "omega_scale": 10},
+        "vocal":        {"steps": 60, "scheduler_type": "euler", "cfg_scale": 15.0,
+                         "guidance_interval": 0.7, "omega_scale": 15},
+    },
+    "best": {
+        "instrumental": {"steps": 80, "scheduler_type": "euler", "cfg_scale": 15.0,
+                         "guidance_interval": 0.6, "omega_scale": 15},
+        "vocal":        {"steps": 80, "scheduler_type": "euler", "cfg_scale": 15.0,
+                         "guidance_interval": 0.8, "omega_scale": 25},
+    },
+}
+
+
 async def generate_music(
     prompt: str,
-    negative_prompt: str = "",
-    duration: float = 30.0,
-    steps: int = 27,
-    cfg_scale: float = 7.0,
-    seed: int = -1,
+    lyrics: str = "",
+    duration: float = 60.0,
+    quality: str = "quality",
 ) -> dict[str, str]:
     """Generate music using ACE-Step.
 
     ACE-Step is a diffusion-based music generation model capable of creating
-    full songs up to 4 minutes in length. It uses natural language prompts
-    to generate high-quality instrumental music.
+    full songs with vocals up to 4 minutes in length.
 
     Args:
-        prompt: Text describing the music (genre, mood, instruments, etc.).
-        negative_prompt: Things to avoid in the generated music.
+        prompt: Text describing the music style (genre, mood, instruments).
+            Example: "Upbeat pop song with synths and guitar"
+        lyrics: Song lyrics with structure tags. Use [verse], [chorus],
+            [bridge], [intro], [outro], [interlude], [hook], [break],
+            [pre-chorus], [post-chorus] to define sections. Leave empty
+            for instrumental music. Example::
+
+                [verse]
+                Walking down the empty street
+                The city lights shine at my feet
+
+                [chorus]
+                We're alive tonight
+                Nothing's gonna stop us now
+
+            Supports 17 languages including English, Spanish, Chinese,
+            Japanese, French, German, Korean, and more.
         duration: Length of the generated audio in seconds (max 240s / 4 min).
-        steps: Inference steps (higher = better quality, default 27).
-        cfg_scale: CFG guidance scale (default 7.0).
-        seed: Random seed (-1 for random).
+        quality: "fast" (quick drafts), "quality" (default, good balance),
+            or "best" (highest quality, slower).
 
     Returns:
         Dict with ``status``, ``path``, and ``media_type``.
@@ -61,13 +95,19 @@ async def generate_music(
     container_name = cfg.inference_container.container_name
     container_user = cfg.inference_container.container_user
 
+    # Resolve quality preset, auto-selecting vocal vs instrumental settings
+    quality_tier = _QUALITY_PRESETS.get(quality, _QUALITY_PRESETS["quality"])
+    preset = quality_tier["vocal"] if lyrics else quality_tier["instrumental"]
+
     # Construct parameters dict for the inference client
     params = {
-        "negative_prompt": negative_prompt,
+        "lyrics": lyrics,
         "duration": min(duration, 240.0),  # Cap at 4 minutes
-        "steps": steps,
-        "cfg_scale": cfg_scale,
-        "seed": seed if seed >= 0 else None,
+        "steps": preset["steps"],
+        "cfg_scale": preset["cfg_scale"],
+        "scheduler_type": preset["scheduler_type"],
+        "guidance_interval": preset["guidance_interval"],
+        "omega_scale": preset["omega_scale"],
     }
     params_json = json.dumps(params)
 
@@ -161,7 +201,7 @@ async def generate_music(
             host_path = Path(host_home) / final_path.lstrip("/")
 
         if host_path.exists() and host_path.is_file():
-            content_type = "audio/wav"
+            content_type = mimetypes.guess_type(host_path.name)[0] or "audio/wav"
 
             # Publish final preview referencing the container path
             _publish_preview(
@@ -188,6 +228,7 @@ async def generate_music(
         return {"status": "ok", "path": final_path, "media_type": media_type}
 
     except TimeoutError:
+        proc.kill()
         _publish_preview(gen_id, media_type, status="failed",
                          message=f"Generation timed out after {_STREAM_TIMEOUT}s")
         return {"status": "error", "message": "Generation timed out"}

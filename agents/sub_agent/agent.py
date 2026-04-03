@@ -24,7 +24,7 @@ from sdk.events import agent_span, get_model_options
 from agents.types import Agent
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.generation import generate_media, generate_music
+from tools.generation import generate_image, generate_music
 from tools.virtual_computer import (
     apply_text_patch,
     describe_image,
@@ -46,7 +46,7 @@ _SYSTEM_PROMPT = dedent(
     run_custom_tool). Prefer write_file over shell redirects. Use grep to find code,
     then read_file(start=N, end=M) for targeted sections — avoid reading entire large
     files. Use apply_text_patch for precise edits and replace_in_file for bulk
-    find/replace. Use generate_media
+    find/replace. Use generate_image
     for images. Use run_browser_agent_as_tool for any web browsing. Use describe_image
     to analyze images from the container.
     Do NOT run "pip install torch".
@@ -79,7 +79,7 @@ _TOOLS = [
     # Shell
     run_bash_cmd,
     # Media
-    generate_media,
+    generate_image,
     generate_music,
     describe_image,
     # Browsing

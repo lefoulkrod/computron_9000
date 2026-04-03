@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
 
 
-async def generate_media(
+async def generate_image(
     description: str,
     model: str = "fast",
     size: str = "square",
@@ -171,11 +171,12 @@ async def generate_media(
         return {"status": "ok", "path": final_path, "media_type": media_type}
 
     except TimeoutError:
+        proc.kill()
         _publish_preview(gen_id, media_type, status="failed",
                          message=f"Generation timed out after {_STREAM_TIMEOUT}s")
         return {"status": "error", "message": "Generation timed out"}
     except Exception as exc:
-        logger.exception("generate_media failed")
+        logger.exception("generate_image failed")
         _publish_preview(gen_id, media_type, status="failed", message=str(exc))
         return {"status": "error", "message": str(exc)}
 

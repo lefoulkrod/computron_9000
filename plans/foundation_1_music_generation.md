@@ -49,7 +49,7 @@ The existing inference system consists of:
    - `generate(type, description, **params)` - blocking
    - `generate_stream(type, description, **params)` - streaming
 
-3. **generate_media.py** (host-side)
+3. **generate_image.py** (host-side)
    - Host tool that calls container client via podman exec
    - Publishes `GenerationPreviewPayload` events
    - Returns file output for chat
@@ -117,7 +117,7 @@ Modify `generate()` and `generate_stream()` in `inference_client.py`:
 ### Phase 3: Host Tool Implementation
 
 #### 3.1 Extend or Create Tool
-**Option A: Extend `generate_media.py`**
+**Option A: Extend `generate_image.py`**
 - Add `media_type="audio"` support
 - Add music-specific parameters
 - Pros: Single tool for all media generation
@@ -177,7 +177,7 @@ Add `generate_music` to:
 
 #### 4.2 Update Agent Prompts
 Add instructions for music generation:
-- When to use generate_music vs generate_media
+- When to use generate_music vs generate_image
 - Prompt structure guidelines
 - Parameter recommendations
 

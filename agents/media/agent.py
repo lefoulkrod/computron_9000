@@ -14,7 +14,7 @@ from agents.browser import browser_agent_tool
 from sdk import make_run_agent_as_tool_function
 from tools.custom_tools import lookup_custom_tools, run_custom_tool
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.generation import generate_media, generate_music
+from tools.generation import generate_image, generate_music
 from tools.virtual_computer import describe_image, output_file, play_audio, run_bash_cmd
 
 logger = logging.getLogger(__name__)
@@ -28,9 +28,9 @@ SYSTEM_PROMPT = dedent(
     """
     You are INFERENCE_AGENT, a GPU inference specialist inside COMPUTRON_9000.
 
-    IMAGES — ALWAYS use generate_media(description). It handles GPU, model loading,
-    VRAM, and delivers to the UI automatically. Do NOT call output_file after generate_media.
-    NEVER load Flux models directly — always use generate_media.
+    IMAGES — ALWAYS use generate_image(description). It handles GPU, model loading,
+    VRAM, and delivers to the UI automatically. Do NOT call output_file after generate_image.
+    NEVER load Flux models directly — always use generate_image.
     Available models: "quality" (default, best results), "photorealistic" (realistic photos),
     "fast" (quick drafts). Pick based on the request.
 
@@ -43,10 +43,11 @@ SYSTEM_PROMPT = dedent(
     (e.g. numpy + wave module, or ffmpeg). Do NOT use TTS/voice tools for sound effects.
 
     MUSIC GENERATION — use generate_music for creating full songs and instrumental music.
-    - Use natural language prompts describing genre, mood, and instruments
-    - Example: "Energetic electronic dance music with driving bassline and synth leads"
-    - Specify duration in seconds (up to 240 seconds / 4 minutes)
-    - ACE-Step understands natural language descriptions of instruments, genres, and moods
+    - prompt: describe genre, mood, and instruments (e.g. "Upbeat pop song with synths")
+    - lyrics: optional song lyrics with structure tags for vocals. Leave empty for
+      instrumental. Use tags like [verse], [chorus], [bridge], [intro], [outro],
+      [pre-chorus], [hook]. Supports 17 languages.
+    - duration: length in seconds (up to 240 / 4 minutes)
 
     Call output_file(path) and play_audio(path) for all audio output.
 
@@ -64,7 +65,7 @@ SYSTEM_PROMPT = dedent(
     """
 )
 TOOLS = [
-    generate_media,
+    generate_image,
     generate_music,
     run_bash_cmd,
     run_custom_tool,

@@ -41,6 +41,11 @@ RUN python3.12 -m pip install --no-cache-dir \
       transformers accelerate safetensors sentencepiece protobuf \
       "huggingface_hub[cli]" bitsandbytes ftfy opencv-python-headless
 
+# Music generation stack (ACE-Step)
+# Installed as a package to avoid trust_remote_code=True supply-chain risk.
+RUN python3.12 -m pip install --no-cache-dir \
+      git+https://github.com/ace-step/ACE-Step.git
+
 # Pre-download TAESD (AutoencoderTiny) for cheap image preview decoding (~50 MB).
 # Used by the inference server to stream denoising previews during generation.
 RUN python3.12 -c "from diffusers import AutoencoderTiny; AutoencoderTiny.from_pretrained('madebyollin/taef1')"
