@@ -1,0 +1,133 @@
+.progressBlock {
+    background: var(--bg-secondary, #1e1e2e);
+    border: 1px solid var(--border-color, #363647);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    font-size: 13px;
+    transition: opacity 0.3s ease;
+}
+
+.progressBlock.complete {
+    opacity: 0.8;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+}
+
+.spinnerTrack {
+    stroke: var(--spinner-track, #4a4a5e);
+}
+
+.spinnerArc {
+    stroke: var(--accent-color, #4d9ef6);
+    stroke-dasharray: 20, 80;
+    stroke-dashoffset: 0;
+    animation: spinnerArc 2s ease-in-out infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes spinnerArc {
+    0% { stroke-dashoffset: 60; }
+    50% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: -60; }
+}
+
+.checkIcon {
+    width: 18px;
+    height: 18px;
+    color: var(--success-color, #4ade80);
+}
+
+.errorIcon {
+    width: 18px;
+    height: 18px;
+    color: var(--error-color, #f87171);
+}
+
+.info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.toolName {
+    font-weight: 600;
+    color: var(--text-primary, #e8e8ef);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stage {
+    font-size: 12px;
+    color: var(--text-secondary, #a0a0b0);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progressBar {
+    height: 4px;
+    background: var(--progress-track, #2a2a3a);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.progressFill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-color, #4d9ef6), var(--accent-secondary, #7c3aed));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.message {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary, #a0a0b0);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.logContainer {
+    margin-top: 10px;
+    background: var(--bg-tertiary, #16161e);
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.log {
+    margin: 0;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-muted, #808090);
+    white-space: pre-wrap;
+    word-break: break-all;
+}

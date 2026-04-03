@@ -26,7 +26,8 @@ export default function ChatMessages({ messages, onPreview }) {
             {messages.map((msg, idx) => {
                 if (msg.role === 'assistant' && msg.agentId) {
                     const entries = agents[msg.agentId]?.activityLog;
-                    return <Message key={msg.id || idx} {...msg} entries={entries} onPreview={onPreview} />;
+                    const toolProgress = agents[msg.agentId]?.toolProgress;
+                    return <Message key={msg.id || idx} {...msg} entries={entries} toolProgress={toolProgress} onPreview={onPreview} />;
                 }
                 return <Message key={msg.id || idx} {...msg} onPreview={onPreview} />;
             })}

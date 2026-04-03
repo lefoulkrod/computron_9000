@@ -87,6 +87,33 @@ function _handleStreamEvent(data, callbacks) {
         }
     }
 
+    // Tool progress events → stream progress updates for long-running tools
+    if (type === 'tool_progress') {
+        if (callbacks.onToolProgress) {
+            callbacks.onToolProgress({
+                toolCallId: payload.tool_call_id,
+                toolName: payload.tool_name,
+                message: payload.message,
+                output: payload.output,
+                progressPercent: payload.progress_percent,
+                agentId,
+            });
+        }
+    }
+
+    // Tool stage events → stage transitions for long-running tools
+    if (type === 'tool_stage') {
+        if (callbacks.onToolStage) {
+            callbacks.onToolStage({
+                toolCallId: payload.tool_call_id,
+                toolName: payload.tool_name,
+                stage: payload.stage,
+                stageLabel: payload.stage_label,
+                agentId,
+            });
+        }
+    }
+
     if (type === 'audio_playback') {
         callbacks.onAudioPlayback({
             key: Date.now(),

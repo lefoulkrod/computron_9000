@@ -36,6 +36,8 @@ from ._models import (
     TerminalOutputPayload,
     ToolCallPayload,
     ToolCreatedPayload,
+    ToolProgressPayload,
+    ToolStagePayload,
     TurnEndPayload,
 )
 
@@ -56,6 +58,8 @@ __all__ = [
     "TerminalOutputPayload",
     "ToolCallPayload",
     "ToolCreatedPayload",
+    "ToolProgressPayload",
+    "ToolStagePayload",
     "TurnEndPayload",
     "agent_span",
     "get_current_agent_id",

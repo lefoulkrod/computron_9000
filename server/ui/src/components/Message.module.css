@@ -303,6 +303,14 @@
   opacity: 0.85;
 }
 
+/* Tool progress container */
+.toolProgressContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
 /* Inline markdown images (charts, plots, etc.) */
 .bubble img {
   max-width: 100%;

@@ -133,6 +133,26 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 entry: { type: 'tool_call', name, timestamp: Date.now() },
             });
         },
+        // Tool progress events — stream progress updates for long-running tools
+        onToolProgress: ({ toolCallId, toolName, message, output, progressPercent, agentId }) => {
+            agentDispatch({
+                type: 'UPDATE_TOOL_PROGRESS',
+                agentId,
+                toolCallId,
+                toolName,
+                progress: { message, output, progressPercent, timestamp: Date.now() },
+            });
+        },
+        // Tool stage events — stage transitions for long-running tools
+        onToolStage: ({ toolCallId, toolName, stage, stageLabel, agentId }) => {
+            agentDispatch({
+                type: 'UPDATE_TOOL_STAGE',
+                agentId,
+                toolCallId,
+                toolName,
+                stage: { stage, stageLabel, timestamp: Date.now() },
+            });
+        },
         // Sub-agent text tokens, batched ~60x/sec. We merge content and
         // thinking in one update so they don't get jumbled together.
         onAgentContent: ({ agentId, content, thinking }) => {

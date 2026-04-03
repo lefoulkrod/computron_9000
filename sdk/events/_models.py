@@ -244,6 +244,53 @@ class AgentCompletedPayload(BaseModel):
     status: Literal["success", "error", "stopped"]
 
 
+class ToolProgressPayload(BaseModel):
+    """Emitted during long-running tool execution to stream progress updates.
+
+    Multiple events share the same ``tool_call_id`` to track a single tool
+    invocation. Progress is incremental — the frontend should append ``message``
+    or ``output`` to the running log.
+
+    Attributes:
+        type: Discriminator; always "tool_progress".
+        tool_call_id: Unique identifier correlating progress events.
+        tool_name: The name of the tool being executed.
+        message: Human-readable progress message (e.g., "Line 45 of 100").
+        output: Optional incremental output (e.g., stdout chunk).
+        progress_percent: Optional completion percentage (0.0-100.0).
+    """
+
+    type: Literal["tool_progress"]
+    tool_call_id: str
+    tool_name: str
+    message: str | None = None
+    output: str | None = None
+    progress_percent: float | None = None
+
+
+class ToolStagePayload(BaseModel):
+    """Emitted when a tool transitions between execution stages.
+
+    Unlike ``ToolProgressPayload`` which streams incremental updates,
+    ``ToolStagePayload`` signals discrete phase changes (e.g., "connecting",
+    "navigating", "extracting"). Useful for showing spinner states and
+    stage indicators in the UI.
+
+    Attributes:
+        type: Discriminator; always "tool_stage".
+        tool_call_id: Unique identifier correlating events for this invocation.
+        tool_name: The name of the tool being executed.
+        stage: Machine-readable stage identifier (e.g., "navigating").
+        stage_label: Human-readable stage description (e.g., "Navigating to page...").
+    """
+
+    type: Literal["tool_stage"]
+    tool_call_id: str
+    tool_name: str
+    stage: str
+    stage_label: str | None = None
+
+
 AgentEventPayload = Annotated[
     ContentPayload
     | TurnEndPayload
@@ -257,7 +304,9 @@ AgentEventPayload = Annotated[
     | ContextUsagePayload
     | DesktopActivePayload
     | AgentStartedPayload
-    | AgentCompletedPayload,
+    | AgentCompletedPayload
+    | ToolProgressPayload
+    | ToolStagePayload,
     Field(discriminator="type"),
 ]
 
@@ -298,5 +347,7 @@ __all__ = [
     "TerminalOutputPayload",
     "ToolCallPayload",
     "ToolCreatedPayload",
+    "ToolProgressPayload",
+    "ToolStagePayload",
     "TurnEndPayload",
 ]

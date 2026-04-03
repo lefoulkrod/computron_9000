@@ -248,6 +248,66 @@ function _agentReducer(state, action) {
             };
         }
 
+        // Update tool progress for a running tool
+        case 'UPDATE_TOOL_PROGRESS': {
+            const { agentId, toolCallId, toolName, progress } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            const toolProgress = agent.toolProgress || {};
+            const existing = toolProgress[toolCallId] || {
+                toolCallId,
+                toolName,
+                history: [],
+            };
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: {
+                        ...agent,
+                        toolProgress: {
+                            ...toolProgress,
+                            [toolCallId]: {
+                                ...existing,
+                                ...progress,
+                                history: [...existing.history, progress],
+                            },
+                        },
+                    },
+                },
+            };
+        }
+
+        // Update tool stage for a running tool
+        case 'UPDATE_TOOL_STAGE': {
+            const { agentId, toolCallId, toolName, stage } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            const toolProgress = agent.toolProgress || {};
+            const existing = toolProgress[toolCallId] || {
+                toolCallId,
+                toolName,
+                history: [],
+            };
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: {
+                        ...agent,
+                        toolProgress: {
+                            ...toolProgress,
+                            [toolCallId]: {
+                                ...existing,
+                                stage: stage.stage,
+                                stageLabel: stage.stageLabel,
+                            },
+                        },
+                    },
+                },
+            };
+        }
+
         case 'UPDATE_ITERATION': {
             const { agentId, iteration, maxIterations, contextUsage } = action;
             const agent = state.agents[agentId];
