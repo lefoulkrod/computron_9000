@@ -47,7 +47,6 @@ from agents.desktop import (
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
-    load_conversation_metadata,
     save_agent_events,
     save_conversation_title,
 )
@@ -211,6 +210,7 @@ async def _run_turn(
     options: LLMOptions,
     conversation_id: str | None,
     handler: Callable[[AgentEvent], object],
+    is_new_conversation: bool = False,
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
     logger.info(
@@ -266,32 +266,17 @@ async def _run_turn(
             except Exception:
                 logger.exception("Failed to save agent events for '%s'", conv_id)
 
+        # Generate a title for new conversations after the first successful turn
+        if is_new_conversation and conversation_id:
+            task = asyncio.create_task(_generate_title(conversation_id, user_content))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
 
-async def _generate_title_if_first_turn(conversation_id: str) -> None:
-    """Generate title if no title exists in metadata."""
+
+async def _generate_title(conversation_id: str, first_message: str) -> None:
+    """Generate and save a title for a new conversation."""
     try:
-        # Check if title already exists
-        metadata = load_conversation_metadata(conversation_id)
-        if metadata.get("title"):
-            return  # Title already exists, skip
-
-        # Load history to get first message
-        history = load_conversation_history(conversation_id)
-        if not history:
-            return
-
-        # Find first user message
-        first_msg = ""
-        for msg in history:
-            if msg.get("role") == "user":
-                first_msg = msg.get("content", "")
-                break
-
-        if not first_msg:
-            return
-
-        # Generate and save title
-        title = await generate_conversation_title(first_msg)
+        title = await generate_conversation_title(first_message)
         save_conversation_title(conversation_id, title)
         logger.info("Generated title for conversation %s: %r", conversation_id, title)
     except Exception:
@@ -318,6 +303,8 @@ async def handle_user_message(
     Yields:
         AgentEvent: Events from the LLM.
     """
+    cid = conversation_id or _DEFAULT_CONVERSATION_ID
+    is_new_conversation = cid not in _conversations
     conversation = _get_conversation(conversation_id)
 
     user_content = message
@@ -349,6 +336,7 @@ async def handle_user_message(
                     options=options,
                     conversation_id=conversation_id,
                     handler=_queue_handler,
+                    is_new_conversation=is_new_conversation,
                 )
             finally:
                 await queue.put(None)
@@ -373,9 +361,3 @@ async def handle_user_message(
             content="An error occurred while processing your message.",
         ))
         yield AgentEvent(payload=TurnEndPayload(type="turn_end"))
-    finally:
-        # After turn completes, kick off title generation if first turn (fire-and-forget)
-        if conversation_id:
-            task = asyncio.create_task(_generate_title_if_first_turn(conversation_id))
-            _background_tasks.add(task)
-            task.add_done_callback(_background_tasks.discard)

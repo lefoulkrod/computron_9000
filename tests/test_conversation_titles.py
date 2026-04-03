@@ -1,6 +1,5 @@
 """Tests for conversation title generation feature."""
 
-import pytest
 from datetime import datetime, UTC
 from conversations import ConversationSummary
 
@@ -45,16 +44,3 @@ def test_conversation_summary_model_dump():
     assert data["turn_count"] == 5
 
 
-@pytest.mark.asyncio
-async def test_generate_conversation_title():
-    """Test the title generation function (requires running Ollama)."""
-    from conversations._title_generation import generate_conversation_title
-    
-    # Test with a simple message
-    title = await generate_conversation_title("What is the capital of France?")
-    
-    # Should return a non-empty string
-    assert isinstance(title, str)
-    assert len(title) > 0
-    # Should be reasonably short (not the full message)
-    assert len(title) < 100
