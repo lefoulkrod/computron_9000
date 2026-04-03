@@ -14,7 +14,7 @@ from agents.browser import browser_agent_tool
 from sdk import make_run_agent_as_tool_function
 from tools.custom_tools import lookup_custom_tools, run_custom_tool
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.generation import generate_media
+from tools.generation import generate_media, generate_music
 from tools.virtual_computer import describe_image, output_file, play_audio, run_bash_cmd
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,12 @@ SYSTEM_PROMPT = dedent(
     write a Python script with run_bash_cmd that generates WAV files programmatically
     (e.g. numpy + wave module, or ffmpeg). Do NOT use TTS/voice tools for sound effects.
 
+    MUSIC GENERATION — use generate_music for creating musical samples and loops.
+    - Use structured prompts: "Instrument, Timbre, FX, Notation, Bars, BPM, Key"
+    - Example: "Synth Lead, Supersaw, Bright, Wide, Melody, 8 Bars, 128 BPM, C minor"
+    - Always include Bars (4 or 8), BPM (100-150), Key, and Scale (major/minor)
+    - Supports instrument families: Synth, Keys, Bass, Strings, Mallet, Wind, Guitar, Brass, Vocal
+
     Call output_file(path) and play_audio(path) for all audio output.
 
     Use describe_image(path, prompt) to analyze images from the container.
@@ -59,6 +65,7 @@ SYSTEM_PROMPT = dedent(
 )
 TOOLS = [
     generate_media,
+    generate_music,
     run_bash_cmd,
     run_custom_tool,
     lookup_custom_tools,

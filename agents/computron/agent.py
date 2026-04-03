@@ -9,7 +9,7 @@ from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
 from agents.sub_agent import run_sub_agent
-from tools.generation import generate_media
+from tools.generation import generate_media, generate_music
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.memory import forget, remember
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
@@ -70,6 +70,13 @@ SYSTEM_PROMPT = dedent(
 
         IMAGE GENERATION — use the generate_media tool directly for image generation.
         Do NOT delegate image generation to COMPUTER_AGENT or other sub-agents.
+
+        MUSIC GENERATION — use generate_music for creating musical samples and loops.
+        - Use structured prompts: "Instrument, Timbre, FX, Notation, Bars, BPM, Key"
+        - Example: "Synth Lead, Supersaw, Bright, Wide, Melody, 8 Bars, 128 BPM, C minor"
+        - Always include Bars (4 or 8), BPM (100-150), Key, and Scale (major/minor)
+        - Supports instrument families: Synth, Keys, Bass, Strings, Mallet, Wind, Guitar, Brass, Vocal
+
         - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
           Use ONLY for web browsing — never for creating files or assets.
         - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.
@@ -113,6 +120,7 @@ TOOLS = [
     browser_agent_tool,
     desktop_agent_tool,
     generate_media,
+    generate_music,
     create_custom_tool,
     lookup_custom_tools,
     run_custom_tool,

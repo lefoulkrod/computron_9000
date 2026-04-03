@@ -24,7 +24,7 @@ from sdk.events import agent_span, get_model_options
 from agents.types import Agent
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.generation import generate_media
+from tools.generation import generate_media, generate_music
 from tools.virtual_computer import (
     apply_text_patch,
     describe_image,
@@ -80,6 +80,7 @@ _TOOLS = [
     run_bash_cmd,
     # Media
     generate_media,
+    generate_music,
     describe_image,
     # Browsing
     browser_agent_tool,
