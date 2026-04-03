@@ -15,6 +15,9 @@ import AgentNetwork from './components/AgentNetwork.jsx';
 import AgentActivityView from './components/AgentActivityView.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import FlyoutPanel from './components/FlyoutPanel.jsx';
+import GoalsPanel from './components/goals/GoalsPanel.jsx';
+import GoalView from './components/goals/GoalView.jsx';
+import useGoals from './hooks/useGoals.js';
 import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
 import { AgentStateProvider, useAgentState, useAgentDispatch } from './hooks/useAgentState.jsx';
@@ -60,6 +63,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [nudgeToast, setNudgeToast] = useState(null);
 
     const modelSettings = useModelSettings();
+    const goalsState = useGoals(flyoutPanel === 'goals');
     const { addToast } = useToast();
 
     // ── Read preview data from root agent in the reducer ────────────
@@ -247,6 +251,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         if (panel === 'agents') {
                             // Agents icon returns to network overview
                             agentDispatch({ type: 'SELECT_AGENT', agentId: null });
+                            goalsState.setSelectedGoalId(null);
                             setFlyoutPanel(null);
                         } else {
                             setFlyoutPanel(panel);
@@ -254,13 +259,14 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     }}
                 />
 
-                {/* Flyout panel (settings, memory, etc.) — not for 'agents' which controls the main view */}
+                {/* Flyout panel (settings, memory, goals, etc.) — not for 'agents' which controls the main view */}
                 {flyoutPanel && flyoutPanel !== 'agents' && (
                     <FlyoutPanel
                         title={flyoutPanel === 'settings' ? 'Model Settings'
                             : flyoutPanel === 'memory' ? 'Memory'
                             : flyoutPanel === 'conversations' ? 'Conversations'
                             : flyoutPanel === 'tools' ? 'Custom Tools'
+                            : flyoutPanel === 'goals' ? 'Goals'
                             : 'Panel'}
                         onClose={() => setFlyoutPanel(null)}
                     >
@@ -276,25 +282,49 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         {flyoutPanel === 'tools' && (
                             <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />
                         )}
+                        {flyoutPanel === 'goals' && (
+                            <GoalsPanel
+                                goals={goalsState.goals}
+                                runnerStatus={goalsState.runnerStatus}
+                                onSelectGoal={(goalId) => {
+                                    goalsState.setSelectedGoalId(goalId);
+                                    setFlyoutPanel(null);
+                                }}
+                            />
+                        )}
                     </FlyoutPanel>
                 )}
 
                 {/* Main content area */}
                 <div className={styles.mainContent}>
+                    {/* Goal detail — full-screen view replacing everything */}
+                    {goalsState.selectedGoalId && (
+                        <GoalView
+                            goal={goalsState.goals.find(g => g.id === goalsState.selectedGoalId) || { id: goalsState.selectedGoalId, description: 'Loading...' }}
+                            onBack={() => { goalsState.setSelectedGoalId(null); setFlyoutPanel('goals'); }}
+                            onDeleteGoal={(goalId) => goalsState.deleteGoal(goalId)}
+                            onDeleteRun={(runId) => goalsState.deleteRun(goalsState.selectedGoalId, runId)}
+                            onPauseGoal={(goalId) => goalsState.pauseGoal(goalId)}
+                            onResumeGoal={(goalId) => goalsState.resumeGoal(goalId)}
+                            onTriggerGoal={(goalId) => goalsState.triggerGoal(goalId)}
+                            fetchDetail={() => goalsState.fetchGoalDetail(goalsState.selectedGoalId)}
+                        />
+                    )}
+
                     {/* Agent detail — full-screen activity view */}
-                    {selectedAgent && (
+                    {!goalsState.selectedGoalId && selectedAgent && (
                         <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
                     )}
 
                     {/* Network graph — shown alongside chat once sub-agents have appeared */}
-                    {!selectedAgent && networkActive && (
+                    {!goalsState.selectedGoalId && !selectedAgent && networkActive && (
                         <div className={styles.networkArea}>
                             <AgentNetwork />
                         </div>
                     )}
 
                     {/* Preview panels — shown alongside chat in simple (non-network) mode */}
-                    {!selectedAgent && !networkActive && hasAnyPanel && (
+                    {!goalsState.selectedGoalId && !selectedAgent && !networkActive && hasAnyPanel && (
                         <div className={styles.previewColumn}>
                             {showGeneration && <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />}
                             {showBrowser && <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels(_closePanel('browser'))} />}
@@ -304,7 +334,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     )}
 
                     {/* Chat panel — single instance, always mounted, hidden in detail view */}
-                    <div className={`${styles.chatColumn} ${selectedAgent ? styles.hidden : ''}`}>
+                    <div className={`${styles.chatColumn} ${selectedAgent || goalsState.selectedGoalId ? styles.hidden : ''}`}>
                         <ChatPanel
                             messages={messages}
                             onSend={handleSend}

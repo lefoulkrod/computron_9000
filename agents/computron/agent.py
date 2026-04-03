@@ -8,12 +8,13 @@ from textwrap import dedent
 from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
+from agents.goal_planner import goal_planner_tool
 from agents.sub_agent import run_sub_agent
 from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.memory import forget, remember
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-from tools.virtual_computer import output_file, play_audio, run_bash_cmd
+from tools.virtual_computer import send_file, play_audio, run_bash_cmd
 from tools.virtual_computer.describe_image import describe_image
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ SYSTEM_PROMPT = dedent(
         CUSTOM TOOLS — always prefer existing tools over new code. Only create new tools
         for genuinely reusable, parameterized operations. Test after creating.
 
-        OUTPUT — call output_file(path) for every file you or a sub-agent creates.
+        OUTPUT — call send_file(path) for every file you or a sub-agent creates.
         play_audio(path) plays audio in the browser. Never just mention the path.
 
         ASSETS — Files under /home/computron/ are served by the web server. In HTML
@@ -116,7 +117,7 @@ TOOLS = [
     create_custom_tool,
     lookup_custom_tools,
     run_custom_tool,
-    output_file,
+    send_file,
     play_audio,
     describe_image,
     run_sub_agent,
@@ -124,6 +125,7 @@ TOOLS = [
     forget,
     save_to_scratchpad,
     recall_from_scratchpad,
+    goal_planner_tool,
 ]
 
 __all__ = [

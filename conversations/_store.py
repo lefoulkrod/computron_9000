@@ -211,6 +211,15 @@ def delete_conversation(conversation_id: str) -> bool:
     if not conv_dir.exists():
         return False
     shutil.rmtree(conv_dir)
+    # Remove empty parent directories up to the conversations root.
+    conv_root = _get_conversations_dir()
+    parent = conv_dir.parent
+    while parent != conv_root and parent.is_dir():
+        try:
+            parent.rmdir()  # only succeeds if empty
+            parent = parent.parent
+        except OSError:
+            break
     return True
 
 

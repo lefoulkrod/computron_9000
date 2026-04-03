@@ -15,7 +15,7 @@ from sdk import make_run_agent_as_tool_function
 from tools.custom_tools import lookup_custom_tools, run_custom_tool
 from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.generation import generate_media
-from tools.virtual_computer import describe_image, output_file, play_audio, run_bash_cmd
+from tools.virtual_computer import describe_image, send_file, play_audio, run_bash_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ SYSTEM_PROMPT = dedent(
     You are INFERENCE_AGENT, a GPU inference specialist inside COMPUTRON_9000.
 
     IMAGES — ALWAYS use generate_media(description). It handles GPU, model loading,
-    VRAM, and delivers to the UI automatically. Do NOT call output_file after generate_media.
+    VRAM, and delivers to the UI automatically. Do NOT call send_file after generate_media.
     NEVER load Flux models directly — always use generate_media.
     Available models: "quality" (default, best results), "photorealistic" (realistic photos),
     "fast" (quick drafts). Pick based on the request.
@@ -42,7 +42,7 @@ SYSTEM_PROMPT = dedent(
     write a Python script with run_bash_cmd that generates WAV files programmatically
     (e.g. numpy + wave module, or ffmpeg). Do NOT use TTS/voice tools for sound effects.
 
-    Call output_file(path) and play_audio(path) for all audio output.
+    Call send_file(path) and play_audio(path) for all audio output.
 
     Use describe_image(path, prompt) to analyze images from the container.
     Use run_browser_agent_as_tool for web browsing or accepting gated model licenses.
@@ -62,7 +62,7 @@ TOOLS = [
     run_bash_cmd,
     run_custom_tool,
     lookup_custom_tools,
-    output_file,
+    send_file,
     play_audio,
     describe_image,
     browser_agent_tool,

@@ -89,3 +89,14 @@ llm:
 parallel:
   enabled: true
   max_concurrent: 4
+
+goals:
+  enabled: true
+  poll_interval: 5
+  max_concurrent: 2
+  max_retries: 3
+  timezone: America/Chicago
+  model: "kimi-k2.5:cloud"
+  num_ctx: 60000
+  notifications:
+    enabled: true

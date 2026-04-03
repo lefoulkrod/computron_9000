@@ -20,30 +20,7 @@ from agents.types import Agent, Data, LLMOptions
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
-from agents.computron import (
-    DESCRIPTION as _COMPUTRON_DESCRIPTION,
-    NAME as _COMPUTRON_NAME,
-    SYSTEM_PROMPT as _COMPUTRON_PROMPT,
-    TOOLS as _COMPUTRON_TOOLS,
-)
-from agents.browser import (
-    DESCRIPTION as _BROWSER_DESCRIPTION,
-    NAME as _BROWSER_NAME,
-    SYSTEM_PROMPT as _BROWSER_PROMPT,
-    TOOLS as _BROWSER_TOOLS,
-)
-from agents.coding import (
-    DESCRIPTION as _CODER_DESCRIPTION,
-    NAME as _CODER_NAME,
-    SYSTEM_PROMPT as _CODER_PROMPT,
-    TOOLS as _CODER_TOOLS,
-)
-from agents.desktop import (
-    DESCRIPTION as _DESKTOP_DESCRIPTION,
-    NAME as _DESKTOP_NAME,
-    SYSTEM_PROMPT as _DESKTOP_PROMPT,
-    TOOLS as _DESKTOP_TOOLS,
-)
+from agents import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
@@ -57,29 +34,6 @@ from sdk import (
 )
 from sdk.hooks._agent_event_buffer import AgentEventBufferHook
 from sdk.turn._turn import StopRequestedError
-
-# Agent registry mapping user-facing IDs to their config constants.
-_AGENT_REGISTRY: dict[str, tuple[str, str, str, list]] = {
-    "computron": (_COMPUTRON_NAME, _COMPUTRON_DESCRIPTION, _COMPUTRON_PROMPT, _COMPUTRON_TOOLS),
-    "browser": (_BROWSER_NAME, _BROWSER_DESCRIPTION, _BROWSER_PROMPT, _BROWSER_TOOLS),
-    "coder": (_CODER_NAME, _CODER_DESCRIPTION, _CODER_PROMPT, _CODER_TOOLS),
-    "desktop": (_DESKTOP_NAME, _DESKTOP_DESCRIPTION, _DESKTOP_PROMPT, _DESKTOP_TOOLS),
-}
-
-# Aliases for convenience (e.g. "computer" -> "coder")
-_AGENT_ALIASES: dict[str, str] = {
-    "computer": "coder",
-}
-
-AVAILABLE_AGENTS = sorted(_AGENT_REGISTRY.keys())
-
-
-def _resolve_agent(agent_id: str | None) -> tuple[str, str, str, list]:
-    """Resolve an agent ID to its config tuple, defaulting to computron."""
-    if not agent_id:
-        return _AGENT_REGISTRY["computron"]
-    key = _AGENT_ALIASES.get(agent_id, agent_id)
-    return _AGENT_REGISTRY.get(key, _AGENT_REGISTRY["computron"])
 
 logger = logging.getLogger(__name__)
 
