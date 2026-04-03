@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 from logging_config import setup_logging
 from server.aiohttp_app import create_app
 from tools.browser.core.browser import close_browser
-from utils.shutdown import register_shutdown_callback, run_shutdown_callbacks
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +28,9 @@ def main() -> None:
     load_dotenv()
     setup_logging()
     app = create_app()
-    register_shutdown_callback(close_browser)
 
-    async def _run_shutdown_callbacks(_app: aiohttp.web.Application) -> None:  # pragma: no cover
-        await run_shutdown_callbacks()
+    async def _close_browser(_app: aiohttp.web.Application) -> None:  # pragma: no cover
+        await close_browser()
 
     async def _shutdown_executor(_app: aiohttp.web.Application) -> None:  # pragma: no cover
         import asyncio
@@ -46,7 +44,7 @@ def main() -> None:
             logger.warning("Executor threads did not finish within 5s; forcing exit")
             os._exit(0)
 
-    app.on_shutdown.append(_run_shutdown_callbacks)
+    app.on_shutdown.append(_close_browser)
     app.on_cleanup.append(_shutdown_executor)
     logger.info("Starting server on port %s", PORT)
     aiohttp.web.run_app(app, port=PORT)
