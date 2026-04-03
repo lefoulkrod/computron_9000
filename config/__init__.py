@@ -227,7 +227,6 @@ class GoalsConfig(BaseModel):
     poll_interval: int = 5
     max_concurrent: int = 2
     max_retries: int = 3
-    retry_backoff_base: int = 30
     shutdown_timeout: int = 60
     timezone: str = "UTC"  # Default timezone for goals (IANA name)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)

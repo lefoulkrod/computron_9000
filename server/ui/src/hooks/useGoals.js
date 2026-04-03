@@ -2,16 +2,30 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const POLL_INTERVAL = 5000;
 
-export default function useGoals() {
+/**
+ * Goals state hook. Polls automatically whenever the goals panel is open
+ * (panelOpen=true) or a goal is selected for detail view.
+ */
+export default function useGoals(panelOpen) {
     const [goals, setGoals] = useState([]);
     const [runnerStatus, setRunnerStatus] = useState(null);
     const [selectedGoalId, setSelectedGoalId] = useState(null);
-    const [polling, setPolling] = useState(false);
     const _lastGoalsJson = useRef('');
     const _lastRunnerJson = useRef('');
 
+    // Reset selection each time the panel opens fresh.
+    const prevOpen = useRef(false);
     useEffect(() => {
-        if (!polling) return;
+        if (panelOpen && !prevOpen.current) {
+            setSelectedGoalId(null);
+        }
+        prevOpen.current = panelOpen;
+    }, [panelOpen]);
+
+    // Poll while panel is open or a goal detail is showing.
+    const shouldPoll = panelOpen || !!selectedGoalId;
+    useEffect(() => {
+        if (!shouldPoll) return;
         let active = true;
         const poll = async () => {
             const [goalsRes, runnerRes] = await Promise.all([
@@ -37,7 +51,7 @@ export default function useGoals() {
         poll();
         const id = setInterval(poll, POLL_INTERVAL);
         return () => { active = false; clearInterval(id); };
-    }, [polling]);
+    }, [shouldPoll]);
 
     const fetchGoalDetail = useCallback(async (goalId) => {
         const res = await fetch(`/api/goals/${goalId}`);
@@ -69,9 +83,6 @@ export default function useGoals() {
         return res.json();
     }, []);
 
-    const startPolling = useCallback(() => setPolling(true), []);
-    const stopPolling = useCallback(() => setPolling(false), []);
-
     return {
         goals,
         runnerStatus,
@@ -83,7 +94,5 @@ export default function useGoals() {
         pauseGoal,
         resumeGoal,
         triggerGoal,
-        startPolling,
-        stopPolling,
     };
 }

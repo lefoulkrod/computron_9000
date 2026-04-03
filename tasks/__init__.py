@@ -37,4 +37,34 @@ def get_store() -> TaskStore:
     return _store
 
 
-__all__ = ["TaskStore", "get_store", "init_store"]
+from tasks._tools import add_task, begin_goal, commit_goal, list_goals, list_tasks, trigger_goal
+
+__all__ = [
+    "TaskExecutor",
+    "TaskRunner",
+    "TaskStore",
+    "TelegramNotifier",
+    "add_task",
+    "begin_goal",
+    "commit_goal",
+    "get_store",
+    "init_store",
+    "list_goals",
+    "list_tasks",
+    "trigger_goal",
+]
+
+
+def __getattr__(name: str) -> object:
+    """Lazy imports for heavy classes with third-party deps."""
+    if name == "TaskExecutor":
+        from tasks._executor import TaskExecutor
+        return TaskExecutor
+    if name == "TaskRunner":
+        from tasks._runner import TaskRunner
+        return TaskRunner
+    if name == "TelegramNotifier":
+        from tasks._notifier import TelegramNotifier
+        return TelegramNotifier
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)

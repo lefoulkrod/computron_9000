@@ -9,7 +9,7 @@ from __future__ import annotations
 from textwrap import dedent
 
 from sdk import make_run_agent_as_tool_function
-from tasks._tools import add_task, begin_goal, commit_goal, list_goals, list_tasks, trigger_goal
+from tasks import add_task, begin_goal, commit_goal, list_goals, list_tasks, trigger_goal
 
 NAME = "GOAL_PLANNER"
 DESCRIPTION = "Plan and create autonomous goals with scheduled tasks"

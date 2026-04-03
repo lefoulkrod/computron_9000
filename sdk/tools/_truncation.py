@@ -13,7 +13,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from tools._truncation import TRUNCATE_ATTR, truncate_args
+from tools import TRUNCATE_ATTR, truncate_args
 
 logger = logging.getLogger(__name__)
 

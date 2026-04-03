@@ -20,7 +20,7 @@ from agents.types import Agent, Data, LLMOptions
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
-from agents._registry import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
+from agents import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
 from conversations import (
     generate_conversation_title,
     load_conversation_history,

@@ -63,7 +63,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [nudgeToast, setNudgeToast] = useState(null);
 
     const modelSettings = useModelSettings();
-    const goalsState = useGoals();
+    const goalsState = useGoals(flyoutPanel === 'goals');
     const { addToast } = useToast();
 
     // ── Read preview data from root agent in the reducer ────────────
@@ -253,10 +253,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             agentDispatch({ type: 'SELECT_AGENT', agentId: null });
                             goalsState.setSelectedGoalId(null);
                             setFlyoutPanel(null);
-                        } else if (panel === 'goals') {
-                            goalsState.setSelectedGoalId(null);
-                            goalsState.startPolling();
-                            setFlyoutPanel(panel);
                         } else {
                             setFlyoutPanel(panel);
                         }
@@ -272,7 +268,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             : flyoutPanel === 'tools' ? 'Custom Tools'
                             : flyoutPanel === 'goals' ? 'Goals'
                             : 'Panel'}
-                        onClose={() => { setFlyoutPanel(null); goalsState.stopPolling(); }}
+                        onClose={() => setFlyoutPanel(null)}
                     >
                         {flyoutPanel === 'settings' && (
                             <ModelSettingsPanel settings={modelSettings} disabled={isStreaming} />

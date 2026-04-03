@@ -100,7 +100,7 @@ class TaskExecutor:
 
     def _build_agent(self, task: Task, options: LLMOptions) -> Agent:
         """Construct an Agent from registry or inline config."""
-        from agents._registry import resolve_agent as _resolve_agent
+        from agents import resolve_agent as _resolve_agent
 
         if task.agent_config:
             config = task.agent_config

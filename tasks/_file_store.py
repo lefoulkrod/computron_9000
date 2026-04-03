@@ -71,7 +71,7 @@ class FileTaskStore:
         data["tasks"] = []
         self._write_json(self._goal_path(goal.id), data)
         if auto_run and not cron:
-            self.spawn_run(goal.id)
+            self.queue_run(goal.id)
         return goal
 
     def get_goal(self, goal_id: str) -> Goal | None:
@@ -171,7 +171,7 @@ class FileTaskStore:
         return None
 
 
-    def spawn_run(self, goal_id: str) -> Run:
+    def queue_run(self, goal_id: str) -> Run:
         """Create a new run for a goal with TaskResults for each task."""
         existing = self.get_goal_runs(goal_id)
         run_number = max((r.run_number for r in existing), default=0) + 1

@@ -68,7 +68,7 @@ class TaskStore(Protocol):
         """Return a task by ID, or None if not found."""
         ...
 
-    def spawn_run(self, goal_id: str) -> Run:
+    def queue_run(self, goal_id: str) -> Run:
         """Create a new run for a goal with TaskResults for each task."""
         ...
 

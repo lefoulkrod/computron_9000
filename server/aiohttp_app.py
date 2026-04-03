@@ -402,16 +402,13 @@ async def _start_task_runner(app: web.Application) -> None:
     if not config.goals.enabled:
         return
     goals_dir = Path(config.goals.goals_dir or Path(config.settings.home_dir) / "goals")
-    from tasks import init_store
-    from tasks._executor import TaskExecutor
-    from tasks._runner import TaskRunner
+    from tasks import TaskExecutor, TaskRunner, TelegramNotifier, init_store
 
     store = init_store(goals_dir, default_timezone=config.goals.timezone)
     executor = TaskExecutor(store)
 
     notifier = None
     if config.goals.notifications.enabled:
-        from tasks._notifier import TelegramNotifier
 
         notifier = TelegramNotifier(config.goals.notifications)
         if not notifier.enabled:

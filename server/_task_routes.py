@@ -75,7 +75,7 @@ async def handle_trigger_goal(request: web.Request) -> web.Response:
     goal = store.get_goal(goal_id)
     if not goal:
         return web.json_response({"error": "Not found"}, status=404)
-    run = store.spawn_run(goal_id)
+    run = store.queue_run(goal_id)
     return web.json_response({"run_id": run.id, "run_number": run.run_number}, status=201)
 
 

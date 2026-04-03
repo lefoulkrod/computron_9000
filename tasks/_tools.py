@@ -231,7 +231,7 @@ async def create_goal(
     created_tasks = store.create_tasks(goal_id=goal.id, task_defs=task_defs)
 
     if not cron:
-        store.spawn_run(goal.id)
+        store.queue_run(goal.id)
 
     lines = []
     keys = [str(t["key"]).strip() for t in tasks]
@@ -287,7 +287,7 @@ async def trigger_goal(goal_id: str) -> str:
     goal = store.get_goal(goal_id)
     if not goal:
         return f"Error: Goal '{goal_id}' not found."
-    run = store.spawn_run(goal_id)
+    run = store.queue_run(goal_id)
     return f"Triggered run #{run.run_number} (id={run.id}) for goal '{goal.description}'."
 
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -35,7 +37,7 @@ class TaskRunner:
         self._executor = executor
         self._config = config
         self._notifier = notifier
-        self._running: dict[str, asyncio.Task] = {}  # task_result_id → asyncio.Task
+        self._running: dict[str, asyncio.Task] = {}  # result_id → asyncio.Task
         self._stop_event = asyncio.Event()
         self._paused = False
         self._loop_task: asyncio.Task | None = None
@@ -43,7 +45,7 @@ class TaskRunner:
     async def start(self) -> None:
         """Start the runner. Called from aiohttp on_startup."""
         self._store.reset_stale_running()
-        self._loop_task = asyncio.create_task(self._poll_loop())
+        self._loop_task = asyncio.create_task(self._poll_loop(), name="task-runner-poll")
         logger.info("Task runner started")
 
     async def stop(self) -> None:
@@ -96,7 +98,7 @@ class TaskRunner:
     async def _tick(self) -> None:
         """Single tick: spawn due runs, pick up ready tasks, clean up finished."""
         for goal in self._store.get_due_recurring_goals():
-            run = self._store.spawn_run(goal.id)
+            run = self._store.queue_run(goal.id)
             self._store.stamp_last_run_spawned(goal.id)
             logger.info("Spawned run #%d for goal %s", run.run_number, goal.id)
 
@@ -107,7 +109,8 @@ class TaskRunner:
                 self._store.mark_task_result_running(task_result.id)
                 self._store.update_run_status(task_result.run_id)
                 self._running[task_result.id] = asyncio.create_task(
-                    self._execute(task_result, task)
+                    self._execute(task_result, task),
+                    name=f"task-exec-{task_result.id[:8]}",
                 )
 
         done = [trid for trid, t in self._running.items() if t.done()]
@@ -115,13 +118,7 @@ class TaskRunner:
             del self._running[trid]
 
     async def _execute(self, task_result: "TaskResult", task: "Task") -> None:
-        """Execute a task result with retry on failure.
-
-        On retriable failure, sets the result back to pending and records
-        a ``retry_after`` timestamp. The slot is freed immediately — the
-        tick loop will re-pick it up once the backoff has elapsed (checked
-        via ``retry_count`` and poll timing).
-        """
+        """Execute a task, recording outcome into its result."""
         try:
             result_text, file_paths = await self._executor.run(task_result, task)
             if file_paths:
@@ -129,20 +126,16 @@ class TaskRunner:
             self._store.mark_task_result_completed(task_result.id, result_text)
         except Exception:
             error_msg = traceback.format_exc()
-            logger.exception("TaskResult %s failed", task_result.id)
+            logger.exception("Task %s failed", task.description)
 
             if task_result.retry_count < task.max_retries:
-                delay = self._config.retry_backoff_base * (
-                    2 ** task_result.retry_count
-                )
                 self._store.increment_retry(task_result.id, error_msg)
                 self._store.update_task_result_status(task_result.id, "pending")
                 logger.info(
-                    "TaskResult %s set to pending for retry (%d/%d, backoff %ds)",
-                    task_result.id,
+                    "Task %s queued for retry (%d/%d)",
+                    task.description,
                     task_result.retry_count + 1,
                     task.max_retries,
-                    delay,
                 )
             else:
                 self._store.mark_task_result_failed(task_result.id, error_msg)
@@ -153,8 +146,6 @@ class TaskRunner:
 
     async def _notify_run_finished(self, run_id: str, status: str) -> None:
         """Send a Telegram notification when a run reaches a terminal state."""
-        from pathlib import Path
-
         from tasks._notifier import format_run_completed, format_run_failed
 
         cfg = self._config.notifications
@@ -177,8 +168,6 @@ class TaskRunner:
 
         duration = ""
         if run.started_at and run.completed_at:
-            from datetime import datetime
-
             try:
                 start = datetime.fromisoformat(run.started_at)
                 end = datetime.fromisoformat(run.completed_at)
@@ -187,7 +176,7 @@ class TaskRunner:
             except (ValueError, TypeError):
                 duration = ""
 
-        # Collect all file output paths from all task results
+        # Collect file outputs from all completed tasks in this run
         all_files: list[Path] = []
         if cfg.include_files:
             for r in results:

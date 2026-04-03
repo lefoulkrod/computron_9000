@@ -4,21 +4,17 @@ import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
 
-function _formatLabel(id) {
-    return id.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
-}
-
 function ChatInput({ onSend, onStop, isStreaming, attachment }) {
     const [message, setMessage] = useState('');
     const [selectedAgent, setSelectedAgent] = useState('computron');
-    const [agents, setAgents] = useState([{ id: 'computron', label: 'Computron' }]);
+    const [agents, setAgents] = useState(['computron']);
 
     useEffect(() => {
         fetch('/api/agents')
             .then(r => r.json())
             .then(data => {
                 if (data.agents) {
-                    setAgents(data.agents.map(id => ({ id, label: _formatLabel(id) })));
+                    setAgents(data.agents);
                     if (data.default) setSelectedAgent(data.default);
                 }
             })
@@ -151,7 +147,7 @@ function ChatInput({ onSend, onStop, isStreaming, attachment }) {
                         onChange={(e) => setSelectedAgent(e.target.value)}
                     >
                         {agents.map((a) => (
-                            <option key={a.id} value={a.id}>{a.label}</option>
+                            <option key={a} value={a}>{a}</option>
                         ))}
                     </select>
                     <div className={styles.actionButtons}>

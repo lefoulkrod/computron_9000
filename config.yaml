@@ -95,7 +95,6 @@ goals:
   poll_interval: 5
   max_concurrent: 2
   max_retries: 3
-  retry_backoff_base: 30
   timezone: America/Chicago
   model: "kimi-k2.5:cloud"
   num_ctx: 60000
