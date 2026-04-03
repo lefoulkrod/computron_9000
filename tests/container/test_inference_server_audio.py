@@ -1,8 +1,8 @@
 """Unit tests for audio generation functionality in inference_server.py.
 
 Tests cover:
-- Audio model configuration (_AUDIO_MODEL)
-- Duration calculation: seconds = (bars * 4) / (bpm / 60)
+- Audio model configuration (_AUDIO_MODEL) for ACE-Step
+- Duration calculation using direct seconds parameter
 - Parameter parsing in _generate_audio and _generate_audio_stream
 - Audio model loading (_ensure_audio_model, _load_audio_model)
 """
@@ -70,34 +70,32 @@ def test_audio_model_configuration():
     for key in required_keys:
         assert key in server._AUDIO_MODEL, f"Missing key: {key}"
 
-    # Verify specific values
-    assert server._AUDIO_MODEL["model_id"] == "RoyalCities/Foundation-1"
-    assert server._AUDIO_MODEL["pipeline_class"] == "StableAudioPipeline"
+    # Verify specific values for ACE-Step
+    assert server._AUDIO_MODEL["model_id"] == "ACE-Step/ACE-Step-v1-3.5B"
+    assert server._AUDIO_MODEL["pipeline_class"] == "DiffusionPipeline"
     assert server._AUDIO_MODEL["sample_rate"] == 44100
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("bars,bpm,expected", [
-    (4, 120, 8.0),    # 4 bars at 120 BPM = 8 seconds
-    (8, 120, 16.0),   # 8 bars at 120 BPM = 16 seconds
-    (4, 60, 16.0),    # 4 bars at 60 BPM = 16 seconds
-    (8, 128, 15.0),   # 8 bars at 128 BPM = 15 seconds
-    (4, 100, 9.6),    # 4 bars at 100 BPM = 9.6 seconds
-    (16, 140, 27.43), # 16 bars at 140 BPM ≈ 27.43 seconds
+@pytest.mark.parametrize("duration,expected", [
+    (8.0, 8.0),    # 8 seconds
+    (16.0, 16.0),  # 16 seconds
+    (9.6, 9.6),    # 9.6 seconds
+    (15.0, 15.0),  # 15 seconds
+    (27.43, 27.43), # ~27.43 seconds
 ])
-def test_duration_calculation_formula(bars, bpm, expected):
-    """Test the duration calculation formula used in audio generation.
+def test_duration_parameter(duration, expected):
+    """Test that duration is passed directly in seconds for ACE-Step.
 
-    Formula: seconds = (bars * 4) / (bpm / 60)
+    ACE-Step uses duration parameter directly, not bars/bpm calculation.
     """
-    duration = (bars * 4) / (bpm / 60)
     assert round(duration, 2) == round(expected, 2)
 
 
 @skip_if_no_diffusers
 @pytest.mark.unit
 def test_generate_audio_parameter_parsing(reset_server_state):
-    """Test that _generate_audio correctly parses input parameters."""
+    """Test that _generate_audio correctly parses input parameters for ACE-Step."""
     # Mock the pipe and its methods
     import numpy as np
     mock_pipe = MagicMock()
@@ -116,11 +114,8 @@ def test_generate_audio_parameter_parsing(reset_server_state):
         body = {
             "description": "upbeat electronic music",
             "negative_prompt": "drums",
-            "bars": 8,
-            "bpm": 140,
-            "key": "F#",
-            "scale": "minor",
-            "steps": 100,
+            "duration": 15.0,
+            "steps": 27,
             "cfg_scale": 8.5,
             "seed": 42,
         }
@@ -129,22 +124,20 @@ def test_generate_audio_parameter_parsing(reset_server_state):
 
         # Verify the pipe was called with correct parameters
         call_kwargs = mock_pipe.call_args[1]
-        assert "upbeat electronic music" in mock_pipe.call_args[0][0]
-        assert "F# minor" in mock_pipe.call_args[0][0]
-        assert "140 BPM" in mock_pipe.call_args[0][0]
+        # ACE-Step uses raw prompt without musical formatting
+        assert mock_pipe.call_args[0][0] == "upbeat electronic music"
         assert call_kwargs["negative_prompt"] == "drums"
-        assert call_kwargs["num_inference_steps"] == 100
+        assert call_kwargs["num_inference_steps"] == 27
         assert call_kwargs["guidance_scale"] == 8.5
 
-        # Verify duration calculation
-        expected_duration = (8 * 4) / (140 / 60)  # ~13.71 seconds
-        assert abs(call_kwargs["audio_end_in_s"] - expected_duration) < 0.01
+        # Verify duration is passed directly for ACE-Step
+        assert call_kwargs["duration"] == 15.0
 
 
 @skip_if_no_diffusers
 @pytest.mark.unit
 def test_generate_audio_default_parameters(reset_server_state):
-    """Test that _generate_audio uses correct defaults."""
+    """Test that _generate_audio uses correct defaults for ACE-Step."""
     mock_pipe = MagicMock()
     mock_output = MagicMock()
     import numpy as np
@@ -171,14 +164,14 @@ def test_generate_audio_default_parameters(reset_server_state):
         assert call_kwargs["num_inference_steps"] == server._AUDIO_MODEL["num_inference_steps"]
         assert call_kwargs["guidance_scale"] == server._AUDIO_MODEL["guidance_scale"]
 
-        # Default duration: 4 bars at 120 BPM = 8 seconds
-        assert call_kwargs["audio_end_in_s"] == (4 * 4) / (120 / 60)
+        # Default duration for ACE-Step: 10 seconds
+        assert call_kwargs["duration"] == 10.0
 
 
 @skip_if_no_diffusers
 @pytest.mark.unit
 def test_generate_audio_conditional_prompt_format(reset_server_state):
-    """Test that conditional prompt is formatted correctly."""
+    """Test that ACE-Step uses raw prompt without musical formatting."""
     mock_pipe = MagicMock()
     mock_output = MagicMock()
     import numpy as np
@@ -202,9 +195,9 @@ def test_generate_audio_conditional_prompt_format(reset_server_state):
 
         server._generate_audio(body)
 
-        # Check the prompt format: "{description}, {key} {scale}, {bpm} BPM"
+        # ACE-Step uses raw prompt without "{key} {scale}, {bpm} BPM" formatting
         prompt = mock_pipe.call_args[0][0]
-        assert prompt == "jazz piano, C major, 120 BPM"
+        assert prompt == "jazz piano"
 
 
 @skip_if_no_diffusers
@@ -308,7 +301,7 @@ def test_generate_audio_output_path_format(reset_server_state):
 @skip_if_no_diffusers
 @pytest.mark.unit
 def test_generate_audio_stream_parameter_parsing(reset_server_state):
-    """Test that _generate_audio_stream correctly parses parameters."""
+    """Test that _generate_audio_stream correctly parses parameters for ACE-Step."""
     mock_pipe = MagicMock()
     mock_output = MagicMock()
     import numpy as np
@@ -331,11 +324,8 @@ def test_generate_audio_stream_parameter_parsing(reset_server_state):
     ):
         body = {
             "description": "techno beat",
-            "bars": 16,
-            "bpm": 130,
-            "key": "G",
-            "scale": "minor",
-            "steps": 50,
+            "duration": 20.0,
+            "steps": 27,
         }
 
         server._generate_audio_stream(body, mock_write_line)
@@ -356,7 +346,7 @@ def test_generate_audio_stream_parameter_parsing(reset_server_state):
 
 @pytest.mark.unit
 def test_generate_audio_stream_duration_in_message(reset_server_state):
-    """Test that _generate_audio_stream includes duration in initial message."""
+    """Test that _generate_audio_stream includes duration in initial message for ACE-Step."""
     mock_pipe = MagicMock()
     mock_output = MagicMock()
     import numpy as np
@@ -378,10 +368,7 @@ def test_generate_audio_stream_duration_in_message(reset_server_state):
     ):
         body = {
             "description": "test",
-            "bars": 8,
-            "bpm": 120,
-            "key": "C",
-            "scale": "major",
+            "duration": 16.0,
         }
 
         server._generate_audio_stream(body, mock_write_line)
@@ -390,12 +377,9 @@ def test_generate_audio_stream_duration_in_message(reset_server_state):
         generating_events = [e for e in lines if e.get("status") == "generating"]
         assert len(generating_events) >= 1
 
-        # Check message contains duration and musical info
-        # Duration: (8 bars * 4) / (120 BPM / 60) = 16 seconds
+        # Check message format: "Starting audio generation ({duration:.1f}s)..."
         message = generating_events[0].get("message", "")
-        assert "16.0s" in message or "16s" in message
-        assert "C major" in message
-        assert "120 BPM" in message
+        assert "16.0s" in message or "Starting audio generation" in message
 
 
 @pytest.mark.unit
@@ -435,19 +419,19 @@ def test_ensure_audio_model_raises_on_different_model_type(reset_server_state):
 @skip_if_no_diffusers
 @pytest.mark.unit
 def test_load_audio_model_sets_globals(reset_server_state):
-    """Test that _load_audio_model sets global state correctly."""
-    # Skip if StableAudioPipeline can't be imported
+    """Test that _load_audio_model sets global state correctly for ACE-Step."""
+    # Skip if DiffusionPipeline can't be imported
     try:
-        from diffusers import StableAudioPipeline
+        from diffusers import DiffusionPipeline
     except (ImportError, RuntimeError) as e:
-        pytest.skip(f"StableAudioPipeline not available: {e}")
+        pytest.skip(f"DiffusionPipeline not available: {e}")
 
     mock_pipeline_class = MagicMock()
     mock_pipe_instance = MagicMock()
     mock_pipeline_class.from_pretrained.return_value = mock_pipe_instance
 
     with (
-        patch("diffusers.StableAudioPipeline", mock_pipeline_class),
+        patch("diffusers.DiffusionPipeline", mock_pipeline_class),
         patch("torch.cuda.set_device"),
         patch("inference_server._unload"),
         patch("inference_server._find_best_gpu", return_value=(1, 8000.0, 12000.0)),
@@ -458,12 +442,13 @@ def test_load_audio_model_sets_globals(reset_server_state):
         # Check globals were set
         assert server._pipe_type == "audio"
         assert server._loaded_gpu == 1
-        assert server._loaded_model == "foundation-1"
+        assert server._loaded_model == "ace-step"
 
-        # Check pipeline was created with correct model
+        # Check pipeline was created with correct model and trust_remote_code=True
         mock_pipeline_class.from_pretrained.assert_called_once()
         call_args = mock_pipeline_class.from_pretrained.call_args
-        assert call_args[0][0] == "RoyalCities/Foundation-1"
+        assert call_args[0][0] == "ACE-Step/ACE-Step-v1-3.5B"
+        assert call_args[1].get("trust_remote_code") is True
 
         # Check model offload was enabled
         mock_pipe_instance.enable_model_cpu_offload.assert_called_once_with(gpu_id=1)
@@ -483,12 +468,11 @@ def test_handler_generate_audio_endpoint():
 
 @pytest.mark.unit
 def test_handler_generate_stream_audio():
-    """Test that streaming endpoint handles audio type correctly."""
+    """Test that streaming endpoint handles audio type correctly for ACE-Step."""
     body = {
         "type": "audio",
         "description": "test music",
-        "bars": 4,
-        "bpm": 120,
+        "duration": 10.0,
     }
 
     # Test that _generate_audio_stream function exists and can be patched
@@ -506,8 +490,8 @@ def test_audio_model_sample_rate():
 
 @pytest.mark.unit
 def test_audio_model_default_steps():
-    """Test that audio model has reasonable default steps."""
-    assert server._AUDIO_MODEL["num_inference_steps"] == 75
+    """Test that ACE-Step audio model has correct default steps."""
+    assert server._AUDIO_MODEL["num_inference_steps"] == 27
     assert server._AUDIO_MODEL["num_inference_steps"] > 0
 
 

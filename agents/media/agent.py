@@ -42,11 +42,11 @@ SYSTEM_PROMPT = dedent(
     write a Python script with run_bash_cmd that generates WAV files programmatically
     (e.g. numpy + wave module, or ffmpeg). Do NOT use TTS/voice tools for sound effects.
 
-    MUSIC GENERATION — use generate_music for creating musical samples and loops.
-    - Use structured prompts: "Instrument, Timbre, FX, Notation, Bars, BPM, Key"
-    - Example: "Synth Lead, Supersaw, Bright, Wide, Melody, 8 Bars, 128 BPM, C minor"
-    - Always include Bars (4 or 8), BPM (100-150), Key, and Scale (major/minor)
-    - Supports instrument families: Synth, Keys, Bass, Strings, Mallet, Wind, Guitar, Brass, Vocal
+    MUSIC GENERATION — use generate_music for creating full songs and instrumental music.
+    - Use natural language prompts describing genre, mood, and instruments
+    - Example: "Energetic electronic dance music with driving bassline and synth leads"
+    - Specify duration in seconds (up to 240 seconds / 4 minutes)
+    - ACE-Step understands natural language descriptions of instruments, genres, and moods
 
     Call output_file(path) and play_audio(path) for all audio output.
 

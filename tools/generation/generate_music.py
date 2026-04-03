@@ -4,6 +4,9 @@ Runs generation inside the container via the persistent inference server's
 ``/generate-stream`` endpoint, reads chunked JSONL output, and publishes
 ``GenerationPreviewPayload`` events so the frontend can display live
 progress updates.
+
+Uses ACE-Step (ACE-Step-v1-3.5B) for full song generation - a diffusion-based
+model capable of generating high-quality music up to 4 minutes in length.
 """
 
 from __future__ import annotations
@@ -30,25 +33,23 @@ _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
 async def generate_music(
     prompt: str,
     negative_prompt: str = "",
-    bars: int = 8,
-    bpm: int = 128,
-    key: str = "C",
-    scale: str = "minor",
-    steps: int = 75,
+    duration: float = 30.0,
+    steps: int = 27,
     cfg_scale: float = 7.0,
     seed: int = -1,
 ) -> dict[str, str]:
-    """Generate music using Foundation-1.
+    """Generate music using ACE-Step.
+
+    ACE-Step is a diffusion-based music generation model capable of creating
+    full songs up to 4 minutes in length. It uses natural language prompts
+    to generate high-quality instrumental music.
 
     Args:
-        prompt: Text describing the music (instrument, timbre, FX, notation).
+        prompt: Text describing the music (genre, mood, instruments, etc.).
         negative_prompt: Things to avoid in the generated music.
-        bars: Number of bars (4 or 8).
-        bpm: Tempo in beats per minute (100-150).
-        key: Musical key (A, A#, B, C, C#, D, D#, E, F, F#, G, G#).
-        scale: Scale type ("major" or "minor").
-        steps: Inference steps (higher = better quality).
-        cfg_scale: CFG guidance scale.
+        duration: Length of the generated audio in seconds (max 240s / 4 min).
+        steps: Inference steps (higher = better quality, default 27).
+        cfg_scale: CFG guidance scale (default 7.0).
         seed: Random seed (-1 for random).
 
     Returns:
@@ -63,13 +64,10 @@ async def generate_music(
     # Construct parameters dict for the inference client
     params = {
         "negative_prompt": negative_prompt,
-        "bars": bars,
-        "bpm": bpm,
-        "key": key,
-        "scale": scale,
+        "duration": min(duration, 240.0),  # Cap at 4 minutes
         "steps": steps,
         "cfg_scale": cfg_scale,
-        "seed": seed,
+        "seed": seed if seed >= 0 else None,
     }
     params_json = json.dumps(params)
 
@@ -82,7 +80,7 @@ async def generate_music(
     )
 
     # Publish initial loading event
-    _publish_preview(gen_id, media_type, status="loading", message="Starting music generation...")
+    _publish_preview(gen_id, media_type, status="loading", message="Starting music generation with ACE-Step...")
 
     try:
         # Use a large buffer limit for any preview data

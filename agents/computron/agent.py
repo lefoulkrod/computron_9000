@@ -71,11 +71,11 @@ SYSTEM_PROMPT = dedent(
         IMAGE GENERATION — use the generate_media tool directly for image generation.
         Do NOT delegate image generation to COMPUTER_AGENT or other sub-agents.
 
-        MUSIC GENERATION — use generate_music for creating musical samples and loops.
-        - Use structured prompts: "Instrument, Timbre, FX, Notation, Bars, BPM, Key"
-        - Example: "Synth Lead, Supersaw, Bright, Wide, Melody, 8 Bars, 128 BPM, C minor"
-        - Always include Bars (4 or 8), BPM (100-150), Key, and Scale (major/minor)
-        - Supports instrument families: Synth, Keys, Bass, Strings, Mallet, Wind, Guitar, Brass, Vocal
+        MUSIC GENERATION — use generate_music for creating full songs and instrumental music.
+        - Use natural language prompts describing genre, mood, and instruments
+        - Example: "Energetic electronic dance music with driving bassline and synth leads"
+        - Specify duration in seconds (up to 240 seconds / 4 minutes)
+        - ACE-Step understands natural language descriptions of instruments, genres, and moods
 
         - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
           Use ONLY for web browsing — never for creating files or assets.

@@ -1,4 +1,4 @@
-"""Persistent inference server for image/video generation.
+"""Persistent inference server for image/video/audio generation.
 
 Keeps ML models loaded in VRAM between requests so custom tools don't
 pay the ~30s model-loading cost on every call.  Auto-shuts down after
@@ -95,13 +95,14 @@ _MODELS = {
     },
 }
 
-# Audio model configuration (Foundation-1)
+# Audio model configuration (ACE-Step for full song generation)
 _AUDIO_MODEL = {
-    "model_id": "RoyalCities/Foundation-1",
-    "pipeline_class": "StableAudioPipeline",
-    "num_inference_steps": 75,
+    "model_id": "ACE-Step/ACE-Step-v1-3.5B",
+    "pipeline_class": "ACEStepPipeline",
+    "num_inference_steps": 27,  # Default from ACE-Step docs
     "guidance_scale": 7.0,
     "sample_rate": 44100,
+    "max_duration": 240,  # 4 minutes max
 }
 
 _SIZE_PRESETS = {
@@ -180,7 +181,7 @@ def _find_best_gpu() -> tuple[int, float, float]:
 
 # ── Global state ──────────────────────────────────────────────────────
 _pipe = None
-_pipe_type = None  # "image" or "video"
+_pipe_type = None  # "image" or "video" or "audio"
 _loaded_gpu = -1  # which physical GPU the model is currently on
 _loaded_model = None  # name key from _MODELS (e.g. "schnell", "klein-4b")
 _taesd = None  # AutoencoderTiny for Flux preview (loaded lazily)
@@ -754,7 +755,7 @@ def _ensure_audio_model(on_progress=None):
 
     # If image or video model is loaded, need to switch
     if _pipe_type in ("image", "video"):
-        raise _ModelSwitchRequired(_loaded_model or "unknown", "foundation-1")
+        raise _ModelSwitchRequired(_loaded_model or "unknown", "ace-step")
 
     if on_progress:
         on_progress("Selecting GPU...")
@@ -804,7 +805,7 @@ def _load_video_model(on_progress=None):
 
 
 def _load_audio_model(on_progress=None):
-    """Load Foundation-1 audio generation model."""
+    """Load ACE-Step audio generation model for full song generation."""
     global _pipe, _pipe_type, _loaded_gpu, _loaded_model
 
     def _emit(msg):
@@ -813,10 +814,10 @@ def _load_audio_model(on_progress=None):
             on_progress(msg)
 
     _unload()
-    _emit("Loading Foundation-1 audio model...")
+    _emit("Loading ACE-Step audio model...")
 
     import torch
-    from diffusers import StableAudioPipeline
+    from diffusers import DiffusionPipeline
 
     gpu_id, free_mb, _total_mb = _find_best_gpu()
     log.info("Selected GPU %d (%.1f GB free) for audio model", gpu_id, free_mb / 1024)
@@ -828,9 +829,11 @@ def _load_audio_model(on_progress=None):
         _download_model(model_id, on_progress=on_progress)
 
     with _TqdmProgressForwarder(on_progress, label="Loading audio model"):
-        _pipe = StableAudioPipeline.from_pretrained(
+        # ACE-Step uses a custom pipeline - load with trust_remote_code
+        _pipe = DiffusionPipeline.from_pretrained(
             model_id,
             torch_dtype=torch.float16,
+            trust_remote_code=True,
         )
 
     _emit(f"Setting up model offload on GPU {gpu_id}...")
@@ -838,8 +841,8 @@ def _load_audio_model(on_progress=None):
 
     _pipe_type = "audio"
     _loaded_gpu = gpu_id
-    _loaded_model = "foundation-1"
-    log.info("Foundation-1 audio model ready on GPU %d", gpu_id)
+    _loaded_model = "ace-step"
+    log.info("ACE-Step audio model ready on GPU %d", gpu_id)
 
 
 # ── Non-streaming generation (backward-compatible) ────────────────────
@@ -908,6 +911,60 @@ def _generate_video(body):
     export_to_video(frames, out_path, fps=16)
     log.info("Video saved: %s", out_path)
     return {"path": out_path}
+
+
+def _generate_audio(body):
+    """Generate audio/music using ACE-Step and return the output path.
+    
+    ACE-Step is a diffusion-based music generation model that can create
+    full songs up to 4 minutes in length with natural language prompts.
+    """
+    import torch
+    import scipy.io.wavfile
+
+    _ensure_audio_model()
+
+    prompt = body["description"]
+    negative_prompt = body.get("negative_prompt", "")
+
+    # Get duration in seconds (ACE-Step supports up to 4 minutes)
+    duration = float(body.get("duration", 30.0))  # Default 30 seconds
+    duration = min(duration, _AUDIO_MODEL["max_duration"])  # Cap at max
+
+    # Get generation parameters
+    num_inference_steps = int(body.get("steps", _AUDIO_MODEL["num_inference_steps"]))
+    guidance_scale = float(body.get("cfg_scale", _AUDIO_MODEL["guidance_scale"]))
+    seed = body.get("seed")
+
+    generator = None
+    if seed is not None:
+        import torch
+        generator = torch.Generator(device=f"cuda:{_loaded_gpu}").manual_seed(int(seed))
+
+    with torch.inference_mode():
+        output = _pipe(
+            prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=num_inference_steps,
+            audio_length_in_s=duration,
+            num_waveforms_per_prompt=1,
+            guidance_scale=guidance_scale,
+            generator=generator,
+        )
+
+    audio = output.audios[0]
+    sample_rate = _AUDIO_MODEL["sample_rate"]
+
+    timestamp = int(time.time() * 1000)
+    out_path = f"/home/computron/generated_audio/generated_{timestamp}.wav"
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    # Save as WAV file (scipy expects int16 format)
+    audio_int16 = (audio * 32767).astype("int16")
+    scipy.io.wavfile.write(out_path, sample_rate, audio_int16)
+
+    log.info("Audio saved: %s (%.1fs, %d Hz)", out_path, duration, sample_rate)
+    return {"path": out_path, "duration": duration, "sample_rate": sample_rate}
 
 
 # ── Streaming generation (with progress + previews) ───────────────────
@@ -1038,107 +1095,45 @@ def _generate_video_stream(body, write_line):
     write_line({"status": "complete", "path": out_path})
 
 
-def _generate_audio(body):
-    """Generate audio/music and return the output path."""
-    import torch
-    import scipy.io.wavfile
-
-    _ensure_audio_model()
-
-    prompt = body["description"]
-    negative_prompt = body.get("negative_prompt", "")
-
-    # Parse musical parameters
-    bars = int(body.get("bars", 4))
-    bpm = int(body.get("bpm", 120))
-    key = body.get("key", "C")
-    scale = body.get("scale", "major")
-
-    # Calculate duration: seconds = (bars * 4 beats) / (BPM / 60)
-    duration = (bars * 4) / (bpm / 60)
-
-    # Get generation parameters
-    num_inference_steps = int(body.get("steps", _AUDIO_MODEL["num_inference_steps"]))
-    guidance_scale = float(body.get("cfg_scale", _AUDIO_MODEL["guidance_scale"]))
-    seed = body.get("seed")
-
-    # Build conditional prompt with musical context
-    conditional_prompt = f"{prompt}, {key} {scale}, {bpm} BPM"
-
-    generator = None
-    if seed is not None:
-        import torch
-        generator = torch.Generator(device=f"cuda:{_loaded_gpu}").manual_seed(int(seed))
-
-    with torch.inference_mode():
-        output = _pipe(
-            conditional_prompt,
-            negative_prompt=negative_prompt,
-            num_inference_steps=num_inference_steps,
-            audio_end_in_s=duration,
-            num_waveforms_per_prompt=1,
-            guidance_scale=guidance_scale,
-            generator=generator,
-        )
-
-    audio = output.audios[0]
-    sample_rate = _AUDIO_MODEL["sample_rate"]
-
-    timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_audio/generated_{timestamp}.wav"
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-
-    # Save as WAV file (scipy expects int16 format)
-    audio_int16 = (audio * 32767).astype("int16")
-    scipy.io.wavfile.write(out_path, sample_rate, audio_int16)
-
-    log.info("Audio saved: %s (%.1fs, %d Hz)", out_path, duration, sample_rate)
-    return {"path": out_path, "duration": duration, "sample_rate": sample_rate}
-
-
 def _generate_audio_stream(body, write_line):
-    """Generate audio with streaming progress."""
+    """Generate audio with streaming progress using ACE-Step.
+    
+    ACE-Step is a diffusion-based model for full song generation.
+    """
     import torch
     import scipy.io.wavfile
 
     def _loading_progress(msg):
         write_line({"status": "loading", "message": msg})
 
-    _loading_progress("Preparing audio model...")
+    _loading_progress("Preparing ACE-Step audio model...")
     _ensure_audio_model(on_progress=_loading_progress)
 
     prompt = body["description"]
     negative_prompt = body.get("negative_prompt", "")
 
-    # Parse musical parameters
-    bars = int(body.get("bars", 4))
-    bpm = int(body.get("bpm", 120))
-    key = body.get("key", "C")
-    scale = body.get("scale", "major")
-
-    # Calculate duration
-    duration = (bars * 4) / (bpm / 60)
+    # Get duration in seconds (ACE-Step supports up to 4 minutes)
+    duration = float(body.get("duration", 30.0))
+    duration = min(duration, _AUDIO_MODEL["max_duration"])
 
     num_inference_steps = int(body.get("steps", _AUDIO_MODEL["num_inference_steps"]))
     guidance_scale = float(body.get("cfg_scale", _AUDIO_MODEL["guidance_scale"]))
     seed = body.get("seed")
-
-    conditional_prompt = f"{prompt}, {key} {scale}, {bpm} BPM"
 
     generator = None
     if seed is not None:
         generator = torch.Generator(device=f"cuda:{_loaded_gpu}").manual_seed(int(seed))
 
     write_line({"status": "generating", "step": 0, "total_steps": num_inference_steps,
-                "message": f"Starting audio generation ({duration:.1f}s, {key} {scale}, {bpm} BPM)..."})
+                "message": f"Starting audio generation ({duration:.1f}s)..."})
 
-    # Note: StableAudioPipeline doesn't have step callbacks, so we emit start/complete
+    # Note: ACE-Step may not have step callbacks, emit start/complete
     with torch.inference_mode():
         output = _pipe(
-            conditional_prompt,
+            prompt,
             negative_prompt=negative_prompt,
             num_inference_steps=num_inference_steps,
-            audio_end_in_s=duration,
+            audio_length_in_s=duration,
             num_waveforms_per_prompt=1,
             guidance_scale=guidance_scale,
             generator=generator,
