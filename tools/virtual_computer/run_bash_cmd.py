@@ -68,8 +68,15 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
     """Execute a bash command in the virtual computer container.
 
     Runs one-shot commands under ``set -euo pipefail``. Package installs
-    (pip, npm, apt) are auto-promoted to root. Dev servers, watch mode, and
-    other long-running/blocking processes are blocked (exit code 126).
+    (pip, npm, apt) are auto-promoted to root.
+
+    For games, GUI apps, servers, and other long-running processes, background
+    them with ``&`` and redirect output::
+
+        run_bash_cmd("python game.py > /tmp/game.log 2>&1 &")
+
+    Then check status with separate commands. NEVER run a long-lived process
+    in the foreground — it will block until timeout.
 
     Args:
         cmd: The bash command to execute.
@@ -186,6 +193,8 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         stderr_parts: list[str] = []
 
         try:
+            # Start the streaming thread — it pushes frames into queue and
+            # sends a None sentinel when done.
             stream_task = loop.run_in_executor(None, _stream_sync)
 
             async def _consume_stream() -> None:
@@ -212,15 +221,24 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                             stderr=chunk_err,
                         )))
 
-            await asyncio.wait_for(
-                asyncio.gather(stream_task, _consume_stream()),
-                timeout=timeout,
-            )
+            # Only wait_for the async consumer — it cancels cleanly.
+            # Do NOT gather with stream_task: in Python 3.12+, wait_for
+            # waits for the gathered future to fully cancel before raising
+            # TimeoutError, but run_in_executor futures can't be cancelled
+            # (the thread keeps running), causing a deadlock.
+            await asyncio.wait_for(_consume_stream(), timeout=timeout)
+            # If the consumer exited normally, wait for the thread too.
+            await stream_task
         except TimeoutError:
             # Close the exec response to unblock _stream_sync's iter_content
             # call so the thread can exit instead of leaking until process shutdown.
             if _exec_resp:
                 _exec_resp[0].close()
+            # Give the thread a moment to exit after socket close.
+            try:
+                await asyncio.wait_for(asyncio.shield(stream_task), timeout=2.0)
+            except (TimeoutError, asyncio.CancelledError):
+                stream_task.cancel()
             logger.exception("Timeout after %s seconds running bash command: %s", timeout, cmd)
             msg = f"Timeout after {timeout} seconds running bash command: {cmd}"
             raise RunBashCmdError(msg) from None
