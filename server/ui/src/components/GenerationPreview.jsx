@@ -11,7 +11,11 @@ export default function GenerationPreview({ preview, onClose }) {
     const outputContentType = preview.output_content_type || '';
 
     const isImage = media_type === 'image';
-    const title = isImage ? 'Generating Image' : 'Generating Video';
+    const isAudio = media_type === 'audio';
+    const isVideo = !isImage && !isAudio;
+
+    const LABELS = { image: 'Image', video: 'Video', audio: 'Music' };
+    const label = LABELS[media_type] || 'Media';
 
     const progressPct = (step != null && total_steps)
         ? Math.round((step / total_steps) * 100)
@@ -19,7 +23,8 @@ export default function GenerationPreview({ preview, onClose }) {
 
     const isComplete = status === 'complete';
     const isFailed = status === 'failed';
-    const isVideo = outputContentType.startsWith('video/');
+    const isVideoContent = outputContentType.startsWith('video/');
+    const isAudioContent = isAudio || outputContentType.startsWith('audio/');
     const hasOutput = output || outputPath;
     const outputSrc = outputPath || (output ? `data:${outputContentType};base64,${output}` : null);
 
@@ -27,18 +32,19 @@ export default function GenerationPreview({ preview, onClose }) {
         if (!outputSrc) return;
         const link = document.createElement('a');
         link.href = outputSrc;
-        const ext = isVideo ? 'mp4' : 'png';
+        const ext = isAudioContent ? 'wav' : isVideoContent ? 'mp4' : 'png';
         link.download = `generated_${Date.now()}.${ext}`;
         link.click();
     };
 
-    const icon = isImage ? '\u{1F5BC}' : '\u{1F3AC}';
-    const displayTitle = isComplete
-        ? (isImage ? 'Image Generated' : 'Video Generated')
-        : title;
+    const ICONS = { image: '\u{1F5BC}', video: '\u{1F3AC}', audio: '\u{1F3B5}' };
+    const icon = ICONS[media_type] || '\u{1F3AC}';
+    const displayTitle = isComplete ? `${label} Generated` : `Generating ${label}`;
 
     const expandContent = isComplete && hasOutput && outputSrc ? (
-        isVideo ? (
+        isAudioContent ? (
+            <audio src={outputSrc} controls autoPlay className={styles.expandedMedia} />
+        ) : isVideoContent ? (
             <video src={outputSrc} controls autoPlay loop className={styles.expandedMedia} />
         ) : (
             <img src={outputSrc} alt="Generated" className={styles.expandedMedia} />
@@ -83,7 +89,7 @@ export default function GenerationPreview({ preview, onClose }) {
                     </div>
                 )}
 
-                {isComplete && hasOutput && !isVideo && (
+                {isComplete && hasOutput && isImage && (
                     <div className={styles.previewContainer}>
                         <img src={outputSrc} alt="Generated image" className={styles.previewImage} />
                         <button className={styles.downloadBtn} onClick={handleDownload}>
@@ -92,9 +98,18 @@ export default function GenerationPreview({ preview, onClose }) {
                     </div>
                 )}
 
-                {isComplete && hasOutput && isVideo && (
+                {isComplete && hasOutput && isVideoContent && (
                     <div className={styles.previewContainer}>
                         <video src={outputSrc} controls autoPlay loop className={styles.previewVideo} />
+                        <button className={styles.downloadBtn} onClick={handleDownload}>
+                            Download
+                        </button>
+                    </div>
+                )}
+
+                {isComplete && hasOutput && isAudioContent && (
+                    <div className={styles.previewContainer}>
+                        <audio src={outputSrc} controls autoPlay />
                         <button className={styles.downloadBtn} onClick={handleDownload}>
                             Download
                         </button>

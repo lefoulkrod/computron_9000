@@ -108,9 +108,9 @@ def generate(gen_type, description, **params):
     """Send a generation request and return the output path.
 
     Args:
-        gen_type: "image" or "video"
+        gen_type: "image", "video", or "audio"
         description: Text prompt for generation.
-        **params: Optional overrides (model, num_frames, height, width).
+        **params: Optional overrides (model, num_frames, height, width, duration, steps, cfg_scale, seed, etc.).
 
     Returns:
         Absolute path to the generated file.
@@ -161,9 +161,9 @@ def generate_stream(gen_type, description, **params):
     handles the restart transparently and re-yields from the new server.
 
     Args:
-        gen_type: "image" or "video"
+        gen_type: "image", "video", or "audio"
         description: Text prompt for generation.
-        **params: Optional overrides (model, num_frames, height, width).
+        **params: Optional overrides (model, num_frames, height, width, duration, steps, cfg_scale, seed, etc.).
 
     Yields:
         dict: Progress events from the inference server.

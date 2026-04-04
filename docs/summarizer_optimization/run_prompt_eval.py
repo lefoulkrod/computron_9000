@@ -150,7 +150,7 @@ _TOOL_ARG_KEYS: dict[str, list[str]] = {
     "run_bash_cmd": ["cmd", "command"], "open_url": ["url"],
     "click": ["selector", "ref"], "fill_field": ["selector", "ref"],
     "grep": ["pattern", "query"], "list_dir": ["path"],
-    "generate_media": ["prompt"], "describe_image": ["path", "image_path"],
+    "generate_image": ["prompt"], "describe_image": ["path", "image_path"],
 }
 
 _TRIVIAL_PATTERNS = [

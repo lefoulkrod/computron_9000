@@ -9,11 +9,9 @@ from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
 from agents.goal_planner import goal_planner_tool
-from tools.generation import generate_media
-from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
+from tools.generation import generate_image, generate_music
 from tools.memory import forget, remember
-from tools.virtual_computer import send_file, play_audio, run_bash_cmd
-from tools.virtual_computer.describe_image import describe_image
+from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +65,16 @@ SYSTEM_PROMPT = dedent(
           assets (audio, SVGs via Python/ffmpeg/etc.), edits files, runs commands,
           and searches codebases. Use for any work that involves creating or modifying files.
 
-        IMAGE GENERATION — use the generate_media tool directly for image generation.
+        IMAGE GENERATION — use the generate_image tool directly for image generation.
         Do NOT delegate image generation to COMPUTER_AGENT or other sub-agents.
+
+        MUSIC GENERATION — use generate_music for creating full songs and instrumental music.
+        - prompt: describe genre, mood, and instruments (e.g. "Upbeat pop song with synths")
+        - lyrics: optional song lyrics with structure tags for vocals. Leave empty for
+          instrumental. Use tags like [verse], [chorus], [bridge], [intro], [outro],
+          [pre-chorus], [hook]. Supports 17 languages.
+        - duration: length in seconds (up to 240 / 4 minutes)
+
         - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
           Use ONLY for web browsing — never for creating files or assets.
         - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.
@@ -113,10 +119,8 @@ TOOLS = [
     computer_agent_tool,
     browser_agent_tool,
     desktop_agent_tool,
-    generate_media,
-    send_file,
-    play_audio,
-    describe_image,
+    generate_image,
+    generate_music,
     remember,
     forget,
     goal_planner_tool,
