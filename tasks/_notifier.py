@@ -27,9 +27,9 @@ class TelegramNotifier:
 
     def __init__(self, config: NotificationsConfig) -> None:
         self._config = config
-        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        self._token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         self._chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-        if not token or not self._chat_id:
+        if not self._token or not self._chat_id:
             logger.warning(
                 "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — "
                 "Telegram notifications disabled"
@@ -38,7 +38,7 @@ class TelegramNotifier:
             self._base_url = ""
             return
         self._disabled = False
-        self._base_url = f"https://api.telegram.org/bot{token}"
+        self._base_url = f"https://api.telegram.org/bot{self._token}"
 
     @property
     def enabled(self) -> bool:
