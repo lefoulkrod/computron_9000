@@ -9,6 +9,7 @@ from agents.types import Agent
 from sdk.context import ConversationHistory
 from sdk.events import AgentEvent, ContentPayload, TurnEndPayload, get_current_agent_name, publish_event
 from sdk.providers import ChatDelta, ChatResponse, ProviderError, get_provider
+from sdk.skills.agent_state import _active_agent_state
 from sdk.tools import _execute_tool_call
 
 from ._turn import StopRequestedError
@@ -165,7 +166,9 @@ async def run_turn(
         ToolLoopError: If an unexpected error occurs in the tool loop.
     """
     provider = get_provider()
-    tools = list(agent.tools or [])
+    agent_state = _active_agent_state.get()
+    if agent_state is None:
+        raise ToolLoopError("run_turn called outside an agent_span (no active AgentState)")
     if hooks is None:
         hooks = []
 
@@ -196,7 +199,7 @@ async def run_turn(
                     provider,
                     model=agent.model,
                     messages=history.messages,
-                    tools=tools,
+                    tools=agent_state.tools,
                     options=agent.options,
                     think=agent.think,
                 ):
@@ -266,7 +269,7 @@ async def run_turn(
 
                     async def _run_parallel(tc_item):
                         async with sem:
-                            return tc_item, await _run_tool_with_hooks(tc_item, tools, hooks)
+                            return tc_item, await _run_tool_with_hooks(tc_item, agent_state.tools, hooks)
 
                     tasks = [asyncio.create_task(_run_parallel(tc)) for tc in tool_calls]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -286,7 +289,7 @@ async def run_turn(
                             history.append(tool_result)
                 else:
                     for tc in tool_calls:
-                        result = await _run_tool_with_hooks(tc, tools, hooks)
+                        result = await _run_tool_with_hooks(tc, agent_state.tools, hooks)
                         history.append(result)
 
             except StopRequestedError:

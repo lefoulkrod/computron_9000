@@ -1,8 +1,4 @@
-"""Skills package — models for reusable workflow recipes."""
+"""Skills package — built-in skill modules for progressive tool loading.
 
-from ._models import SkillDefinition, SkillStep
-
-__all__ = [
-    "SkillDefinition",
-    "SkillStep",
-]
+Skill definitions live here; registration happens in sdk.skills._registry.
+"""

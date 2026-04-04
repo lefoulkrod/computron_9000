@@ -122,6 +122,32 @@ def save_sub_agent_history(
 # -- Conversation metadata persistence ---------------------------------------
 
 
+def save_loaded_skills(conversation_id: str, skills: frozenset[str]) -> None:
+    """Persist loaded skill names to conversation metadata."""
+    conv_dir = _get_conv_dir(conversation_id)
+    conv_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata_path = conv_dir / "metadata.json"
+    metadata: dict[str, Any] = {}
+    if metadata_path.exists():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    metadata["loaded_skills"] = sorted(skills)
+    tmp = metadata_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    tmp.replace(metadata_path)
+
+
+def load_loaded_skills(conversation_id: str) -> set[str]:
+    """Load persisted skill names from conversation metadata."""
+    metadata = load_conversation_metadata(conversation_id)
+    raw = metadata.get("loaded_skills", [])
+    return set(raw) if isinstance(raw, list) else set()
+
+
 def save_conversation_title(conversation_id: str, title: str) -> None:
     """Save or update the title for a conversation.
     

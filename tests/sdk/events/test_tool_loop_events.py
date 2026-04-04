@@ -12,7 +12,8 @@ from typing import Any, List
 import pytest
 
 from sdk.context import ConversationHistory
-from sdk.events import AgentEvent, ContentPayload, ToolCallPayload
+from sdk.events import AgentEvent, ContentPayload, ToolCallPayload, agent_span
+from sdk.skills import AgentState
 from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage, ToolCall, ToolCallFunction
 from sdk.turn import run_turn, turn_scope
 from agents.types import Agent
@@ -89,10 +90,11 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     )
 
     async with turn_scope(handler=_handler):
-        await run_turn(
-            history,
-            agent=agent,
-        )
+        with agent_span("Test", agent_state=AgentState(agent.tools)):
+            await run_turn(
+                history,
+                agent=agent,
+            )
 
     # Assert: at least two events: one model output and one tool_call
     assert any(

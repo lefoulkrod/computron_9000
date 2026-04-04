@@ -6,6 +6,7 @@ from typing import Any
 
 from ._budget_guard import BudgetGuard
 from ._context_hook import ContextHook
+from ._loaded_skill_hook import LoadedSkillHook
 from ._logging_hook import LoggingHook
 from ._loop_detector import LoopDetector
 from ._nudge_hook import NudgeHook
@@ -27,6 +28,7 @@ def default_hooks(
     hooks.append(LoopDetector())
     hooks.append(LoggingHook(agent))
     hooks.append(ScratchpadHook())
+    hooks.append(LoadedSkillHook())
     num_ctx = (agent.options or {}).get("num_ctx", 0)
     if num_ctx > 0:
         hooks.append(ToolResultCapHook(num_ctx))

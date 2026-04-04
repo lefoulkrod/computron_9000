@@ -48,13 +48,27 @@ SYSTEM_PROMPT = dedent(
     To click Save: mouse_click(120, 55)
 
     CHOOSING THE RIGHT TOOL:
-    - read_screen() is fast — use it to find interactive elements.
-    - describe_screen() is slow — use it when you need visual context
-      beyond the element list (what an app shows, non-interactive text).
-    - perform_visual_action(task) — use when the a11y tree doesn't have
-      what you need (canvas, games, custom widgets, images). Sends a
-      screenshot to a vision model that predicts and executes the action.
+    - read_screen() — ALWAYS call this first. Returns the a11y
+      element list with coordinates. This is your primary observation.
+    - mouse_click(x, y) — use coordinates FROM read_screen() output.
+      This is the default way to interact with standard UI elements
+      (buttons, menus, text fields, checkboxes, links, tabs, etc.).
+    - describe_screen() — use when you need to see non-interactive
+      content (what an image shows, text in a canvas, visual layout)
+      that isn't in the element list.
+    - perform_visual_action(task) — use ONLY when the target is NOT
+      in read_screen() output: game canvases, custom drawn widgets,
+      image regions, or elements with no a11y labels. Do NOT use
+      this for standard UI elements — use mouse_click instead.
     - Prefer keyboard shortcuts when they're faster than clicking.
+
+    DECISION RULE: read_screen() first. If the element you need is in
+    the list → mouse_click its coordinates. If it's NOT in the list
+    (canvas, game, unlabeled widget) → perform_visual_action.
+
+    ONE ACTION AT A TIME — never call multiple desktop tools in
+    parallel. Each action changes the screen, so the next action
+    depends on the result of the previous one.
 
     XDOTOOL KEY NAMES (for keyboard_press):
         "Return", "Tab", "Escape", "BackSpace", "Delete", "space",

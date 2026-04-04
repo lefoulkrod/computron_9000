@@ -13,6 +13,8 @@ from typing import Any, Protocol, cast, get_args, get_origin
 from agents.types import Agent
 from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events import agent_span, get_current_agent_id, get_model_options
+from sdk.skills import AgentState
+from sdk.tools._core import get_core_tools
 from sdk.hooks import default_hooks
 from sdk.hooks._persistence import PersistenceHook
 from sdk.turn import StopRequestedError, get_conversation_id, run_turn
@@ -313,7 +315,7 @@ Returns:
             "Spawning sub-agent '%s' (tool=%s, max_iter=%d, instruction=%.100s)",
             agent.name, func_name, effective_max_iterations, instructions,
         )
-        with agent_span(agent.name, instruction=instructions):
+        with agent_span(agent.name, instruction=instructions, agent_state=AgentState(get_core_tools() + agent.tools)):
             conv_id = get_conversation_id() or "default"
             short_id = _uuid.uuid4().hex[:8]
             instance_id = f"{conv_id}/{name}_{short_id}"

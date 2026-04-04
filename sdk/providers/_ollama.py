@@ -272,15 +272,20 @@ def _log_stream_error(model: str, elapsed: float, chunks_received: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+_RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
+
 def _wrap_ollama_error(exc: Exception) -> ProviderError:
     """Convert an Ollama client exception into a ProviderError."""
-    from httpx import HTTPStatusError
+    from ollama import ResponseError
 
     status_code = None
-    if isinstance(exc, HTTPStatusError):
-        status_code = exc.response.status_code
+    retryable = True  # Default for non-HTTP errors (connection issues, etc.)
+    if isinstance(exc, ResponseError):
+        status_code = exc.status_code
+        retryable = status_code in _RETRYABLE_STATUS_CODES
     return ProviderError(
-        str(exc), retryable=True, status_code=status_code, cause=exc,
+        str(exc), retryable=retryable, status_code=status_code, cause=exc,
     )
 
 

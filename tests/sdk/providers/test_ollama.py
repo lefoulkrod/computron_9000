@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from sdk.providers._ollama import OllamaProvider, _normalize_response
+from sdk.providers._ollama import OllamaProvider, _normalize_response, _wrap_ollama_error
 
 
 @dataclass
@@ -130,6 +130,34 @@ class TestOllamaProviderChat:
         assert call_kwargs["stream"] is True
         assert result.message.content == "response text"
         assert result.usage.prompt_tokens == 200
+
+
+@pytest.mark.unit
+class TestWrapOllamaError:
+    def test_response_error_400_not_retryable(self):
+        """Client errors like 400 should not be retried."""
+        from ollama import ResponseError
+
+        exc = ResponseError("does not support thinking", status_code=400)
+        wrapped = _wrap_ollama_error(exc)
+        assert wrapped.retryable is False
+        assert wrapped.status_code == 400
+
+    def test_response_error_500_retryable(self):
+        """Server errors like 500 should be retried."""
+        from ollama import ResponseError
+
+        exc = ResponseError("internal server error", status_code=500)
+        wrapped = _wrap_ollama_error(exc)
+        assert wrapped.retryable is True
+        assert wrapped.status_code == 500
+
+    def test_connection_error_retryable(self):
+        """Non-HTTP errors (connection issues) should be retried."""
+        exc = ConnectionError("refused")
+        wrapped = _wrap_ollama_error(exc)
+        assert wrapped.retryable is True
+        assert wrapped.status_code is None
 
 
 @pytest.mark.unit

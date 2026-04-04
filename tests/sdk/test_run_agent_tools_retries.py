@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from sdk.tools import (
+from sdk.tools._agent_wrapper import (
     AgentToolConversionError,
     make_run_agent_as_tool_function,
 )

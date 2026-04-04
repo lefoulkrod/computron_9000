@@ -10,6 +10,8 @@ from config import load_config
 from sdk import PersistenceHook, default_hooks, run_turn
 from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
 from sdk.events._context import agent_span, get_current_dispatcher, set_model_options
+from sdk.skills.agent_state import AgentState
+from sdk.tools._core import get_core_tools
 from sdk.events._models import FileOutputPayload
 from sdk.turn import turn_scope
 
@@ -93,7 +95,7 @@ class TaskExecutor:
             dispatcher = get_current_dispatcher()
             if dispatcher:
                 dispatcher.subscribe(_capture_file_output)
-            with agent_span(agent.name, instruction=instruction):
+            with agent_span(agent.name, instruction=instruction, agent_state=AgentState(get_core_tools() + (agent.tools or []))):
                 result = await run_turn(history, agent, hooks=hooks)
 
         return result or "", file_paths

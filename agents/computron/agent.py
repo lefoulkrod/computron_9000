@@ -9,11 +9,9 @@ from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
 from agents.goal_planner import goal_planner_tool
-from agents.sub_agent import run_sub_agent
 from tools.generation import generate_media
 from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
 from tools.memory import forget, remember
-from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import send_file, play_audio, run_bash_cmd
 from tools.virtual_computer.describe_image import describe_image
 
@@ -76,8 +74,10 @@ SYSTEM_PROMPT = dedent(
         - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.
           Use for GUI applications like LibreOffice, GIMP, file managers, or anything
           that needs a graphical interface beyond the web browser.
-        - run_sub_agent(instructions, agent_name) — general tasks, data processing, working
-          with files in /home/computron/. Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
+        - spawn_agent(instructions, skills, agent_name) — general-purpose sub-agent with
+          dynamically composed skills. Available skills: "coder" (file I/O, bash, code editing),
+          "browser" (web browsing), "media" (image/audio generation, custom tools),
+          "desktop" (GUI control). Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
           Sub-agents share /home/computron/.
         For quick file ops in /home/computron/ (read, list, move, check output), use
         run_bash_cmd directly. Delegate to COMPUTER_AGENT for code, asset generation,
@@ -114,17 +114,11 @@ TOOLS = [
     browser_agent_tool,
     desktop_agent_tool,
     generate_media,
-    create_custom_tool,
-    lookup_custom_tools,
-    run_custom_tool,
     send_file,
     play_audio,
     describe_image,
-    run_sub_agent,
     remember,
     forget,
-    save_to_scratchpad,
-    recall_from_scratchpad,
     goal_planner_tool,
 ]
 

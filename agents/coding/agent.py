@@ -12,7 +12,6 @@ import logging
 from textwrap import dedent
 
 from sdk import make_run_agent_as_tool_function
-from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import (
     apply_text_patch,
     describe_image,
@@ -106,9 +105,6 @@ TOOLS = [
     run_bash_cmd,
     # Vision
     describe_image,
-    # Scratchpad
-    save_to_scratchpad,
-    recall_from_scratchpad,
 ]
 
 computer_agent_tool = make_run_agent_as_tool_function(

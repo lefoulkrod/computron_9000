@@ -7,7 +7,7 @@ name to the returned function so the tool loop can distinguish multiple agents.
 import pytest
 from pydantic import BaseModel
 
-from sdk.tools import make_run_agent_as_tool_function
+from sdk.tools._agent_wrapper import make_run_agent_as_tool_function
 
 
 @pytest.mark.unit

@@ -25,6 +25,8 @@ if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
 
 from agents.types import LLMOptions
 
+from sdk.skills.agent_state import AgentState, _active_agent_state
+
 from ._dispatcher import EventDispatcher
 from ._models import AgentCompletedPayload, AgentEvent, AgentStartedPayload, ContentPayload
 
@@ -95,15 +97,22 @@ def get_current_depth() -> int:
 def agent_span(
     agent_name: str | None = None,
     instruction: str | None = None,
+    agent_state: AgentState | None = None,
 ) -> Generator[str, None, None]:
     """Push an attribution frame for the duration of the block.
 
     Events published inside will be tagged with the given agent name and an
     incremented depth. Emits agent lifecycle events on entry and exit.
 
+    When an AgentState is passed, the span borrows it (useful for multi-turn
+    agents whose skills should survive across turns). Otherwise a fresh
+    empty AgentState is created.
+
     Args:
         agent_name: Human-readable agent name for event attribution.
         instruction: The instruction or user message this agent was given.
+        agent_state: AgentState to use for this span. A fresh empty one is
+            created when None.
 
     Yields:
         str: The context id pushed onto the stack.
@@ -117,6 +126,10 @@ def agent_span(
     context_id = _make_child_context_id(agent_name)
     depth = len(stack)
     token = _context_stack.set((*stack, (context_id, agent_name)))
+    # Borrow an existing AgentState (multi-turn agents) or create a fresh
+    # one (sub-agents). Skills loaded mid-span persist for the span's
+    # lifetime; a borrowed instance also preserves skills across spans.
+    ls_token = _active_agent_state.set(agent_state if agent_state is not None else AgentState([]))
 
     logger.info(
         "Agent started: %s (id=%s, parent=%s, depth=%d)",
@@ -150,6 +163,7 @@ def agent_span(
             agent_name=agent_name or "",
             status=status,
         )))
+        _active_agent_state.reset(ls_token)
         _context_stack.reset(token)
 
 

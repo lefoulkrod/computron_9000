@@ -17,6 +17,8 @@ from typing import Any
 import pytest
 
 from sdk.context import ConversationHistory
+from sdk.events import agent_span
+from sdk.skills import AgentState
 from sdk.providers._models import ChatMessage, ChatResponse, TokenUsage
 from sdk.turn import run_turn
 from agents.types import Agent
@@ -84,7 +86,8 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
-    await run_turn(history, agent=agent)
+    with agent_span("Test", agent_state=AgentState(agent.tools)):
+        await run_turn(history, agent=agent)
 
     messages = history.messages
     tool_msg = next(msg for msg in reversed(messages) if msg.get("role") == "tool")
@@ -119,7 +122,8 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
-    await run_turn(history, agent=agent)
+    with agent_span("Test", agent_state=AgentState(agent.tools)):
+        await run_turn(history, agent=agent)
 
     tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     content = tool_msg["content"]
@@ -144,7 +148,8 @@ async def test_tool_serialization_tool_exception_as_error(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[explode])
-    await run_turn(history, agent=agent)
+    with agent_span("Test", agent_state=AgentState(agent.tools)):
+        await run_turn(history, agent=agent)
 
     tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     content = tool_msg["content"]
@@ -168,7 +173,8 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[run_bash_cmd])
-    await run_turn(history, agent=agent)
+    with agent_span("Test", agent_state=AgentState(agent.tools)):
+        await run_turn(history, agent=agent)
 
     tool_msg = next(msg for msg in reversed(history.messages) if msg.get("role") == "tool")
     content = tool_msg["content"]
@@ -197,7 +203,8 @@ async def test_persist_thinking_true_stores_thinking_in_history(monkeypatch):
         model="dummy", options={}, tools=[],
         persist_thinking=True,
     )
-    await run_turn(history, agent=agent)
+    with agent_span("Test", agent_state=AgentState(agent.tools)):
+        await run_turn(history, agent=agent)
 
     assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
     assert assistant_msg["thinking"] == "deep thought"
@@ -229,7 +236,8 @@ async def test_persist_thinking_false_excludes_thinking_from_history(monkeypatch
         model="dummy", options={}, tools=[],
         persist_thinking=False,
     )
-    await run_turn(history, agent=agent)
+    with agent_span("Test", agent_state=AgentState(agent.tools)):
+        await run_turn(history, agent=agent)
 
     # History should NOT contain thinking
     assistant_msg = next(m for m in history.messages if m["role"] == "assistant")

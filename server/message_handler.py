@@ -24,8 +24,10 @@ from agents import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
+    load_loaded_skills,
     save_agent_events,
     save_conversation_title,
+    save_loaded_skills,
 )
 from sdk import (
     PersistenceHook,
@@ -33,6 +35,8 @@ from sdk import (
     run_turn,
 )
 from sdk.hooks._agent_event_buffer import AgentEventBufferHook
+from sdk.skills.agent_state import AgentState
+from sdk.tools._core import get_core_tools
 from sdk.turn._turn import StopRequestedError
 
 logger = logging.getLogger(__name__)
@@ -178,6 +182,12 @@ async def _run_turn(
     ctx_manager = _ensure_context_manager(conversation, active_agent)
     conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
 
+    # Fresh AgentState each turn, restored from persisted skill names.
+    agent_state = AgentState(get_core_tools() + active_agent.tools)
+    for skill_name in load_loaded_skills(conv_id):
+        if agent_state.load(skill_name) is not None:
+            logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
+
     async with turn_scope(handler=handler, conversation_id=conversation_id):
         # Subscribe event buffer to capture agent lifecycle/preview events
         event_buffer = AgentEventBufferHook()
@@ -185,7 +195,7 @@ async def _run_turn(
         if dispatcher:
             dispatcher.subscribe(event_buffer.handle_event)
 
-        with agent_span(active_agent.name, instruction=user_content):
+        with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state):
             conversation.history.append({"role": "user", "content": user_content})
             _refresh_system_message(conversation.history, active_agent.instruction)
 
@@ -206,6 +216,13 @@ async def _run_turn(
                     agent=active_agent,
                     hooks=hooks,
                 )
+
+        # Persist loaded skills so they survive across turns and restarts
+        if agent_state.loaded_skill_names:
+            try:
+                save_loaded_skills(conv_id, agent_state.loaded_skill_names)
+            except Exception:
+                logger.exception("Failed to save loaded skills for '%s'", conv_id)
 
         # Yield to event loop so call_soon callbacks (sync event handlers)
         # have a chance to run before we read the buffer

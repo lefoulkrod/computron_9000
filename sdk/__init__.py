@@ -15,7 +15,7 @@ from .hooks import (
 )
 from .turn import run_turn
 from .providers import LLMRuntimeStats, llm_runtime_stats
-from .tools import make_run_agent_as_tool_function
+from .tools._agent_wrapper import make_run_agent_as_tool_function
 
 __all__ = [
     "BudgetGuard",

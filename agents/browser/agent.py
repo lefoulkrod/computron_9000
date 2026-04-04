@@ -27,7 +27,6 @@ from tools.browser import (
     scroll_page,
     select_option,
 )
-from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
 from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
@@ -135,8 +134,6 @@ TOOLS = [
     execute_javascript,
     save_page_content,
     run_bash_cmd,
-    save_to_scratchpad,
-    recall_from_scratchpad,
 ]
 
 browser_agent_tool = make_run_agent_as_tool_function(
