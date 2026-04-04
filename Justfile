@@ -727,13 +727,14 @@ inference-start:
         echo "🔑 HF_TOKEN detected, passing to container"
     fi
 
+    # Only bind-mount the shared output directory — not the full home.
+    # This prevents stale user-installed packages from shadowing
+    # system packages inside the container.
     podman run -d --rm \
       --name computron_inference \
-      --userns=keep-id \
-      --group-add keep-groups \
       --device nvidia.com/gpu=all \
       $hf_token_args \
-      -v "$home_dir:/home/computron:rw,z" \
+      -v "$home_dir:/output:rw,z" \
       computron_inference:latest
 
     echo "✅ Container 'computron_inference' started successfully!"

@@ -25,8 +25,8 @@ def mock_config():
     """Mock configuration for inference container."""
     config = MagicMock()
     config.inference_container.container_name = "test-inference-container"
-    config.inference_container.container_user = "computron"
-    config.inference_container.container_working_dir = "/home/computron"
+    config.inference_container.container_working_dir = "/output"
+    config.virtual_computer.container_working_dir = "/home/computron"
     config.inference_container.home_dir = "/tmp/test_computron"
     return config
 
@@ -84,7 +84,7 @@ async def test_generate_music_default_parameters(mock_config):
         mock_proc.stdout.readline = AsyncMock(side_effect=[
             json.dumps({"status": "loading", "message": "Loading model..."}).encode(),
             json.dumps({"status": "generating", "step": 1, "total_steps": 60}).encode(),
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",  # EOF
         ])
         mock_proc.stderr = AsyncMock()
@@ -113,7 +113,7 @@ async def test_generate_music_custom_parameters(mock_config):
         mock_proc.returncode = 0
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -134,13 +134,12 @@ async def test_generate_music_custom_parameters(mock_config):
         # Verify the subprocess was called with correct parameters
         call_args = mock_exec.call_args
         assert call_args is not None
-        script_arg = call_args[0][7]  # 7th positional argument is the script
+        script_arg = call_args[0][5]  # podman exec container python3 -c <script>
         assert "jazz piano" in script_arg
         assert "duration" in script_arg
-        # "best" vocal preset uses euler scheduler, 80 steps, higher guidance_interval
-        assert "euler" in script_arg
-        assert '"steps": 80' in script_arg
-        assert "guidance_interval" in script_arg
+        # "best" quality preset uses 16 steps with thinking enabled
+        assert "'steps': 16" in script_arg
+        assert "'thinking': True" in script_arg
 
 
 @pytest.mark.unit
@@ -156,7 +155,7 @@ async def test_generate_music_valid_duration(mock_config, duration):
         mock_proc.returncode = 0
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -183,7 +182,7 @@ async def test_generate_music_publishes_generation_preview_events(mock_config):
             json.dumps({"status": "loading", "message": "Loading model..."}).encode(),
             json.dumps({"status": "generating", "step": 1, "total_steps": 60, "message": "Step 1/60"}).encode(),
             json.dumps({"status": "generating", "step": 60, "total_steps": 60, "message": "Finalizing..."}).encode(),
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -221,7 +220,7 @@ async def test_generate_music_publishes_file_output_event(mock_config):
         mock_proc.returncode = 0
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -360,7 +359,7 @@ async def test_generate_music_file_not_found_on_host(mock_config):
         mock_proc.returncode = 0
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -382,7 +381,7 @@ async def test_generate_music_parses_json_lines_correctly(mock_config):
         {"status": "loading", "message": "Loading ACE-Step model..."},
         {"status": "generating", "step": 10, "total_steps": 60, "message": "Step 10/60"},
         {"status": "generating", "step": 20, "total_steps": 60, "message": "Step 20/60"},
-        {"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav", "duration": 30.0},
+        {"status": "complete", "path": "/output/generated_audio/generated_12345.wav", "duration": 30.0},
     ]
 
     with (
@@ -421,7 +420,7 @@ async def test_generate_music_skips_non_json_lines(mock_config):
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
             b"Some log output that is not JSON",
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -447,7 +446,7 @@ async def test_generate_music_podman_exec_command_structure(mock_config):
         mock_proc.returncode = 0
         mock_proc.stdout = MagicMock()
         mock_proc.stdout.readline = AsyncMock(side_effect=[
-            json.dumps({"status": "complete", "path": "/home/computron/generated_audio/generated_12345.wav"}).encode(),
+            json.dumps({"status": "complete", "path": "/output/generated_audio/generated_12345.wav"}).encode(),
             b"",
         ])
         mock_proc.stderr = AsyncMock()
@@ -468,18 +467,16 @@ async def test_generate_music_podman_exec_command_structure(mock_config):
 
         assert args[0] == "podman"
         assert args[1] == "exec"
-        assert args[2] == "-u"
-        assert args[3] == "computron"
-        assert args[4] == "test-inference-container"
-        assert args[5] == "python3"
-        assert args[6] == "-c"
+        assert args[2] == "test-inference-container"
+        assert args[3] == "python3"
+        assert args[4] == "-c"
 
         # Check the script contains expected ACE-Step parameters
-        script = args[7]
+        script = args[5]
         assert "inference_client" in script
         assert "generate_stream" in script
         assert "ambient synth" in script or "ambient" in script.lower()
         assert "duration" in script
-        # "fast" instrumental preset uses pingpong scheduler, 25 steps
-        assert "pingpong" in script
-        assert '"steps": 25' in script
+        # "fast" quality preset uses 4 steps, no thinking
+        assert "'steps': 4" in script
+        assert "'thinking': False" in script

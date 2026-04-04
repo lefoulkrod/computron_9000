@@ -95,14 +95,15 @@ _MODELS = {
     },
 }
 
-# Audio model configuration (ACE-Step for full song generation)
+# Audio model configuration (ACE-Step 1.5 for full song generation)
 _AUDIO_MODEL = {
-    "model_id": "ACE-Step/ACE-Step-v1-3.5B",
-    "num_inference_steps": 60,
-    "guidance_scale": 15.0,
+    "num_inference_steps": 8,  # Turbo default
     "sample_rate": 48000,
-    "max_duration": 240,  # 4 minutes max
+    "max_duration": 600,  # 10 minutes max in v1.5
 }
+
+# LLM handler for ACE-Step 1.5 (initialized alongside DiT)
+_llm_handler = None
 
 _SIZE_PRESETS = {
     "square": (1024, 1024),
@@ -214,7 +215,7 @@ def _unload():
     can't be freed from GPU memory within the same process, so model
     switching is handled by restarting the server process instead.
     """
-    global _pipe, _pipe_type, _taesd, _loaded_gpu, _loaded_model
+    global _pipe, _pipe_type, _taesd, _loaded_gpu, _loaded_model, _llm_handler
     if _pipe is not None:
         log.info("Unloading %s model (%s) from GPU %d", _pipe_type, _loaded_model, _loaded_gpu)
         del _pipe
@@ -222,6 +223,9 @@ def _unload():
         _pipe_type = None
         _loaded_gpu = -1
         _loaded_model = None
+    if _llm_handler is not None:
+        del _llm_handler
+        _llm_handler = None
     if _taesd is not None:
         del _taesd
         _taesd = None
@@ -865,8 +869,8 @@ def _load_video_model(on_progress=None):
 
 
 def _load_audio_model(on_progress=None):
-    """Load ACE-Step audio generation model for full song generation."""
-    global _pipe, _pipe_type, _loaded_gpu, _loaded_model
+    """Load ACE-Step 1.5 DiT + LLM handlers for music generation."""
+    global _pipe, _pipe_type, _loaded_gpu, _loaded_model, _llm_handler
 
     def _emit(msg):
         log.info(msg)
@@ -874,13 +878,11 @@ def _load_audio_model(on_progress=None):
             on_progress(msg)
 
     _unload()
-    _emit("Loading ACE-Step audio model...")
+    _emit("Loading ACE-Step 1.5 audio model...")
 
     # Pick the best GPU via nvidia-smi BEFORE initializing CUDA.
-    # Then restrict CUDA_VISIBLE_DEVICES so cuda:0 maps to the chosen
-    # physical GPU — ACE-Step's internals hardcode cuda:0 in places,
-    # so this is the only reliable way to land on the right device.
-    # Safe because the server restarts to switch model types.
+    # Restrict CUDA_VISIBLE_DEVICES so cuda:0 maps to the chosen
+    # physical GPU.  Safe because the server restarts to switch models.
     if on_progress:
         on_progress("Selecting GPU...")
     gpu_id, free_mb, _total_mb = _find_best_gpu()
@@ -890,26 +892,51 @@ def _load_audio_model(on_progress=None):
     import torch
     torch.cuda.set_device(0)
 
-    from acestep.pipeline_ace_step import ACEStepPipeline
+    from acestep.handler import AceStepHandler
+    from acestep.llm_inference import LLMHandler
 
-    # ACE-Step needs ~12 GB resident without offload.  If the GPU has
-    # enough headroom, skip cpu_offload for much faster generation.
-    _AUDIO_FULL_GPU_MB = 14_000  # ~14 GB threshold with safety margin
+    # Determine offload strategy based on VRAM
+    _AUDIO_FULL_GPU_MB = 10_000
     use_offload = free_mb < _AUDIO_FULL_GPU_MB
 
-    if use_offload:
-        _emit(f"Initializing ACE-Step pipeline (cpu_offload, {free_mb / 1024:.1f} GB free)...")
-    else:
-        _emit(f"Initializing ACE-Step pipeline (full GPU, {free_mb / 1024:.1f} GB free)...")
-    _pipe = ACEStepPipeline(device_id=0, cpu_offload=use_offload)
+    offload_label = "cpu_offload" if use_offload else "full GPU"
+    _emit(f"Initializing ACE-Step 1.5 DiT ({offload_label})...")
 
-    _emit("Loading ACE-Step checkpoint (downloading if needed)...")
-    _pipe.load_checkpoint()
+    _pipe = AceStepHandler()
+    # Use a writable directory for model checkpoints — the package install
+    # location is not writable by the non-root container user.
+    project_root = os.path.expanduser("~/.cache/ace-step")
+    os.makedirs(project_root, exist_ok=True)
+    status, success = _pipe.initialize_service(
+        project_root=project_root,
+        config_path="acestep-v15-turbo",
+        device="cuda",
+        offload_to_cpu=use_offload,
+    )
+    if not success:
+        raise RuntimeError(f"DiT initialization failed: {status}")
+    _emit(f"DiT ready: {status}")
+
+    # Initialize LLM handler for Chain-of-Thought reasoning
+    _emit("Initializing 5Hz LM (acestep-5Hz-lm-1.7B)...")
+    _llm_handler = LLMHandler()
+    lm_status, lm_success = _llm_handler.initialize(
+        checkpoint_dir=os.path.expanduser("~/.cache/ace-step/checkpoints"),
+        lm_model_path="acestep-5Hz-lm-1.7B",
+        backend="pt",
+        device="cuda",
+        offload_to_cpu=use_offload,
+    )
+    if not lm_success:
+        log.warning("LLM init failed (%s), generation will work without CoT", lm_status)
+        _llm_handler = None
+    else:
+        _emit(f"LLM ready: {lm_status}")
 
     _pipe_type = "audio"
     _loaded_gpu = gpu_id
-    _loaded_model = "ace-step"
-    log.info("ACE-Step audio model ready on GPU %d", gpu_id)
+    _loaded_model = "ace-step-1.5"
+    log.info("ACE-Step 1.5 ready on GPU %d", gpu_id)
 
 
 # ── Non-streaming generation (backward-compatible) ────────────────────
@@ -933,7 +960,7 @@ def _generate_image(body):
     with torch.inference_mode():
         image = _pipe(**pipe_kwargs).images[0]
     timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_images/generated_{timestamp}.png"
+    out_path = f"/output/generated_images/generated_{timestamp}.png"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     image.save(out_path)
     log.info("Image saved: %s", out_path)
@@ -973,52 +1000,73 @@ def _generate_video(body):
         )
     frames = output.frames[0]
     timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_videos/generated_{timestamp}.mp4"
+    out_path = f"/output/generated_videos/generated_{timestamp}.mp4"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     export_to_video(frames, out_path, fps=16)
     log.info("Video saved: %s", out_path)
     return {"path": out_path}
 
 
-def _generate_audio(body):
-    """Generate audio/music using ACE-Step and return the output path."""
-    _ensure_audio_model()
+def _build_generation_params(body):
+    """Map request body to ACE-Step 1.5 GenerationParams fields."""
+    from acestep.inference import GenerationParams
 
     prompt = body["description"]
-
-    # Get duration in seconds (ACE-Step supports up to 4 minutes)
-    duration = float(body.get("duration", 30.0))
-    duration = min(duration, _AUDIO_MODEL["max_duration"])
-
-    num_inference_steps = int(body.get("steps", _AUDIO_MODEL["num_inference_steps"]))
-    guidance_scale = float(body.get("cfg_scale", _AUDIO_MODEL["guidance_scale"]))
-    scheduler_type = body.get("scheduler_type", "euler")
-    guidance_interval = float(body.get("guidance_interval", 0.5))
-    omega_scale = float(body.get("omega_scale", 10.0))
-
-    timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_audio/generated_{timestamp}.wav"
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-
     lyrics = body.get("lyrics", "")
+    duration = float(body.get("duration", 60.0))
+    duration = min(duration, _AUDIO_MODEL["max_duration"])
+    steps = int(body.get("steps", _AUDIO_MODEL["num_inference_steps"]))
 
-    # ACEStepPipeline returns [output_path, ..., input_params_dict]
-    result = _pipe(
-        prompt=prompt,
-        lyrics=lyrics,
-        audio_duration=duration,
-        infer_step=num_inference_steps,
-        guidance_scale=guidance_scale,
-        scheduler_type=scheduler_type,
-        guidance_interval=guidance_interval,
-        omega_scale=omega_scale,
-        save_path=out_path,
-    )
+    kwargs = {
+        "caption": prompt,
+        "lyrics": lyrics,
+        "duration": duration,
+        "inference_steps": steps,
+    }
 
-    # First element is the output audio path
-    actual_path = result[0]
-    log.info("Audio saved: %s (%.1fs)", actual_path, duration)
-    return {"path": actual_path, "duration": duration, "sample_rate": _AUDIO_MODEL["sample_rate"]}
+    # Optional overrides — only include if explicitly provided
+    if "guidance_scale" in body:
+        kwargs["guidance_scale"] = float(body["guidance_scale"])
+    if "shift" in body:
+        kwargs["shift"] = float(body["shift"])
+    if "seed" in body:
+        kwargs["seed"] = int(body["seed"])
+    if "instrumental" in body:
+        kwargs["instrumental"] = bool(body["instrumental"])
+    if "thinking" in body:
+        kwargs["thinking"] = bool(body["thinking"])
+    if "lm_temperature" in body:
+        kwargs["lm_temperature"] = float(body["lm_temperature"])
+    if "lm_cfg_scale" in body:
+        kwargs["lm_cfg_scale"] = float(body["lm_cfg_scale"])
+    if "lm_top_p" in body:
+        kwargs["lm_top_p"] = float(body["lm_top_p"])
+
+    return GenerationParams(**kwargs)
+
+
+def _generate_audio(body):
+    """Generate audio/music using ACE-Step 1.5 and return the output path."""
+    from acestep.inference import GenerationConfig, generate_music
+
+    _ensure_audio_model()
+
+    out_dir = "/output/generated_audio"
+    os.makedirs(out_dir, exist_ok=True)
+
+    params = _build_generation_params(body)
+    config = GenerationConfig(batch_size=1, audio_format="wav")
+
+    result = generate_music(_pipe, _llm_handler, params, config, save_dir=out_dir)
+
+    if not result.success:
+        raise RuntimeError(result.error or "Audio generation failed")
+    if not result.audios:
+        raise RuntimeError("No audio generated")
+
+    actual_path = result.audios[0].get("path", "")
+    log.info("Audio saved: %s (%.1fs)", actual_path, params.duration)
+    return {"path": actual_path, "duration": params.duration, "sample_rate": _AUDIO_MODEL["sample_rate"]}
 
 
 # ── Streaming generation (with progress + previews) ───────────────────
@@ -1074,7 +1122,7 @@ def _generate_image_stream(body, write_line):
         image = _pipe(**pipe_kwargs).images[0]
 
     timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_images/generated_{timestamp}.png"
+    out_path = f"/output/generated_images/generated_{timestamp}.png"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     image.save(out_path)
     log.info("Image saved: %s", out_path)
@@ -1141,7 +1189,7 @@ def _generate_video_stream(body, write_line):
 
     frames = output.frames[0]
     timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_videos/generated_{timestamp}.mp4"
+    out_path = f"/output/generated_videos/generated_{timestamp}.mp4"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     export_to_video(frames, out_path, fps=16)
     log.info("Video saved: %s", out_path)
@@ -1150,48 +1198,37 @@ def _generate_video_stream(body, write_line):
 
 
 def _generate_audio_stream(body, write_line):
-    """Generate audio with streaming progress using ACE-Step."""
+    """Generate audio with streaming progress using ACE-Step 1.5."""
+    from acestep.inference import GenerationConfig, generate_music
+
     def _loading_progress(msg):
         write_line({"status": "loading", "message": msg})
 
-    _loading_progress("Preparing ACE-Step audio model...")
+    _loading_progress("Preparing ACE-Step 1.5 audio model...")
     _ensure_audio_model(on_progress=_loading_progress)
 
-    prompt = body["description"]
+    out_dir = "/output/generated_audio"
+    os.makedirs(out_dir, exist_ok=True)
 
-    duration = float(body.get("duration", 30.0))
-    duration = min(duration, _AUDIO_MODEL["max_duration"])
+    params = _build_generation_params(body)
 
-    num_inference_steps = int(body.get("steps", _AUDIO_MODEL["num_inference_steps"]))
-    guidance_scale = float(body.get("cfg_scale", _AUDIO_MODEL["guidance_scale"]))
-    scheduler_type = body.get("scheduler_type", "euler")
-    guidance_interval = float(body.get("guidance_interval", 0.5))
-    omega_scale = float(body.get("omega_scale", 10.0))
-    lyrics = body.get("lyrics", "")
+    write_line({"status": "generating", "step": 0, "total_steps": params.inference_steps,
+                "message": f"Starting audio generation ({params.duration:.1f}s)..."})
 
-    timestamp = int(time.time() * 1000)
-    out_path = f"/home/computron/generated_audio/generated_{timestamp}.wav"
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    config = GenerationConfig(batch_size=1, audio_format="wav")
+    result = generate_music(_pipe, _llm_handler, params, config, save_dir=out_dir)
 
-    write_line({"status": "generating", "step": 0, "total_steps": num_inference_steps,
-                "message": f"Starting audio generation ({duration:.1f}s)..."})
+    if not result.success:
+        write_line({"status": "failed", "message": result.error or "Generation failed"})
+        return
 
-    # ACEStepPipeline returns [output_path, ..., input_params_dict]
-    result = _pipe(
-        prompt=prompt,
-        lyrics=lyrics,
-        audio_duration=duration,
-        infer_step=num_inference_steps,
-        guidance_scale=guidance_scale,
-        scheduler_type=scheduler_type,
-        guidance_interval=guidance_interval,
-        omega_scale=omega_scale,
-        save_path=out_path,
-    )
+    if not result.audios:
+        write_line({"status": "failed", "message": "No audio generated"})
+        return
 
-    actual_path = result[0]
-    log.info("Audio saved: %s (%.1fs)", actual_path, duration)
-    write_line({"status": "complete", "path": actual_path, "duration": duration,
+    actual_path = result.audios[0].get("path", "")
+    log.info("Audio saved: %s (%.1fs)", actual_path, params.duration)
+    write_line({"status": "complete", "path": actual_path, "duration": params.duration,
                 "sample_rate": _AUDIO_MODEL["sample_rate"]})
 
 

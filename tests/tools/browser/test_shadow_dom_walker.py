@@ -202,16 +202,18 @@ async def _run_snapshot(html: str, snapshot_js: str, *, use_init_script: bool = 
     """Launch a browser, load HTML, run the structured walker + pipeline."""
     async with async_playwright() as pw:
         browser = await pw.chromium.launch()
-        context = await browser.new_context()
-        if use_init_script:
-            await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
-        page = await context.new_page()
-        await page.set_content(html)
-        result = await page.evaluate(
-            snapshot_js,
-            {"fullPage": True},
-        )
-        await browser.close()
+        try:
+            context = await browser.new_context()
+            if use_init_script:
+                await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
+            page = await context.new_page()
+            await page.set_content(html)
+            result = await page.evaluate(
+                snapshot_js,
+                {"fullPage": True},
+            )
+        finally:
+            await browser.close()
         content, _ = process_snapshot(
             result["nodes"],
             budget=8000,

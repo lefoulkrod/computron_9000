@@ -1,24 +1,22 @@
 .button {
+    width: 26px;
+    height: 26px;
+    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 2px;
-    width: 36px;
-    height: 36px;
-    margin-right: 0.35rem;
-    padding: 0 !important;
-    border-radius: 999px;
-    background: var(--muted);
-    color: var(--text);
-    border: 1px solid rgba(0, 0, 0, 0.25);
-    box-shadow: none;
-    line-height: 1;
+    border-radius: 5px;
+    background: none;
+    color: var(--muted);
+    border: none;
     cursor: pointer;
-    transition: transform 120ms ease, filter 160ms ease;
+    transition: background 120ms ease, color 120ms ease;
 }
 
 .button:hover {
-    filter: brightness(1.08);
+    background: var(--secondary);
+    color: var(--text);
 }
 
 .button:active {
@@ -30,24 +28,24 @@
     outline-offset: 2px;
 }
 
-.muted {
+.paused {
     opacity: 0.5;
 }
 
 .bar {
     display: inline-block;
-    width: 3px;
-    border-radius: 2px;
+    width: 2px;
+    border-radius: 1px;
     background: currentColor;
     animation: wave 0.8s ease-in-out infinite;
 }
 
-.bar:nth-child(1) { animation-delay: 0s;   height: 8px; }
-.bar:nth-child(2) { animation-delay: 0.15s; height: 14px; }
-.bar:nth-child(3) { animation-delay: 0.3s;  height: 10px; }
-.bar:nth-child(4) { animation-delay: 0.45s; height: 6px; }
+.bar:nth-child(1) { animation-delay: 0s;    height: 6px; }
+.bar:nth-child(2) { animation-delay: 0.15s; height: 11px; }
+.bar:nth-child(3) { animation-delay: 0.3s;  height: 8px; }
+.bar:nth-child(4) { animation-delay: 0.45s; height: 5px; }
 
-.muted .bar {
+.paused .bar {
     animation-play-state: paused;
 }
 

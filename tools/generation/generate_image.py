@@ -48,7 +48,6 @@ async def generate_image(
     gen_id = uuid.uuid4().hex[:12]
     cfg = load_config()
     container_name = cfg.inference_container.container_name
-    container_user = cfg.inference_container.container_user
 
     # Construct a compact script to run inside the container
     params_json = json.dumps({"model": model, "size": size})
@@ -66,7 +65,7 @@ async def generate_image(
         # Use a large buffer limit because TAESD preview images in base64
         # can exceed the default 64KB asyncio StreamReader line limit.
         proc = await asyncio.create_subprocess_exec(
-            "podman", "exec", "-u", container_user, container_name,
+            "podman", "exec", container_name,
             "python3", "-c", script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -131,36 +130,38 @@ async def generate_image(
                              message="No output path received from generator")
             return {"status": "error", "message": "No output path received"}
 
-        # Read the generated file from the host volume and emit the final preview
-        container_home = cfg.inference_container.container_working_dir.rstrip("/") + "/"
+        # Map the inference container path to the host volume and to the
+        # virtual computer container path (used by the UI's file route).
         host_home = cfg.inference_container.home_dir
+        vc_prefix = cfg.virtual_computer.container_working_dir.rstrip("/")
+        _CONTAINER_OUTPUT = "/output/"
 
-        if final_path.startswith(container_home):
-            relative = final_path[len(container_home):]
-            host_path = Path(host_home) / relative
+        if final_path.startswith(_CONTAINER_OUTPUT):
+            relative = final_path[len(_CONTAINER_OUTPUT):]
         else:
-            host_path = Path(host_home) / final_path.lstrip("/")
+            relative = final_path.lstrip("/")
+        host_path = Path(host_home) / relative
+        # UI serves files via the virtual computer container path.
+        ui_path = f"{vc_prefix}/{relative}"
 
         if host_path.exists() and host_path.is_file():
             content_type, _ = mimetypes.guess_type(host_path.name)
             if content_type is None:
                 content_type = "application/octet-stream"
 
-            # Publish final preview referencing the container path
             _publish_preview(
                 gen_id, media_type,
                 status="complete",
-                output_path=final_path,
+                output_path=ui_path,
                 output_content_type=content_type,
                 message="Generation complete",
             )
 
-            # Also emit a FileOutputPayload for the chat message
             publish_event(AgentEvent(payload=FileOutputPayload(
                 type="file_output",
                 filename=host_path.name,
                 content_type=content_type,
-                path=final_path,
+                path=ui_path,
             )))
             logger.info("Generation complete: %s (%s)", host_path.name, content_type)
         else:
@@ -168,7 +169,7 @@ async def generate_image(
                              message="Generation complete (file not accessible on host)")
             logger.warning("Generated file not found on host: %s", host_path)
 
-        return {"status": "ok", "path": final_path, "media_type": media_type}
+        return {"status": "ok", "path": ui_path, "media_type": media_type}
 
     except TimeoutError:
         proc.kill()

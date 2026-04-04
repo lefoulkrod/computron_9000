@@ -62,9 +62,10 @@ def _ensure_builtins() -> None:
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
     from skills.desktop import _SKILL as desktop_skill
-    from skills.media import _SKILL as media_skill
+    from skills.image_generation import _SKILL as image_skill
+    from skills.music_generation import _SKILL as music_skill
 
-    for skill in (browser_skill, coder_skill, desktop_skill, media_skill):
+    for skill in (browser_skill, coder_skill, desktop_skill, image_skill, music_skill):
         register_skill(skill)
 
 

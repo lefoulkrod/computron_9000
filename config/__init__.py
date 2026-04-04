@@ -175,7 +175,6 @@ class InferenceContainerConfig(BaseModel):
     """Configuration for the GPU inference container."""
 
     container_name: str
-    container_user: str
     home_dir: str
     container_working_dir: str
 

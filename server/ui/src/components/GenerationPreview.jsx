@@ -109,7 +109,6 @@ export default function GenerationPreview({ preview, onClose }) {
 
                 {isComplete && hasOutput && isAudioContent && (
                     <div className={styles.previewContainer}>
-                        <audio src={outputSrc} controls autoPlay />
                         <button className={styles.downloadBtn} onClick={handleDownload}>
                             Download
                         </button>

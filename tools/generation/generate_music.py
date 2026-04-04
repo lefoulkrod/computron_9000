@@ -5,8 +5,8 @@ Runs generation inside the container via the persistent inference server's
 ``GenerationPreviewPayload`` events so the frontend can display live
 progress updates.
 
-Uses ACE-Step (ACE-Step-v1-3.5B) for full song generation - a diffusion-based
-model capable of generating high-quality music up to 4 minutes in length.
+Uses ACE-Step 1.5 for full song generation — a two-stage model with an LM
+planner and DiT executor, capable of generating high-quality music with vocals.
 """
 
 from __future__ import annotations
@@ -31,24 +31,52 @@ logger = logging.getLogger(__name__)
 _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
 
 
+# ACE-Step 1.5 quality presets — controls inference steps and LM planning.
 _QUALITY_PRESETS = {
-    "fast": {
-        "instrumental": {"steps": 25, "scheduler_type": "pingpong", "cfg_scale": 15.0,
-                         "guidance_interval": 0.5, "omega_scale": 10},
-        "vocal":        {"steps": 25, "scheduler_type": "pingpong", "cfg_scale": 15.0,
-                         "guidance_interval": 0.7, "omega_scale": 15},
+    "fast":    {"steps": 4,  "thinking": False},
+    "quality": {"steps": 8,  "thinking": True},
+    "best":    {"steps": 16, "thinking": True},
+}
+
+# Style presets — optimized DiT and LM parameters for different music scenarios.
+# Based on ACE-Step 1.5 community research and official tuning guide.
+# Maps to GenerationParams fields: guidance_scale, shift, lm_temperature, etc.
+_STYLE_PRESETS: dict[str, dict] = {
+    "pop": {
+        "guidance_scale": 5.0, "shift": 4.0,
+        "lm_temperature": 0.85, "lm_cfg_scale": 2.5,
     },
-    "quality": {
-        "instrumental": {"steps": 60, "scheduler_type": "euler", "cfg_scale": 15.0,
-                         "guidance_interval": 0.5, "omega_scale": 10},
-        "vocal":        {"steps": 60, "scheduler_type": "euler", "cfg_scale": 15.0,
-                         "guidance_interval": 0.7, "omega_scale": 15},
+    "rock": {
+        "guidance_scale": 5.0, "shift": 5.0,
+        "lm_temperature": 0.85, "lm_cfg_scale": 2.5,
     },
-    "best": {
-        "instrumental": {"steps": 80, "scheduler_type": "euler", "cfg_scale": 15.0,
-                         "guidance_interval": 0.6, "omega_scale": 15},
-        "vocal":        {"steps": 80, "scheduler_type": "euler", "cfg_scale": 15.0,
-                         "guidance_interval": 0.8, "omega_scale": 25},
+    "hiphop": {
+        "guidance_scale": 3.5, "shift": 3.5,
+        "lm_temperature": 0.85, "lm_cfg_scale": 2.0,
+    },
+    "electronic": {
+        "guidance_scale": 5.0, "shift": 4.0,
+        "lm_temperature": 0.85, "lm_cfg_scale": 2.0,
+    },
+    "jazz": {
+        "guidance_scale": 2.5, "shift": 3.0,
+        "lm_temperature": 0.75, "lm_cfg_scale": 2.0,
+    },
+    "classical": {
+        "guidance_scale": 2.0, "shift": 3.0,
+        "lm_temperature": 0.70, "lm_cfg_scale": 2.0,
+    },
+    "ambient": {
+        "guidance_scale": 1.5, "shift": 2.5,
+        "lm_temperature": 0.80, "lm_cfg_scale": 2.0,
+    },
+    "metal": {
+        "guidance_scale": 1.5, "shift": 4.0,
+        "lm_temperature": 0.85, "lm_cfg_scale": 2.0,
+    },
+    "lofi": {
+        "guidance_scale": 1.5, "shift": 2.5,
+        "lm_temperature": 0.80, "lm_cfg_scale": 2.0,
     },
 }
 
@@ -58,33 +86,68 @@ async def generate_music(
     lyrics: str = "",
     duration: float = 60.0,
     quality: str = "quality",
+    style: str = "",
 ) -> dict[str, str]:
-    """Generate music using ACE-Step.
+    """Generate music using ACE-Step 1.5.
 
-    ACE-Step is a diffusion-based music generation model capable of creating
-    full songs with vocals up to 4 minutes in length.
+    ACE-Step 1.5 is a two-stage model (LM planner + DiT diffusion) that
+    generates full songs with vocals up to 10 minutes long.
 
     Args:
-        prompt: Text describing the music style (genre, mood, instruments).
-            Example: "Upbeat pop song with synths and guitar"
-        lyrics: Song lyrics with structure tags. Use [verse], [chorus],
-            [bridge], [intro], [outro], [interlude], [hook], [break],
-            [pre-chorus], [post-chorus] to define sections. Leave empty
-            for instrumental music. Example::
+        prompt: Describe genre, mood, vocal style, instruments, tempo, key,
+            and production style. Be specific — detailed prompts produce
+            much better results. Format::
 
-                [verse]
+                [Genre], [Vocal type], [Emotion], [Instruments], [Tempo], [Key]
+
+            Examples:
+                "pop-rock, powerful female vocal, energetic, driving drums
+                 and synth bass, 128 bpm, E major, anthemic chorus"
+                "ambient lo-fi hip-hop, warm Rhodes piano with vinyl crackle,
+                 boom-bap drums, 75 bpm, D minor, bedroom production"
+
+        lyrics: Song lyrics with structure tags. Leave empty for instrumental.
+            Use tags like [verse], [chorus], [bridge], [intro], [outro],
+            [interlude], [hook], [break], [pre-chorus], [post-chorus].
+            Add style hints to tags for vocal control::
+
+                [verse - whispered]
                 Walking down the empty street
                 The city lights shine at my feet
 
-                [chorus]
+                [chorus - powerful]
                 We're alive tonight
                 Nothing's gonna stop us now
 
+                [outro - fade out]
+
+            For instrumental, use "[Instrumental]" or structure tags with
+            instrument hints like "[Intro - ambient pads]", "[Theme A - piano]".
             Supports 17 languages including English, Spanish, Chinese,
             Japanese, French, German, Korean, and more.
-        duration: Length of the generated audio in seconds (max 240s / 4 min).
-        quality: "fast" (quick drafts), "quality" (default, good balance),
-            or "best" (highest quality, slower).
+
+        duration: Length in seconds (max 600s / 10 min). Sweet spots:
+            - 30-60s for previews / fast iteration
+            - 90-120s for vocal tracks (best quality range)
+            - 60-90s for instrumental (shorter = more coherent)
+
+        quality: Controls inference steps and LM planning:
+            - "fast": 4 steps, no LM — instant previews
+            - "quality": 8 steps with LM planning (default, good balance)
+            - "best": 16 steps with LM planning (highest fidelity)
+
+        style: Genre preset that auto-tunes internal parameters for optimal
+            results. Pick the closest match to the requested genre:
+            - "pop": bright, catchy, strong vocal presence
+            - "rock": driving energy, anthemic structure
+            - "hiphop": rhythmic, punchy beats, flow-focused
+            - "electronic": synth-heavy, EDM, dance, techno
+            - "jazz": warm, natural, acoustic instruments
+            - "classical": orchestral, precise, composed
+            - "ambient": textural, atmospheric, spacious
+            - "metal": heavy, aggressive, intense
+            - "lofi": warm, vintage, relaxed
+            Leave empty to use default parameters (works well for most cases).
 
     Returns:
         Dict with ``status``, ``path``, and ``media_type``.
@@ -93,30 +156,30 @@ async def generate_music(
     gen_id = uuid.uuid4().hex[:12]
     cfg = load_config()
     container_name = cfg.inference_container.container_name
-    container_user = cfg.inference_container.container_user
 
-    # Resolve quality preset, auto-selecting vocal vs instrumental settings
-    quality_tier = _QUALITY_PRESETS.get(quality, _QUALITY_PRESETS["quality"])
-    preset = quality_tier["vocal"] if lyrics else quality_tier["instrumental"]
+    # Resolve quality preset
+    preset = _QUALITY_PRESETS.get(quality, _QUALITY_PRESETS["quality"])
 
     # Construct parameters dict for the inference client
-    params = {
+    params: dict = {
         "lyrics": lyrics,
-        "duration": min(duration, 240.0),  # Cap at 4 minutes
+        "duration": min(duration, 600.0),  # Cap at 10 minutes (v1.5 max)
         "steps": preset["steps"],
-        "cfg_scale": preset["cfg_scale"],
-        "scheduler_type": preset["scheduler_type"],
-        "guidance_interval": preset["guidance_interval"],
-        "omega_scale": preset["omega_scale"],
+        "thinking": preset["thinking"],
     }
-    params_json = json.dumps(params)
+
+    # Apply style preset (tuned guidance_scale, shift, lm params)
+    style_preset = _STYLE_PRESETS.get(style.lower(), {}) if style else {}
+    params.update(style_preset)
+
+    params_repr = repr(params)
 
     # Construct a compact script to run inside the container
     script = (
         "import sys; sys.path.insert(0, '/opt/inference'); "
         "import json; "
         "from inference_client import generate_stream; "
-        f"[print(json.dumps(e), flush=True) for e in generate_stream('audio', {prompt!r}, **{params_json})]"
+        f"[print(json.dumps(e), flush=True) for e in generate_stream('audio', {prompt!r}, **{params_repr})]"
     )
 
     # Publish initial loading event
@@ -125,7 +188,7 @@ async def generate_music(
     try:
         # Use a large buffer limit for any preview data
         proc = await asyncio.create_subprocess_exec(
-            "podman", "exec", "-u", container_user, container_name,
+            "podman", "exec", container_name,
             "python3", "-c", script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -190,24 +253,29 @@ async def generate_music(
                              message="No output path received from generator")
             return {"status": "error", "message": "No output path received"}
 
-        # Read the generated file from the host volume and emit the final preview
-        container_home = cfg.inference_container.container_working_dir.rstrip("/") + "/"
+        # Map the inference container path to the host path and the
+        # virtual computer path (the agent operates in the virtual computer).
         host_home = cfg.inference_container.home_dir
+        vc_prefix = cfg.virtual_computer.container_working_dir.rstrip("/")
+        _CONTAINER_OUTPUT = "/output/"
 
-        if final_path.startswith(container_home):
-            relative = final_path[len(container_home):]
-            host_path = Path(host_home) / relative
+        if final_path.startswith(_CONTAINER_OUTPUT):
+            relative = final_path[len(_CONTAINER_OUTPUT):]
         else:
-            host_path = Path(host_home) / final_path.lstrip("/")
+            relative = final_path.lstrip("/")
+
+        host_path = Path(host_home) / relative
+        # UI serves files via the virtual computer container path.
+        ui_path = f"{vc_prefix}/{relative}"
 
         if host_path.exists() and host_path.is_file():
             content_type = mimetypes.guess_type(host_path.name)[0] or "audio/wav"
 
-            # Publish final preview referencing the container path
+            # Publish final preview with the virtual computer path
             _publish_preview(
                 gen_id, media_type,
                 status="complete",
-                output_path=final_path,
+                output_path=ui_path,
                 output_content_type=content_type,
                 message="Generation complete",
             )
@@ -217,7 +285,7 @@ async def generate_music(
                 type="file_output",
                 filename=host_path.name,
                 content_type=content_type,
-                path=final_path,
+                path=ui_path,
             )))
             logger.info("Music generation complete: %s (%s)", host_path.name, content_type)
         else:
@@ -225,7 +293,7 @@ async def generate_music(
                              message="Generation complete (file not accessible on host)")
             logger.warning("Generated file not found on host: %s", host_path)
 
-        return {"status": "ok", "path": final_path, "media_type": media_type}
+        return {"status": "ok", "path": ui_path, "media_type": media_type}
 
     except TimeoutError:
         proc.kill()

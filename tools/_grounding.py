@@ -76,7 +76,6 @@ async def run_grounding(
     cfg = load_config()
     host_home = cfg.inference_container.home_dir
     container_name = cfg.inference_container.container_name
-    container_user = cfg.inference_container.container_user
     container_working_dir = cfg.inference_container.container_working_dir
 
     # Write screenshot to .vision/ subfolder on the shared volume.
@@ -99,16 +98,16 @@ async def run_grounding(
     )
 
     loop = asyncio.get_running_loop()
-    raw_output = await loop.run_in_executor(None, _exec_grounding, container_name, container_user, script)
+    raw_output = await loop.run_in_executor(None, _exec_grounding, container_name, script)
 
     return _parse_response(raw_output)
 
 
-def _exec_grounding(container_name: str, container_user: str, script: str) -> str:
+def _exec_grounding(container_name: str, script: str) -> str:
     """Run the grounding script inside the inference container."""
     result = subprocess.run(
         [
-            "podman", "exec", "-u", container_user,
+            "podman", "exec",
             container_name,
             "python3", "-c", script,
         ],

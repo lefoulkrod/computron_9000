@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from textwrap import dedent
 
-from tools.generation import generate_image, generate_music
 from tools.memory import forget, remember
 from tools.virtual_computer import play_audio, run_bash_cmd
 from tools.virtual_computer.describe_image import describe_image
@@ -76,9 +75,6 @@ SYSTEM_PROMPT = dedent(
     3. Decide which steps to handle directly (load_skill) vs delegate
        (spawn_agent).
 
-    IMAGE GENERATION — use generate_image directly. Do NOT delegate to
-    sub-agents or load a skill for it.
-
     CUSTOM TOOLS — always prefer existing tools over new code. Only create
     new tools for genuinely reusable, parameterized operations.
 
@@ -110,8 +106,6 @@ SYSTEM_PROMPT = dedent(
 TOOLS = [
     # Direct tools (always available, no skill needed)
     run_bash_cmd,
-    generate_image,
-    generate_music,
     describe_image,
     play_audio,
     # Memory

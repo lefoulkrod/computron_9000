@@ -129,7 +129,6 @@ def test_parse_response_uses_coordinates_fallback() -> None:
 class _FakeInferenceConfig:
     home_dir = "/tmp/test_grounding_home"
     container_name = "test_inference"
-    container_user = "testuser"
     container_working_dir = "/home/testuser"
 
 
