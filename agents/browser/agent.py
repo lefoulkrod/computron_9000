@@ -19,7 +19,7 @@ from tools.browser import (
     fill_field,
     go_back,
     open_url,
-    perform_visual_action,
+    browser_visual_action,
     press_and_hold,
     press_keys,
     read_page,
@@ -92,7 +92,7 @@ SYSTEM_PROMPT = dedent(
         [5] [button] Submit       → click("5")
         [8] [menuitem] Search     → click("8")
     Prefer ref-based tools (click, fill_field, drag, select_option) when
-    elements have clear refs. Use vision tools (perform_visual_action,
+    elements have clear refs. Use vision tools (browser_visual_action,
     inspect_page) when:
     - Elements have no ref (canvas, images, CAPTCHAs, custom widgets)
     - You need to interact based on visual appearance (colors, shapes, layout)
@@ -111,7 +111,7 @@ SYSTEM_PROMPT = dedent(
     WHEN STUCK:
     - Ref not found → page may have changed, call browse_page() for fresh refs
     - Can't find element → scroll + browse_page, or browse_page(scope="...")
-    - Ref failed → try perform_visual_action("describe what to do")
+    - Ref failed → try browser_visual_action("describe what to do")
     - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
     - Ambiguous → ask user for clarification
 
@@ -123,7 +123,7 @@ TOOLS = [
     read_page,
     click,
     press_and_hold,
-    perform_visual_action,
+    browser_visual_action,
     fill_field,
     press_keys,
     select_option,

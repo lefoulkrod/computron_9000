@@ -1,4 +1,4 @@
-"""Tests for browser vision tools (inspect_page + perform_visual_action)."""
+"""Tests for browser vision tools (inspect_page + browser_visual_action)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 from tools._grounding import GroundingResponse
 from tools.browser import BrowserToolError
-from tools.browser.vision import inspect_page, perform_visual_action
+from tools.browser.vision import inspect_page, browser_visual_action
 
 
 # ── Shared helpers ────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None
     assert "No element matched selector handle '#missing'" in msg or "No element matched selector '#missing'" in msg
 
 
-# ── perform_visual_action tests ───────────────────────────────────────
+# ── browser_visual_action tests ───────────────────────────────────────
 
 
 _CLICK_GROUNDING_RESPONSE = GroundingResponse(
@@ -305,8 +305,8 @@ _FINISHED_GROUNDING_RESPONSE = GroundingResponse(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_perform_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> None:
-    """perform_visual_action with a click response should execute the click."""
+async def test_browser_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> None:
+    """browser_visual_action with a click response should execute the click."""
     page = _ScreenshotFakePage(b"fake-bytes")
     browser = _FakeBrowser(page)
 
@@ -326,7 +326,7 @@ async def test_perform_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> N
     mock_execute = AsyncMock()
     monkeypatch.setattr("tools.browser._action_map.execute_action", mock_execute)
 
-    # Mock _format_result — it's imported lazily inside perform_visual_action
+    # Mock _format_result — it's imported lazily inside browser_visual_action
     interactions_module = importlib.import_module("tools.browser.interactions")
 
     async def fake_format_result(result, *, tool_name="", resolution=None):
@@ -334,14 +334,14 @@ async def test_perform_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(interactions_module, "_format_result", fake_format_result)
 
-    result = await perform_visual_action("Click the login button")
+    result = await browser_visual_action("Click the login button")
     assert isinstance(result, str)
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_perform_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -> None:
-    """perform_visual_action with finished response should return snapshot with note."""
+async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -> None:
+    """browser_visual_action with finished response should return snapshot with note."""
     page = _ScreenshotFakePage(b"fake-bytes")
     browser = _FakeBrowser(page)
 
@@ -355,7 +355,7 @@ async def test_perform_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(grounding_module, "run_grounding", fake_run_grounding)
 
-    # Mock build_page_view — it's lazy-imported inside perform_visual_action
+    # Mock build_page_view — it's lazy-imported inside browser_visual_action
     from tools.browser.core.page_view import PageView
     page_view_module = importlib.import_module("tools.browser.core.page_view")
 
@@ -376,21 +376,21 @@ async def test_perform_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(page_view_module, "build_page_view", fake_build_page_view)
 
-    result = await perform_visual_action("Check if login succeeded")
+    result = await browser_visual_action("Check if login succeeded")
     assert "finished" in result.lower() or "Login was successful" in result
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_perform_visual_action_empty_task() -> None:
+async def test_browser_visual_action_empty_task() -> None:
     """Empty task should raise BrowserToolError."""
     with pytest.raises(BrowserToolError):
-        await perform_visual_action("   ")
+        await browser_visual_action("   ")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_perform_visual_action_grounding_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_browser_visual_action_grounding_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """RuntimeError from grounding should become BrowserToolError."""
     page = _ScreenshotFakePage(b"fake")
     browser = _FakeBrowser(page)
@@ -406,13 +406,13 @@ async def test_perform_visual_action_grounding_failure(monkeypatch: pytest.Monke
     monkeypatch.setattr(grounding_module, "run_grounding", failing_grounding)
 
     with pytest.raises(BrowserToolError, match="Grounding request failed"):
-        await perform_visual_action("Click login")
+        await browser_visual_action("Click login")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_perform_visual_action_requires_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """perform_visual_action should require a navigated page."""
+async def test_browser_visual_action_requires_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """browser_visual_action should require a navigated page."""
     page = _ScreenshotFakePage(b"bytes", url="about:blank")
     browser = _FakeBrowser(page)
     module = importlib.import_module("tools.browser.vision")
@@ -420,4 +420,4 @@ async def test_perform_visual_action_requires_navigation(monkeypatch: pytest.Mon
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await perform_visual_action("Click login")
+        await browser_visual_action("Click login")

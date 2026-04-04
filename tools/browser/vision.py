@@ -1,7 +1,7 @@
 """Vision-enabled browser tools.
 
 Uses Ollama for visual question answering (``inspect_page``) and the
-UI-TARS grounding server for action prediction (``perform_visual_action``).
+UI-TARS grounding server for action prediction (``browser_visual_action``).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from tools.browser.events import emit_screenshot_after
 logger = logging.getLogger(__name__)
 
 _SCREENSHOT_TOOL_NAME = "inspect_page"
-_VISUAL_ACTION_TOOL_NAME = "perform_visual_action"
+_VISUAL_ACTION_TOOL_NAME = "browser_visual_action"
 
 
 async def inspect_page(
@@ -125,7 +125,7 @@ async def inspect_page(
 
 
 @emit_screenshot_after
-async def perform_visual_action(task: str) -> str:
+async def browser_visual_action(task: str) -> str:
     """Ask a vision model to decide and execute the next GUI action.
 
     Only the current viewport is screenshotted — the target element must
@@ -261,5 +261,5 @@ def _encode_image(image_bytes: bytes) -> str:
 
 __all__ = [
     "inspect_page",
-    "perform_visual_action",
+    "browser_visual_action",
 ]

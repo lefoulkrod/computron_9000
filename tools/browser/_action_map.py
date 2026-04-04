@@ -96,7 +96,7 @@ def _require_coords(response: GroundingResponse) -> tuple[int, int]:
     """Extract x, y from response, raising if absent."""
     if response.x is None or response.y is None:
         msg = "Action '%s' requires coordinates but none were returned" % response.action_type
-        raise BrowserToolError(msg, tool="perform_visual_action")
+        raise BrowserToolError(msg, tool="browser_visual_action")
     return response.x, response.y
 
 
@@ -137,7 +137,7 @@ async def execute_action(
         coords = response.raw.get("coordinates", [])
         if len(coords) < 2:
             msg = "Drag action requires two coordinate pairs"
-            raise BrowserToolError(msg, tool="perform_visual_action")
+            raise BrowserToolError(msg, tool="browser_visual_action")
         src = coords[0]["screen"]
         dst = coords[1]["screen"]
         src_bbox = _point_bbox(src[0], src[1])
@@ -154,7 +154,7 @@ async def execute_action(
         raw_key = response.raw.get("hotkey", "")
         if not raw_key:
             msg = "Hotkey action missing 'hotkey' field"
-            raise BrowserToolError(msg, tool="perform_visual_action")
+            raise BrowserToolError(msg, tool="browser_visual_action")
         normalized = _normalize_hotkey(raw_key)
         await human_press_keys(frame, [normalized])
 
