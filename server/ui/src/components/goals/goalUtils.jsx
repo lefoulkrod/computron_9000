@@ -1,120 +1,80 @@
 /**
- * Shared utilities for goal UI components.
+ * Utility functions for Goals UI components.
+ * Status icons, formatting helpers, and common patterns.
  */
 
-const _DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const _DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Status Icon component (reused across goals)
+export function StatusIcon({ status, size = 14 }) {
+    const color = {
+        completed: '#4ade80',
+        running: '#fbbf24',
+        failed: '#f87171',
+        pending: 'var(--muted)',
+        paused: '#a78bfa',
+    }[status] || 'var(--muted)';
 
-function _formatTime(hour, min) {
-    const h = parseInt(hour, 10);
-    const m = parseInt(min, 10);
-    if (isNaN(h) || isNaN(m)) return null;
-    const ampm = h < 12 ? 'AM' : 'PM';
-    const h12 = h % 12 || 12;
-    return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-}
-
-function _isSimple(part) {
-    return /^\d+$/.test(part);
-}
-
-/** Convert a 5-part cron expression to a human-readable string. Falls back to the raw expr. */
-export function formatCron(expr) {
-    if (!expr) return null;
-    const parts = expr.trim().split(/\s+/);
-    if (parts.length !== 5) return expr;
-    const [min, hour, dom, month, dow] = parts;
-
-    // Every N minutes: */N * * * *
-    if (/^\*\/\d+$/.test(min) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
-        const n = parseInt(min.slice(2), 10);
-        return n === 1 ? 'Every minute' : `Every ${n} minutes`;
-    }
-
-    // Every N hours: 0 */N * * *
-    if (min === '0' && /^\*\/\d+$/.test(hour) && dom === '*' && month === '*' && dow === '*') {
-        const n = parseInt(hour.slice(2), 10);
-        return n === 1 ? 'Every hour' : `Every ${n} hours`;
-    }
-
-    // Need a fixed time for remaining patterns
-    if (!_isSimple(min) || !_isSimple(hour)) return expr;
-    const time = _formatTime(hour, min);
-    if (!time) return expr;
-
-    // Every day: 0 H * * *
-    if (dom === '*' && month === '*' && dow === '*') {
-        return `Daily at ${time}`;
-    }
-
-    // Specific weekday(s): 0 H * * D
-    if (dom === '*' && month === '*' && dow !== '*') {
-        if (dow === '1-5') return `Weekdays at ${time}`;
-        if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
-        if (_isSimple(dow)) {
-            const d = parseInt(dow, 10);
-            if (d >= 0 && d <= 6) return `Every ${_DAYS_FULL[d]} at ${time}`;
-        }
-        // Multiple specific days: 0 H * * 1,3,5
-        if (/^[\d,]+$/.test(dow)) {
-            const days = dow.split(',').map(Number);
-            if (days.every(d => d >= 0 && d <= 6)) {
-                return `${days.map(d => _DAYS_SHORT[d]).join('/')} at ${time}`;
-            }
-        }
-    }
-
-    // Specific day of month: 0 H D * *
-    if (_isSimple(dom) && month === '*' && dow === '*') {
-        const d = parseInt(dom, 10);
-        const suffix = d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
-        return `Monthly on the ${d}${suffix} at ${time}`;
-    }
-
-    return expr;
-}
-
-export function formatTime(iso) {
-    if (!iso) return '';
-    try {
-        const d = new Date(iso);
-        const now = new Date();
-        const isToday = d.toDateString() === now.toDateString();
-        const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        return isToday ? `Today ${time}` : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ` ${time}`;
-    } catch { return ''; }
-}
-
-export function formatDuration(start, end) {
-    if (!start || !end) return '';
-    const ms = new Date(end) - new Date(start);
-    const s = Math.floor(ms / 1000);
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `${m}m ${rem}s`;
-}
-
-const STATUS_MAP = {
-    completed: { char: '\u2713', color: '#4ade80', bg: 'rgba(74, 222, 128, 0.15)', border: 'rgba(74, 222, 128, 0.3)' },
-    running: { char: '\u25B6', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)', border: 'rgba(251, 191, 36, 0.3)', nudge: '1px' },
-    failed: { char: '\u2717', color: '#f87171', bg: 'rgba(248, 113, 113, 0.15)', border: 'rgba(248, 113, 113, 0.3)' },
-    pending: { char: '\u2022', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.15)', border: 'rgba(107, 114, 128, 0.3)' },
-    active: { char: '\u2022', color: '#4ade80', bg: 'rgba(74, 222, 128, 0.15)', border: 'rgba(74, 222, 128, 0.3)' },
-    paused: { char: '\u2016', color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.15)', border: 'rgba(167, 139, 250, 0.3)' },
-};
-
-export function StatusIcon({ status, size = 16 }) {
-    const { char, color, bg, border, nudge } = STATUS_MAP[status] || STATUS_MAP.pending;
     return (
-        <div style={{
-            width: size, height: size, borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: size * 0.56, flexShrink: 0,
-            background: bg, color, border: `1px solid ${border}`,
-            paddingLeft: nudge || 0,
-        }}>
-            {char}
-        </div>
+        <svg width={size} height={size} viewBox="0 0 14 14" fill={color}>
+            <circle cx="7" cy="7" r="6" stroke="none" />
+        </svg>
     );
+}
+
+// Format a timestamp relative to now (e.g., "2h ago")
+export function formatTime(timestamp) {
+    if (!timestamp) return '-';
+    
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : new Date(timestamp * 1000);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// Format duration between two timestamps
+export function formatDuration(start, end) {
+    if (!start || !end) return null;
+    
+    const startMs = typeof start === 'string' ? new Date(start).getTime() : start * 1000;
+    const endMs = typeof end === 'string' ? new Date(end).getTime() : end * 1000;
+    const diffSec = Math.floor((endMs - startMs) / 1000);
+    
+    if (diffSec < 60) return `${diffSec}s`;
+    const min = Math.floor(diffSec / 60);
+    const sec = diffSec % 60;
+    if (min < 60) return `${min}m ${sec}s`;
+    const hour = Math.floor(min / 60);
+    const remMin = min % 60;
+    return `${hour}h ${remMin}m`;
+}
+
+// Format cron expression for display (simplified)
+export function formatCron(cron) {
+    if (!cron) return '-';
+    
+    // Very basic cron formatter - shows the raw cron in a readable way
+    // For a full app, you'd want a proper cron-parser library
+    const parts = cron.split(' ');
+    if (parts.length !== 5) return cron;
+    
+    const [minute, hour, dayMonth, month, dayWeek] = parts;
+    
+    // Common patterns
+    if (cron === '0 * * * *') return 'Every hour';
+    if (cron === '0 0 * * *') return 'Daily at midnight';
+    if (cron === '0 */6 * * *') return 'Every 6 hours';
+    if (cron === '*/15 * * * *') return 'Every 15 minutes';
+    if (cron === '0 9 * * 1-5') return 'Weekdays at 9 AM';
+    
+    // Default: show the cron
+    return cron;
 }
