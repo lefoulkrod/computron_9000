@@ -59,7 +59,7 @@ export default function GoalsView({
         const interval = setInterval(() => {
             fetchDetail(selectedGoalId)
                 .then(data => setDetail(data))
-                .catch(err => console.error('Poll error:', err));
+                .catch(() => {}); // Silent fail for background polling
         }, 5000);
 
         return () => clearInterval(interval);
