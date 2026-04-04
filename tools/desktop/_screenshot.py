@@ -51,14 +51,16 @@ async def capture_screenshot() -> bytes:
 
     loop = asyncio.get_running_loop()
 
-    def _read_file() -> bytes:
+    def _read_and_cleanup() -> bytes:
         if not host_path.exists():
             msg = "Screenshot file not found at %s" % host_path
             raise RuntimeError(msg)
-        return host_path.read_bytes()
+        data = host_path.read_bytes()
+        host_path.unlink(missing_ok=True)
+        return data
 
     try:
-        return await loop.run_in_executor(None, _read_file)
+        return await loop.run_in_executor(None, _read_and_cleanup)
     except RuntimeError:
         raise
     except Exception as exc:
