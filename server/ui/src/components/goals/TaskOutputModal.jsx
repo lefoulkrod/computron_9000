@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './TaskOutputModal.module.css';
 
 /**
@@ -7,6 +7,15 @@ import styles from './TaskOutputModal.module.css';
 export default function TaskOutputModal({ output, taskName, runNumber, onClose }) {
     const [copied, setCopied] = useState(false);
     const isError = output?.toLowerCase().includes('error') || output?.toLowerCase().includes('exception');
+
+    // Handle Escape key to close modal
+    useEffect(() => {
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [onClose]);
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(output);

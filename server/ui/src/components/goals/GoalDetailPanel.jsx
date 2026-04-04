@@ -4,6 +4,33 @@ import TaskOutputModal from './TaskOutputModal.jsx';
 import styles from './GoalDetailPanel.module.css';
 
 /**
+ * Helper function to calculate next run from cron expression.
+ * Supports basic cron patterns (minute hour * * *)
+ */
+function getNextRun(cron, timezone) {
+    if (!cron) return null;
+    
+    const now = new Date();
+    const next = new Date(now);
+    
+    // Parse cron parts
+    const parts = cron.split(' ');
+    if (parts.length >= 5) {
+        const minute = parts[0];
+        const hour = parts[1];
+        
+        if (minute !== '*' && hour !== '*') {
+            next.setHours(parseInt(hour), parseInt(minute), 0, 0);
+            if (next <= now) {
+                next.setDate(next.getDate() + 1);
+            }
+            return next;
+        }
+    }
+    return null;
+}
+
+/**
  * Right panel showing goal detail with header, actions, and tabs.
  * Tabs: Runs | Task Definitions
  */
@@ -11,7 +38,6 @@ export default function GoalDetailPanel({
     goal,
     detail,
     isLoading,
-    onBack,
     onDeleteGoal,
     onPauseGoal,
     onResumeGoal,
@@ -29,6 +55,7 @@ export default function GoalDetailPanel({
     }
 
     const isPaused = goal.status === 'paused';
+    const nextRun = getNextRun(goal.cron, goal.timezone);
 
     const handleRunNow = () => {
         onTriggerGoal(goal.id);
@@ -43,7 +70,7 @@ export default function GoalDetailPanel({
     };
 
     const handleDelete = () => {
-        if (window.confirm(`Delete goal "${goal.description}"?`)) {
+        if (window.confirm(\`Delete goal "\${goal.description}"?\`)) {
             onDeleteGoal(goal.id);
         }
     };
@@ -55,12 +82,6 @@ export default function GoalDetailPanel({
         <div className={styles.container}>
             {/* Header */}
             <div className={styles.header}>
-                <div className={styles.headerTop}>
-                    <button className={styles.backBtn} onClick={onBack}>
-                        ← Back
-                    </button>
-                </div>
-
                 <div className={styles.headerMain}>
                     <div className={styles.titleRow}>
                         <div className={styles.statusIcon}>
@@ -76,6 +97,11 @@ export default function GoalDetailPanel({
                             </span>
                             {goal.timezone && (
                                 <span className={styles.timezone}>{goal.timezone}</span>
+                            )}
+                            {nextRun && (
+                                <span className={styles.nextRun}>
+                                    Next: {formatTime(nextRun)}
+                                </span>
                             )}
                         </div>
                     )}
@@ -98,7 +124,7 @@ export default function GoalDetailPanel({
                         {isPaused ? '▶ Resume' : '⏸ Pause'}
                     </button>
                     <button
-                        className={`${styles.actionBtn} ${styles.danger}`}
+                        className={\`\${styles.actionBtn} \${styles.danger}\`}
                         onClick={handleDelete}
                         disabled={isLoading}
                     >
@@ -110,13 +136,13 @@ export default function GoalDetailPanel({
             {/* Tabs */}
             <div className={styles.tabBar}>
                 <button
-                    className={`${styles.tab} ${activeTab === 'runs' ? styles.tabActive : ''}`}
+                    className={\`\${styles.tab} \${activeTab === 'runs' ? styles.tabActive : ''}\`}
                     onClick={() => setActiveTab('runs')}
                 >
                     Runs ({runs.length})
                 </button>
                 <button
-                    className={`${styles.tab} ${activeTab === 'tasks' ? styles.tabActive : ''}`}
+                    className={\`\${styles.tab} \${activeTab === 'tasks' ? styles.tabActive : ''}\`}
                     onClick={() => setActiveTab('tasks')}
                 >
                     Task Definitions ({tasks.length})
@@ -194,7 +220,7 @@ function RunItem({ run, taskMap, isExpanded, onToggle, onViewOutput }) {
                     </div>
                     <div className={styles.runMeta}>
                         {formatTime(run.created_at)}
-                        {duration && ` · ${duration}`}
+                        {duration && \` · \${duration}\`}
                         {' · '}
                         {completedCount}/{totalCount} tasks
                     </div>
@@ -271,7 +297,7 @@ function TaskDefinitionsTab({ tasks }) {
             {tasks.map((task, index) => (
                 <div
                     key={task.id}
-                    className={`${styles.taskDefItem} ${task.id === expandedTaskId ? styles.taskExpanded : ''}`}
+                    className={\`\${styles.taskDefItem} \${task.id === expandedTaskId ? styles.taskExpanded : ''}\`}
                     onClick={() => setExpandedTaskId(
                         task.id === expandedTaskId ? null : task.id
                     )}
