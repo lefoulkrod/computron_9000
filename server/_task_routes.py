@@ -27,8 +27,17 @@ def _serialize_run(store, run) -> dict:
 async def handle_list_goals(request: web.Request) -> web.Response:
     """List goals, optionally filtered by status."""
     status = request.query.get("status")
-    goals = get_store().list_goals(status=status)
-    return web.json_response({"goals": [g.model_dump() for g in goals]})
+    store = get_store()
+    goals = store.list_goals(status=status)
+    result = []
+    for g in goals:
+        data = g.model_dump()
+        runs = store.get_goal_runs(g.id)
+        if runs:
+            latest = max(runs, key=lambda r: r.started_at or r.created_at)
+            data["last_run_at"] = latest.started_at or latest.created_at
+        result.append(data)
+    return web.json_response({"goals": result})
 
 
 async def handle_get_goal(request: web.Request) -> web.Response:
