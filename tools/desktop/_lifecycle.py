@@ -133,7 +133,7 @@ def _build_desktop_cmd(
         " sleep 2;"
         " xset s off -dpms 2>/dev/null || true;"
         " xsetroot -cursor_name left_ptr 2>/dev/null || true;"
-        " x11vnc -display %s -forever -nopw -listen 0.0.0.0 -rfbport %d -shared -cursor arrow -bg;"
+        " x11vnc -display %s -forever -nopw -noshm -listen 0.0.0.0 -rfbport %d -shared -cursor arrow -bg;"
         " websockify --web /usr/share/novnc 0.0.0.0:%d localhost:%d &"
         " echo started"
         % (display, display, resolution, display, vnc_port, ws_port, vnc_port)

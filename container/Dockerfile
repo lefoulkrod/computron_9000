@@ -4,7 +4,7 @@ FROM docker.io/ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DISPLAY=:99
+    DISPLAY=:0
 
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone
@@ -49,6 +49,16 @@ RUN add-apt-repository -y ppa:mozillateam/ppa && \
       > /etc/apt/preferences.d/mozilla-firefox && \
     apt-get update && \
     apt-get install -y --no-install-recommends firefox && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── Google Chrome (for browser automation via CDP) ───────────────────────────
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+      | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] \
+      https://dl.google.com/linux/chrome/deb/ stable main" \
+      > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends google-chrome-stable && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── GitHub CLI ────────────────────────────────────────────────────────────────
@@ -137,13 +147,38 @@ RUN mkdir -p /opt/kokoro && \
       https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin && \
     chmod -R 755 /opt/kokoro
 
-# ── Non-root user ─────────────────────────────────────────────────────────────
+# ── gosu (clean privilege dropping) ───────────────────────────────────────────
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gosu && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── Users & permissions ──────────────────────────────────────────────────────
+# computron_app: runs the app server, owns state files
+# computron: runs agent subprocesses, read-only access to state via group
 RUN useradd --create-home --shell /bin/bash computron && \
     passwd -d computron && \
-    usermod -aG sudo computron && \
-    echo 'computron ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    useradd --create-home --system --shell /bin/false computron_app && \
+    usermod -aG computron_app computron && \
+    # State dir: app server can read/write, agent can only read (via group)
+    mkdir -p /var/lib/computron_9000 && \
+    chown computron_app:computron_app /var/lib/computron_9000 && \
+    chmod 750 /var/lib/computron_9000 && \
+    # Agent home
     chown -R computron:computron /home/computron && \
-    chmod 700 /home/computron
+    chmod 755 /home/computron && \
+    mkdir -p /home/computron/Desktop && \
+    chown computron:computron /home/computron/Desktop && \
+    # Shared downloads dir: Chrome (computron_app) writes, agent (computron) reads
+    mkdir -p /home/computron/downloads && \
+    chown computron:computron_app /home/computron/downloads && \
+    chmod 775 /home/computron/downloads && \
+    # Sudoers: app server can run agent commands as computron,
+    # and run package installs as root
+    echo "computron_app ALL=(computron) NOPASSWD: ALL" \
+      > /etc/sudoers.d/computron_app && \
+    echo "computron_app ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/local/bin/pip, /usr/local/bin/npm" \
+      >> /etc/sudoers.d/computron_app && \
+    chmod 440 /etc/sudoers.d/computron_app
 
 # ── Xfce config (theme, icons, cursor, disable power management) ──────────────
 RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
@@ -177,7 +212,7 @@ RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
     chown -R computron:computron /home/computron/.config && \
     # Ensure DISPLAY=:99 in all interactive/login shells (belt-and-suspenders
     # on top of the container ENV, since --network=host exposes host display).
-    printf 'export DISPLAY=:99\n' > /etc/profile.d/display.sh && \
+    printf 'export DISPLAY=:0\n' > /etc/profile.d/display.sh && \
     chmod 644 /etc/profile.d/display.sh
 
 # ── Desktop scripts ───────────────────────────────────────────────────────────
@@ -187,18 +222,35 @@ RUN chmod +x /opt/entrypoint.sh && \
     chmod 755 /opt/desktop/a11y_tree.py && \
     mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
-# ── Switch to non-root user ───────────────────────────────────────────────────
-USER computron
-WORKDIR /home/computron
-
-# ── Git config ────────────────────────────────────────────────────────────────
-RUN git config --global user.name "larry foulkrod" && \
+# ── Git config for agent user ─────────────────────────────────────────────────
+# Placed before COPY . so it's cached across code changes.
+RUN su - computron -c '\
+    git config --global user.name "larry foulkrod" && \
     git config --global user.email "lefoulkrod@gmail.com" && \
     git config --global credential.helper \
-      '!f() { test -n "$GITHUB_TOKEN" && echo "password=$GITHUB_TOKEN"; }; f'
+      '"'"'!f() { test -n "$GITHUB_TOKEN" && echo "password=$GITHUB_TOKEN"; }; f'"'"''
+
+# ── App dependencies (cached unless manifests change) ────────────────────────
+WORKDIR /opt/computron_9000
+COPY pyproject.toml uv.lock ./
+RUN uv pip install --system --no-cache -e . 2>/dev/null || true
+
+COPY server/ui/package.json server/ui/package-lock.json server/ui/
+RUN cd server/ui && npm ci
+
+# ── App source ───────────────────────────────────────────────────────────────
+COPY . /opt/computron_9000/
+RUN uv pip install --system --no-cache -e .
+RUN cd server/ui && npm run build
+
+# Lock down app directory
+RUN chown -R root:root /opt/computron_9000 && \
+    chmod -R 755 /opt/computron_9000
 
 SHELL ["/bin/bash", "-c"]
 
-# tini reaps zombie processes; entrypoint starts desktop then idles
+EXPOSE 8080 5900 6080
+
+# tini reaps zombie processes; entrypoint starts desktop then app server
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/opt/entrypoint.sh"]

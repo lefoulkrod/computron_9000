@@ -379,7 +379,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.
     cfg = load_config()
-    container_prefix = cfg.virtual_computer.container_working_dir
+    container_prefix = cfg.virtual_computer.home_dir
     app.router.add_route("GET", f"{container_prefix}/{{path:.*}}", container_file_handler)
 
     # UI routes

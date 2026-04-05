@@ -26,7 +26,6 @@ def mock_config(tmp_path):
     """Provide a mock config pointing at a temp directory."""
     cfg = MagicMock()
     cfg.virtual_computer.home_dir = str(tmp_path)
-    cfg.virtual_computer.container_working_dir = "/home/computron"
     with patch.object(_mod, "load_config", return_value=cfg):
         yield cfg, tmp_path
 
@@ -37,7 +36,7 @@ def test_receive_attachment_writes_file(mock_config):
     content = b"hello world"
     encoded = base64.b64encode(content).decode()
     path = receive_attachment(encoded, "text/plain", "hello.txt")
-    assert path == "/home/computron/uploads/hello.txt"
+    assert path == str(tmp_path / "uploads" / "hello.txt")
     assert (tmp_path / "uploads" / "hello.txt").read_bytes() == content
 
 
@@ -47,9 +46,9 @@ def test_receive_attachment_generates_name_when_missing(mock_config):
     content = b"PNG data"
     encoded = base64.b64encode(content).decode()
     path = receive_attachment(encoded, "image/png")
-    assert path.startswith("/home/computron/uploads/")
+    assert path.startswith(str(tmp_path / "uploads"))
     assert path.endswith(".png")
-    filename = path.split("/")[-1]
+    filename = Path(path).name
     assert (tmp_path / "uploads" / filename).exists()
 
 
@@ -61,5 +60,5 @@ def test_receive_attachment_handles_collision(mock_config):
     content = b"new content"
     encoded = base64.b64encode(content).decode()
     path = receive_attachment(encoded, "text/plain", "test.txt")
-    assert path != "/home/computron/uploads/test.txt"
+    assert path != str(tmp_path / "uploads" / "test.txt")
     assert "test_" in path

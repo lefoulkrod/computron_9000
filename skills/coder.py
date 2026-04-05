@@ -6,6 +6,7 @@ from sdk.skills import Skill
 from tools.virtual_computer import (
     apply_text_patch,
     grep,
+    install_packages,
     list_dir,
     read_file,
     replace_in_file,
@@ -52,6 +53,10 @@ _SKILL = Skill(
         is directly accessible at localhost:<port>. Use ports 8000-8010 to avoid
         conflicts (8080 is taken by the app server).
 
+        INSTALLING PACKAGES — use install_packages(packages, manager) to install
+        system packages (apt), Python packages (pip), or Node packages (npm).
+        Do NOT use apt-get or pip install directly in run_bash_cmd.
+
         PRE-INSTALLED: torch, torchaudio, torchvision (with CUDA), flask,
         flask-socketio, numpy, pandas, scipy, scikit-learn, matplotlib, pillow,
         and many more are already installed. Do NOT reinstall these.
@@ -64,5 +69,6 @@ _SKILL = Skill(
         apply_text_patch,
         replace_in_file,
         run_bash_cmd,
+        install_packages,
     ],
 )

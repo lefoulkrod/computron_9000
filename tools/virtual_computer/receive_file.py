@@ -1,4 +1,4 @@
-"""Write incoming file attachments to the virtual computer volume."""
+"""Write incoming file attachments to the uploads directory."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def receive_attachment(
     content_type: str,
     filename: str | None = None,
 ) -> str:
-    """Decode a base64-encoded file and write it to the virtual computer volume.
+    """Decode a base64-encoded file and write it to the uploads directory.
 
     Args:
         base64_encoded: Base64-encoded file content.
@@ -26,13 +26,12 @@ def receive_attachment(
         filename: Original filename. A UUID-based name is generated if absent.
 
     Returns:
-        The container-side path (e.g. ``/home/computron/uploads/myfile.pdf``).
+        The absolute path to the saved file.
     """
     cfg = load_config()
-    host_home = Path(cfg.virtual_computer.home_dir)
-    container_working_dir = cfg.virtual_computer.container_working_dir.rstrip("/")
+    home_dir = Path(cfg.virtual_computer.home_dir)
 
-    uploads_dir = host_home / "uploads"
+    uploads_dir = home_dir / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     if not filename:
@@ -50,4 +49,4 @@ def receive_attachment(
     dest.write_bytes(raw)
     logger.info("Wrote attachment to %s (%d bytes, %s)", dest, len(raw), content_type)
 
-    return f"{container_working_dir}/uploads/{filename}"
+    return str(dest)

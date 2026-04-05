@@ -401,15 +401,18 @@ class Browser:
         context: BrowserContext,
         extra_headers: dict[str, str] | None = None,
         pw: Playwright | None = None,
+        pw_browser: Any = None,
         use_channel: bool = False,
         profile_dir: str = "",
     ) -> None:
         """Initialize the browser wrapper.
 
         Args:
-            context: The persistent Playwright browser context.
+            context: The Playwright browser context.
             extra_headers: Default HTTP headers applied to all requests.
-            pw: The Playwright driver instance used to launch the context.
+            pw: The Playwright driver instance used to launch the browser.
+            pw_browser: The Playwright Browser object. Present on the root
+                browser so sub-agents can create new contexts on it.
             use_channel: True when using a real Chrome channel. Disables
                 viewport overrides so the OS window manager controls sizing.
             profile_dir: Path to the Chromium user-data-dir.
@@ -418,12 +421,12 @@ class Browser:
         self._profile_dir: str = profile_dir
         self._extra_headers: dict[str, str] = extra_headers or {}
         self._pw: Playwright | None = pw
+        self._pw_browser: Any = pw_browser
         self._use_channel: bool = use_channel
         self._closed: bool = False
         self._active_frame: Frame | None = None
         self._pending_downloads: list[DownloadInfo] = []
         self._downloads_dir: str = ""
-        self._container_dir: str = ""
         self._download_listener_pages: set[int] = set()  # page id() tracking
         self._download_tasks: set[asyncio.Task[None]] = set()
         self._download_event: asyncio.Event = asyncio.Event()
@@ -494,7 +497,7 @@ class Browser:
 
             info = build_download_info_from_path(
                 host_path=path,
-                container_dir=self._container_dir,
+                container_dir=self._downloads_dir,
             )
             self._pending_downloads.append(info)
             self._download_event.set()
@@ -602,10 +605,17 @@ class Browser:
         extra_headers: dict[str, str] | None = None,  # sent with every request
         args: list[str] | None = None,  # extra Chromium args
     ) -> Browser:
-        """Start a persistent Chromium context and return a ``Browser``.
+        """Launch Chrome and create a browser context.
+
+        Uses ``chromium.launch()`` which returns a ``Browser`` object,
+        allowing sub-agents to create additional contexts on the same
+        Chrome process via ``_pw_browser``.
+
+        Session state (cookies, localStorage) is persisted to a JSON file
+        in *profile_dir* and restored on the next launch.
 
         Args:
-            profile_dir: Directory for Chromium user data (persisted across runs).
+            profile_dir: Directory for session state persistence.
             channel: Browser channel (``"chrome"`` for system Chrome, ``None``
                 for bundled Chromium).
             headless: Whether to launch without a visible window.
@@ -622,18 +632,10 @@ class Browser:
             args: Additional Chromium command-line flags.
 
         Returns:
-            A ready-to-use ``Browser`` wrapping the persistent context.
+            A ready-to-use ``Browser`` wrapping the context.
         """
         profile_path = Path(profile_dir).expanduser().resolve()
         profile_path.mkdir(parents=True, exist_ok=True)
-
-        # Remove stale lock files left by previous unclean shutdowns so
-        # Chromium can start even after a hard kill.
-        cls._cleanup_stale_profile_locks(profile_path)
-
-        # Mark the profile as cleanly exited so Chrome doesn't show the
-        # "Restore pages?" bubble on next launch.
-        cls._mark_profile_clean_exit(profile_path)
 
         _use_channel = channel is not None
 
@@ -641,34 +643,23 @@ class Browser:
         # Chromium args — real Chrome needs fewer overrides since it already
         # has correct TLS fingerprint, client hints, and native APIs.
         # -----------------------------------------------------------------
-        # Shared args: always needed regardless of channel
         chromium_args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-features=AutomationControlled",
             "--no-default-browser-check",
             "--disable-dev-shm-usage",
             *(["--start-maximized"] if not headless else []),
-            # Suppress the "Chrome is being controlled by automated test software"
-            # infobar.  --disable-infobars is deprecated; the banner is triggered by
-            # Playwright's implicit --enable-automation flag, so we must explicitly
-            # opt out plus suppress the "crashed" bubble on unclean shutdown.
             "--enable-automation=false",
             "--disable-session-crashed-bubble",
             "--hide-crash-restore-bubble",
-            # Prevent IP leak via RTCPeerConnection without fully disabling WebRTC
             "--webrtc-ip-handling-policy=disable_non_proxied_udp",
-            # Disable the built-in PDF/media viewer so files trigger download
-            # events instead of loading in an inline viewer.  The download
-            # listener captures real file bytes automatically.
             "--disable-pdf-viewer",
         ]
         if not _use_channel:
-            # Bundled Chromium needs extra help to look like a real browser
             chromium_args.extend([
                 "--disable-features=IsolateOrigins,site-per-process",
                 "--enable-features=NetworkService,NetworkServiceInProcess",
                 "--ignore-certificate-errors",
-                # Software WebGL fallback so sites don't detect missing GPU
                 "--enable-unsafe-swiftshader",
             ])
         if args:
@@ -681,95 +672,104 @@ class Browser:
             dl_path.mkdir(parents=True, exist_ok=True)
             resolved_downloads_path = str(dl_path)
 
-        # Both real Chrome and bundled Chromium get an explicit viewport.
-        # --start-maximized is unreliable on some Linux window managers,
-        # leading to odd window dimensions.  The jitter keeps runs from
-        # being pixel-identical.
         viewport = _viewport()
 
         launch_kwargs: dict[str, Any] = dict(
-            user_data_dir=str(profile_path),
             channel=channel,
             headless=headless,
-            proxy=proxy,
             args=chromium_args,
-            viewport=viewport,
-            locale=locale,
-            timezone_id=timezone_id,
-            accept_downloads=accept_downloads,
-            downloads_path=resolved_downloads_path,
-            geolocation=geolocation,
-            permissions=permissions or [],
-            java_script_enabled=True,  # ensure JS is enabled
         )
-        # Only override the UA for bundled Chromium.  Real Chrome already
-        # sends a correct User-Agent that matches its Sec-CH-UA client-hint
-        # headers; overriding it creates a detectable mismatch.
-        if not _use_channel:
-            launch_kwargs["user_agent"] = user_agent
+        if resolved_downloads_path:
+            launch_kwargs["downloads_path"] = resolved_downloads_path
 
         pw: Playwright = await async_playwright().start()
         try:
-            context = await pw.chromium.launch_persistent_context(**launch_kwargs)
+            pw_browser = await pw.chromium.launch(**launch_kwargs)
         except Exception:
-            # If launch fails (e.g. stale lock that appeared between cleanup
-            # and launch), stop the driver to kill any orphaned Chromium child,
-            # re-clean locks, and retry once with a fresh driver.
             try:
                 await asyncio.wait_for(pw.stop(), timeout=5.0)
             except Exception:  # noqa: BLE001
                 pass
-            cls._cleanup_stale_profile_locks(profile_path)
             pw = await async_playwright().start()
-            context = await pw.chromium.launch_persistent_context(**launch_kwargs)
+            try:
+                pw_browser = await pw.chromium.launch(**launch_kwargs)
+            except Exception:
+                await pw.stop()
+                raise
+
+        # Restore session state (cookies + localStorage) from previous run.
+        state_file = profile_path / "storage_state.json"
+        storage_state: Any = None
+        if state_file.exists():
+            try:
+                storage_state = str(state_file)
+                logger.info("Restoring browser session from %s", state_file)
+            except Exception:  # noqa: BLE001
+                logger.warning("Failed to load browser storage state")
+
+        context_kwargs: dict[str, Any] = dict(
+            viewport=viewport,
+            locale=locale,
+            timezone_id=timezone_id,
+            accept_downloads=accept_downloads,
+            geolocation=geolocation,
+            permissions=permissions or [],
+            java_script_enabled=True,
+            storage_state=storage_state,
+        )
+        if proxy:
+            context_kwargs["proxy"] = proxy
+        if not _use_channel:
+            context_kwargs["user_agent"] = user_agent
+
+        context = await pw_browser.new_context(**context_kwargs)
 
         # HTTP headers to look like a normal browser.
-        # IMPORTANT: Do NOT include Sec-Fetch-* headers here. Playwright/Chromium sets
-        # those correctly per request type (navigate vs script vs image etc.). Forcing
-        # them globally breaks subresource loading on CDNs that validate the headers.
         headers = {
-            "Accept-Language": f"{locale},en;q=0.9",
+            "Accept-Language": "%s,en;q=0.9" % locale,
             **(extra_headers or {}),
         }
         if not _use_channel:
-            # Real Chrome sets Accept-Encoding natively; only force it for
-            # bundled Chromium where GitHub needs explicit br support.
             headers["Accept-Encoding"] = "gzip, deflate, br"
         await context.set_extra_http_headers(headers)
 
-        # Anti-bot JS shims — channel-aware to avoid conflicts with real
-        # Chrome's native properties (plugins, userAgentData, etc.)
+        # Anti-bot JS shims
         anti_bot = _build_anti_bot_script(use_channel=_use_channel)
         await context.add_init_script(anti_bot)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
 
-        return cls(context=context, extra_headers=headers, pw=pw, use_channel=_use_channel, profile_dir=str(profile_path))
+        return cls(
+            context=context,
+            extra_headers=headers,
+            pw=pw,
+            pw_browser=pw_browser,
+            use_channel=_use_channel,
+            profile_dir=str(profile_path),
+        )
 
     @classmethod
     async def start_ephemeral(
         cls,
         root_browser: Browser,
         storage_state: Any,
-        pw_browser: Any,
     ) -> Browser:
-        """Create an ephemeral browser context on a shared Chromium process.
+        """Create an ephemeral browser context on the root's Chrome process.
 
         The new context inherits cookies and localStorage from *storage_state*
         but is fully isolated — changes do not affect the root profile or other
         ephemeral contexts.
 
         Args:
-            root_browser: The persistent root browser used as template for
-                headers, anti-bot patches, and download/container paths.
+            root_browser: The root browser whose ``_pw_browser`` hosts the
+                new context. Also used as template for headers and anti-bot
+                patches.
             storage_state: Cookies and localStorage snapshot from
                 ``root_browser._context.storage_state()``.
-            pw_browser: A Playwright ``Browser`` instance (from
-                ``chromium.launch()``) that hosts the ephemeral contexts.
 
         Returns:
             A ``Browser`` wrapping the new ephemeral context.
         """
-        context = await pw_browser.new_context(
+        context = await root_browser._pw_browser.new_context(
             storage_state=storage_state,
             viewport=_viewport(),
             locale="en-US",
@@ -793,7 +793,6 @@ class Browser:
             profile_dir="",
         )
         instance._downloads_dir = root_browser._downloads_dir
-        instance._container_dir = root_browser._container_dir
         return instance
 
     async def close_context(self) -> None:
@@ -1055,6 +1054,17 @@ class Browser:
             logger.debug("Browser.close called but already closed")
             return
         self._closed = True
+
+        # Persist session state (cookies + localStorage) so the next launch
+        # can restore login sessions.
+        if self._profile_dir:
+            state_file = Path(self._profile_dir) / "storage_state.json"
+            try:
+                await self._context.storage_state(path=str(state_file))
+                logger.info("Saved browser session state to %s", state_file)
+            except Exception:  # noqa: BLE001
+                logger.warning("Failed to save browser storage state")
+
         context_exc: Exception | None = None
         pages_to_close = list(self._context.pages)
         for page in pages_to_close:
@@ -1097,6 +1107,14 @@ class Browser:
                 exc,
             )
         finally:
+            # Close the Playwright Browser (kills Chrome), then stop the driver.
+            try:
+                if self._pw_browser is not None:
+                    logger.debug("Closing Playwright Browser ...")
+                    await asyncio.wait_for(self._pw_browser.close(), timeout=self._CONTEXT_CLOSE_TIMEOUT_S)
+                    logger.debug("Playwright Browser closed")
+            except Exception:  # noqa: BLE001
+                logger.warning("Failed to close Playwright Browser")
             try:
                 if self._pw is not None:
                     logger.debug("Stopping Playwright driver ...")
@@ -1195,7 +1213,7 @@ class Browser:
                     download_info = await save_response_as_file(
                         response,
                         downloads_dir=self._downloads_dir or ".",
-                        container_dir=self._container_dir or "/tmp",
+                        container_dir=self._downloads_dir or "/tmp",
                     )
                 except Exception:
                     logger.exception("Failed to save file from response")
@@ -1299,7 +1317,7 @@ class Browser:
                 info = await save_response_as_file(
                     api_resp,
                     downloads_dir=self._downloads_dir or ".",
-                    container_dir=self._container_dir or "/tmp",
+                    container_dir=self._downloads_dir or "/tmp",
                 )
                 self._pending_downloads.append(info)
                 logger.info(
@@ -1424,8 +1442,6 @@ class Browser:
 
 
 _browser: Browser | None = None
-_ephemeral_pw_browser: Any = None  # Playwright Browser for sub-agent contexts
-_ephemeral_pw: Any = None  # Playwright driver instance for ephemeral browser
 _agent_browsers: dict[str, Browser] = {}
 _agent_browser_lock = asyncio.Lock()
 
@@ -1457,15 +1473,6 @@ def _atexit_kill_browser() -> None:
     no-op.  Otherwise it sends SIGTERM to the Playwright driver PID, which
     takes Chromium down with it.
     """
-    # Kill ephemeral driver if it was never stopped.
-    if _ephemeral_pw is not None:
-        try:
-            epid = _ephemeral_pw._connection._transport._proc.pid  # type: ignore[union-attr]
-            logger.debug("atexit: killing ephemeral driver tree (pid %d)", epid)
-            _kill_driver_tree(epid)
-        except Exception:  # noqa: BLE001
-            pass
-
     if _browser is None or _browser._closed:
         return
     pid = _browser._driver_pid
@@ -1481,12 +1488,16 @@ async def _get_root_browser() -> Browser:
     if _browser is None:
         config = load_config()
         profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
-        downloads_path = config.virtual_computer.home_dir
+        downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
         channel = config.tools.browser.channel
         headless = config.tools.browser.headless
-        _browser = await Browser.start(str(profile_path), channel=channel, headless=headless, downloads_path=downloads_path)
-        _browser._downloads_dir = downloads_path
-        _browser._container_dir = config.virtual_computer.container_working_dir
+        _browser = await Browser.start(
+            str(profile_path),
+            channel=channel,
+            headless=headless,
+            downloads_path=downloads_dir,
+        )
+        _browser._downloads_dir = downloads_dir
         atexit.register(_atexit_kill_browser)
     return _browser
 
@@ -1495,7 +1506,7 @@ async def get_browser() -> Browser:
     """Get the browser instance for the current agent.
 
     Root agents (depth 0) get the persistent singleton browser.  Sub-agents
-    get an ephemeral context on the same Chromium process, seeded with the
+    get an ephemeral context on the same Chrome process, seeded with the
     root's cookies and localStorage for session inheritance.
     """
     from sdk.events import get_current_agent_id, get_current_depth
@@ -1511,32 +1522,8 @@ async def get_browser() -> Browser:
         if agent_id in _agent_browsers:
             return _agent_browsers[agent_id]
 
-        # Lazily launch a separate headless Chromium process for ephemeral
-        # contexts.  Persistent contexts (launch_persistent_context) don't
-        # expose a Browser object in Playwright, so we need a second process.
-        global _ephemeral_pw_browser, _ephemeral_pw
-        if _ephemeral_pw_browser is None:
-            config = load_config()
-            channel = config.tools.browser.channel
-            headless = config.tools.browser.headless
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--disable-features=AutomationControlled",
-                "--no-default-browser-check",
-                "--disable-dev-shm-usage",
-            ]
-            _ephemeral_pw = await async_playwright().start()
-            _ephemeral_pw_browser = await _ephemeral_pw.chromium.launch(
-                channel=channel,
-                headless=headless,
-                args=launch_args,
-            )
-            logger.info("Launched ephemeral Chromium process for sub-agent contexts")
-
         state = await root._context.storage_state()
-        ephemeral = await Browser.start_ephemeral(
-            root, storage_state=state, pw_browser=_ephemeral_pw_browser,
-        )
+        ephemeral = await Browser.start_ephemeral(root, storage_state=state)
         _agent_browsers[agent_id] = ephemeral
         logger.info("Created ephemeral browser context for agent '%s'", agent_id)
         return ephemeral
@@ -1556,7 +1543,7 @@ async def release_agent_browser(agent_id: str) -> None:
 
 async def close_browser() -> None:
     """Shutdown all browser instances — ephemeral contexts and root singleton."""
-    global _browser, _ephemeral_pw_browser, _ephemeral_pw
+    global _browser
 
     # Close all ephemeral sub-agent contexts first.
     async with _agent_browser_lock:
@@ -1567,20 +1554,6 @@ async def close_browser() -> None:
             await browser.close_context()
         except Exception:  # noqa: BLE001
             logger.warning("Failed to close ephemeral context for '%s'", agent_id)
-
-    # Close the ephemeral Chromium process and its Playwright driver.
-    if _ephemeral_pw_browser is not None:
-        try:
-            await _ephemeral_pw_browser.close()
-        except Exception:  # noqa: BLE001
-            logger.warning("Failed to close ephemeral Chromium process")
-        _ephemeral_pw_browser = None
-    if _ephemeral_pw is not None:
-        try:
-            await _ephemeral_pw.stop()
-        except Exception:  # noqa: BLE001
-            logger.warning("Failed to stop ephemeral Playwright driver")
-        _ephemeral_pw = None
 
     if _browser is None:
         logger.debug("close_browser called but no browser instance exists")

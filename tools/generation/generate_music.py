@@ -256,7 +256,7 @@ async def generate_music(
         # Map the inference container path to the host path and the
         # virtual computer path (the agent operates in the virtual computer).
         host_home = cfg.inference_container.home_dir
-        vc_prefix = cfg.virtual_computer.container_working_dir.rstrip("/")
+        vc_prefix = cfg.virtual_computer.home_dir.rstrip("/")
         _CONTAINER_OUTPUT = "/output/"
 
         if final_path.startswith(_CONTAINER_OUTPUT):

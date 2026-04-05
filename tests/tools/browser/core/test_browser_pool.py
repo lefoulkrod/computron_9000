@@ -1,6 +1,5 @@
 """Tests for the browser context pool (copy-on-create isolation)."""
 
-import tools.browser.core.browser as browser_mod
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -62,29 +61,22 @@ class _FakeContext:
 
 
 def _make_browser(**kwargs: Any) -> Browser:
+    """Create a Browser with a fake context and a mock pw_browser for sub-agent contexts."""
     ctx = _FakeContext([_FakePage()])
-    b = Browser(context=ctx, extra_headers={"Accept-Language": "en"}, **kwargs)  # type: ignore[arg-type]
+    # Mock pw_browser so sub-agents can call root._pw_browser.new_context()
+    mock_pw_browser = MagicMock()
+    mock_pw_browser.new_context = AsyncMock(return_value=_FakeContext([]))
+    b = Browser(context=ctx, extra_headers={"Accept-Language": "en"}, pw_browser=mock_pw_browser, **kwargs)  # type: ignore[arg-type]
     b._downloads_dir = "/tmp/dl"
-    b._container_dir = "/home/computron"
     return b
 
 
 @pytest.fixture(autouse=True)
 def _clean_pool():
-    """Ensure the global pool and ephemeral browser are clean."""
+    """Ensure the global pool is clean."""
     _agent_browsers.clear()
-    old_ephem = browser_mod._ephemeral_pw_browser
     yield
     _agent_browsers.clear()
-    browser_mod._ephemeral_pw_browser = old_ephem
-
-
-def _set_ephemeral_pw_browser(new_ctx: _FakeContext) -> MagicMock:
-    """Set up a fake ephemeral Playwright Browser that returns new_ctx."""
-    fake_pw_browser = MagicMock()
-    fake_pw_browser.new_context = AsyncMock(return_value=new_ctx)
-    browser_mod._ephemeral_pw_browser = fake_pw_browser
-    return fake_pw_browser
 
 
 @pytest.mark.unit
@@ -105,10 +97,10 @@ async def test_root_agent_gets_singleton(monkeypatch: pytest.MonkeyPatch) -> Non
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_sub_agent_gets_ephemeral_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Sub-agents (depth > 0) get an ephemeral context, not the root singleton."""
+    """Sub-agents (depth > 0) get an ephemeral context on the root's Chrome process."""
     root = _make_browser()
-    new_ctx = _FakeContext([])
-    fake_pw = _set_ephemeral_pw_browser(new_ctx)
+    ephemeral_ctx = _FakeContext([])
+    root._pw_browser.new_context = AsyncMock(return_value=ephemeral_ctx)
 
     monkeypatch.setattr("sdk.events.get_current_depth", lambda: 1)
     monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.browser_agent.1")
@@ -117,11 +109,10 @@ async def test_sub_agent_gets_ephemeral_context(monkeypatch: pytest.MonkeyPatch)
         result = await get_browser()
 
     assert result is not root
-    assert result._context is new_ctx
+    assert result._context is ephemeral_ctx
     assert "root.browser_agent.1" in _agent_browsers
-    # Inherits download dirs from root
+    # Inherits download dir from root
     assert result._downloads_dir == root._downloads_dir
-    assert result._container_dir == root._container_dir
 
 
 @pytest.mark.unit
@@ -129,8 +120,6 @@ async def test_sub_agent_gets_ephemeral_context(monkeypatch: pytest.MonkeyPatch)
 async def test_sub_agent_reuses_existing_context(monkeypatch: pytest.MonkeyPatch) -> None:
     """Repeated get_browser calls from the same sub-agent return the same instance."""
     root = _make_browser()
-    new_ctx = _FakeContext([])
-    fake_pw = _set_ephemeral_pw_browser(new_ctx)
 
     monkeypatch.setattr("sdk.events.get_current_depth", lambda: 1)
     monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.web.1")
@@ -141,7 +130,7 @@ async def test_sub_agent_reuses_existing_context(monkeypatch: pytest.MonkeyPatch
 
     assert first is second
     # new_context called only once
-    fake_pw.new_context.assert_awaited_once()
+    root._pw_browser.new_context.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -171,8 +160,8 @@ async def test_ephemeral_inherits_storage_state(monkeypatch: pytest.MonkeyPatch)
     """Ephemeral context is seeded with root's storage state."""
     root = _make_browser()
     root._context._storage = {"cookies": [{"name": "session", "value": "abc"}], "origins": []}
-    new_ctx = _FakeContext([])
-    fake_pw = _set_ephemeral_pw_browser(new_ctx)
+    ephemeral_ctx = _FakeContext([])
+    root._pw_browser.new_context = AsyncMock(return_value=ephemeral_ctx)
 
     monkeypatch.setattr("sdk.events.get_current_depth", lambda: 2)
     monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.deep.1")
@@ -181,5 +170,5 @@ async def test_ephemeral_inherits_storage_state(monkeypatch: pytest.MonkeyPatch)
         await get_browser()
 
     # Verify storage_state was passed to new_context
-    call_kwargs = fake_pw.new_context.call_args[1]
+    call_kwargs = root._pw_browser.new_context.call_args[1]
     assert call_kwargs["storage_state"]["cookies"] == [{"name": "session", "value": "abc"}]

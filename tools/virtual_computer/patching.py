@@ -1,11 +1,11 @@
 """Text patch application utilities (structured + unified diff)."""
 
 import logging
+from pathlib import Path
 
 from tools._truncation import truncate_args
 
 from ._fs_internal import is_binary_file, read_text_lines, write_text_lines
-from ._path_utils import resolve_under_home
 from .models import ApplyPatchResult
 
 logger = logging.getLogger(__name__)
@@ -15,24 +15,14 @@ logger = logging.getLogger(__name__)
 def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
     """Replace a unique block of text in a file with new content.
 
-    The old_text must match exactly one location in the file (character-for-
-    character, including whitespace). If it matches zero or multiple locations
-    the operation fails with a descriptive error.
-
-    Args:
-        path: Target file path.
-        old_text: Exact text to find and replace. Must be unique in the file.
-        new_text: Replacement text.
-
-    Returns:
-        ApplyPatchResult: Success flag, ``file_path``, and unified ``diff``.
+    The old_text must match exactly one location in the file.
     """
     try:
-        abs_path, _home, rel = resolve_under_home(path)
+        abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():
-            return ApplyPatchResult(success=False, file_path=rel, error="File does not exist")
+            return ApplyPatchResult(success=False, file_path=path, error="File does not exist")
         if is_binary_file(abs_path):
-            return ApplyPatchResult(success=False, file_path=rel, error="Binary file not supported")
+            return ApplyPatchResult(success=False, file_path=path, error="Binary file not supported")
 
         content = abs_path.read_text(encoding="utf-8", errors="replace")
         count = content.count(old_text)
@@ -40,24 +30,24 @@ def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResul
         if count == 0:
             return ApplyPatchResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 error="No match found. Ensure old_text matches the file content exactly, "
                 "including whitespace and indentation.",
             )
         if count > 1:
             return ApplyPatchResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 error=f"Found {count} matches. Include more surrounding context "
                 "in old_text to make a unique match.",
             )
 
         if old_text == new_text:
-            return ApplyPatchResult(success=True, file_path=rel)
+            return ApplyPatchResult(success=True, file_path=path)
 
         new_content = content.replace(old_text, new_text, 1)
         write_text_lines(abs_path, new_content.splitlines(keepends=True))
-        return ApplyPatchResult(success=True, file_path=rel)
+        return ApplyPatchResult(success=True, file_path=path)
     except (OSError, ValueError) as exc:  # pragma: no cover
         logger.exception("Failed to apply text patch to %s", path)
         return ApplyPatchResult(success=False, file_path=path, error=str(exc))
@@ -65,20 +55,7 @@ def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResul
 
 @truncate_args(patch_text=300)
 def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
-    """Apply unified diff patches to existing text files.
-
-    The given ``patch_text`` may contain hunks for one or more files. File
-    creation and deletion are not supported; attempts to patch non-existent
-    files yield error results for those entries.
-
-    Args:
-        patch_text: Unified diff text covering one or multiple files.
-
-    Returns:
-        list[ApplyPatchResult]: One result per file encountered in the diff,
-        reporting success and an optional unified diff of the applied changes,
-        or an ``error`` message.
-    """
+    """Apply unified diff patches to existing text files."""
     results: list[ApplyPatchResult] = []
     lines = patch_text.splitlines(keepends=False)
     idx = 0
@@ -109,12 +86,12 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
             )
         else:
             try:
-                abs_path, _home, rel = resolve_under_home(target)
+                abs_path = Path(target)
                 if not abs_path.exists() or not abs_path.is_file():
                     results.append(
                         ApplyPatchResult(
                             success=False,
-                            file_path=rel,
+                            file_path=target,
                             error="Target file missing",
                         )
                     )
@@ -123,14 +100,14 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
                     try:
                         patched = _apply_hunks(original, hunks)
                     except ValueError as exc:  # pragma: no cover - error path
-                        results.append(ApplyPatchResult(success=False, file_path=rel, error=str(exc)))
+                        results.append(ApplyPatchResult(success=False, file_path=target, error=str(exc)))
                     else:
                         if original != patched:
                             write_text_lines(abs_path, patched)
                         results.append(
                             ApplyPatchResult(
                                 success=True,
-                                file_path=rel,
+                                file_path=target,
                             )
                         )
             except (OSError, ValueError) as exc:  # pragma: no cover
@@ -181,22 +158,7 @@ def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
 
 
 def _apply_hunks(original: list[str], hunks: list[tuple[int, int, int, int, list[str]]]) -> list[str]:
-    """Apply parsed hunks to an original list of lines.
-
-    Args:
-        original: The original file content as a list of lines (with newlines).
-        hunks: Parsed hunk tuples of the form ``(old_start, old_count,
-            new_start, new_count, hunk_body)`` where ``hunk_body`` contains
-            lines prefixed with one of ``' '`` (context), ``'-'`` (removal), or
-            ``'+'`` (addition).
-
-    Returns:
-        list[str]: The patched file content as a list of lines.
-
-    Raises:
-        ValueError: If a hunk cannot be applied due to invalid ranges or
-            mismatched context.
-    """
+    """Apply parsed hunks to an original list of lines."""
     result: list[str] = []
     orig_pos = 0
     for old_start, _old_count, _new_start, _new_count, body in hunks:

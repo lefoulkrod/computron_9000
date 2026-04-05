@@ -35,10 +35,9 @@ async def save_page_content(filename: str) -> str:
 
     config = load_config()
     home_dir = Path(config.virtual_computer.home_dir)
-    container_working_dir = config.virtual_computer.container_working_dir.rstrip("/")
 
     host_path = home_dir / filename
-    container_path = f"{container_working_dir}/{filename}"
+    file_path = str(host_path)
 
     logger.info("Saving page content from %s to %s", view.url, host_path)
 
@@ -52,7 +51,7 @@ async def save_page_content(filename: str) -> str:
         logger.info("Saved %d bytes to %s", size, host_path)
         return format_save_result(
             filename=filename,
-            container_path=container_path,
+            container_path=file_path,
             size_bytes=size,
         )
     except BrowserToolError:

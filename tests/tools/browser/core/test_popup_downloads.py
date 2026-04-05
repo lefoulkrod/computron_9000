@@ -328,7 +328,6 @@ class TestHandleDownloadRename:
         ctx = FakeContext([FakePage()])
         browser = _make_browser(ctx)
         browser._downloads_dir = str(tmp_path)
-        browser._container_dir = "/home/computron"
 
         # Simulate a Playwright download with a UUID path and suggested name
         uuid_file = tmp_path / "abc123-def456"
@@ -344,7 +343,7 @@ class TestHandleDownloadRename:
         info = browser._pending_downloads[0]
         assert info.filename == "BoardRules_March2026.pdf"
         assert info.content_type == "application/pdf"
-        assert info.container_path == "/home/computron/BoardRules_March2026.pdf"
+        assert info.container_path == str(tmp_path / "BoardRules_March2026.pdf")
         # Original UUID file should have been moved
         assert not uuid_file.exists()
         assert (tmp_path / "BoardRules_March2026.pdf").exists()
@@ -354,7 +353,6 @@ class TestHandleDownloadRename:
         ctx = FakeContext([FakePage()])
         browser = _make_browser(ctx)
         browser._downloads_dir = str(tmp_path)
-        browser._container_dir = "/home/computron"
 
         # Pre-existing file with the same name
         (tmp_path / "report.pdf").write_bytes(b"existing")
@@ -379,7 +377,6 @@ class TestHandleDownloadRename:
         ctx = FakeContext([FakePage()])
         browser = _make_browser(ctx)
         browser._downloads_dir = str(tmp_path)
-        browser._container_dir = "/home/computron"
 
         uuid_file = tmp_path / "some-uuid-name"
         uuid_file.write_bytes(b"some content")

@@ -133,7 +133,7 @@ async def generate_image(
         # Map the inference container path to the host volume and to the
         # virtual computer container path (used by the UI's file route).
         host_home = cfg.inference_container.home_dir
-        vc_prefix = cfg.virtual_computer.container_working_dir.rstrip("/")
+        vc_prefix = cfg.virtual_computer.home_dir.rstrip("/")
         _CONTAINER_OUTPUT = "/output/"
 
         if final_path.startswith(_CONTAINER_OUTPUT):

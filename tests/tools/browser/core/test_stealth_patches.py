@@ -234,10 +234,10 @@ class TestChannelAwareLaunch:
     """Verify Browser.start adjusts settings based on browser channel."""
 
     def test_user_agent_not_forced_for_chrome_channel(self):
-        """When a channel is specified, user_agent should not be in launch_kwargs."""
+        """When a channel is specified, user_agent should not be in context_kwargs."""
         source = inspect.getsource(Browser.start)
         assert "if not _use_channel" in source
-        assert 'launch_kwargs["user_agent"]' in source
+        assert 'context_kwargs["user_agent"]' in source
 
     def test_swiftshader_only_for_bundled_chromium(self):
         """--enable-unsafe-swiftshader is only needed for bundled Chromium."""

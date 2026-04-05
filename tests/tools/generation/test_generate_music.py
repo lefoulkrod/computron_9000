@@ -26,7 +26,7 @@ def mock_config():
     config = MagicMock()
     config.inference_container.container_name = "test-inference-container"
     config.inference_container.container_working_dir = "/output"
-    config.virtual_computer.container_working_dir = "/home/computron"
+    config.virtual_computer.home_dir = "/home/computron"
     config.inference_container.home_dir = "/tmp/test_computron"
     return config
 

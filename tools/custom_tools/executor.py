@@ -1,4 +1,4 @@
-"""Container execution of custom tools via Podman."""
+"""Local execution of custom tools."""
 
 from __future__ import annotations
 
@@ -6,92 +6,66 @@ import asyncio
 import json
 import logging
 import shlex
-from typing import TYPE_CHECKING
-
-from podman import PodmanClient
+import subprocess
 
 from config import load_config
 
 from .registry import CustomToolDefinition
 
-if TYPE_CHECKING:
-    from podman.domain.containers import Container
-
 logger = logging.getLogger(__name__)
 
-# Process-lifetime cache: packages already installed in this container session.
+# Process-lifetime cache: packages already installed in this session.
 _installed_packages: set[str] = set()
 
 _DEFAULT_TIMEOUT: float = 300.0
 _INSTALL_TIMEOUT: float = 180.0
 
 
-def _get_container() -> tuple[Container, str]:
-    """Return (container, container_user), raising RuntimeError if not found."""
-    cfg = load_config()
-    container_name = cfg.virtual_computer.container_name
-    container_user = cfg.virtual_computer.container_user
-    client = PodmanClient().from_env()
-    container = next(
-        (c for c in client.containers.list() if c.name == container_name),
-        None,
-    )
-    if container is None:
-        msg = f"Container '{container_name}' not found."
-        raise RuntimeError(msg)
-    return container, container_user
-
-
 def _exec_sync(
-    container: Container,
     cmd: list[str],
-    user: str,
     timeout: float,
+    *,
+    user: str | None = None,
 ) -> dict[str, object]:
-    """Run cmd in container synchronously and return stdout/stderr/exit_code."""
-    exit_code, output = container.exec_run(
+    """Run cmd locally and return stdout/stderr/exit_code.
+
+    Args:
+        cmd: Command and arguments to run.
+        timeout: Max seconds to wait.
+        user: If set, run as this user via ``sudo -u``.
+    """
+    if user:
+        cmd = ["sudo", "-n", "-u", user] + cmd
+    result = subprocess.run(
         cmd,
-        stdout=True,
-        stderr=True,
-        demux=True,
-        tty=False,
-        user=user,
+        capture_output=True,
+        timeout=timeout,
     )
-    stdout = None
-    stderr = None
-    if isinstance(output, tuple) and len(output) == 2:
-        stdout_bytes, stderr_bytes = output
-        if stdout_bytes:
-            stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
-        if stderr_bytes:
-            stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
-    return {"stdout": stdout, "stderr": stderr, "exit_code": exit_code}
+    stdout = result.stdout.decode("utf-8", errors="replace").strip() if result.stdout else None
+    stderr = result.stderr.decode("utf-8", errors="replace").strip() if result.stderr else None
+    return {"stdout": stdout, "stderr": stderr, "exit_code": result.returncode}
 
 
 async def _ensure_dependencies(
-    container: Container,
-    container_user: str,
     dependencies: list[str],
     language: str,
 ) -> None:
-    """Install missing dependencies in the container (cached per process lifetime)."""
+    """Install missing dependencies locally (cached per process lifetime)."""
     missing = [pkg for pkg in dependencies if pkg not in _installed_packages]
     if not missing:
         return
 
     if language == "python":
-        # Run as root so we can write to the system site-packages.
         cmd = ["pip3", "install", *missing]
-        install_user = "root"
     else:
         cmd = ["npm", "install", "-g", *missing]
-        install_user = "root"
 
-    logger.info("Installing dependencies in container as root: %s", missing)
+    logger.info("Installing dependencies: %s", missing)
     loop = asyncio.get_running_loop()
     try:
+        # Install as root so packages are available system-wide.
         await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _exec_sync(container, cmd, install_user, _INSTALL_TIMEOUT)),
+            loop.run_in_executor(None, lambda: _exec_sync(cmd, _INSTALL_TIMEOUT, user="root")),
             timeout=_INSTALL_TIMEOUT,
         )
     except TimeoutError:
@@ -102,24 +76,23 @@ async def _ensure_dependencies(
 
 
 async def execute_custom_tool(tool_def: CustomToolDefinition, arguments: dict[str, object]) -> dict[str, object]:
-    """Execute a custom tool inside the container.
+    """Execute a custom tool locally.
 
     Args:
         tool_def: The tool definition from the registry.
-        arguments: Dict of argument name → value.
+        arguments: Dict of argument name -> value.
 
     Returns:
         dict with stdout, stderr, exit_code.
     """
-    container, container_user = _get_container()
-
     if tool_def.dependencies:
-        await _ensure_dependencies(container, container_user, tool_def.dependencies, tool_def.language)
+        await _ensure_dependencies(tool_def.dependencies, tool_def.language)
 
     loop = asyncio.get_running_loop()
+    cfg = load_config()
+    home_dir = cfg.virtual_computer.home_dir
 
     if tool_def.type == "command":
-        # Interpolate {param} placeholders with shell-quoted argument values.
         cmd_str = tool_def.command_template
         for key, value in arguments.items():
             cmd_str = cmd_str.replace(f"{{{key}}}", shlex.quote(str(value)))
@@ -127,27 +100,26 @@ async def execute_custom_tool(tool_def: CustomToolDefinition, arguments: dict[st
 
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _exec_sync(container, exec_cmd, container_user, _DEFAULT_TIMEOUT)),
+                loop.run_in_executor(None, lambda: _exec_sync(exec_cmd, _DEFAULT_TIMEOUT, user="computron")),
                 timeout=_DEFAULT_TIMEOUT,
             )
         except TimeoutError:
-            return {"stdout": None, "stderr": f"Timed out after {_DEFAULT_TIMEOUT}s", "exit_code": 1}
+            return {"stdout": None, "stderr": "Timed out after %ss" % _DEFAULT_TIMEOUT, "exit_code": 1}
 
     else:
-        # program type: pass arguments as JSON on stdin
         json_args = json.dumps(arguments)
-        script_path = f"/home/computron/custom_tools/scripts/{tool_def.script_filename}"
+        script_path = "%s/custom_tools/scripts/%s" % (home_dir, tool_def.script_filename)
         interpreter = "python3" if tool_def.language == "python" else "bash"
-        cmd_str = f"echo {shlex.quote(json_args)} | {interpreter} {shlex.quote(script_path)}"
+        cmd_str = "echo %s | %s %s" % (shlex.quote(json_args), interpreter, shlex.quote(script_path))
         exec_cmd = ["bash", "-c", cmd_str]
 
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _exec_sync(container, exec_cmd, container_user, _DEFAULT_TIMEOUT)),
+                loop.run_in_executor(None, lambda: _exec_sync(exec_cmd, _DEFAULT_TIMEOUT, user="computron")),
                 timeout=_DEFAULT_TIMEOUT,
             )
         except TimeoutError:
-            return {"stdout": None, "stderr": f"Timed out after {_DEFAULT_TIMEOUT}s", "exit_code": 1}
+            return {"stdout": None, "stderr": "Timed out after %ss" % _DEFAULT_TIMEOUT, "exit_code": 1}
 
     return result
 

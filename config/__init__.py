@@ -153,7 +153,7 @@ class DesktopConfig(BaseModel):
     """Configuration for the desktop environment (noVNC + Xfce4)."""
 
     display: str = ":1"
-    user_display: str = ":99"
+    user_display: str = ":0"
     agent_display_base: int = 100
     resolution: str = "1280x720"
     vnc_port: int = 5900
@@ -165,10 +165,7 @@ class DesktopConfig(BaseModel):
 class VirtualComputerConfig(BaseModel):
     """Configuration for the virtual computer environment."""
 
-    container_name: str
-    container_user: str
     home_dir: str
-    container_working_dir: str
 
 
 class InferenceContainerConfig(BaseModel):
@@ -273,7 +270,11 @@ def load_config() -> AppConfig:
         RuntimeError: If the configuration file cannot be read or parsed.
 
     """
-    path = Path(__file__).parent.parent / "config.yaml"
+    # In the container, always use config.yaml even if config.dev.yaml is
+    # present (source mount exposes the host's dev config).
+    dev_path = Path(__file__).parent.parent / "config.dev.yaml"
+    in_container = os.environ.get("COMPUTRON_CONTAINER") == "1"
+    path = dev_path if (dev_path.exists() and not in_container) else Path(__file__).parent.parent / "config.yaml"
     logger.info("Loading configuration from %s", path)
 
     try:

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import io
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ._fs_internal import is_binary_file
-from ._path_utils import resolve_under_home
 from .models import ReadTextResult
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Iterable
-    from pathlib import Path
 
 
 def _read_text_iter(path: Path) -> Iterable[str]:
@@ -42,29 +41,20 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
 
     Content is returned with embedded line numbers (``cat -n`` style).
     Files over 2000 lines are automatically truncated when no range is given.
-    Use ``start``/``end`` or ``grep`` to read specific sections of large files.
-
-    Args:
-        path: File path (relative or absolute under home).
-        start: First line to read (1-based, inclusive). Omit to start at 1.
-        end: Last line to read (1-based, inclusive). Omit to read to EOF.
-
-    Returns:
-        ReadTextResult: ``content`` with line numbers, ``total_lines``, and optional range info.
     """
     try:
-        abs_path, _home, rel = resolve_under_home(path)
+        abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():
             return ReadTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 content=None,
                 error="file not found",
             )
         if is_binary_file(abs_path):
             return ReadTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 content=None,
                 error="binary file not supported",
             )
@@ -83,7 +73,7 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
 
             return ReadTextResult(
                 success=True,
-                file_path=rel,
+                file_path=path,
                 content=content,
                 start=1 if truncated else None,
                 end=_MAX_LINES_DEFAULT if truncated else None,
@@ -106,7 +96,7 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
         content = out_buf.getvalue()
         return ReadTextResult(
             success=True,
-            file_path=rel,
+            file_path=path,
             content=content,
             start=s,
             end=e,
@@ -118,41 +108,25 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
 
 
 def head(path: str, n: int = 200) -> ReadTextResult:
-    """Read the first n lines of a UTF-8 text file.
-
-    Args:
-        path: File path (relative or absolute under home).
-        n: Number of lines to return. Defaults to 200.
-
-    Returns:
-        ReadTextResult: Content of the first n lines with range metadata.
-    """
+    """Read the first n lines of a UTF-8 text file."""
     return read_file(path, start=1, end=max(1, n))
 
 
 def tail(path: str, n: int = 200) -> ReadTextResult:
-    """Read the last n lines of a UTF-8 text file.
-
-    Args:
-        path: File path (relative or absolute under home).
-        n: Number of lines to return. Defaults to 200.
-
-    Returns:
-        ReadTextResult: Content of the last n lines with range metadata.
-    """
+    """Read the last n lines of a UTF-8 text file."""
     try:
-        abs_path, _home, rel = resolve_under_home(path)
+        abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():
             return ReadTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 content=None,
                 error="file not found",
             )
         if is_binary_file(abs_path):
             return ReadTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 content=None,
                 error="binary file not supported",
             )
@@ -171,7 +145,7 @@ def tail(path: str, n: int = 200) -> ReadTextResult:
         end_line = total if total > 0 else 1
         return ReadTextResult(
             success=True,
-            file_path=rel,
+            file_path=path,
             content=content,
             start=start_line,
             end=end_line,

@@ -1,18 +1,18 @@
 """Edit operations for files: replace literal strings and insert text by anchor.
 
-UTF-8 only, atomic writes, and safe path resolution under the workspace.
+UTF-8 only, atomic writes.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Final
 
 from tools._truncation import truncate_args
 
 from ._fs_internal import is_binary_file, write_text_lines
-from ._path_utils import resolve_under_home
 from .models import InsertTextResult, ReplaceInFileResult
 
 logger = logging.getLogger(__name__)
@@ -28,29 +28,20 @@ def replace_in_file(
     pattern: str,
     replacement: str,
 ) -> ReplaceInFileResult:
-    """Replace all occurrences of a literal string in a text file.
-
-    Args:
-        path: File path under the virtual computer home.
-        pattern: Literal string to find. All occurrences are replaced.
-        replacement: Replacement text.
-
-    Returns:
-        ReplaceInFileResult: Success flag, relative ``file_path``, and count of replacements.
-    """
+    """Replace all occurrences of a literal string in a text file."""
     try:
-        abs_path, _home, rel = resolve_under_home(path)
+        abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():
             return ReplaceInFileResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 replacements=0,
                 error="file not found",
             )
         if is_binary_file(abs_path):
             return ReplaceInFileResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 replacements=0,
                 error="binary file not supported",
             )
@@ -64,7 +55,7 @@ def replace_in_file(
 
         return ReplaceInFileResult(
             success=True,
-            file_path=rel,
+            file_path=path,
             replacements=count,
         )
     except OSError:  # pragma: no cover - defensive
@@ -86,18 +77,7 @@ def insert_text(
     where: str = "after",
     occurrences: str = "first",
 ) -> InsertTextResult:
-    """Insert text relative to a literal anchor string within a file.
-
-    Args:
-        path: File path under the virtual computer home.
-        anchor: Literal string to locate the insertion point.
-        text: Text to insert or replace with.
-        where: One of ``{"after","before","replace"}``. Default "after".
-        occurrences: One of ``{"first","all"}``. Default "first".
-
-    Returns:
-        InsertTextResult: Success, relative path, and count of occurrences changed.
-    """
+    """Insert text relative to a literal anchor string within a file."""
     if where not in _WHERE_VALUES:
         return InsertTextResult(
             success=False,
@@ -116,11 +96,11 @@ def insert_text(
         )
 
     try:
-        abs_path, _home, rel = resolve_under_home(path)
+        abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():
             return InsertTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 occurrences=0,
                 where=where,
                 error="file not found",
@@ -128,7 +108,7 @@ def insert_text(
         if is_binary_file(abs_path):
             return InsertTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 occurrences=0,
                 where=where,
                 error="binary file not supported",
@@ -152,7 +132,7 @@ def insert_text(
         if count == 0:
             return InsertTextResult(
                 success=False,
-                file_path=rel,
+                file_path=path,
                 occurrences=0,
                 where=where,
                 error="anchor not found",
@@ -161,7 +141,7 @@ def insert_text(
         write_text_lines(abs_path, new_text.splitlines(keepends=True))
         return InsertTextResult(
             success=True,
-            file_path=rel,
+            file_path=path,
             occurrences=count,
             where=where,
         )

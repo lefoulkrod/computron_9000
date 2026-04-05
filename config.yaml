@@ -1,10 +1,7 @@
 settings:
-  home_dir: /home/larry/.computron_9000
+  home_dir: /var/lib/computron_9000
 virtual_computer:
-  container_name: computron_virtual_computer
-  container_user: computron
-  home_dir: /home/larry/.computron_9000/container_home
-  container_working_dir: /home/computron
+  home_dir: /home/computron
 inference_container:
   container_name: computron_inference
   home_dir: /home/larry/.computron_9000/container_home
@@ -46,7 +43,7 @@ agents:
     think: false
 
 desktop:
-  display: ":1"
+  display: ":0"
   resolution: "1280x720"
   websocket_port: 6080
   screenshot_quality: 70
