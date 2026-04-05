@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 import Header from './components/Header.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
@@ -59,6 +59,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [muted, setMuted] = useState(false);
     const [userDesktopOpen, setUserDesktopOpen] = useState(false);
     const [closedPanels, setClosedPanels] = useState(new Set());
+    const [networkViewOpen, setNetworkViewOpen] = useState(false);
     const [nudgeToast, setNudgeToast] = useState(null);
 
     const modelSettings = useModelSettings();
@@ -204,25 +205,59 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         await chatNewConversation();
         setFilePreview(null);
         setClosedPanels(new Set());
+        setNetworkViewOpen(false);
         setToolsPanelKey((k) => k + 1);
         agentDispatch({ type: 'RESET' });
     }, [chatNewConversation, agentDispatch]);
 
     // ── Which layout to show ───────────────────────────────────────────
-    // Three possible views:
+    // Two top-level views:
     //
-    //   1. Agent detail — user clicked a card → full-screen activity view
-    //   2. Agent network — sub-agents exist → tree graph + chat side by side
-    //   3. Simple chat — no sub-agents → classic chat + preview panels
+    //   1. Simple chat (default) — chat + preview panels. Always shows the
+    //      root agent's conversation. When sub-agents have been spawned, a
+    //      network indicator appears so the user can navigate to the network.
     //
-    // Flow: simple chat → network (when first sub-agent spawns)
-    //       → detail (click a card) → back to network ("← Agents" button)
-    // Once any sub-agent has appeared, the network view stays active for
-    // the rest of the conversation — even on subsequent root-only turns.
-    const networkActive = agentState.networkActivated;
+    //   2. Network view — full-screen agent graph. Click a card to drill
+    //      into an agent's activity view. Close to return to simple chat.
+    //
+    // Flow: simple chat ⇄ network view (via indicator/sidebar)
+    //       network → agent detail (click card) → back to network ("← Agents")
     const selectedAgent = agentState.selectedAgentId;
 
-    // Which preview panels are visible (simple chat + desktop overlay)
+    // Compute network-visible agent stats for the indicator badge.
+    // Counts all agents in trees that have sub-agents (same as the
+    // network view header) so the numbers match when you open it.
+    const { networkAgentCount, networkRunningCount } = useMemo(() => {
+        const agents = agentState.agents;
+        let total = 0, running = 0;
+        // Walk each root that has children (same filter as _buildTrees)
+        for (const a of Object.values(agents)) {
+            if (a.parentId !== null || a.childIds.length === 0) continue;
+            // BFS this tree
+            const queue = [a.id];
+            while (queue.length > 0) {
+                const id = queue.shift();
+                const node = agents[id];
+                if (!node) continue;
+                total++;
+                if (node.status === 'running') running++;
+                for (const childId of node.childIds) queue.push(childId);
+            }
+        }
+        return { networkAgentCount: total, networkRunningCount: running };
+    }, [agentState.agents]);
+
+    const handleOpenNetwork = useCallback(() => {
+        setNetworkViewOpen(true);
+        setFlyoutPanel(null);
+    }, []);
+
+    const handleCloseNetwork = useCallback(() => {
+        setNetworkViewOpen(false);
+        agentDispatch({ type: 'SELECT_AGENT', agentId: null });
+    }, [agentDispatch]);
+
+    // Which preview panels are visible (simple chat view only)
     const showBrowser = browserSnapshot && !closedPanels.has('browser');
     const showDesktop = desktopActive && !closedPanels.has('desktop');
     const showTerminal = terminalLines.length > 0 && !closedPanels.has('terminal');
@@ -246,14 +281,19 @@ function DesktopAppInner({ dark, onToggleTheme }) {
             <div className={styles.bodyRow}>
                 {/* Icon sidebar */}
                 <Sidebar
-                    activePanel={flyoutPanel}
+                    activePanel={networkViewOpen ? 'agents' : flyoutPanel}
                     onPanelToggle={(panel) => {
                         if (panel === 'agents') {
-                            // Agents icon returns to network overview
-                            agentDispatch({ type: 'SELECT_AGENT', agentId: null });
+                            // Toggle the network view open/closed
+                            if (networkViewOpen) {
+                                handleCloseNetwork();
+                            } else if (agentState.networkActivated) {
+                                handleOpenNetwork();
+                            }
                             goalsState.setSelectedGoalId(null);
-                            setFlyoutPanel(null);
                         } else {
+                            // Close network view when opening a flyout panel
+                            if (networkViewOpen) handleCloseNetwork();
                             setFlyoutPanel(panel);
                         }
                     }}
@@ -302,20 +342,20 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         />
                     )}
 
-                    {/* Agent detail — full-screen activity view */}
-                    {!goalsActive && selectedAgent && (
+                    {/* Agent detail — full-screen activity view (from network drill-down) */}
+                    {!goalsActive && networkViewOpen && selectedAgent && (
                         <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
                     )}
 
-                    {/* Network graph — shown alongside chat once sub-agents have appeared */}
-                    {!goalsActive && !selectedAgent && networkActive && (
+                    {/* Network graph — full-screen view, opened via indicator or sidebar */}
+                    {!goalsActive && networkViewOpen && !selectedAgent && (
                         <div className={styles.networkArea}>
-                            <AgentNetwork />
+                            <AgentNetwork onClose={handleCloseNetwork} agentCount={networkAgentCount} />
                         </div>
                     )}
 
-                    {/* Preview panels — shown alongside chat in simple (non-network) mode */}
-                    {!goalsActive && !selectedAgent && !networkActive && hasAnyPanel && (
+                    {/* Preview panels — shown alongside chat (simple chat view) */}
+                    {!goalsActive && !networkViewOpen && hasAnyPanel && (
                         <div className={styles.previewColumn}>
                             {showGeneration && <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />}
                             {showBrowser && <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels(_closePanel('browser'))} />}
@@ -324,8 +364,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         </div>
                     )}
 
-                    {/* Chat panel — single instance, always mounted, hidden in detail view */}
-                    <div className={`${styles.chatColumn} ${selectedAgent || goalsActive ? styles.hidden : ''}`}>
+                    {/* Chat panel — always mounted, hidden when network view or goals are active */}
+                    <div className={`${styles.chatColumn} ${networkViewOpen || goalsActive ? styles.hidden : ''}`}>
                         <ChatPanel
                             messages={messages}
                             onSend={handleSend}
@@ -333,6 +373,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             isStreaming={isStreaming}
                             attachment={attachment}
                             rootAgent={rootAgent}
+                            networkActivated={agentState.networkActivated}
+                            networkAgentCount={networkAgentCount}
+                            networkRunningCount={networkRunningCount}
+                            onOpenNetwork={handleOpenNetwork}
                             onPreview={(item) => {
                                 setFilePreview(item);
                                 setClosedPanels((prev) => {

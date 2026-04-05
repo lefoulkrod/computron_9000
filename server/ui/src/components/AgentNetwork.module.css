@@ -14,6 +14,7 @@
     flex-shrink: 0;
 }
 
+
 .title {
     font-size: 14px;
     font-weight: 600;
@@ -57,14 +58,21 @@
     flex: 1;
     overflow: auto;
     padding: 1rem;
+}
+
+/* Content wrapper — sized to its children. The SVG and cards are both
+   inside here so connectors scroll naturally with the card layout. */
+.graphContent {
     position: relative;
+    display: inline-block;
+    min-width: 100%;
 }
 
 .forest {
-    display: flex;
+    display: inline-flex;
     gap: 1.5rem;
+    min-width: 100%;
     justify-content: center;
-    flex-wrap: wrap;
     position: relative;
     z-index: 1;
 }
@@ -92,7 +100,6 @@
     margin-bottom: 24px;
     position: relative;
     z-index: 1;
-    flex-wrap: wrap;
 }
 
 .nodeWrap {

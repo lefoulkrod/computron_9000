@@ -1,0 +1,28 @@
+.btn {
+    background: none;
+    border: 1px solid var(--muted);
+    border-radius: 5px;
+    color: var(--muted);
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    line-height: 1;
+}
+.arrow {
+    /* Nudge the arrow to visually center with the label text */
+    display: inline-block;
+    transform: translateY(-0.5px);
+    font-size: 11px;
+}
+.btn:hover {
+    color: var(--text);
+    border-color: #3a3a4c;
+}
+.btn:focus-visible {
+    outline: 2px solid #7aa2ff;
+    outline-offset: 2px;
+}

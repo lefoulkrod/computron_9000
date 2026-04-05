@@ -8,7 +8,7 @@ const MOCK_BASE64_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAADElEQVR
 
 describe('ChatInput', () => {
     it('renders textarea and buttons', () => {
-        render(<ChatInput onSend={vi.fn()} disabled={false} />);
+        render(<ChatInput onSend={vi.fn()} isStreaming={false} />);
 
         expect(screen.getByPlaceholderText('Type your message...')).toBeInTheDocument();
         expect(screen.getByLabelText('Attach file')).toBeInTheDocument();
@@ -18,31 +18,31 @@ describe('ChatInput', () => {
     it('calls onSend with message when submitted', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const textarea = screen.getByPlaceholderText('Type your message...');
         await user.type(textarea, 'Hello world');
         await user.click(screen.getByLabelText('Send message'));
 
-        expect(onSend).toHaveBeenCalledWith('Hello world', null);
+        expect(onSend).toHaveBeenCalledWith('Hello world', null, expect.any(String));
     });
 
     it('trims whitespace from messages', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const textarea = screen.getByPlaceholderText('Type your message...');
         await user.type(textarea, '  test message  ');
         await user.click(screen.getByLabelText('Send message'));
 
-        expect(onSend).toHaveBeenCalledWith('test message', null);
+        expect(onSend).toHaveBeenCalledWith('test message', null, expect.any(String));
     });
 
     it('clears message after sending', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const textarea = screen.getByPlaceholderText('Type your message...');
         await user.type(textarea, 'Hello');
@@ -54,18 +54,18 @@ describe('ChatInput', () => {
     it('submits on Enter key press', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const textarea = screen.getByPlaceholderText('Type your message...');
         await user.type(textarea, 'Test{Enter}');
 
-        expect(onSend).toHaveBeenCalledWith('Test', null);
+        expect(onSend).toHaveBeenCalledWith('Test', null, expect.any(String));
     });
 
     it('does not submit on Shift+Enter', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const textarea = screen.getByPlaceholderText('Type your message...');
         await user.type(textarea, 'Line 1{Shift>}{Enter}{/Shift}Line 2');
@@ -74,27 +74,17 @@ describe('ChatInput', () => {
         expect(textarea.value).toContain('Line 1\nLine 2');
     });
 
-    it('does not submit when disabled', async () => {
-        const onSend = vi.fn();
-        const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={true} />);
+    it('shows stop button and nudge placeholder when streaming', () => {
+        render(<ChatInput onSend={vi.fn()} onStop={vi.fn()} isStreaming={true} />);
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
-
-        // When disabled, the send button is replaced by a stop button
-        expect(textarea).toBeDisabled();
-        expect(screen.queryByLabelText('Send message')).not.toBeInTheDocument();
         expect(screen.getByLabelText('Stop generation')).toBeInTheDocument();
-
-        await user.type(textarea, 'Test');
-
-        expect(onSend).not.toHaveBeenCalled();
+        expect(screen.getByPlaceholderText('Send a nudge to the agent...')).toBeInTheDocument();
     });
 
     it('handles file selection and displays preview', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const file = new File(['dummy'], 'test.png', { type: 'image/png' });
         const fileInput = screen.getByLabelText('Attach file').closest('div').querySelector('input[type="file"]');
@@ -109,7 +99,7 @@ describe('ChatInput', () => {
     it('removes file attachment when remove button clicked', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const file = new File(['dummy'], 'test.png', { type: 'image/png' });
         const fileInput = screen.getByLabelText('Attach file').closest('div').querySelector('input[type="file"]');
@@ -120,7 +110,7 @@ describe('ChatInput', () => {
             expect(screen.getByAltText('selected')).toBeInTheDocument();
         });
 
-        const removeButton = screen.getByLabelText('Remove image');
+        const removeButton = screen.getByLabelText('Remove attachment');
         await user.click(removeButton);
 
         expect(screen.queryByAltText('selected')).not.toBeInTheDocument();
@@ -129,7 +119,7 @@ describe('ChatInput', () => {
     it('sends file data with message', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         // Create a mock file
         const fileContent = MOCK_BASE64_PNG;
@@ -151,14 +141,15 @@ describe('ChatInput', () => {
             expect.objectContaining({
                 content_type: 'image/png',
                 base64: expect.any(String)
-            })
+            }),
+            expect.any(String),
         );
     });
 
     it('clears file after sending', async () => {
         const onSend = vi.fn();
         const user = userEvent.setup();
-        render(<ChatInput onSend={onSend} disabled={false} />);
+        render(<ChatInput onSend={onSend} isStreaming={false} />);
 
         const file = new File(['dummy'], 'test.png', { type: 'image/png' });
         const fileInput = screen.getByLabelText('Attach file').closest('div').querySelector('input[type="file"]');
@@ -177,14 +168,14 @@ describe('ChatInput', () => {
     describe('attachment prop', () => {
         it('sets attachment when attachment prop is provided', async () => {
             const onSend = vi.fn();
-            const { rerender } = render(<ChatInput onSend={onSend} disabled={false} />);
+            const { rerender } = render(<ChatInput onSend={onSend} isStreaming={false} />);
 
             expect(screen.queryByAltText('selected')).not.toBeInTheDocument();
 
             rerender(
                 <ChatInput
                     onSend={onSend}
-                    disabled={false}
+                    isStreaming={false}
                     attachment={{ base64: MOCK_BASE64_PNG, contentType: 'image/png' }}
                 />
             );
@@ -200,7 +191,7 @@ describe('ChatInput', () => {
             render(
                 <ChatInput
                     onSend={onSend}
-                    disabled={false}
+                    isStreaming={false}
                     attachment={{ base64: MOCK_BASE64_PNG, contentType: 'image/png' }}
                 />
             );
@@ -218,7 +209,8 @@ describe('ChatInput', () => {
                 expect.objectContaining({
                     content_type: 'image/png',
                     base64: MOCK_BASE64_PNG
-                })
+                }),
+                expect.any(String),
             );
         });
 
@@ -227,7 +219,7 @@ describe('ChatInput', () => {
             render(
                 <ChatInput
                     onSend={onSend}
-                    disabled={false}
+                    isStreaming={false}
                     attachment={{ base64: MOCK_BASE64_PNG }}
                 />
             );
@@ -243,7 +235,7 @@ describe('ChatInput', () => {
             render(
                 <ChatInput
                     onSend={onSend}
-                    disabled={false}
+                    isStreaming={false}
                     attachment={{ base64: MOCK_BASE64_PNG, contentType: 'image/png' }}
                 />
             );
@@ -252,7 +244,7 @@ describe('ChatInput', () => {
                 expect(screen.getByAltText('selected')).toBeInTheDocument();
             });
 
-            const removeButton = screen.getByLabelText('Remove image');
+            const removeButton = screen.getByLabelText('Remove attachment');
             await user.click(removeButton);
 
             expect(screen.queryByAltText('selected')).not.toBeInTheDocument();

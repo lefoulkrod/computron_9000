@@ -116,7 +116,7 @@ describe('useAgentState reducer', () => {
             expect(getState().agents['root-2'].desktopActive).toBe(true);
         });
 
-        it('does NOT carry generation preview to new root', () => {
+        it('carries generation preview from previous root to new root', () => {
             const { getState, dispatch } = renderWithProvider();
 
             dispatch(agentStarted('root-1'));
@@ -124,7 +124,7 @@ describe('useAgentState reducer', () => {
 
             dispatch(agentStarted('root-2'));
 
-            expect(getState().agents['root-2'].generationPreview).toBeNull();
+            expect(getState().agents['root-2'].generationPreview).toEqual(GENERATION_PREVIEW);
         });
 
         it('new preview data replaces carried-over data in new turn', () => {

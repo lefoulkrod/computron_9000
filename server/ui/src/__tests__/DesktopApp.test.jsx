@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStateProvider, useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
 
@@ -13,7 +13,16 @@ vi.mock('../components/Header.jsx', () => ({
 }));
 
 vi.mock('../components/ChatPanel.jsx', () => ({
-    default: () => <div data-testid="chat-panel">Chat</div>,
+    default: ({ networkActivated, networkAgentCount, onOpenNetwork }) => (
+        <div data-testid="chat-panel">
+            Chat
+            {networkActivated && (
+                <button data-testid="network-indicator" onClick={onOpenNetwork}>
+                    {networkAgentCount} agents
+                </button>
+            )}
+        </div>
+    ),
 }));
 
 vi.mock('../components/BrowserPreview.jsx', () => ({
@@ -41,7 +50,12 @@ vi.mock('../components/GenerationPreview.jsx', () => ({
 }));
 
 vi.mock('../components/AgentNetwork.jsx', () => ({
-    default: () => <div data-testid="agent-network">Network Graph</div>,
+    default: ({ onClose }) => (
+        <div data-testid="agent-network">
+            Network Graph
+            {onClose && <button data-testid="network-close" onClick={onClose}>Close</button>}
+        </div>
+    ),
 }));
 
 vi.mock('../components/AgentActivityView.jsx', () => ({
@@ -265,7 +279,7 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
         });
 
-        it('generation preview does NOT persist into second turn', () => {
+        it('generation preview persists into second turn', () => {
             const { dispatch } = renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
@@ -277,7 +291,7 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('generation-preview')).toBeInTheDocument();
 
             startRoot(dispatch, 'r2');
-            expect(screen.queryByTestId('generation-preview')).not.toBeInTheDocument();
+            expect(screen.getByTestId('generation-preview')).toBeInTheDocument();
         });
 
         it('new browser snapshot replaces old one in second turn', () => {
@@ -303,64 +317,100 @@ describe('DesktopApp view transitions', () => {
     // ── Network view (sub-agents) ───────────────────────────────────
 
     describe('network view', () => {
-        it('shows network graph when sub-agent spawns', () => {
+        it('does not auto-show network when sub-agent spawns; shows indicator instead', () => {
             const { dispatch } = renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
+            // Network is NOT auto-shown — chat stays visible
+            expect(screen.queryByTestId('agent-network')).not.toBeInTheDocument();
+            expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
+            // Indicator appears so user can navigate to network
+            expect(screen.getByTestId('network-indicator')).toBeInTheDocument();
+        });
+
+        it('shows network when indicator is clicked', () => {
+            const { dispatch } = renderApp();
+            startRoot(dispatch, 'r1');
+            startSubAgent(dispatch, 's1', 'r1');
+
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
+
             expect(screen.getByTestId('agent-network')).toBeInTheDocument();
+        });
+
+        it('closes network and returns to chat', () => {
+            const { dispatch } = renderApp();
+            startRoot(dispatch, 'r1');
+            startSubAgent(dispatch, 's1', 'r1');
+
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
+            expect(screen.getByTestId('agent-network')).toBeInTheDocument();
+
+            act(() => fireEvent.click(screen.getByTestId('network-close')));
+            expect(screen.queryByTestId('agent-network')).not.toBeInTheDocument();
             expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
         });
 
-        it('network graph persists into next root-only turn', () => {
+        it('does not show preview column when network view is open', () => {
             const { dispatch } = renderApp();
             startRoot(dispatch, 'r1');
+            dispatch({
+                type: 'UPDATE_BROWSER_SNAPSHOT',
+                agentId: 'r1',
+                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
+            });
+            expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
+
             startSubAgent(dispatch, 's1', 'r1');
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
 
+            // Network is shown, preview column is hidden
             expect(screen.getByTestId('agent-network')).toBeInTheDocument();
-
-            // New turn with no sub-agents
-            startRoot(dispatch, 'r2');
-            expect(screen.getByTestId('agent-network')).toBeInTheDocument();
+            expect(screen.queryByTestId('browser-preview')).not.toBeInTheDocument();
         });
 
-        it('does not show preview column when in network mode', () => {
+        it('previews return when network view is closed', () => {
             const { dispatch } = renderApp();
             startRoot(dispatch, 'r1');
-            startSubAgent(dispatch, 's1', 'r1');
-
-            // Even if root has a browser snapshot, preview column is hidden in network mode
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
                 snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
             });
 
-            // Network is shown, browser preview column is not (previews are per-agent in detail view)
-            expect(screen.getByTestId('agent-network')).toBeInTheDocument();
+            startSubAgent(dispatch, 's1', 'r1');
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
             expect(screen.queryByTestId('browser-preview')).not.toBeInTheDocument();
+
+            act(() => fireEvent.click(screen.getByTestId('network-close')));
+            expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
         });
     });
 
     // ── Detail view (agent selected) ────────────────────────────────
 
     describe('detail view', () => {
-        it('shows activity view when agent is selected', () => {
+        it('shows activity view when agent is selected from network view', () => {
             const { dispatch } = renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
+
+            // Open network first, then select agent
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
             dispatch({ type: 'SELECT_AGENT', agentId: 's1' });
 
             expect(screen.getByTestId('agent-activity-view')).toBeInTheDocument();
         });
 
-        it('hides network graph when agent is selected', () => {
+        it('does not show activity view when agent is selected but network is closed', () => {
             const { dispatch } = renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
-            dispatch({ type: 'SELECT_AGENT', agentId: 's1' });
 
-            expect(screen.queryByTestId('agent-network')).not.toBeInTheDocument();
+            // Select without opening network — should not show activity view
+            dispatch({ type: 'SELECT_AGENT', agentId: 's1' });
+            expect(screen.queryByTestId('agent-activity-view')).not.toBeInTheDocument();
         });
 
         it('returns to network view when selection is cleared', () => {
@@ -368,6 +418,7 @@ describe('DesktopApp view transitions', () => {
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
             dispatch({ type: 'SELECT_AGENT', agentId: 's1' });
             expect(screen.getByTestId('agent-activity-view')).toBeInTheDocument();
 
@@ -380,7 +431,7 @@ describe('DesktopApp view transitions', () => {
     // ── Full lifecycle ──────────────────────────────────────────────
 
     describe('full lifecycle transitions', () => {
-        it('simple chat → preview → network → detail → back to network → new turn', () => {
+        it('simple chat → preview → open network → detail → back to network → close → chat with previews', () => {
             const { dispatch } = renderApp();
 
             // 1. Start in simple chat
@@ -396,24 +447,32 @@ describe('DesktopApp view transitions', () => {
             });
             expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
 
-            // 3. Sub-agent spawns → network view (preview column hidden)
+            // 3. Sub-agent spawns → indicator appears, chat + preview still visible
             startSubAgent(dispatch, 's1', 'r1');
+            expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
+            expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
+            expect(screen.getByTestId('network-indicator')).toBeInTheDocument();
+
+            // 4. Click indicator → network view (chat + preview hidden)
+            act(() => fireEvent.click(screen.getByTestId('network-indicator')));
             expect(screen.getByTestId('agent-network')).toBeInTheDocument();
             expect(screen.queryByTestId('browser-preview')).not.toBeInTheDocument();
 
-            // 4. Select sub-agent → detail view
+            // 5. Select sub-agent → detail view
             dispatch({ type: 'SELECT_AGENT', agentId: 's1' });
             expect(screen.getByTestId('agent-activity-view')).toBeInTheDocument();
             expect(screen.queryByTestId('agent-network')).not.toBeInTheDocument();
 
-            // 5. Deselect → back to network
+            // 6. Deselect → back to network
             dispatch({ type: 'SELECT_AGENT', agentId: null });
             expect(screen.getByTestId('agent-network')).toBeInTheDocument();
             expect(screen.queryByTestId('agent-activity-view')).not.toBeInTheDocument();
 
-            // 6. New turn (root only) — network stays because networkActivated is sticky
-            startRoot(dispatch, 'r2');
-            expect(screen.getByTestId('agent-network')).toBeInTheDocument();
+            // 7. Close network → back to chat with previews
+            act(() => fireEvent.click(screen.getByTestId('network-close')));
+            expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
+            expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
+            expect(screen.queryByTestId('agent-network')).not.toBeInTheDocument();
         });
     });
 });

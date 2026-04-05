@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
 import useAutoScroll from '../hooks/useAutoScroll.js';
 import { formatAgentName } from './AgentCard.jsx';
+import BackButton from './BackButton.jsx';
 import { formatElapsed } from '../utils/agentUtils.js';
 import ContextUsageBadge from './ContextUsageBadge.jsx';
 import AgentOutput from './AgentOutput.jsx';
@@ -68,12 +69,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
             {/* Agent header with back button */}
             <div className={styles.agentBar}>
                 <div className={styles.backRow}>
-                    <button
-                        className={styles.backBtn}
-                        onClick={() => dispatch({ type: 'SELECT_AGENT', agentId: null })}
-                    >
-                        &larr; Agents
-                    </button>
+                    <BackButton label="Agents" onClick={() => dispatch({ type: 'SELECT_AGENT', agentId: null })} />
                     <span className={styles.breadcrumb}>
                         {breadcrumb.map((a, i) => (
                             <span key={a.id}>
@@ -89,7 +85,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                     <span className={`${styles.dot} ${statusClass}`} />
                     <span className={styles.title}>{formatAgentName(agent.name)}</span>
                     <div className={styles.meta}>
-                        {agent.startedAt && <span>{formatElapsed(agent.startedAt)}</span>}
+                        {agent.startedAt && <span>{formatElapsed(agent.startedAt, agent.completedAt)}</span>}
                         {agent.iteration !== null && (
                             <span>
                                 iter {agent.iteration}{agent.maxIterations ? `/${agent.maxIterations}` : ''}
