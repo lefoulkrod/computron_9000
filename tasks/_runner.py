@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from config import GoalsConfig
     from tasks._executor import TaskExecutor
+    from tasks._models import Task, TaskResult
     from tasks._notifier import TelegramNotifier
     from tasks._store import TaskStore
 
