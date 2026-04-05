@@ -116,17 +116,3 @@
     padding: 20px;
     background: rgba(0, 0, 0, 0.2);
 }
-
-.content.error {
-    background: rgba(248, 113, 113, 0.05);
-}
-
-.pre {
-    margin: 0;
-    font-family: var(--font-mono, monospace);
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text);
-    white-space: pre-wrap;
-    word-break: break-word;
-}

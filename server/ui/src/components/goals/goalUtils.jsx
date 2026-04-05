@@ -6,11 +6,12 @@
 // Status Icon component (reused across goals)
 export function StatusIcon({ status, size = 14 }) {
     const color = {
+        active: 'var(--text)',
         completed: '#4ade80',
-        running: '#fbbf24',
+        running: '#22d3ee',
         failed: '#f87171',
         pending: 'var(--muted)',
-        paused: '#a78bfa',
+        paused: '#fbbf24',
     }[status] || 'var(--muted)';
 
     return (
@@ -57,6 +58,24 @@ export function formatDuration(start, end) {
     return `${hour}h ${remMin}m`;
 }
 
+// Format a future timestamp relative to now (e.g., "in 2h")
+export function formatTimeUntil(timestamp) {
+    if (!timestamp) return '-';
+
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+    const now = new Date();
+    const diffMs = date - now;
+    if (diffMs <= 0) return 'now';
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffMin < 1) return '<1m';
+    if (diffMin < 60) return `in ${diffMin}m`;
+    if (diffHour < 24) return `in ${diffHour}h ${diffMin % 60}m`;
+    return `in ${diffDay}d`;
+}
+
 // Format cron expression for display (simplified)
 export function formatCron(cron) {
     if (!cron) return '-';
@@ -65,9 +84,7 @@ export function formatCron(cron) {
     // For a full app, you'd want a proper cron-parser library
     const parts = cron.split(' ');
     if (parts.length !== 5) return cron;
-    
-    const [minute, hour, dayMonth, month, dayWeek] = parts;
-    
+
     // Common patterns
     if (cron === '0 * * * *') return 'Every hour';
     if (cron === '0 0 * * *') return 'Daily at midnight';

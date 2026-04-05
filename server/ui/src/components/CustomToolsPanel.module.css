@@ -110,7 +110,7 @@
 }
 
 .name {
-    font-family: var(--font-mono);
+    font-family: inherit;
     font-size: 0.85em;
     color: var(--text);
     font-weight: 500;

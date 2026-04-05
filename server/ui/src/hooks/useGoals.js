@@ -33,11 +33,16 @@ export default function useGoals(panelOpen) {
                 fetch('/api/runner/status').then(r => r.json()).catch(() => null),
             ]);
             if (!active) return;
+            const runningIds = new Set(runnerRes?.running_goal_ids || []);
             if (goalsRes?.goals) {
-                const json = JSON.stringify(goalsRes.goals);
+                const enriched = goalsRes.goals.map(g => ({
+                    ...g,
+                    is_running: runningIds.has(g.id),
+                }));
+                const json = JSON.stringify(enriched);
                 if (json !== _lastGoalsJson.current) {
                     _lastGoalsJson.current = json;
-                    setGoals(goalsRes.goals);
+                    setGoals(enriched);
                 }
             }
             if (runnerRes) {

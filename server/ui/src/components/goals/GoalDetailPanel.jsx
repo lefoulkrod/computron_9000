@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StatusIcon, formatCron, formatTime, formatDuration } from './goalUtils.jsx';
+import { StatusIcon, formatCron, formatTime, formatTimeUntil, formatDuration } from './goalUtils.jsx';
 import TaskOutputModal from './TaskOutputModal.jsx';
 import styles from './GoalDetailPanel.module.css';
 
@@ -7,7 +7,7 @@ import styles from './GoalDetailPanel.module.css';
  * Helper function to calculate next run from cron expression.
  * Supports basic cron patterns (minute hour * * *)
  */
-function getNextRun(cron, timezone) {
+function getNextRun(cron) {
     if (!cron) return null;
     
     const now = new Date();
@@ -39,12 +39,14 @@ export default function GoalDetailPanel({
     detail,
     isLoading,
     onDeleteGoal,
+    onDeleteRun,
     onPauseGoal,
     onResumeGoal,
     onTriggerGoal,
 }) {
     const [activeTab, setActiveTab] = useState('runs');
     const [selectedOutput, setSelectedOutput] = useState(null);
+    const [confirmDelete, setConfirmDelete] = useState(false);
 
     if (!goal) {
         return (
@@ -55,7 +57,7 @@ export default function GoalDetailPanel({
     }
 
     const isPaused = goal.status === 'paused';
-    const nextRun = getNextRun(goal.cron, goal.timezone);
+    const nextRun = getNextRun(goal.cron);
 
     const handleRunNow = () => {
         onTriggerGoal(goal.id);
@@ -70,13 +72,16 @@ export default function GoalDetailPanel({
     };
 
     const handleDelete = () => {
-        if (window.confirm(\`Delete goal "\${goal.description}"?\`)) {
-            onDeleteGoal(goal.id);
+        if (!confirmDelete) {
+            setConfirmDelete(true);
+            setTimeout(() => setConfirmDelete(false), 3000);
+            return;
         }
+        onDeleteGoal(goal.id);
     };
 
     const runs = detail?.runs || [];
-    const tasks = detail?.task_definitions || [];
+    const tasks = detail?.tasks || [];
 
     return (
         <div className={styles.container}>
@@ -100,7 +105,7 @@ export default function GoalDetailPanel({
                             )}
                             {nextRun && (
                                 <span className={styles.nextRun}>
-                                    Next: {formatTime(nextRun)}
+                                    Next: {formatTimeUntil(nextRun)}
                                 </span>
                             )}
                         </div>
@@ -124,11 +129,11 @@ export default function GoalDetailPanel({
                         {isPaused ? '▶ Resume' : '⏸ Pause'}
                     </button>
                     <button
-                        className={\`\${styles.actionBtn} \${styles.danger}\`}
+                        className={`${styles.actionBtn} ${styles.danger}`}
                         onClick={handleDelete}
                         disabled={isLoading}
                     >
-                        🗑 Delete
+                        {confirmDelete ? 'Confirm Delete?' : '🗑 Delete'}
                     </button>
                 </div>
             </div>
@@ -136,13 +141,13 @@ export default function GoalDetailPanel({
             {/* Tabs */}
             <div className={styles.tabBar}>
                 <button
-                    className={\`\${styles.tab} \${activeTab === 'runs' ? styles.tabActive : ''}\`}
+                    className={`${styles.tab} ${activeTab === 'runs' ? styles.tabActive : ''}`}
                     onClick={() => setActiveTab('runs')}
                 >
                     Runs ({runs.length})
                 </button>
                 <button
-                    className={\`\${styles.tab} \${activeTab === 'tasks' ? styles.tabActive : ''}\`}
+                    className={`${styles.tab} ${activeTab === 'tasks' ? styles.tabActive : ''}`}
                     onClick={() => setActiveTab('tasks')}
                 >
                     Task Definitions ({tasks.length})
@@ -155,7 +160,9 @@ export default function GoalDetailPanel({
                     <RunsTab
                         runs={runs}
                         tasks={tasks}
+                        goalId={goal.id}
                         onViewOutput={setSelectedOutput}
+                        onDeleteRun={onDeleteRun}
                     />
                 )}
                 {activeTab === 'tasks' && (
@@ -176,7 +183,7 @@ export default function GoalDetailPanel({
     );
 }
 
-function RunsTab({ runs, tasks, onViewOutput }) {
+function RunsTab({ runs, tasks, goalId, onViewOutput, onDeleteRun }) {
     const [expandedRunId, setExpandedRunId] = useState(null);
 
     const taskMap = Object.fromEntries(tasks.map(t => [t.id, t]));
@@ -197,13 +204,14 @@ function RunsTab({ runs, tasks, onViewOutput }) {
                         run.id === expandedRunId ? null : run.id
                     )}
                     onViewOutput={onViewOutput}
+                    onDelete={() => onDeleteRun(goalId, run.id)}
                 />
             ))}
         </div>
     );
 }
 
-function RunItem({ run, taskMap, isExpanded, onToggle, onViewOutput }) {
+function RunItem({ run, taskMap, isExpanded, onToggle, onViewOutput, onDelete }) {
     const completedCount = run.task_results?.filter(tr => tr.status === 'completed').length || 0;
     const totalCount = run.task_results?.length || 0;
     const duration = formatDuration(run.started_at, run.completed_at);
@@ -220,12 +228,19 @@ function RunItem({ run, taskMap, isExpanded, onToggle, onViewOutput }) {
                     </div>
                     <div className={styles.runMeta}>
                         {formatTime(run.created_at)}
-                        {duration && \` · \${duration}\`}
+                        {duration && ` · ${duration}`}
                         {' · '}
                         {completedCount}/{totalCount} tasks
                     </div>
                 </div>
                 <StatusIcon status={run.status} size={14} />
+                <button
+                    className={styles.deleteRunBtn}
+                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    title="Delete run"
+                >
+                    ✕
+                </button>
             </div>
 
             {isExpanded && run.task_results && (
@@ -297,7 +312,7 @@ function TaskDefinitionsTab({ tasks }) {
             {tasks.map((task, index) => (
                 <div
                     key={task.id}
-                    className={\`\${styles.taskDefItem} \${task.id === expandedTaskId ? styles.taskExpanded : ''}\`}
+                    className={`${styles.taskDefItem} ${task.id === expandedTaskId ? styles.taskExpanded : ''}`}
                     onClick={() => setExpandedTaskId(
                         task.id === expandedTaskId ? null : task.id
                     )}

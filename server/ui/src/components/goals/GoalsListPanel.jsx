@@ -1,20 +1,22 @@
-import { StatusIcon, formatTime, formatDuration } from './goalUtils.jsx';
+import { formatTime } from './goalUtils.jsx';
+import shared from '../CustomToolsPanel.module.css';
 import styles from './GoalsListPanel.module.css';
 
 /**
- * Left panel showing list of goal cards.
- * Clicking a card selects it.
+ * Left panel showing list of goals.
+ * Uses the same shared list styles as ConversationsPanel / CustomToolsPanel.
  */
 export default function GoalsListPanel({ goals, runnerStatus, selectedGoalId, onSelectGoal }) {
-    // Sort: active/running first, then by last run time
     const sortedGoals = [...goals].sort((a, b) => {
-        const statusOrder = { running: 0, pending: 1, completed: 2, failed: 3, paused: 4 };
-        const aOrder = statusOrder[a.status] ?? 5;
-        const bOrder = statusOrder[b.status] ?? 5;
+        const statusOrder = { running: 0, active: 1, pending: 2, paused: 3, completed: 4, failed: 5 };
+        const aStatus = a.is_running ? 'running' : a.status;
+        const bStatus = b.is_running ? 'running' : b.status;
+        const aOrder = statusOrder[aStatus] ?? 5;
+        const bOrder = statusOrder[bStatus] ?? 5;
         if (aOrder !== bOrder) return aOrder - bOrder;
-        
-        const aTime = a.last_run_at || 0;
-        const bTime = b.last_run_at || 0;
+
+        const aTime = a.last_run_at ? new Date(a.last_run_at) : 0;
+        const bTime = b.last_run_at ? new Date(b.last_run_at) : 0;
         return bTime - aTime;
     });
 
@@ -29,55 +31,35 @@ export default function GoalsListPanel({ goals, runnerStatus, selectedGoalId, on
 
             <div className={styles.goalsList}>
                 {sortedGoals.length === 0 ? (
-                    <div className={styles.empty}>No goals yet</div>
+                    <div className={shared.empty}>No goals yet</div>
                 ) : (
-                    sortedGoals.map(goal => (
-                        <GoalCard
-                            key={goal.id}
-                            goal={goal}
-                            isSelected={goal.id === selectedGoalId}
-                            onClick={() => onSelectGoal(goal.id)}
-                        />
-                    ))
+                    sortedGoals.map(goal => {
+                        const lastRunTime = goal.last_run_at ? formatTime(goal.last_run_at) : null;
+                        const isSelected = goal.id === selectedGoalId;
+                        const displayStatus = goal.is_running ? 'running' : goal.status;
+
+                        return (
+                            <div
+                                key={goal.id}
+                                className={`${shared.item} ${isSelected ? styles.itemSelected : ''}`}
+                                onClick={() => onSelectGoal(goal.id)}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                <div className={shared.itemMain}>
+                                    <span className={`${shared.name} ${styles.goalName}`}>{goal.description}</span>
+                                </div>
+                                <p className={shared.desc}>
+                                    {lastRunTime ? `Last run ${lastRunTime}` : 'No runs yet'}
+                                </p>
+                                <div className={styles.statusBadge} style={{ color: getStatusColor(displayStatus), borderColor: getStatusColor(displayStatus) }}>
+                                    {displayStatus}
+                                </div>
+                            </div>
+                        );
+                    })
                 )}
             </div>
         </div>
-    );
-}
-
-function GoalCard({ goal, isSelected, onClick }) {
-    const statusColor = getStatusColor(goal.status);
-    const runCount = goal.run_count || 0;
-    const lastRunTime = goal.last_run_at ? formatTime(goal.last_run_at) : 'Never';
-
-    return (
-        <button
-            className={`${styles.card} ${isSelected ? styles.cardSelected : ''}`}
-            onClick={onClick}
-        >
-            <div className={styles.cardHeader}>
-                <div className={styles.name}>{goal.description}</div>
-                <div className={styles.statusBadge} style={{ borderColor: statusColor, color: statusColor }}>
-                    {goal.status}
-                </div>
-            </div>
-
-            <div className={styles.cardMeta}>
-                <span className={styles.metaItem}>
-                    Runs: {runCount}
-                </span>
-                <span className={styles.metaItem}>
-                    {lastRunTime}
-                </span>
-            </div>
-
-            {goal.current_run_id && (
-                <div className={styles.currentRun}>
-                    <StatusIcon status="running" size={10} />
-                    <span>Running now...</span>
-                </div>
-            )}
-        </button>
     );
 }
 
@@ -93,11 +75,12 @@ function RunnerStatusBadge({ status }) {
 
 function getStatusColor(status) {
     const colors = {
+        active: 'var(--text)',
         completed: '#4ade80',
-        running: '#fbbf24',
+        running: '#22d3ee',
         failed: '#f87171',
         pending: 'var(--muted)',
-        paused: '#a78bfa',
+        paused: '#fbbf24',
     };
     return colors[status] || 'var(--muted)';
 }

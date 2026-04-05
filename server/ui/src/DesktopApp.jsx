@@ -260,13 +260,12 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 />
 
                 {/* Flyout panel (settings, memory, goals, etc.) — not for 'agents' which controls the main view */}
-                {flyoutPanel && flyoutPanel !== 'agents' && (
+                {flyoutPanel && flyoutPanel !== 'agents' && flyoutPanel !== 'goals' && (
                     <FlyoutPanel
                         title={flyoutPanel === 'settings' ? 'Model Settings'
                             : flyoutPanel === 'memory' ? 'Memory'
                             : flyoutPanel === 'conversations' ? 'Conversations'
                             : flyoutPanel === 'tools' ? 'Custom Tools'
-                            : flyoutPanel === 'goals' ? 'Goals'
                             : 'Panel'}
                         onClose={() => setFlyoutPanel(null)}
                     >

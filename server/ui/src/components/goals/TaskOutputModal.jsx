@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import MarkdownContent from '../MarkdownContent.jsx';
 import styles from './TaskOutputModal.module.css';
 
 /**
@@ -6,8 +7,6 @@ import styles from './TaskOutputModal.module.css';
  */
 export default function TaskOutputModal({ output, taskName, runNumber, onClose }) {
     const [copied, setCopied] = useState(false);
-    const isError = output?.toLowerCase().includes('error') || output?.toLowerCase().includes('exception');
-
     // Handle Escape key to close modal
     useEffect(() => {
         const handleEscape = (e) => {
@@ -55,8 +54,8 @@ export default function TaskOutputModal({ output, taskName, runNumber, onClose }
                         </button>
                     </div>
                 </div>
-                <div className={`${styles.content} ${isError ? styles.error : ''}`}>
-                    <pre className={styles.pre}>{output || 'No output'}</pre>
+                <div className={styles.content}>
+                    {output ? <MarkdownContent>{output}</MarkdownContent> : <p>No output</p>}
                 </div>
             </div>
         </div>

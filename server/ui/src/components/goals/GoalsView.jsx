@@ -22,6 +22,7 @@ export default function GoalsView({
     const [detail, setDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [refreshCounter, setRefreshCounter] = useState(0);
 
     // Fetch detail when selected goal changes
     useEffect(() => {
@@ -45,25 +46,20 @@ export default function GoalsView({
             .finally(() => {
                 setIsLoading(false);
             });
-    }, [selectedGoalId, fetchDetail]);
+    }, [selectedGoalId, fetchDetail, refreshCounter]);
 
-    // Refresh detail periodically if goal is running
+    // Refresh detail periodically while a goal is selected
     useEffect(() => {
-        if (!selectedGoalId || !detail) return;
-
-        const goal = goals.find(g => g.id === selectedGoalId);
-        const shouldPoll = goal?.status === 'running' || goal?.current_run_id;
-
-        if (!shouldPoll) return;
+        if (!selectedGoalId) return;
 
         const interval = setInterval(() => {
             fetchDetail(selectedGoalId)
                 .then(data => setDetail(data))
-                .catch(() => {}); // Silent fail for background polling
+                .catch(() => {});
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [selectedGoalId, detail, goals, fetchDetail]);
+    }, [selectedGoalId, fetchDetail]);
 
     // Clear selection on unmount
     useEffect(() => {
@@ -72,8 +68,30 @@ export default function GoalsView({
         };
     }, [setSelectedGoalId]);
 
-    const handleBack = () => {
-        setSelectedGoalId(null);
+    const refresh = () => setRefreshCounter(c => c + 1);
+
+    const handleTrigger = async (goalId) => {
+        await triggerGoal(goalId);
+        refresh();
+    };
+
+    const handlePause = async (goalId) => {
+        await pauseGoal(goalId);
+        refresh();
+    };
+
+    const handleResume = async (goalId) => {
+        await resumeGoal(goalId);
+        refresh();
+    };
+
+    const handleDelete = async (goalId) => {
+        await deleteGoal(goalId);
+    };
+
+    const handleDeleteRun = async (goalId, runId) => {
+        await deleteRun(goalId, runId);
+        refresh();
     };
 
     const selectedGoal = goals.find(g => g.id === selectedGoalId) || null;
@@ -98,11 +116,11 @@ export default function GoalsView({
                     goal={selectedGoal}
                     detail={detail}
                     isLoading={isLoading}
-                    onBack={handleBack}
-                    onDeleteGoal={deleteGoal}
-                    onPauseGoal={pauseGoal}
-                    onResumeGoal={resumeGoal}
-                    onTriggerGoal={triggerGoal}
+                    onDeleteGoal={handleDelete}
+                    onDeleteRun={handleDeleteRun}
+                    onPauseGoal={handlePause}
+                    onResumeGoal={handleResume}
+                    onTriggerGoal={handleTrigger}
                 />
             </div>
         </div>
