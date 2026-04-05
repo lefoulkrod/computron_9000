@@ -9,8 +9,13 @@ const JS_URL = 'javascript:alert("x")';
 // Simple (harmless) SVG turned into data URL
 const DATA_URL_SVG = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9ImJsYWNrIi8+PC9zdmc+';
 
+/**
+ * Assistant messages use `entries` (activity log format) rather than
+ * raw `content`. Wrap markdown in a content entry for these tests.
+ */
 function renderAssistant(markdown) {
-    return render(<Message role="assistant" content={markdown} />);
+    const entries = [{ type: 'content', content: markdown, timestamp: Date.now() }];
+    return render(<Message role="assistant" entries={entries} />);
 }
 
 function renderUser(markdown) {

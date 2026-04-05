@@ -57,9 +57,12 @@ _SKILL = Skill(
         system packages (apt), Python packages (pip), or Node packages (npm).
         Do NOT use apt-get or pip install directly in run_bash_cmd.
 
+        GIT & GITHUB — git and the GitHub CLI (gh) are available. Use gh for
+        creating PRs, issues, checking CI status, browsing repos, etc.
+
         PRE-INSTALLED: torch, torchaudio, torchvision (with CUDA), flask,
         flask-socketio, numpy, pandas, scipy, scikit-learn, matplotlib, pillow,
-        and many more are already installed. Do NOT reinstall these.
+        git, gh, and many more are already installed. Do NOT reinstall these.
     """),
     tools=[
         read_file,

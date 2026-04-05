@@ -20,19 +20,7 @@
     margin-bottom: 8px;
 }
 
-.backBtn {
-    background: none;
-    border: 1px solid var(--muted);
-    border-radius: 5px;
-    color: var(--muted);
-    font-size: 10px;
-    padding: 2px 8px;
-    cursor: pointer;
-}
-.backBtn:hover {
-    color: var(--text);
-    border-color: #3a3a4c;
-}
+/* backBtn styles moved to shared BackButton component */
 
 .breadcrumb {
     font-size: 9px;

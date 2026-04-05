@@ -38,6 +38,7 @@ function _makeAgent(id, name, parentId, instruction, startedAt) {
         desktopActive: false,
         generationPreview: null,
         activeTool: null,        // what tool is running right now
+        completedAt: null,       // when the agent finished (for frozen elapsed time)
         iteration: null,         // current loop iteration
         maxIterations: null,     // budget limit
         contextUsage: null,      // how full the context window is
@@ -65,12 +66,12 @@ function _agentReducer(state, action) {
             // When a new root agent starts (new turn), carry over persistent
             // preview state so panels don't vanish between turns. Previews are
             // only replaced by newer data or appended to (terminal).
-            // generationPreview is NOT carried — it's ephemeral to the turn.
             if (!parentAgentId && state.rootId && state.agents[state.rootId]) {
                 const prev = state.agents[state.rootId];
                 agent.browserSnapshot = prev.browserSnapshot;
                 agent.terminalLines = prev.terminalLines;
                 agent.desktopActive = prev.desktopActive;
+                agent.generationPreview = prev.generationPreview;
             }
 
             const agents = { ...state.agents, [agentId]: agent };
@@ -107,7 +108,7 @@ function _agentReducer(state, action) {
                 ...state,
                 agents: {
                     ...state.agents,
-                    [agentId]: { ...agent, status, activeTool: null },
+                    [agentId]: { ...agent, status, activeTool: null, completedAt: Date.now() },
                 },
             };
         }

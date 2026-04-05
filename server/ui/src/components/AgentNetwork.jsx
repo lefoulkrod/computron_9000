@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import AgentCard from './AgentCard.jsx';
+import BackButton from './BackButton.jsx';
 import { useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
 import styles from './AgentNetwork.module.css';
 
@@ -77,7 +78,7 @@ function _drawConnectors(containerEl, svgEl, agents) {
  * The tree layout and line drawing only recalculate when agents are
  * added/removed. A 1-second timer updates elapsed times on running cards.
  */
-export default function AgentNetwork() {
+export default function AgentNetwork({ onClose, agentCount: agentCountProp }) {
     const { agents } = useAgentState();
     const dispatch = useAgentDispatch();
     const containerRef = useRef(null);
@@ -134,11 +135,14 @@ export default function AgentNetwork() {
         return () => clearInterval(id);
     }, [runningCount]);
 
+    const displayCount = agentCountProp != null ? agentCountProp : agentCount;
+
     return (
         <div className={styles.container}>
             <div className={styles.header}>
+                {onClose && <BackButton label="Chat" onClick={onClose} />}
                 <h2 className={styles.title}>Agent Network</h2>
-                <span className={styles.count}>{agentCount} agent{agentCount !== 1 ? 's' : ''}</span>
+                <span className={styles.count}>{displayCount} agent{displayCount !== 1 ? 's' : ''}</span>
                 <div className={styles.legend}>
                     {runningCount > 0 && (
                         <span className={styles.legendItem}>
@@ -160,9 +164,10 @@ export default function AgentNetwork() {
                     )}
                 </div>
             </div>
-            <div className={styles.graphArea} ref={containerRef}>
-                <svg className={styles.connectors} ref={svgRef} />
-                <div className={styles.forest}>
+            <div className={styles.graphArea}>
+                <div className={styles.graphContent} ref={containerRef}>
+                    <svg className={styles.connectors} ref={svgRef} />
+                    <div className={styles.forest}>
                     {trees.map((tree, treeIdx) => (
                         <div key={treeIdx} className={styles.tree}>
                             {tree.map((level, depth) => (
@@ -176,6 +181,7 @@ export default function AgentNetwork() {
                             ))}
                         </div>
                     ))}
+                </div>
                 </div>
             </div>
         </div>

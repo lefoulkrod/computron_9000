@@ -109,11 +109,10 @@
     overflow: hidden;
 }
 
-/* Left side: network graph or preview panels (whichever is active) */
+/* Network view — full-screen when open (not side-by-side with chat) */
 .networkArea {
     flex: 1;
     overflow: hidden;
-    border-right: 1px solid var(--muted);
 }
 .previewColumn {
     flex: 0 0 60%;

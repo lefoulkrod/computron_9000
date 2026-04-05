@@ -25,11 +25,13 @@ export function mergeTerminalEvent(prev, event, maxLines = 50) {
 }
 
 /**
- * Format elapsed time from a start timestamp to now.
+ * Format elapsed time from a start timestamp to an end timestamp (or now
+ * if the agent is still running).
  */
-export function formatElapsed(startedAt) {
+export function formatElapsed(startedAt, completedAt) {
     if (!startedAt) return null;
-    const seconds = Math.floor((Date.now() - startedAt) / 1000);
+    const end = completedAt || Date.now();
+    const seconds = Math.floor((end - startedAt) / 1000);
     if (seconds < 60) return `${seconds}s`;
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;

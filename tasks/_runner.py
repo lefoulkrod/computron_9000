@@ -38,6 +38,7 @@ class TaskRunner:
         self._config = config
         self._notifier = notifier
         self._running: dict[str, asyncio.Task] = {}  # result_id → asyncio.Task
+        self._running_goal_ids: dict[str, str] = {}  # result_id → goal_id
         self._stop_event = asyncio.Event()
         self._paused = False
         self._loop_task: asyncio.Task | None = None
@@ -76,6 +77,7 @@ class TaskRunner:
             "paused": self._paused,
             "active_tasks": len(self._running),
             "max_concurrent": self._config.max_concurrent,
+            "running_goal_ids": list(set(self._running_goal_ids.values())),
         }
 
     async def _poll_loop(self) -> None:
@@ -112,10 +114,12 @@ class TaskRunner:
                     self._execute(task_result, task),
                     name=f"task-exec-{task_result.id[:8]}",
                 )
+                self._running_goal_ids[task_result.id] = task.goal_id
 
         done = [trid for trid, t in self._running.items() if t.done()]
         for trid in done:
             del self._running[trid]
+            self._running_goal_ids.pop(trid, None)
 
     async def _execute(self, task_result: "TaskResult", task: "Task") -> None:
         """Execute a task, recording outcome into its result."""

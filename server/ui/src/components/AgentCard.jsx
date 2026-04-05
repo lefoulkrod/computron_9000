@@ -58,7 +58,7 @@ function AgentCard({ agent, onClick }) {
                 )}
                 {agent.startedAt && (
                     <span className={`${styles.badge} ${styles.time}`}>
-                        {formatElapsed(agent.startedAt)}
+                        {formatElapsed(agent.startedAt, agent.completedAt)}
                     </span>
                 )}
             </div>
