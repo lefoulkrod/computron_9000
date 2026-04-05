@@ -21,8 +21,6 @@ from sdk.events import (
     GenerationPreviewPayload,
     publish_event,
 )
-from config import load_config
-
 logger = logging.getLogger(__name__)
 
 _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
@@ -46,16 +44,14 @@ async def generate_image(
     """
     media_type = "image"
     gen_id = uuid.uuid4().hex[:12]
-    cfg = load_config()
-    container_name = cfg.inference_container.container_name
 
-    # Construct a compact script to run inside the container
     params_json = json.dumps({"model": model, "size": size})
     script = (
-        "import sys; sys.path.insert(0, '/opt/inference'); "
+        "import sys; sys.path.insert(0, '/opt/computron_9000/container'); "
         "import json; "
         "from inference_client import generate_stream; "
-        f"[print(json.dumps(e), flush=True) for e in generate_stream({media_type!r}, {description!r}, **{params_json})]"
+        "[print(json.dumps(e), flush=True) for e in generate_stream(%r, %r, **%s)]"
+        % (media_type, description, params_json)
     )
 
     # Publish initial loading event
@@ -65,7 +61,6 @@ async def generate_image(
         # Use a large buffer limit because TAESD preview images in base64
         # can exceed the default 64KB asyncio StreamReader line limit.
         proc = await asyncio.create_subprocess_exec(
-            "podman", "exec", container_name,
             "python3", "-c", script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -130,19 +125,9 @@ async def generate_image(
                              message="No output path received from generator")
             return {"status": "error", "message": "No output path received"}
 
-        # Map the inference container path to the host volume and to the
-        # virtual computer container path (used by the UI's file route).
-        host_home = cfg.inference_container.home_dir
-        vc_prefix = cfg.virtual_computer.home_dir.rstrip("/")
-        _CONTAINER_OUTPUT = "/output/"
-
-        if final_path.startswith(_CONTAINER_OUTPUT):
-            relative = final_path[len(_CONTAINER_OUTPUT):]
-        else:
-            relative = final_path.lstrip("/")
-        host_path = Path(host_home) / relative
-        # UI serves files via the virtual computer container path.
-        ui_path = f"{vc_prefix}/{relative}"
+        # The inference server writes directly to /home/computron/.
+        host_path = Path(final_path)
+        ui_path = final_path
 
         if host_path.exists() and host_path.is_file():
             content_type, _ = mimetypes.guess_type(host_path.name)

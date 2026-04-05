@@ -2,10 +2,6 @@ settings:
   home_dir: /var/lib/computron_9000
 virtual_computer:
   home_dir: /home/computron
-inference_container:
-  container_name: computron_inference
-  home_dir: /home/larry/.computron_9000/container_home
-  container_working_dir: /output
 
 tools:
   web:

@@ -1,8 +1,7 @@
 """Shared grounding client for UI-TARS inference.
 
-Writes a screenshot to the shared volume, invokes the grounding server
-in the inference container via ``podman exec``, and returns an action
-prediction.
+Writes a screenshot to a temp directory, invokes the grounding server
+locally, and returns an action prediction.
 """
 
 from __future__ import annotations
@@ -13,8 +12,6 @@ import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -73,44 +70,31 @@ async def run_grounding(
         safe_id = agent_id.replace(".", "_")
         screenshot_filename = f"grounding_{safe_id}.png"
 
-    cfg = load_config()
-    host_home = cfg.inference_container.home_dir
-    container_name = cfg.inference_container.container_name
-    container_working_dir = cfg.inference_container.container_working_dir
+    # Write screenshot to a temp .vision/ directory.
+    vision_dir = Path("/tmp") / _VISION_DIR
+    vision_dir.mkdir(exist_ok=True)
+    screenshot_path = vision_dir / screenshot_filename
+    screenshot_path.write_bytes(screenshot_bytes)
 
-    # Write screenshot to .vision/ subfolder on the shared volume.
-    host_vision_dir = Path(host_home) / _VISION_DIR
-    host_vision_dir.mkdir(exist_ok=True)
-    host_path = host_vision_dir / screenshot_filename
-    host_path.write_bytes(screenshot_bytes)
-
-    container_path = f"{container_working_dir}/{_VISION_DIR}/{screenshot_filename}"
-
-    # Inline Python script executed inside the inference container.
-    # Uses ground_from_path to avoid base64 encode/decode overhead.
     script = (
-        "import sys; sys.path.insert(0, '/opt/inference'); "
+        "import sys; sys.path.insert(0, '/opt/computron_9000/container'); "
         "import json; "
         "from grounding_client import ground_from_path; "
         "result = ground_from_path(%s, %s); "
         "print(json.dumps(result), flush=True)"
-        % (repr(container_path), repr(task))
+        % (repr(str(screenshot_path)), repr(task))
     )
 
     loop = asyncio.get_running_loop()
-    raw_output = await loop.run_in_executor(None, _exec_grounding, container_name, script)
+    raw_output = await loop.run_in_executor(None, _exec_grounding, script)
 
     return _parse_response(raw_output)
 
 
-def _exec_grounding(container_name: str, script: str) -> str:
-    """Run the grounding script inside the inference container."""
+def _exec_grounding(script: str) -> str:
+    """Run the grounding script locally."""
     result = subprocess.run(
-        [
-            "podman", "exec",
-            container_name,
-            "python3", "-c", script,
-        ],
+        ["python3", "-c", script],
         capture_output=True,
         timeout=_REQUEST_TIMEOUT,
     )

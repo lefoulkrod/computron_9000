@@ -4,10 +4,20 @@
 export DISPLAY=:0
 export COMPUTRON_CONTAINER=1
 
+# Re-export container env vars so gosu children inherit them.
+# Podman/Docker -e vars are in the process env but not always exported
+# in the bash sense when tini execs the entrypoint.
+[ -n "${HF_TOKEN:-}" ] && export HF_TOKEN
+[ -n "${GITHUB_TOKEN:-}" ] && export GITHUB_TOKEN
+[ -n "${GITHUB_USER:-}" ] && export GITHUB_USER
+# Default LLM_HOST to host Ollama if not explicitly set
+export LLM_HOST="${LLM_HOST:-http://host.docker.internal:11434}"
+
 # ── Fix volume-mount ownership ───────────────────────────────────────────────
 # When host directories are bind-mounted, they may arrive owned by the host
 # user (e.g. UID 1000).  Ensure the container users own their directories.
 chown computron:computron /home/computron
+chmod 775 /home/computron
 mkdir -p /home/computron/Desktop /home/computron/downloads
 
 # Copy default Xfce config on first run (named volume starts empty)

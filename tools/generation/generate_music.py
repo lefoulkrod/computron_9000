@@ -24,8 +24,6 @@ from sdk.events import (
     GenerationPreviewPayload,
     publish_event,
 )
-from config import load_config
-
 logger = logging.getLogger(__name__)
 
 _STREAM_TIMEOUT: float = 900.0  # 15 minutes max for generation
@@ -154,8 +152,6 @@ async def generate_music(
     """
     media_type = "audio"
     gen_id = uuid.uuid4().hex[:12]
-    cfg = load_config()
-    container_name = cfg.inference_container.container_name
 
     # Resolve quality preset
     preset = _QUALITY_PRESETS.get(quality, _QUALITY_PRESETS["quality"])
@@ -174,25 +170,23 @@ async def generate_music(
 
     params_repr = repr(params)
 
-    # Construct a compact script to run inside the container
     script = (
-        "import sys; sys.path.insert(0, '/opt/inference'); "
+        "import sys; sys.path.insert(0, '/opt/computron_9000/container'); "
         "import json; "
         "from inference_client import generate_stream; "
-        f"[print(json.dumps(e), flush=True) for e in generate_stream('audio', {prompt!r}, **{params_repr})]"
+        "[print(json.dumps(e), flush=True) for e in generate_stream('audio', %r, **%s)]"
+        % (prompt, params_repr)
     )
 
     # Publish initial loading event
     _publish_preview(gen_id, media_type, status="loading", message="Starting music generation with ACE-Step...")
 
     try:
-        # Use a large buffer limit for any preview data
         proc = await asyncio.create_subprocess_exec(
-            "podman", "exec", container_name,
             "python3", "-c", script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            limit=1024 * 1024,  # 1MB line buffer
+            limit=1024 * 1024,
         )
 
         final_path: str | None = None
@@ -253,20 +247,9 @@ async def generate_music(
                              message="No output path received from generator")
             return {"status": "error", "message": "No output path received"}
 
-        # Map the inference container path to the host path and the
-        # virtual computer path (the agent operates in the virtual computer).
-        host_home = cfg.inference_container.home_dir
-        vc_prefix = cfg.virtual_computer.home_dir.rstrip("/")
-        _CONTAINER_OUTPUT = "/output/"
-
-        if final_path.startswith(_CONTAINER_OUTPUT):
-            relative = final_path[len(_CONTAINER_OUTPUT):]
-        else:
-            relative = final_path.lstrip("/")
-
-        host_path = Path(host_home) / relative
-        # UI serves files via the virtual computer container path.
-        ui_path = f"{vc_prefix}/{relative}"
+        # The inference server writes directly to /home/computron/.
+        host_path = Path(final_path)
+        ui_path = final_path
 
         if host_path.exists() and host_path.is_file():
             content_type = mimetypes.guess_type(host_path.name)[0] or "audio/wav"

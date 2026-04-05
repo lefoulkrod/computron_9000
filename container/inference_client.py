@@ -13,7 +13,8 @@ import urllib.error
 import urllib.request
 
 SERVER_URL = "http://127.0.0.1:18901"
-SERVER_SCRIPT = "/opt/inference/inference_server.py"
+SERVER_SCRIPT = "/opt/computron_9000/container/inference_server.py"
+
 _PID_FILE = "/tmp/inference_server.pid"
 STARTUP_TIMEOUT = 120  # max seconds to wait for server to come up
 REQUEST_TIMEOUT = 600  # max seconds to wait for generation
@@ -68,12 +69,20 @@ def _kill_server():
     time.sleep(3)
 
 
+_LOG_FILE = "/tmp/inference_server.log"
+
+
 def _start_server():
-    """Launch the inference server as a background process."""
+    """Launch the inference server as a background process.
+
+    Runs as ``computron`` so generated files are written to /home/computron/
+    with the correct ownership.
+    """
+    log_fh = open(_LOG_FILE, "a")  # noqa: SIM115
     proc = subprocess.Popen(
         ["python3", SERVER_SCRIPT],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_fh,
+        stderr=log_fh,
         start_new_session=True,
     )
     # Write PID file so subsequent clients know a server is starting

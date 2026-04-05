@@ -1,155 +1,284 @@
-# COMPUTRON_9000
+# COMPUTRON 9000
 
-COMPUTRON_9000 is a self-hosted AI assistant with a Python/aiohttp backend, React frontend, and Ollama or Anthropic for LLM inference. It can browse the web, write and run code, control your desktop, generate media, and more — all running on your own hardware or with a remote Ollama instance.
+A self-hosted AI assistant that runs entirely inside a single container. It can browse the web, write and run code, control a Linux desktop, generate images and music — all on your own hardware.
 
 ![COMPUTRON_9000 Logo](image.png)
 
+## Try It
+
+Just need [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://ollama.com/) running:
+
+```bash
+ollama pull qwen3.5:4b
+ollama pull qwen3:32b
+docker run -d --name computron --shm-size=256m -p 8080:8080 -p 6080:6080 --add-host=host.docker.internal:host-gateway ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+`qwen3.5:4b` is the vision model (required — used for desktop screenshots). `qwen3:32b` is the chat model — swap it for any [Ollama model](https://ollama.com/library) you like, or use a cloud model (`ollama login && ollama pull qwen3:32b-cloud`) to skip local GPU for chat. There are no cloud vision models available, so `qwen3.5:4b` must run locally (~3 GB VRAM).
+
+Open **[http://localhost:8080](http://localhost:8080)**. Chat, browse the web, write code, control the desktop.
+
+Data won't persist when the container is removed. When you're ready to keep it, add volumes:
+
+### Keep Your Data
+
+```bash
+docker run -d --name computron --shm-size=256m \
+  -p 8080:8080 -p 6080:6080 \
+  --add-host=host.docker.internal:host-gateway \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron_9000 \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+Conversations, memory, custom tools, and generated files now survive restarts.
+
+### Enable GPU (image/music generation)
+
+Add your NVIDIA GPU and a [HuggingFace token](https://huggingface.co/settings/tokens) for image generation:
+
+```bash
+docker run -d --name computron --shm-size=256m \
+  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
+  --add-host=host.docker.internal:host-gateway \
+  --gpus all \
+  -e HF_TOKEN=hf_your_token_here \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron_9000 \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). See [GPU Setup](#gpu-setup) for install steps.
+
+---
+
 ## Features
 
-- Multiple specialized agents:
-  - **Browser agent** — full browser automation with human-like interactions (clicking, typing, scrolling, drag-and-drop, form filling, navigation). Uses a numbered-ref system for reliable element targeting and a structured DOM walker for page understanding.
-  - **Desktop agent** — controls your Linux desktop via accessibility tree inspection, screenshots, mouse/keyboard actions, and vision-based visual grounding (UI-TARS model)
-  - **Coding agent** — writes and executes Python code in a sandboxed Podman container
-- Create, save, and reuse custom tools the assistant writes itself (persisted across restarts)
-- **Autonomous task engine** — define goals with multi-step task pipelines that run in the background on a schedule or on-demand. Supports cron scheduling, task dependencies, parallel execution, automatic retries, and Telegram notifications.
-- Persistent memory across sessions
-- Conversation history with automatic context compaction (summarization)
-- Sub-agent delegation for complex multi-step tasks
-- Configurable browser headless/headed mode
+- **Chat** — talk to the agent, ask it to do things
+- **Browser automation** — controls Chrome with human-like clicking, typing, and scrolling
+- **Desktop control** — sees and interacts with the full Linux desktop via screenshots and accessibility tree
+- **Code execution** — writes and runs Python, installs packages, builds projects
+- **Custom tools** — the agent can write its own tools and reuse them across sessions
+- **Autonomous tasks** — schedule recurring goals that run in the background (with optional Telegram notifications)
+- **Memory** — persistent memory across conversations
+- **Text-to-speech** — Kokoro TTS, runs on CPU, no setup needed
 
-## Hardware Requirements
+### GPU Features (optional)
 
-**Minimum for LLM inference only:**
-- 16 GB+ VRAM for smaller models, 48 GB+ recommended for larger models (e.g. `gpt-oss:120b`)
-- Alternatively, use Ollama cloud models (e.g. `ollama pull qwen3:32b-cloud`) to skip local GPU entirely — requires an [Ollama account](https://ollama.com/) and being logged in (`ollama login`)
+These require an NVIDIA GPU, the NVIDIA Container Toolkit, and some extra setup. Models download automatically on first use.
 
-**For full feature set (local image/video generation + visual grounding):**
-- NVIDIA GPU(s) with 12 GB+ VRAM for the inference container (image/video gen)
-- Additional ~31 GB VRAM for the UI-TARS visual grounding model (desktop agent)
-- The author runs this on 84 GB VRAM across 4 GPUs
+**Image Generation** — 1024x1024 images using FLUX.1. Two modes: "fast" (4 steps, ~10s) and "quality" (20 steps, ~30s). Requires 8-10 GB VRAM and a free [HuggingFace token](https://huggingface.co/settings/tokens) (FLUX is a gated model). First download: ~58 GB.
 
-You can use Ollama cloud models for all LLM inference (no local GPU needed), but image generation, video generation, and visual grounding require local NVIDIA GPU hardware with the Podman inference container.
+**Music Generation** — full tracks with vocals using ACE-Step 1.5. Style presets (pop, rock, electronic, jazz, etc.), custom lyrics, up to 10 minutes. Requires ~10 GB VRAM. First download: ~8 GB.
 
-## Requirements
+**Desktop Visual Grounding** — the agent looks at a screenshot and clicks specific UI elements using the UI-TARS vision model. Powers the desktop agent's ability to interact with any application. Requires ~15 GB VRAM. First download: ~33 GB.
 
-- Python 3.12+ (see `.python-version`)
-- [uv](https://github.com/astral-sh/uv) (dependency and venv management)
-- [Ollama](https://ollama.com/) running locally (cloud models available with an Ollama account)
-- [Just](https://just.systems/) (task runner)
-- [Podman](https://podman.io/) (optional — for sandboxed code execution, media generation, and desktop agent)
-- [Node.js](https://nodejs.org/) & npm (optional — for UI development)
-- NVIDIA GPU + drivers (optional — only needed for local media generation and visual grounding)
+---
 
-## Quick Start
+## GPU Setup
 
-```sh
+Skip this section if you don't need image/music generation.
+
+### Platform Support
+
+- **Linux** (x86_64) — fully supported
+- **Windows** — works via WSL2 + Docker Desktop (with NVIDIA GPU passthrough)
+- **macOS** — not supported
+
+### Prerequisites
+
+1. **NVIDIA GPU + drivers**
+2. **Docker or Podman (rootful)**
+3. **[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)**
+4. **[Ollama](https://ollama.com/)** running on the host
+5. **[HuggingFace token](https://huggingface.co/settings/tokens)** (optional, for FLUX.1 image generation)
+
+### Linux
+
+```bash
+# 1. Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo systemctl enable --now docker
+
+# 2. Install NVIDIA Container Toolkit
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# 3. Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 4. Pull a chat model
+ollama pull qwen3:32b
+```
+
+### Windows (WSL2)
+
+```powershell
+# 1. Install WSL2 with Ubuntu
+wsl --install -d Ubuntu
+
+# 2. Install Docker Desktop with WSL2 backend
+#    https://docs.docker.com/desktop/install/windows-install/
+#    Enable: Settings > Resources > WSL Integration > Ubuntu
+
+# 3. Install NVIDIA drivers for WSL2
+#    https://developer.nvidia.com/cuda/wsl
+#    Install the Windows NVIDIA driver (not the Linux one inside WSL)
+
+# Then inside WSL2 (Ubuntu terminal):
+# 4. Install NVIDIA Container Toolkit (same as Linux steps above)
+
+# 5. Install Ollama inside WSL2
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 6. Pull a chat model
+ollama pull qwen3:32b
+```
+
+### Running with GPU
+
+**Docker:**
+
+```bash
+docker run -d --rm \
+  --name computron \
+  --gpus all \
+  --shm-size=256m \
+  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
+  --add-host=host.docker.internal:host-gateway \
+
+  -e HF_TOKEN=hf_your_token_here \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron_9000 \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+**Podman (rootful):**
+
+```bash
+sudo podman run -d --rm \
+  --name computron \
+  --device nvidia.com/gpu=all \
+  --shm-size=256m \
+  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
+  --add-host=host.docker.internal:host-gateway \
+
+  -e HF_TOKEN=hf_your_token_here \
+  -v computron_home:/home/computron:rw \
+  -v computron_state:/var/lib/computron_9000:rw \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+Then open **[http://localhost:8080](http://localhost:8080)**.
+
+---
+
+## Reference
+
+### Environment Variables
+
+Pass these with `-e` when running the container:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `LLM_HOST` | No | Ollama URL. Defaults to `http://host.docker.internal:11434` (host Ollama). Override only if Ollama runs elsewhere. |
+| `HF_TOKEN` | For image gen | HuggingFace token. Required for FLUX.1 (gated model). |
+| `GITHUB_TOKEN` | No | GitHub personal access token for repo operations. |
+| `GITHUB_USER` | No | GitHub username (used with GITHUB_TOKEN). |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for goal run notifications. |
+| `TELEGRAM_CHAT_ID` | No | Telegram chat ID to receive notifications. |
+
+### Ports
+
+| Port | Service |
+|------|---------|
+| 8080 | Web UI |
+| 5900 | VNC (connect with any VNC viewer to watch the agent's desktop) |
+| 6080 | noVNC (browser-based VNC at `http://localhost:6080/vnc.html`) |
+
+### Data Persistence
+
+Named volumes survive container restarts and upgrades:
+
+| Volume | Contents |
+|--------|----------|
+| `computron_home` | Agent workspace, downloads, generated media, model cache |
+| `computron_state` | Conversations, memory, custom tools, goals |
+
+To start fresh: `docker volume rm computron_home computron_state`
+
+### Ollama Models
+
+These run on your host Ollama instance. Change the chat model in the UI. Other roles are configured in `config.yaml`.
+
+| Role | Default Model | What It Does |
+|------|--------------|--------------|
+| Chat | *(your choice)* | Main conversation model |
+| Vision | `qwen3.5:4b` | Analyzes screenshots for the desktop agent |
+| Summary | `kimi-k2.5:cloud` | Compresses conversation context |
+| Goals | `kimi-k2.5:cloud` | Plans and executes autonomous tasks |
+| Skills | `qwen3.5:cloud` | Extracts reusable skills from conversations |
+
+Cloud models work without a local GPU: `ollama login && ollama pull qwen3:32b-cloud`
+
+### GPU Models
+
+Download automatically on first use. Cached in the `computron_home` volume.
+
+| Model | Task | Download | VRAM |
+|-------|------|----------|------|
+| [FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) | Fast image gen | ~58 GB | ~8 GB |
+| [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) | Quality image gen | ~58 GB | ~10 GB |
+| [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) | Music generation | ~8 GB | ~10 GB |
+| [UI-TARS 1.5 7B](https://huggingface.co/ByteDance-Seed/UI-TARS-1.5-7B) | Desktop grounding | ~33 GB | ~15 GB |
+
+### VRAM Guide
+
+GPU models load on demand and unload after idle timeout to free VRAM. Only one generation model is loaded at a time — if you generate an image then generate music, the image model unloads first. Models also use CPU offload automatically when VRAM is tight.
+
+| Use Case | VRAM Needed |
+|----------|-------------|
+| Chat only (Ollama cloud models) | 0 GB |
+| Chat + local Ollama (e.g. qwen3:32b) | 24 GB |
+| Image generation | 8-10 GB |
+| Music generation | ~10 GB |
+| Desktop grounding | ~15 GB |
+
+These are independent — you don't need to add them up. The author runs all features on 4 GPUs (84 GB total), but a single 12 GB GPU handles image and music generation fine.
+
+### Stopping
+
+```bash
+docker stop computron        # Docker
+sudo podman stop computron   # Podman
+```
+
+## Troubleshooting
+
+**"Cannot access gated repo"** — Set `HF_TOKEN` and accept the model license at [huggingface.co/black-forest-labs/FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell).
+
+**UI doesn't load** — Wait 10-15 seconds for startup. Check logs: `docker logs -f computron`.
+
+**"Ollama connection refused"** — Make sure Ollama is running on the host and you passed `--add-host=host.docker.internal:host-gateway` in the `docker run` command.
+
+**No GPU detected** — Install the NVIDIA Container Toolkit and pass `--gpus all` (Docker) or `--device nvidia.com/gpu=all` (Podman).
+
+**VNC blank screen** — Desktop takes a few seconds. Check `docker logs computron` for errors.
+
+## Building from Source
+
+```bash
 git clone <repo-url> computron_9000
 cd computron_9000
-
-# One-command setup: creates venv, installs deps, checks Ollama, installs Playwright
-just setup
-
-# Start the app
-just run
+docker build -f container/Dockerfile -t computron_9000:latest .
 ```
 
-Then open [http://localhost:8080](http://localhost:8080) in your browser.
+Then run with the same commands above, replacing `ghcr.io/lefoulkrod/computron_9000:latest` with `computron_9000:latest`.
 
-### Using Ollama Cloud Models
-
-If you don't have a local GPU, you can use Ollama's cloud-hosted models. Sign up at [ollama.com](https://ollama.com/), then:
-
-```sh
-ollama login
-ollama pull qwen3:32b-cloud   # or any cloud-tagged model
-```
-
-Ollama still runs locally but inference happens in the cloud. Update `config.yaml` to reference the cloud model tags.
-
-## Environment Configuration
-
-Copy `.env.example` to `.env` and populate as needed:
-
-| Variable | Purpose |
-|----------|---------|
-| `LLM_HOST` | Override Ollama host URL (default: `http://localhost:11434`) |
-| `LLM_API_KEY` | Anthropic API key (when using `anthropic` provider) |
-| `HF_TOKEN` | HuggingFace token for gated models (Flux.1-schnell) |
-| `GITHUB_TOKEN/USER` | GitHub publishing (repos, Pages) |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for goal run notifications (via [@BotFather](https://t.me/BotFather)) |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID to receive notifications |
-
-## Task Engine (Goals)
-
-The task engine runs multi-step agent workflows autonomously in the background. Goals are created through the chat interface or the Goals panel in the sidebar.
-
-**Key concepts:**
-- **Goal** — a unit of work with one or more tasks (e.g. "Research and summarize today's AI news")
-- **Task** — a single agent prompt with a designated agent (`computron`, `browser`, or `coder`), optional dependencies on other tasks
-- **Run** — one execution of a goal's task pipeline. One-shot goals run immediately; recurring goals run on a cron schedule.
-
-**Configuration** in `config.yaml`:
-```yaml
-goals:
-  enabled: true
-  poll_interval: 5       # seconds between runner ticks
-  max_concurrent: 2      # max tasks running in parallel
-  max_retries: 3         # retries per failed task
-  timezone: America/Chicago
-  model: "qwen3:32b-cloud"
-  notifications:
-    enabled: true        # requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env
-```
-
-**Telegram notifications:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in your `.env` file to receive notifications when goal runs complete or fail. Create a bot via [@BotFather](https://t.me/BotFather).
-
-## Virtual Computer (Podman)
-
-The sandboxed container provides code execution, media generation, and desktop environment tooling. Files are shared via a mounted volume configured by `virtual_computer.home_dir` in `config.yaml` (default: `~/.computron_9000/container_home/`).
-
-```sh
-just container-build     # build the container image
-just container-start     # start the sandbox
-just container-shell     # open a shell in the container
-just container-stop      # stop the container
-```
-
-## GPU Media Generation
-
-Requires an NVIDIA GPU (12 GB+ VRAM), a HuggingFace account, and the inference container.
-
-**Models:**
-- **Images**: [Flux.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) — 1024x1024, 4 inference steps
-- **Video**: [Wan2.1-T2V-1.3B](https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers) — 480p/720p text-to-video
-- **Voice/TTS**: [Kokoro-82M](https://github.com/thewh1teagle/kokoro-onnx) — lightweight TTS
-
-**Setup:**
-1. Accept the [Flux.1-schnell license](https://huggingface.co/black-forest-labs/FLUX.1-schnell) on HuggingFace
-2. Add your HuggingFace token to `.env`: `HF_TOKEN=hf_...`
-3. Build and start the inference container:
-   ```sh
-   just inference-build
-   just inference-start
-   ```
-
-Model weights are downloaded on first use and cached in `~/.computron_9000/container_home/`. A persistent inference server keeps models loaded in VRAM and auto-shuts down after 10 minutes of inactivity.
-
-## Development
-
-```sh
-just dev          # backend with auto-reload
-just dev-full     # backend + React UI dev server
-just ui-dev       # UI dev server only
-just test         # run test suite
-just format       # format code with ruff
-just lint         # lint with ruff
-just typecheck    # type check with mypy
-just check        # all quality checks
-just ci           # quality checks + tests
-```
-
-Run `just` to see all available commands.
-
-## Contributing
-
-Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the dev workflow.

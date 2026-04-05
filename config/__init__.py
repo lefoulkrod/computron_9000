@@ -168,14 +168,6 @@ class VirtualComputerConfig(BaseModel):
     home_dir: str
 
 
-class InferenceContainerConfig(BaseModel):
-    """Configuration for the GPU inference container."""
-
-    container_name: str
-    home_dir: str
-    container_working_dir: str
-
-
 class LLMConfig(BaseModel):
     """Configuration for Large Language Model connection."""
 
@@ -238,7 +230,6 @@ class AppConfig(BaseModel):
 
     settings: Settings
     virtual_computer: VirtualComputerConfig
-    inference_container: InferenceContainerConfig
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)

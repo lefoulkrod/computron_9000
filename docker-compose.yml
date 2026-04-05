@@ -1,0 +1,39 @@
+services:
+  computron:
+    image: ghcr.io/lefoulkrod/computron_9000:latest
+    container_name: computron
+    shm_size: 256m
+    ports:
+      - "8080:8080"   # Web UI
+      - "5900:5900"   # VNC
+      - "6080:6080"   # noVNC
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # LLM_HOST defaults to http://host.docker.internal:11434 (host Ollama)
+      # Override only if Ollama is running elsewhere:
+      # - LLM_HOST=http://some-other-host:11434
+      # Uncomment for GPU image generation (requires HuggingFace token):
+      # - HF_TOKEN=hf_your_token_here
+      # Uncomment for GitHub integration:
+      # - GITHUB_TOKEN=
+      # - GITHUB_USER=
+      # Uncomment for Telegram goal notifications:
+      # - TELEGRAM_BOT_TOKEN=
+      # - TELEGRAM_CHAT_ID=
+    volumes:
+      - computron_home:/home/computron
+      - computron_state:/var/lib/computron_9000
+    restart: unless-stopped
+    # Uncomment the next two lines for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  computron_home:
+  computron_state:

@@ -482,7 +482,7 @@ container-start:
       --shm-size=256m \
       -p 8080:8080 -p 5900:5900 -p 6080:6080 \
       --add-host=host.docker.internal:host-gateway \
-      -e LLM_HOST=http://host.docker.internal:11434 \
+
       $hf_token_args \
       $github_args \
       -v computron_home:/home/computron:rw \
@@ -540,7 +540,7 @@ container-dev:
       --shm-size=256m \
       -p 8080:8080 -p 5900:5900 -p 6080:6080 \
       --add-host=host.docker.internal:host-gateway \
-      -e LLM_HOST=http://host.docker.internal:11434 \
+
       $env_args \
       -v computron_home:/home/computron:rw \
       -v computron_state:/var/lib/computron_9000:rw \
@@ -550,15 +550,23 @@ container-dev:
     echo "✅ Dev container started (source at /opt/computron_9000)"
     echo "   Edit files locally, then: just container-restart-app"
 
-# Restart just the app server (desktop/VNC stay up)
+# Restart app server + inference server (desktop/VNC stay up)
 container-restart-app:
     #!/usr/bin/env bash
     set -euo pipefail
     if sudo podman container exists computron_virtual_computer && \
        [ -n "$(sudo podman ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-        echo "🔄 Restarting app server..."
-        sudo podman exec computron_virtual_computer pkill -f "python3.12 main.py" || true
-        echo "✅ App server restarting (entrypoint auto-restarts in 2s)"
+        echo "🔄 Restarting app + inference servers..."
+        # Kill inference server by process name (PID file can be stale).
+        # pkill exits 1 if no match — ignore that.
+        sudo podman exec computron_virtual_computer \
+          pkill -9 -f "inference_server.py" 2>/dev/null || true
+        sudo podman exec computron_virtual_computer \
+          rm -f /tmp/inference_server.pid 2>/dev/null || true
+        # Kill app server (entrypoint auto-restarts in 2s)
+        sudo podman exec computron_virtual_computer \
+          pkill -f "python3.12 main.py" 2>/dev/null || true
+        echo "✅ Servers restarting (app in 2s, inference on next request)"
     else
         echo "❌ Container is not running. Start it with: just container-dev"
         exit 1
@@ -636,147 +644,50 @@ container-status:
         echo "   🚀 Create and start with: just container-start"
     fi
 
-# Build inference container image
-inference-build:
+# Publish image to GitHub Container Registry
+publish registry="ghcr.io/lefoulkrod/computron_9000":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! sudo podman image exists computron_9000:latest; then
+        echo "❌ No local image. Run: just container-build"
         exit 1
     fi
 
-    echo "🏗️  Building inference container image..."
-    podman build --format docker -f container/Dockerfile.inference -t computron_inference:latest .
-    echo "✅ Inference container image built successfully!"
+    sha=$(git rev-parse --short HEAD)
+    branch=$(git branch --show-current | tr '/' '-')
+    tag="${branch}-${sha}"
 
-# Start 'computron_inference' container with GPU
-inference-start:
+    echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
+    sudo podman tag computron_9000:latest "{{registry}}:${tag}"
+    sudo podman tag computron_9000:latest "{{registry}}:${branch}-latest"
+
+    # Auto-login if GITHUB_PACKAGES_TOKEN is set
+    if [ -n "${GITHUB_PACKAGES_TOKEN:-}" ]; then
+        echo "$GITHUB_PACKAGES_TOKEN" | sudo podman login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
+    fi
+
+    echo "🚀 Pushing ($(sudo podman images computron_9000:latest --format '{{{{.Size}}}}'))..."
+    sudo podman push "{{registry}}:${tag}"
+    sudo podman push "{{registry}}:${branch}-latest"
+
+    echo "✅ Published:"
+    echo "   {{registry}}:${tag}"
+    echo "   {{registry}}:${branch}-latest"
+
+# View app server logs (follow mode)
+container-logs:
+    sudo podman logs -f computron_virtual_computer
+
+# View inference server logs (follow mode)
+inference-logs:
+    sudo podman exec computron_virtual_computer tail -f /tmp/inference_server.log
+
+# View both app + inference logs side by side
+logs:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
-        exit 1
-    fi
-
-    if ! podman image exists computron_inference:latest; then
-        echo "❌ Inference image not found. Building first..."
-        just inference-build
-    fi
-
-    if podman container exists computron_inference; then
-        if [ "$(podman container inspect computron_inference --format '{{{{.State.Status}}}}')" = "running" ]; then
-            echo "ℹ️  Container 'computron_inference' is already running"
-            exit 0
-        else
-            echo "🗑️  Removing stopped container..."
-            podman rm computron_inference
-        fi
-    fi
-
-    echo "🚀 Starting inference container..."
-    home_dir=$(awk '/^inference_container:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
-    if [ ! -d "$home_dir" ]; then
-        echo "📁 Creating home directory: $home_dir"
-        mkdir -p "$home_dir"
-    fi
-
-    # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
-    hf_token_args=""
-    if [ -n "${HF_TOKEN:-}" ]; then
-        hf_token_args="-e HF_TOKEN=$HF_TOKEN"
-        echo "🔑 HF_TOKEN detected, passing to container"
-    fi
-
-    # Only bind-mount the shared output directory — not the full home.
-    # This prevents stale user-installed packages from shadowing
-    # system packages inside the container.
-    podman run -d --rm \
-      --name computron_inference \
-      --device nvidia.com/gpu=all \
-      $hf_token_args \
-      -v "$home_dir:/output:rw,z" \
-      computron_inference:latest
-
-    echo "✅ Container 'computron_inference' started successfully!"
-
-# Stop 'computron_inference' container
-inference-stop:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
-        exit 1
-    fi
-
-    if podman container exists computron_inference; then
-        echo "🛑 Stopping inference container..."
-        podman stop computron_inference
-        echo "✅ Inference container stopped"
-    else
-        echo "ℹ️  Container 'computron_inference' is not running"
-    fi
-
-# Open interactive shell in inference container
-inference-shell:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
-        exit 1
-    fi
-
-    if podman container exists computron_inference; then
-        if [ -n "$(podman ps -q --filter name=^computron_inference$ --filter status=running)" ]; then
-            echo "🐚 Opening shell in inference container..."
-            podman exec -it computron_inference bash
-        else
-            echo "❌ Container 'computron_inference' exists but is not running"
-            echo "   Start it with: just inference-start"
-            exit 1
-        fi
-    else
-        echo "❌ Container 'computron_inference' does not exist"
-        echo "   Start it with: just inference-start"
-        exit 1
-    fi
-
-# Get inference container status
-inference-status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
-        exit 1
-    fi
-
-    echo "📊 Inference Container Status:"
-    if podman container exists computron_inference; then
-        echo "   Name: computron_inference"
-        if [ -n "$(podman ps -q --filter name=^computron_inference$ --filter status=running)" ]; then
-            echo "   Status: running"
-            echo "   ✅ Container is running and ready"
-            echo "   🐚 Access with: just inference-shell"
-        else
-            status=$(podman container inspect computron_inference | grep -m1 '"Status"' | sed -E 's/.*"Status"\s*:\s*"([^"]+)".*/\1/')
-            status=${status:-unknown}
-            echo "   Status: $status"
-            echo "   ⚠️  Container exists but is not running"
-            echo "   🚀 Start with: just inference-start"
-        fi
-    else
-        echo "   ❌ Container does not exist"
-        echo "   🚀 Create and start with: just inference-start"
-    fi
-
-# Start both containers (inference + virtual computer)
-start-all: inference-start container-start
-
-# Stop both containers
-stop-all: inference-stop container-stop
+    sudo podman logs -f computron_virtual_computer 2>&1 | sed 's/^/[app] /' &
+    sudo podman exec computron_virtual_computer tail -f /tmp/inference_server.log 2>/dev/null | sed 's/^/[inference] /' &
+    wait
 
