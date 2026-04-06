@@ -23,7 +23,7 @@ services:
       # - TELEGRAM_CHAT_ID=
     volumes:
       - computron_home:/home/computron
-      - computron_state:/var/lib/computron_9000
+      - computron_state:/var/lib/computron
     restart: unless-stopped
     # Uncomment the next two lines for GPU support:
     # deploy:

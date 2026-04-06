@@ -1,5 +1,5 @@
 settings:
-  home_dir: /var/lib/computron_9000
+  home_dir: /var/lib/computron
 virtual_computer:
   home_dir: /home/computron
 

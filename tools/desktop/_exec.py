@@ -52,9 +52,7 @@ async def _run_desktop_cmd(
     if user == "root":
         shell_cmd = "sudo -n bash -c %s" % shlex.quote(inner_cmd)
     else:
-        # Run as the computron desktop user.  The app server process
-        # (computron_app) drops to computron via sudo.
-        shell_cmd = "sudo -n -u computron bash -c %s" % shlex.quote(inner_cmd)
+        shell_cmd = "bash -c %s" % shlex.quote(inner_cmd)
 
     try:
         proc = await asyncio.create_subprocess_shell(

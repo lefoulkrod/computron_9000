@@ -1,7 +1,6 @@
 """Tool for running bash commands locally with guardrails.
 
 Adds deny patterns, per-command timeouts, and strict bash flags.
-Commands execute as the ``computron`` user via ``sudo -u computron``.
 """
 
 import asyncio
@@ -75,12 +74,8 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
             status="running",
         )))
 
-        # Run as the unprivileged computron user. The app server runs as
-        # computron_app and uses sudo to drop to computron for agent commands.
-        agent_cmd = "sudo -n -u computron bash -c %s" % shlex.quote(strict_cmd)
-
         proc = await asyncio.create_subprocess_shell(
-            agent_cmd,
+            strict_cmd,
             cwd=workdir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

@@ -5,26 +5,19 @@
 Computron 9000 runs as a single container. The app server (aiohttp + React), desktop environment (Xfce + VNC), browser (Chrome), and inference models all live inside one image. There is no "host mode" — all development happens through the container.
 
 ```
-Container
-  App server (aiohttp :8080) — runs as computron_app
+Container (everything runs as computron)
+  App server (aiohttp :8080)
     agents/ — LLM agent implementations
     tools/  — tool modules the agent invokes
     server/ — HTTP API + React UI
   Desktop (Xfce + VNC :5900 + noVNC :6080)
     Chrome, Firefox, terminal, file manager
-  Agent subprocesses — run as computron (via sudo -n -u computron)
   Inference (GPU models for image/music/video/grounding)
 
 Host
   Ollama (:11434) — LLM inference
-  Podman/Docker — container runtime
+  Docker — container runtime
 ```
-
-### Two-User Permission Model
-
-- `computron_app` — runs the app server, owns state files in `/var/lib/computron_9000`
-- `computron` — runs agent subprocesses (bash commands, code execution), owns `/home/computron`
-- Sudoers allows `computron_app` to run commands as `computron` and to install packages as root
 
 ### Key Paths
 
@@ -32,7 +25,7 @@ Host
 |------|-------|---------|
 | `/opt/computron_9000` | root | App source (read-only in prod, mounted in dev) |
 | `/home/computron` | computron | Agent workspace, downloads, generated files |
-| `/var/lib/computron_9000` | computron_app | Conversations, memory, custom tools, goals |
+| `/var/lib/computron` | computron | Conversations, memory, custom tools, goals |
 
 ## Dev Workflow
 
@@ -47,7 +40,7 @@ just container-dev
 just container-restart-app
 
 # Watch logs:
-sudo podman logs -f computron_virtual_computer
+docker logs -f computron_virtual_computer
 
 # Shell into the container:
 just container-shell
@@ -57,9 +50,7 @@ The `container-dev` recipe mounts your local source at `/opt/computron_9000` ins
 
 ### Config Files
 
-- `config.yaml` — container paths (`/var/lib/computron_9000`, `/home/computron`). Used when `COMPUTRON_CONTAINER=1`.
-- `config.dev.yaml` — host paths (`~/.computron_9000`). Used outside the container (gitignored).
-- The container always sets `COMPUTRON_CONTAINER=1`, so `config.yaml` is always used inside.
+- `config.yaml` — container paths (`/var/lib/computron`, `/home/computron`).
 
 ## Project Structure
 

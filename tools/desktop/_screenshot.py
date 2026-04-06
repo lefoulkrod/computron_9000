@@ -22,7 +22,6 @@ async def capture_screenshot() -> bytes:
     """
     config = load_config()
 
-    # Per-agent screenshot path to avoid parallel collisions.
     display = _current_display.get() or config.desktop.user_display
     safe_display = display.replace(":", "")
     screenshot_path = "/tmp/.desktop_screenshot_%s.png" % safe_display

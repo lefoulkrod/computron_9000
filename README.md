@@ -11,7 +11,7 @@ Just need [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://oll
 ```bash
 ollama pull qwen3.5:4b
 ollama pull qwen3:32b
-docker run -d --name computron --shm-size=256m -p 8080:8080 -p 6080:6080 --add-host=host.docker.internal:host-gateway ghcr.io/lefoulkrod/computron_9000:latest
+docker run -d --name computron --shm-size=256m --network=host ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
 `qwen3.5:4b` is the vision model (required — used for desktop screenshots). `qwen3:32b` is the chat model — swap it for any [Ollama model](https://ollama.com/library) you like, or use a cloud model (`ollama login && ollama pull qwen3:32b-cloud`) to skip local GPU for chat. There are no cloud vision models available, so `qwen3.5:4b` must run locally (~3 GB VRAM).
@@ -24,10 +24,9 @@ Data won't persist when the container is removed. When you're ready to keep it, 
 
 ```bash
 docker run -d --name computron --shm-size=256m \
-  -p 8080:8080 -p 6080:6080 \
-  --add-host=host.docker.internal:host-gateway \
+  --network=host \
   -v computron_home:/home/computron \
-  -v computron_state:/var/lib/computron_9000 \
+  -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -39,12 +38,11 @@ Add your NVIDIA GPU and a [HuggingFace token](https://huggingface.co/settings/to
 
 ```bash
 docker run -d --name computron --shm-size=256m \
-  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
-  --add-host=host.docker.internal:host-gateway \
+  --network=host \
   --gpus all \
   -e HF_TOKEN=hf_your_token_here \
   -v computron_home:/home/computron \
-  -v computron_state:/var/lib/computron_9000 \
+  -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -150,12 +148,10 @@ docker run -d --rm \
   --name computron \
   --gpus all \
   --shm-size=256m \
-  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
-  --add-host=host.docker.internal:host-gateway \
-
+  --network=host \
   -e HF_TOKEN=hf_your_token_here \
   -v computron_home:/home/computron \
-  -v computron_state:/var/lib/computron_9000 \
+  -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -166,12 +162,10 @@ sudo podman run -d --rm \
   --name computron \
   --device nvidia.com/gpu=all \
   --shm-size=256m \
-  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
-  --add-host=host.docker.internal:host-gateway \
-
+  --network=host \
   -e HF_TOKEN=hf_your_token_here \
   -v computron_home:/home/computron:rw \
-  -v computron_state:/var/lib/computron_9000:rw \
+  -v computron_state:/var/lib/computron:rw \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -187,12 +181,25 @@ Pass these with `-e` when running the container:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `LLM_HOST` | No | Ollama URL. Defaults to `http://host.docker.internal:11434` (host Ollama). Override only if Ollama runs elsewhere. |
+| `LLM_HOST` | No | Ollama URL. Defaults to `http://localhost:11434`. Override only if Ollama runs elsewhere. |
 | `HF_TOKEN` | For image gen | HuggingFace token. Required for FLUX.1 (gated model). |
 | `GITHUB_TOKEN` | No | GitHub personal access token for repo operations. |
 | `GITHUB_USER` | No | GitHub username (used with GITHUB_TOKEN). |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for goal run notifications. |
 | `TELEGRAM_CHAT_ID` | No | Telegram chat ID to receive notifications. |
+
+To pass multiple env vars, add `-e` for each one:
+
+```bash
+docker run -d --name computron --shm-size=256m \
+  --network=host \
+  -e HF_TOKEN=hf_your_token_here \
+  -e TELEGRAM_BOT_TOKEN=your_bot_token \
+  -e TELEGRAM_CHAT_ID=your_chat_id \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
 
 ### Ports
 
@@ -215,7 +222,7 @@ To start fresh: `docker volume rm computron_home computron_state`
 
 ### Ollama Models
 
-These run on your host Ollama instance. Change the chat model in the UI. Other roles are configured in `config.yaml`.
+These run on your host Ollama instance. Change the chat model in the UI.
 
 | Role | Default Model | What It Does |
 |------|--------------|--------------|
@@ -223,7 +230,6 @@ These run on your host Ollama instance. Change the chat model in the UI. Other r
 | Vision | `qwen3.5:4b` | Analyzes screenshots for the desktop agent |
 | Summary | `kimi-k2.5:cloud` | Compresses conversation context |
 | Goals | `kimi-k2.5:cloud` | Plans and executes autonomous tasks |
-| Skills | `qwen3.5:cloud` | Extracts reusable skills from conversations |
 
 Cloud models work without a local GPU: `ollama login && ollama pull qwen3:32b-cloud`
 
@@ -265,7 +271,7 @@ sudo podman stop computron   # Podman
 
 **UI doesn't load** — Wait 10-15 seconds for startup. Check logs: `docker logs -f computron`.
 
-**"Ollama connection refused"** — Make sure Ollama is running on the host and you passed `--add-host=host.docker.internal:host-gateway` in the `docker run` command.
+**"Ollama connection refused"** — Make sure Ollama is running on the host. The container uses `--network=host` so it connects to Ollama at `localhost:11434` directly.
 
 **No GPU detected** — Install the NVIDIA Container Toolkit and pass `--gpus all` (Docker) or `--device nvidia.com/gpu=all` (Podman).
 

@@ -4,7 +4,7 @@ FROM docker.io/ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DISPLAY=:0
+    DISPLAY=:99
 
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone
@@ -165,37 +165,21 @@ RUN mkdir -p /opt/kokoro && \
       https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin && \
     chmod -R 755 /opt/kokoro
 
-# ── Users & permissions ──────────────────────────────────────────────────────
-# computron_app: runs the app server, owns state files
-# computron: runs agent subprocesses, read-only access to state via group
+# ── User & permissions ───────────────────────────────────────────────────────
+# Single user: computron runs the app server, agent tools, and desktop.
+# App code is root-owned (read-only). State and home are both owned by computron.
 RUN useradd --create-home --shell /bin/bash computron && \
     passwd -d computron && \
-    useradd --create-home --system --shell /bin/false computron_app && \
-    # Cross-group membership:
-    # computron ∈ computron_app → can read state dir
-    # computron_app ∈ computron → can write generated files to agent home
-    usermod -aG computron_app computron && \
-    usermod -aG computron computron_app && \
-    # State dir: app server reads/writes, agent reads (via group)
-    mkdir -p /var/lib/computron_9000 && \
-    chown computron_app:computron_app /var/lib/computron_9000 && \
-    chmod 750 /var/lib/computron_9000 && \
-    # Agent home: group-writable so inference server (computron_app) can
-    # create output directories (generated_images/, generated_audio/, etc.)
+    mkdir -p /var/lib/computron && \
+    chown computron:computron /var/lib/computron && \
+    chmod 755 /var/lib/computron && \
     chown -R computron:computron /home/computron && \
-    chmod 775 /home/computron && \
     mkdir -p /home/computron/Desktop && \
-    chown computron:computron /home/computron/Desktop && \
-    # Downloads: Chrome (computron_app) writes, agent (computron) reads
     mkdir -p /home/computron/downloads && \
-    chown computron:computron_app /home/computron/downloads && \
-    chmod 775 /home/computron/downloads && \
-    # Sudoers: app server → agent user, and → root for package installs
-    echo "computron_app ALL=(computron) NOPASSWD: ALL" \
-      > /etc/sudoers.d/computron_app && \
-    echo "computron_app ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/local/bin/pip, /usr/local/bin/npm" \
-      >> /etc/sudoers.d/computron_app && \
-    chmod 440 /etc/sudoers.d/computron_app
+    # Sudoers: computron can install packages as root
+    echo "computron ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/local/bin/pip, /usr/local/bin/npm" \
+      > /etc/sudoers.d/computron && \
+    chmod 440 /etc/sudoers.d/computron
 
 # ── Xfce config ──────────────────────────────────────────────────────────────
 RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
@@ -227,22 +211,13 @@ RUN mkdir -p /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml && \
 </channel>\n' \
       > /home/computron/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
     chown -R computron:computron /home/computron/.config && \
-    printf 'export DISPLAY=:0\n' > /etc/profile.d/display.sh && \
+    printf 'export DISPLAY=:99\n' > /etc/profile.d/display.sh && \
     chmod 644 /etc/profile.d/display.sh
 
 # ── Desktop scripts ───────────────────────────────────────────────────────────
-COPY container/entrypoint.sh /opt/entrypoint.sh
 COPY container/a11y_tree.py /opt/desktop/a11y_tree.py
-RUN chmod +x /opt/entrypoint.sh && \
-    chmod 755 /opt/desktop/a11y_tree.py && \
+RUN chmod 755 /opt/desktop/a11y_tree.py && \
     mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
-
-# ── Git config for agent user ─────────────────────────────────────────────────
-RUN su - computron -c '\
-    git config --global user.name "larry foulkrod" && \
-    git config --global user.email "lefoulkrod@gmail.com" && \
-    git config --global credential.helper \
-      '"'"'!f() { test -n "$GITHUB_TOKEN" && echo "password=$GITHUB_TOKEN"; }; f'"'"''
 
 # ── App dependencies (cached unless manifests change) ────────────────────────
 WORKDIR /opt/computron_9000
@@ -260,6 +235,10 @@ RUN cd server/ui && npm run build
 # Lock down app directory
 RUN chown -R root:root /opt/computron_9000 && \
     chmod -R 755 /opt/computron_9000
+
+# ── Entrypoint (late COPY so edits don't bust app/UI cache) ─────────────────
+COPY container/entrypoint.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh
 
 SHELL ["/bin/bash", "-c"]
 

@@ -24,18 +24,8 @@ _INSTALL_TIMEOUT: float = 180.0
 def _exec_sync(
     cmd: list[str],
     timeout: float,
-    *,
-    user: str | None = None,
 ) -> dict[str, object]:
-    """Run cmd locally and return stdout/stderr/exit_code.
-
-    Args:
-        cmd: Command and arguments to run.
-        timeout: Max seconds to wait.
-        user: If set, run as this user via ``sudo -u``.
-    """
-    if user:
-        cmd = ["sudo", "-n", "-u", user] + cmd
+    """Run cmd locally and return stdout/stderr/exit_code."""
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -65,7 +55,7 @@ async def _ensure_dependencies(
     try:
         # Install as root so packages are available system-wide.
         await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _exec_sync(cmd, _INSTALL_TIMEOUT, user="root")),
+            loop.run_in_executor(None, lambda: _exec_sync(["sudo"] + cmd, _INSTALL_TIMEOUT)),
             timeout=_INSTALL_TIMEOUT,
         )
     except TimeoutError:
@@ -100,7 +90,7 @@ async def execute_custom_tool(tool_def: CustomToolDefinition, arguments: dict[st
 
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _exec_sync(exec_cmd, _DEFAULT_TIMEOUT, user="computron")),
+                loop.run_in_executor(None, lambda: _exec_sync(exec_cmd, _DEFAULT_TIMEOUT)),
                 timeout=_DEFAULT_TIMEOUT,
             )
         except TimeoutError:
@@ -115,7 +105,7 @@ async def execute_custom_tool(tool_def: CustomToolDefinition, arguments: dict[st
 
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _exec_sync(exec_cmd, _DEFAULT_TIMEOUT, user="computron")),
+                loop.run_in_executor(None, lambda: _exec_sync(exec_cmd, _DEFAULT_TIMEOUT)),
                 timeout=_DEFAULT_TIMEOUT,
             )
         except TimeoutError:

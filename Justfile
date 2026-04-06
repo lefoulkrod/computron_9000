@@ -414,21 +414,21 @@ info:
 
 
 # =============================================
-# 🐳 Containers (Podman)
+# 🐳 Containers (Docker)
 # =============================================
-# Build Podman image 'computron_9000:latest'
+# Build Docker image 'computron_9000:latest'
 container-build:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed. Please install it first:"
+        echo "   https://docs.docker.com/engine/install/"
         exit 1
     fi
-    
+
     echo "🏗️  Building container image..."
-    sudo podman build --format docker -f container/Dockerfile -t computron_9000:latest .
+    docker build -f container/Dockerfile -t computron_9000:latest .
     echo "✅ Container image built successfully!"
 
 # Start 'computron_virtual_computer' container (create volumes)
@@ -436,24 +436,24 @@ container-start:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed. Please install it first:"
+        echo "   https://docs.docker.com/engine/install/"
         exit 1
     fi
 
-    if ! sudo podman image exists computron_9000:latest; then
+    if ! docker image inspect computron_9000:latest &> /dev/null; then
         echo "❌ Container image not found. Building first..."
         just container-build
     fi
 
-    if sudo podman container exists computron_virtual_computer; then
-        if [ "$(sudo podman container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
+    if docker container inspect computron_virtual_computer &> /dev/null; then
+        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
             echo "ℹ️  Container 'computron_virtual_computer' is already running"
             exit 0
         else
             echo "🗑️  Removing stopped container..."
-            sudo podman rm computron_virtual_computer
+            docker rm computron_virtual_computer
         fi
     fi
 
@@ -476,17 +476,22 @@ container-start:
         echo "🔑 GITHUB_TOKEN detected, passing to container"
     fi
 
-    sudo podman run -d --rm \
-      --name computron_virtual_computer \
-      --device nvidia.com/gpu=all \
-      --shm-size=256m \
-      -p 8080:8080 -p 5900:5900 -p 6080:6080 \
-      --add-host=host.docker.internal:host-gateway \
+    # GPU support: use --gpus all if nvidia-container-toolkit is available
+    gpu_args=""
+    if docker info 2>/dev/null | grep -q "Runtimes.*nvidia"; then
+        gpu_args="--gpus all"
+        echo "🎮 NVIDIA GPU detected, enabling GPU passthrough"
+    fi
 
+    docker run -d --rm \
+      --name computron_virtual_computer \
+      $gpu_args \
+      --shm-size=256m \
+      --network=host \
       $hf_token_args \
       $github_args \
       -v computron_home:/home/computron:rw \
-      -v computron_state:/var/lib/computron_9000:rw \
+      -v computron_state:/var/lib/computron:rw \
       computron_9000:latest
 
     echo "✅ Container 'computron_virtual_computer' started successfully!"
@@ -496,75 +501,92 @@ container-dev:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed. Please install it first:"
+        echo "   https://docs.docker.com/engine/install/"
         exit 1
     fi
 
-    if ! sudo podman image exists computron_9000:latest; then
+    if ! docker image inspect computron_9000:latest &> /dev/null; then
         echo "❌ Container image not found. Building first..."
         just container-build
     fi
 
-    if sudo podman container exists computron_virtual_computer; then
-        if [ "$(sudo podman container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
+    if docker container inspect computron_virtual_computer &> /dev/null; then
+        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
             echo "ℹ️  Container 'computron_virtual_computer' is already running"
             exit 0
         else
             echo "🗑️  Removing stopped container..."
-            sudo podman rm computron_virtual_computer
+            docker rm computron_virtual_computer
         fi
     fi
 
     echo "🚀 Starting dev container (source mounted)..."
 
-    # Environment variables
-    env_args=""
-    if [ -n "${HF_TOKEN:-}" ]; then
-        env_args="$env_args -e HF_TOKEN=$HF_TOKEN"
-    fi
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        env_args="$env_args -e GITHUB_TOKEN=$GITHUB_TOKEN"
-        if [ -n "${GITHUB_USER:-}" ]; then
-            env_args="$env_args -e GITHUB_USER=$GITHUB_USER"
-        fi
-    fi
-    if [ -n "${LLM_HOST:-}" ]; then
-        env_args="$env_args -e LLM_HOST=$LLM_HOST"
+    # Pass .env file if it exists
+    env_file_args=""
+    if [ -f .env ]; then
+        env_file_args="--env-file .env"
     fi
 
-    sudo podman run -d --rm \
+    # GPU support: use --gpus all if nvidia-container-toolkit is available
+    gpu_args=""
+    if docker info 2>/dev/null | grep -q "Runtimes.*nvidia"; then
+        gpu_args="--gpus all"
+        echo "🎮 NVIDIA GPU detected, enabling GPU passthrough"
+    fi
+
+    # Bind mount state to ~/.computron_9000/ for easy host access during dev
+    state_dir="$HOME/.computron_9000"
+    mkdir -p "$state_dir/state" "$state_dir/home"
+
+    docker run -d --rm \
       --name computron_virtual_computer \
-      --device nvidia.com/gpu=all \
+      $gpu_args \
       --shm-size=256m \
-      -p 8080:8080 -p 5900:5900 -p 6080:6080 \
-      --add-host=host.docker.internal:host-gateway \
-
-      $env_args \
-      -v computron_home:/home/computron:rw \
-      -v computron_state:/var/lib/computron_9000:rw \
-      -v "$(pwd):/opt/computron_9000:rw,z" \
+      --network=host \
+      $env_file_args \
+      -v "$state_dir/home:/home/computron:rw" \
+      -v "$state_dir/state:/var/lib/computron:rw" \
+      -v "$(pwd):/opt/computron_9000:rw" \
       computron_9000:latest
 
     echo "✅ Dev container started (source at /opt/computron_9000)"
+    echo "   State at: $state_dir/"
     echo "   Edit files locally, then: just container-restart-app"
+
+# Restart app server + inference server (desktop/VNC stay up)
+# Rebuild React UI inside the dev container
+container-rebuild-ui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if docker container inspect computron_virtual_computer &> /dev/null && \
+       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+        echo "🔧 Rebuilding UI..."
+        docker exec computron_virtual_computer \
+          bash -c "cd /opt/computron_9000/server/ui && npm run build"
+        echo "✅ UI rebuilt"
+    else
+        echo "❌ Container is not running. Start it with: just container-dev"
+        exit 1
+    fi
 
 # Restart app server + inference server (desktop/VNC stay up)
 container-restart-app:
     #!/usr/bin/env bash
     set -euo pipefail
-    if sudo podman container exists computron_virtual_computer && \
-       [ -n "$(sudo podman ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+    if docker container inspect computron_virtual_computer &> /dev/null && \
+       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
         echo "🔄 Restarting app + inference servers..."
         # Kill inference server by process name (PID file can be stale).
         # pkill exits 1 if no match — ignore that.
-        sudo podman exec computron_virtual_computer \
+        docker exec computron_virtual_computer \
           pkill -9 -f "inference_server.py" 2>/dev/null || true
-        sudo podman exec computron_virtual_computer \
+        docker exec computron_virtual_computer \
           rm -f /tmp/inference_server.pid 2>/dev/null || true
         # Kill app server (entrypoint auto-restarts in 2s)
-        sudo podman exec computron_virtual_computer \
+        docker exec computron_virtual_computer \
           pkill -f "python3.12 main.py" 2>/dev/null || true
         echo "✅ Servers restarting (app in 2s, inference on next request)"
     else
@@ -577,14 +599,14 @@ container-stop:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed"
         exit 1
     fi
-    
-    if sudo podman container exists computron_virtual_computer; then
+
+    if docker container inspect computron_virtual_computer &> /dev/null; then
         echo "🛑 Stopping container..."
-        sudo podman stop computron_virtual_computer
+        docker stop computron_virtual_computer
         echo "✅ Container stopped"
     else
         echo "ℹ️  Container 'computron_virtual_computer' is not running"
@@ -594,16 +616,16 @@ container-stop:
 container-shell:
     #!/usr/bin/env bash
     set -euo pipefail
-    
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
+
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed"
         exit 1
     fi
-    
-    if sudo podman container exists computron_virtual_computer; then
-        if [ -n "$(sudo podman ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+
+    if docker container inspect computron_virtual_computer &> /dev/null; then
+        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
             echo "🐚 Opening shell in container..."
-            sudo podman exec -it computron_virtual_computer bash
+            docker exec -it computron_virtual_computer bash
         else
             echo "❌ Container 'computron_virtual_computer' exists but is not running"
             echo "   Start it with: just container-start"
@@ -619,22 +641,20 @@ container-shell:
 container-status:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed"
         exit 1
     fi
-    
+
     echo "📊 Container Status:"
-    if sudo podman container exists computron_virtual_computer; then
+    if docker container inspect computron_virtual_computer &> /dev/null; then
         echo "   Name: computron_virtual_computer"
-        if [ -n "$(sudo podman ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
             echo "   Status: running"
             echo "   ✅ Container is running and ready"
             echo "   🐚 Access with: just container-shell"
         else
-            # Fallback: extract status from JSON (avoids Go templates in shell)
-            status=$(sudo podman container inspect computron_virtual_computer | grep -m1 '"Status"' | sed -E 's/.*"Status"\s*:\s*"([^"]+)".*/\1/')
-            status=${status:-unknown}
+            status=$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}' 2>/dev/null || echo "unknown")
             echo "   Status: $status"
             echo "   ⚠️  Container exists but is not running"
             echo "   🚀 Start with: just container-start"
@@ -649,7 +669,7 @@ publish registry="ghcr.io/lefoulkrod/computron_9000":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! sudo podman image exists computron_9000:latest; then
+    if ! docker image inspect computron_9000:latest &> /dev/null; then
         echo "❌ No local image. Run: just container-build"
         exit 1
     fi
@@ -659,17 +679,17 @@ publish registry="ghcr.io/lefoulkrod/computron_9000":
     tag="${branch}-${sha}"
 
     echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
-    sudo podman tag computron_9000:latest "{{registry}}:${tag}"
-    sudo podman tag computron_9000:latest "{{registry}}:${branch}-latest"
+    docker tag computron_9000:latest "{{registry}}:${tag}"
+    docker tag computron_9000:latest "{{registry}}:${branch}-latest"
 
     # Auto-login if GITHUB_PACKAGES_TOKEN is set
     if [ -n "${GITHUB_PACKAGES_TOKEN:-}" ]; then
-        echo "$GITHUB_PACKAGES_TOKEN" | sudo podman login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
+        echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
     fi
 
-    echo "🚀 Pushing ($(sudo podman images computron_9000:latest --format '{{{{.Size}}}}'))..."
-    sudo podman push "{{registry}}:${tag}"
-    sudo podman push "{{registry}}:${branch}-latest"
+    echo "🚀 Pushing ($(docker images computron_9000:latest --format '{{{{.Size}}}}'))..."
+    docker push "{{registry}}:${tag}"
+    docker push "{{registry}}:${branch}-latest"
 
     echo "✅ Published:"
     echo "   {{registry}}:${tag}"
@@ -677,17 +697,17 @@ publish registry="ghcr.io/lefoulkrod/computron_9000":
 
 # View app server logs (follow mode)
 container-logs:
-    sudo podman logs -f computron_virtual_computer
+    docker logs -f computron_virtual_computer
 
 # View inference server logs (follow mode)
 inference-logs:
-    sudo podman exec computron_virtual_computer tail -f /tmp/inference_server.log
+    docker exec computron_virtual_computer tail -f /tmp/inference_server.log
 
 # View both app + inference logs side by side
 logs:
     #!/usr/bin/env bash
     set -euo pipefail
-    sudo podman logs -f computron_virtual_computer 2>&1 | sed 's/^/[app] /' &
-    sudo podman exec computron_virtual_computer tail -f /tmp/inference_server.log 2>/dev/null | sed 's/^/[inference] /' &
+    docker logs -f computron_virtual_computer 2>&1 | sed 's/^/[app] /' &
+    docker exec computron_virtual_computer tail -f /tmp/inference_server.log 2>/dev/null | sed 's/^/[inference] /' &
     wait
 
