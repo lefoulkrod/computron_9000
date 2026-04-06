@@ -34,13 +34,15 @@ Conversations, memory, custom tools, and generated files now survive restarts.
 
 ### Enable GPU (image/music generation)
 
-Add your NVIDIA GPU and a [HuggingFace token](https://huggingface.co/settings/tokens) for image generation:
+Add your NVIDIA GPU and enable generation features:
 
 ```bash
 docker run -d --name computron --shm-size=256m \
   --network=host \
   --gpus all \
   -e HF_TOKEN=hf_your_token_here \
+  -e ENABLE_IMAGE_GEN=1 \
+  -e ENABLE_MUSIC_GEN=1 \
   -v computron_home:/home/computron \
   -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest
@@ -150,6 +152,8 @@ docker run -d --rm \
   --shm-size=256m \
   --network=host \
   -e HF_TOKEN=hf_your_token_here \
+  -e ENABLE_IMAGE_GEN=1 \
+  -e ENABLE_MUSIC_GEN=1 \
   -v computron_home:/home/computron \
   -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest
@@ -164,6 +168,8 @@ sudo podman run -d --rm \
   --shm-size=256m \
   --network=host \
   -e HF_TOKEN=hf_your_token_here \
+  -e ENABLE_IMAGE_GEN=1 \
+  -e ENABLE_MUSIC_GEN=1 \
   -v computron_home:/home/computron:rw \
   -v computron_state:/var/lib/computron:rw \
   ghcr.io/lefoulkrod/computron_9000:latest
@@ -185,6 +191,8 @@ Pass these with `-e` when running the container:
 | `HF_TOKEN` | For image gen | HuggingFace token. Required for FLUX.1 (gated model). |
 | `GITHUB_TOKEN` | No | GitHub personal access token for repo operations. |
 | `GITHUB_USER` | No | GitHub username (used with GITHUB_TOKEN). |
+| `ENABLE_IMAGE_GEN` | No | Set to `1` to enable image generation (requires GPU + HF_TOKEN). |
+| `ENABLE_MUSIC_GEN` | No | Set to `1` to enable music generation (requires GPU). |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for goal run notifications. |
 | `TELEGRAM_CHAT_ID` | No | Telegram chat ID to receive notifications. |
 

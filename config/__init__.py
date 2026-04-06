@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,9 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
+
+# Matches ${VAR_NAME:-default_value} or ${VAR_NAME}
+_ENV_VAR_PATTERN = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?\}$", re.DOTALL)
 
 
 class Settings(BaseModel):
@@ -57,9 +61,7 @@ class SearchGoogleConfig(BaseModel):
     no_save_state: bool = False
     timeout: int = 6000
     api_endpoint: str = "https://www.googleapis.com/customsearch/v1"
-    search_engine_id: str | None = Field(
-        default_factory=lambda: os.getenv("GOOGLE_SEARCH_ENGINE_ID"),
-    )
+    search_engine_id: str | None = None
 
 
 class HumanTypingConfig(BaseModel):
@@ -142,11 +144,9 @@ class AgentsConfig(BaseModel):
 class RedditConfig(BaseModel):
     """Reddit API configuration."""
 
-    client_id: str = Field(default_factory=lambda: os.getenv("REDDIT_CLIENT_ID", ""))
-    client_secret: str = Field(
-        default_factory=lambda: os.getenv("REDDIT_CLIENT_SECRET", ""),
-    )
-    user_agent: str = Field(default_factory=lambda: os.getenv("REDDIT_USER_AGENT", ""))
+    client_id: str = ""
+    client_secret: str = ""
+    user_agent: str = ""
 
 
 class DesktopConfig(BaseModel):
@@ -162,6 +162,13 @@ class DesktopConfig(BaseModel):
     vision_model: str | None = "qwen3.5:4b"
 
 
+class FeaturesConfig(BaseModel):
+    """Feature flags for optional capabilities."""
+
+    image_generation: bool = False
+    music_generation: bool = False
+
+
 class VirtualComputerConfig(BaseModel):
     """Configuration for the virtual computer environment."""
 
@@ -173,7 +180,7 @@ class LLMConfig(BaseModel):
 
     provider: str = "ollama"
     host: str | None = None
-    api_key: str | None = Field(default_factory=lambda: os.getenv("LLM_API_KEY"))
+    api_key: str | None = None
     base_url: str | None = None
 
 
@@ -230,6 +237,7 @@ class AppConfig(BaseModel):
 
     settings: Settings
     virtual_computer: VirtualComputerConfig
+    features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     reddit: RedditConfig = Field(default_factory=RedditConfig)
@@ -250,9 +258,68 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
+_YAML_BOOLEANS = {
+    "true": True, "yes": True, "on": True, "1": True,
+    "false": False, "no": False, "off": False, "0": False,
+}
+
+
+def _parse_yaml_scalar(value: str) -> Any:
+    """Convert a resolved env var string to its natural YAML type."""
+    lower = value.strip().lower()
+    if lower in _YAML_BOOLEANS:
+        return _YAML_BOOLEANS[lower]
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
+def _resolve_env_vars(data: Any) -> Any:
+    """Resolve ``${VAR:-default}`` patterns in parsed YAML data.
+
+    Walks the data tree. String values matching the pattern are replaced
+    with the env var value if set, or the default otherwise. Resolved
+    values are parsed as YAML scalars (bool, int, float) so Pydantic
+    receives the correct types. Empty strings become ``None``.
+    """
+    if isinstance(data, dict):
+        return {k: _resolve_env_vars(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_resolve_env_vars(item) for item in data]
+    if not isinstance(data, str):
+        return data
+    match = _ENV_VAR_PATTERN.match(data)
+    if not match:
+        return data
+    var_name = match.group(1)
+    has_default = match.group(2) is not None
+    default = match.group(2) or ""
+    value = os.getenv(var_name)
+    if value is not None and value.strip() != "":
+        return _parse_yaml_scalar(value)
+    # Env var not set or blank — use default.
+    # No :- clause at all (${VAR}) → None (truly unset).
+    if not has_default:
+        return None
+    # Explicit empty default (${VAR:-}) → empty string.
+    # Non-empty default (${VAR:-false}) → parsed scalar.
+    if default == "":
+        return ""
+    return _parse_yaml_scalar(default)
+
+
 @lru_cache(maxsize=1)
 def load_config() -> AppConfig:
     """Load application configuration from ``config.yaml``.
+
+    Values using ``${ENV_VAR:-default}`` syntax are resolved from the
+    environment before Pydantic validation.
 
     Returns:
         AppConfig: Parsed configuration dataclass.
@@ -268,12 +335,8 @@ def load_config() -> AppConfig:
         with path.open(encoding="utf-8") as f:
             data: dict[str, Any] = yaml.safe_load(f)
 
+        data = _resolve_env_vars(data)
         config = AppConfig(**data)
-        # Apply environment variable precedence: if LLM_HOST is set and non-blank,
-        # override any YAML-provided llm.host value.
-        env_host = os.getenv("LLM_HOST")
-        if env_host is not None and env_host.strip() != "":
-            config.llm.host = env_host
         logger.info("Successfully loaded configuration")
 
     except FileNotFoundError as exc:

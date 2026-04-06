@@ -59,14 +59,22 @@ def _ensure_builtins() -> None:
         return
     _builtins_registered = True
 
+    from config import load_config
+
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
     from skills.desktop import _SKILL as desktop_skill
-    from skills.image_generation import _SKILL as image_skill
-    from skills.music_generation import _SKILL as music_skill
 
-    for skill in (browser_skill, coder_skill, desktop_skill, image_skill, music_skill):
+    for skill in (browser_skill, coder_skill, desktop_skill):
         register_skill(skill)
+
+    features = load_config().features
+    if features.image_generation:
+        from skills.image_generation import _SKILL as image_skill
+        register_skill(image_skill)
+    if features.music_generation:
+        from skills.music_generation import _SKILL as music_skill
+        register_skill(music_skill)
 
 
 def get_skill(name: str) -> Skill | None:

@@ -476,16 +476,9 @@ container-start:
         echo "🔑 GITHUB_TOKEN detected, passing to container"
     fi
 
-    # GPU support: use --gpus all if nvidia-container-toolkit is available
-    gpu_args=""
-    if docker info 2>/dev/null | grep -q "Runtimes.*nvidia"; then
-        gpu_args="--gpus all"
-        echo "🎮 NVIDIA GPU detected, enabling GPU passthrough"
-    fi
-
     docker run -d --rm \
       --name computron_virtual_computer \
-      $gpu_args \
+      --gpus all \
       --shm-size=256m \
       --network=host \
       $hf_token_args \
@@ -530,20 +523,13 @@ container-dev:
         env_file_args="--env-file .env"
     fi
 
-    # GPU support: use --gpus all if nvidia-container-toolkit is available
-    gpu_args=""
-    if docker info 2>/dev/null | grep -q "Runtimes.*nvidia"; then
-        gpu_args="--gpus all"
-        echo "🎮 NVIDIA GPU detected, enabling GPU passthrough"
-    fi
-
     # Bind mount state to ~/.computron_9000/ for easy host access during dev
     state_dir="$HOME/.computron_9000"
     mkdir -p "$state_dir/state" "$state_dir/home"
 
     docker run -d --rm \
       --name computron_virtual_computer \
-      $gpu_args \
+      --gpus all \
       --shm-size=256m \
       --network=host \
       $env_file_args \

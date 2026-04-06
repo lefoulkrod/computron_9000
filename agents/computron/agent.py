@@ -9,6 +9,7 @@ from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
 from agents.goal_planner import goal_planner_tool
+from config import load_config
 from tools.memory import forget, remember
 from tools.virtual_computer import run_bash_cmd
 
@@ -19,8 +20,23 @@ DESCRIPTION = (
     "COMPUTRON_9000 is a multi-modal multi-agent multi-model AI system designed "
     "to assist with a wide range of tasks."
 )
+
+
+def _build_skills_line() -> str:
+    """Build the spawn_agent skills list based on enabled features."""
+    skills = ['"coder" (file I/O, bash, code editing)',
+              '"browser" (web browsing)']
+    features = load_config().features
+    if features.image_generation:
+        skills.append('"image_generation" (image creation)')
+    if features.music_generation:
+        skills.append('"music_generation" (song/instrumental creation)')
+    skills.append('"desktop" (GUI control)')
+    return ", ".join(skills)
+
+
 SYSTEM_PROMPT = dedent(
-    """
+    """\
         You are COMPUTRON_9000, an orchestrator. Decompose tasks and delegate to sub-agents.
 
         PLANNING — before delegating anything, think through the full task:
@@ -70,10 +86,8 @@ SYSTEM_PROMPT = dedent(
           Use for GUI applications like LibreOffice, GIMP, file managers, or anything
           that needs a graphical interface beyond the web browser.
         - spawn_agent(instructions, skills, agent_name) — general-purpose sub-agent with
-          dynamically composed skills. Available skills: "coder" (file I/O, bash, code editing),
-          "browser" (web browsing), "image_generation" (image creation),
-          "music_generation" (song/instrumental creation),
-          "desktop" (GUI control). Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
+          dynamically composed skills. Available skills: {skills_line}.
+          Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
           Sub-agents share /home/computron/.
         For quick file ops in /home/computron/ (read, list, move, check output), use
         run_bash_cmd directly. Delegate to COMPUTER_AGENT for code, asset generation,
@@ -102,8 +116,7 @@ SYSTEM_PROMPT = dedent(
         scratchpad is the reliable way to keep important data available.
 
         Respond in Markdown. Brief rationale before tool calls; short summary after.
-        """
-)
+        """).format(skills_line=_build_skills_line())
 TOOLS = [
     run_bash_cmd,
     computer_agent_tool,

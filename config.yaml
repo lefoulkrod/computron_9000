@@ -3,12 +3,17 @@ settings:
 virtual_computer:
   home_dir: /home/computron
 
+features:
+  image_generation: ${ENABLE_IMAGE_GEN:-false}
+  music_generation: ${ENABLE_MUSIC_GEN:-false}
+
 tools:
   web:
     search_google:
       state_file: ".browser-state.json"
       no_save_state: false
       timeout: 6000
+      search_engine_id: ${GOOGLE_SEARCH_ENGINE_ID}
   browser:
     channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
     headless: false  # true = no GUI, false = visible browser window
@@ -37,6 +42,11 @@ agents:
     think: false
   file_system:
     think: false
+
+reddit:
+  client_id: ${REDDIT_CLIENT_ID:-}
+  client_secret: ${REDDIT_CLIENT_SECRET:-}
+  user_agent: ${REDDIT_USER_AGENT:-}
 
 desktop:
   display: ":0"
@@ -73,10 +83,10 @@ skills:
   max_skills: 200
   single_conversation_extraction: true
 
-# LLM settings. If LLM_HOST env var is set and non-blank, it overrides this value.
-# Otherwise, this YAML value is used as the default.
 llm:
   provider: ollama
+  host: ${LLM_HOST}
+  api_key: ${LLM_API_KEY}
 
 parallel:
   enabled: true
