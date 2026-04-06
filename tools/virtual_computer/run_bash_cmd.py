@@ -74,8 +74,8 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
             status="running",
         )))
 
-        proc = await asyncio.create_subprocess_shell(
-            strict_cmd,
+        proc = await asyncio.create_subprocess_exec(
+            "bash", "-c", strict_cmd,
             cwd=workdir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
