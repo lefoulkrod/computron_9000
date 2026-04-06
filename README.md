@@ -32,9 +32,17 @@ docker run -d --name computron --shm-size=256m \
 
 Conversations, memory, custom tools, and generated files now survive restarts.
 
-### Enable GPU (image/music generation)
+### Enable GPU Features
 
-Add your NVIDIA GPU and enable generation features:
+Image generation, music generation, and visual grounding are **disabled by default**. They require an NVIDIA GPU and are enabled individually via environment variables:
+
+| Feature | Env Var | Requires |
+|---------|---------|----------|
+| Image generation | `ENABLE_IMAGE_GEN=1` | GPU + `HF_TOKEN` |
+| Music generation | `ENABLE_MUSIC_GEN=1` | GPU |
+| Visual grounding | `ENABLE_GROUNDING=1` | GPU |
+
+Example with image and music generation enabled:
 
 ```bash
 docker run -d --name computron --shm-size=256m \
@@ -50,6 +58,14 @@ docker run -d --name computron --shm-size=256m \
 
 Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). See [GPU Setup](#gpu-setup) for install steps.
 
+### Experimental Features
+
+These features are disabled by default and may change or be removed in future versions.
+
+| Feature | Env Var | Description |
+|---------|---------|-------------|
+| Desktop agent | `ENABLE_DESKTOP=1` | GUI automation — the agent can see and interact with a full Linux desktop (Xfce4) via mouse and keyboard. Works best with GPU and `ENABLE_GROUNDING=1` for precise visual targeting. |
+
 ---
 
 ## Features
@@ -61,7 +77,6 @@ Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-nat
 - **Custom tools** — the agent can write its own tools and reuse them across sessions
 - **Autonomous tasks** — schedule recurring goals that run in the background (with optional Telegram notifications)
 - **Memory** — persistent memory across conversations
-- **Text-to-speech** — Kokoro TTS, runs on CPU, no setup needed
 
 ### GPU Features (optional)
 
