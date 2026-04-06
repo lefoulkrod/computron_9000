@@ -25,6 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
+from server._feature_routes import register_feature_routes
 from server._task_routes import register_task_routes
 from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
 from sdk.providers import get_provider
@@ -364,6 +365,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("GET", "/api/memory", list_memory_handler)
     app.router.add_route("DELETE", "/api/memory/{key}", delete_memory_handler)
     app.router.add_route("POST", "/api/memory/{key}/hidden", set_memory_hidden_handler)
+
+    # Feature flags
+    register_feature_routes(app)
 
     # Desktop API
     app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)
