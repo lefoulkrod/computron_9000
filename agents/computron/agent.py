@@ -7,7 +7,6 @@ from textwrap import dedent
 
 from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
-from agents.desktop import desktop_agent_tool
 from agents.goal_planner import goal_planner_tool
 from config import load_config
 from tools.memory import forget, remember
@@ -22,21 +21,44 @@ DESCRIPTION = (
 )
 
 
-def _build_skills_line() -> str:
-    """Build the spawn_agent skills list based on enabled features."""
+def _build_system_prompt() -> str:
+    """Build the system prompt with only enabled features mentioned."""
+    features = load_config().features
+
+    # Build spawn_agent skills list
     skills = ['"coder" (file I/O, bash, code editing)',
               '"browser" (web browsing)']
-    features = load_config().features
     if features.image_generation:
         skills.append('"image_generation" (image creation)')
     if features.music_generation:
         skills.append('"music_generation" (song/instrumental creation)')
-    skills.append('"desktop" (GUI control)')
-    return ", ".join(skills)
+    if features.desktop:
+        skills.append('"desktop" (GUI control)')
+    skills_line = ", ".join(skills)
 
+    # Build agents section
+    agents_lines = dedent("""\
+        AGENTS:
+        - COMPUTER_AGENT — full access to the virtual computer. Writes code, generates
+          assets (audio, SVGs via Python/ffmpeg/etc.), edits files, runs commands,
+          and searches codebases. Use for any work that involves creating or modifying files.
 
-SYSTEM_PROMPT = dedent(
-    """\
+        - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
+          Use ONLY for web browsing — never for creating files or assets.""")
+
+    if features.desktop:
+        agents_lines += dedent("""
+        - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.
+          Use for GUI applications like LibreOffice, GIMP, file managers, or anything
+          that needs a graphical interface beyond the web browser.""")
+
+    agents_lines += dedent("""
+        - spawn_agent(instructions, skills, agent_name) — general-purpose sub-agent with
+          dynamically composed skills. Available skills: {skills_line}.
+          Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
+          Sub-agents share /home/computron/.""").format(skills_line=skills_line)
+
+    return dedent("""\
         You are COMPUTRON_9000, an orchestrator. Decompose tasks and delegate to sub-agents.
 
         PLANNING — before delegating anything, think through the full task:
@@ -75,20 +97,7 @@ SYSTEM_PROMPT = dedent(
         every file path, result, measurement, or detail the next agent will need and paste
         them directly into the next delegation prompt. Do not summarise — quote verbatim.
 
-        AGENTS:
-        - COMPUTER_AGENT — full access to the virtual computer. Writes code, generates
-          assets (audio, SVGs via Python/ffmpeg/etc.), edits files, runs commands,
-          and searches codebases. Use for any work that involves creating or modifying files.
-
-        - BROWSER_AGENT — the ONLY way to browse the web. Sub-agents cannot browse.
-          Use ONLY for web browsing — never for creating files or assets.
-        - DESKTOP_AGENT — controls a full Ubuntu desktop (Xfce4) with mouse and keyboard.
-          Use for GUI applications like LibreOffice, GIMP, file managers, or anything
-          that needs a graphical interface beyond the web browser.
-        - spawn_agent(instructions, skills, agent_name) — general-purpose sub-agent with
-          dynamically composed skills. Available skills: {skills_line}.
-          Use descriptive UPPERCASE names (e.g. DATA_ANALYST).
-          Sub-agents share /home/computron/.
+        {agents}
         For quick file ops in /home/computron/ (read, list, move, check output), use
         run_bash_cmd directly. Delegate to COMPUTER_AGENT for code, asset generation,
         and multi-step file work.
@@ -116,16 +125,27 @@ SYSTEM_PROMPT = dedent(
         scratchpad is the reliable way to keep important data available.
 
         Respond in Markdown. Brief rationale before tool calls; short summary after.
-        """).format(skills_line=_build_skills_line())
-TOOLS = [
-    run_bash_cmd,
-    computer_agent_tool,
-    browser_agent_tool,
-    desktop_agent_tool,
-    remember,
-    forget,
-    goal_planner_tool,
-]
+        """).format(agents=agents_lines)
+
+
+def _build_tools() -> list:
+    """Build the tools list with only enabled features included."""
+    tools = [
+        run_bash_cmd,
+        computer_agent_tool,
+        browser_agent_tool,
+        remember,
+        forget,
+        goal_planner_tool,
+    ]
+    if load_config().features.desktop:
+        from agents.desktop import desktop_agent_tool
+        tools.append(desktop_agent_tool)
+    return tools
+
+
+SYSTEM_PROMPT = _build_system_prompt()
+TOOLS = _build_tools()
 
 __all__ = [
     "DESCRIPTION",

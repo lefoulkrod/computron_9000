@@ -63,12 +63,14 @@ def _ensure_builtins() -> None:
 
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
-    from skills.desktop import _SKILL as desktop_skill
 
-    for skill in (browser_skill, coder_skill, desktop_skill):
+    for skill in (browser_skill, coder_skill):
         register_skill(skill)
 
     features = load_config().features
+    if features.desktop:
+        from skills.desktop import _SKILL as desktop_skill
+        register_skill(desktop_skill)
     if features.image_generation:
         from skills.image_generation import _SKILL as image_skill
         register_skill(image_skill)

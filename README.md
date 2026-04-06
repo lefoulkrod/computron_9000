@@ -193,6 +193,8 @@ Pass these with `-e` when running the container:
 | `GITHUB_USER` | No | GitHub username (used with GITHUB_TOKEN). |
 | `ENABLE_IMAGE_GEN` | No | Set to `1` to enable image generation (requires GPU + HF_TOKEN). |
 | `ENABLE_MUSIC_GEN` | No | Set to `1` to enable music generation (requires GPU). |
+| `ENABLE_DESKTOP` | No | Set to `1` to enable the desktop agent (GUI automation via Xfce). |
+| `ENABLE_GROUNDING` | No | Set to `1` to enable visual grounding in browser/desktop (requires GPU). |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for goal run notifications. |
 | `TELEGRAM_CHAT_ID` | No | Telegram chat ID to receive notifications. |
 

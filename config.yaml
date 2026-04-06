@@ -6,6 +6,8 @@ virtual_computer:
 features:
   image_generation: ${ENABLE_IMAGE_GEN:-false}
   music_generation: ${ENABLE_MUSIC_GEN:-false}
+  desktop: ${ENABLE_DESKTOP:-false}
+  visual_grounding: ${ENABLE_GROUNDING:-false}
 
 tools:
   web:

@@ -167,6 +167,8 @@ class FeaturesConfig(BaseModel):
 
     image_generation: bool = False
     music_generation: bool = False
+    desktop: bool = False
+    visual_grounding: bool = False
 
 
 class VirtualComputerConfig(BaseModel):
