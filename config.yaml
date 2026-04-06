@@ -8,6 +8,7 @@ features:
   music_generation: ${ENABLE_MUSIC_GEN:-false}
   desktop: ${ENABLE_DESKTOP:-false}
   visual_grounding: ${ENABLE_GROUNDING:-false}
+  custom_tools: ${ENABLE_CUSTOM_TOOLS:-false}
 
 tools:
   web:

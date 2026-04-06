@@ -62,10 +62,9 @@ def _build_system_prompt() -> str:
         You are COMPUTRON_9000, an orchestrator. Decompose tasks and delegate to sub-agents.
 
         PLANNING — before delegating anything, think through the full task:
-        1. Check for existing custom tools first (lookup_custom_tools or run_custom_tool).
-        2. Break the task into concrete, ordered steps.
-        3. For each step, decide which agent handles it and what inputs it needs.
-        4. Identify which steps produce artifacts (files, data, paths) that later steps depend on.
+        1. {custom_tools_planning}Break the task into concrete, ordered steps.
+        2. For each step, decide which agent handles it and what inputs it needs.
+        3. Identify which steps produce artifacts (files, data, paths) that later steps depend on.
 
         DELEGATION — sub-agents are stateless. They have ZERO context — no conversation
         history, no memory of previous agents, no knowledge of what the user said. Their
@@ -102,9 +101,7 @@ def _build_system_prompt() -> str:
         run_bash_cmd directly. Delegate to COMPUTER_AGENT for code, asset generation,
         and multi-step file work.
 
-        CUSTOM TOOLS — always prefer existing tools over new code. Only create new tools
-        for genuinely reusable, parameterized operations. Test after creating.
-
+        {custom_tools_section}
         OUTPUT — call send_file(path) for every file you or a sub-agent creates.
         play_audio(path) plays audio in the browser. Never just mention the path.
 
@@ -125,7 +122,19 @@ def _build_system_prompt() -> str:
         scratchpad is the reliable way to keep important data available.
 
         Respond in Markdown. Brief rationale before tool calls; short summary after.
-        """).format(agents=agents_lines)
+        """).format(
+        agents=agents_lines,
+        custom_tools_planning=(
+            "Check for existing custom tools first (lookup_custom_tools or run_custom_tool).\n"
+            "        2. "
+            if features.custom_tools else ""
+        ),
+        custom_tools_section=(
+            "CUSTOM TOOLS — always prefer existing tools over new code. Only create new tools\n"
+            "        for genuinely reusable, parameterized operations. Test after creating.\n"
+            if features.custom_tools else ""
+        ),
+    )
 
 
 def _build_tools() -> list:

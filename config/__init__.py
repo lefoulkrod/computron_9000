@@ -169,6 +169,7 @@ class FeaturesConfig(BaseModel):
     music_generation: bool = False
     desktop: bool = False
     visual_grounding: bool = False
+    custom_tools: bool = False
 
 
 class VirtualComputerConfig(BaseModel):

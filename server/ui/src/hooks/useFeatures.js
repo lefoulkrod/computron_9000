@@ -5,6 +5,7 @@ const DEFAULTS = {
     music_generation: false,
     desktop: false,
     visual_grounding: false,
+    custom_tools: false,
 };
 
 /**
