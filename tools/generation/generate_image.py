@@ -47,7 +47,7 @@ async def generate_image(
 
     params_json = json.dumps({"model": model, "size": size})
     script = (
-        "import sys; sys.path.insert(0, '/opt/computron_9000/container'); "
+        "import sys; sys.path.insert(0, '/opt/computron/container'); "
         "import json; "
         "from inference_client import generate_stream; "
         "[print(json.dumps(e), flush=True) for e in generate_stream(%r, %r, **%s)]"

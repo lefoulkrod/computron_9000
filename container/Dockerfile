@@ -221,7 +221,7 @@ RUN chmod 755 /opt/desktop/a11y_tree.py && \
     mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # ── App dependencies (cached unless manifests change) ────────────────────────
-WORKDIR /opt/computron_9000
+WORKDIR /opt/computron
 COPY pyproject.toml uv.lock ./
 RUN uv pip install --system --no-cache -e . 2>/dev/null || true
 
@@ -229,13 +229,13 @@ COPY server/ui/package.json server/ui/package-lock.json server/ui/
 RUN cd server/ui && npm ci
 
 # ── App source ───────────────────────────────────────────────────────────────
-COPY . /opt/computron_9000/
+COPY . /opt/computron/
 RUN uv pip install --system --no-cache -e .
 RUN cd server/ui && npm run build
 
 # Lock down app directory
-RUN chown -R root:root /opt/computron_9000 && \
-    chmod -R 755 /opt/computron_9000
+RUN chown -R root:root /opt/computron && \
+    chmod -R 755 /opt/computron
 
 # ── Entrypoint (late COPY so edits don't bust app/UI cache) ─────────────────
 COPY container/entrypoint.sh /opt/entrypoint.sh

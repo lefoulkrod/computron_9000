@@ -23,7 +23,7 @@ Host
 
 | Path | Owner | Purpose |
 |------|-------|---------|
-| `/opt/computron_9000` | root | App source (read-only in prod, mounted in dev) |
+| `/opt/computron` | root | App source (read-only in prod, mounted in dev) |
 | `/home/computron` | computron | Agent workspace, downloads, generated files |
 | `/var/lib/computron` | computron | Conversations, memory, custom tools, goals |
 
@@ -49,7 +49,7 @@ just container-logs
 just container-shell
 ```
 
-The `container-dev` recipe mounts your local source at `/opt/computron_9000` inside the container. Edit files on your host, restart the app server to pick up changes. The desktop and VNC stay running across app restarts.
+The `container-dev` recipe mounts your local source at `/opt/computron` inside the container. Edit files on your host, restart the app server to pick up changes. The desktop and VNC stay running across app restarts.
 
 **Note:** `container-restart-app` only restarts the Python process. Environment variable changes (`.env`) require a full container restart since they're baked in at `docker run` time.
 

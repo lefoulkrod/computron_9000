@@ -171,7 +171,7 @@ async def generate_music(
     params_repr = repr(params)
 
     script = (
-        "import sys; sys.path.insert(0, '/opt/computron_9000/container'); "
+        "import sys; sys.path.insert(0, '/opt/computron/container'); "
         "import json; "
         "from inference_client import generate_stream; "
         "[print(json.dumps(e), flush=True) for e in generate_stream('audio', %r, **%s)]"

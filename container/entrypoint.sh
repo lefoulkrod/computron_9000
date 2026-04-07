@@ -70,7 +70,7 @@ echo "Desktop ready on :99, VNC on 5900, noVNC on 6080"
 _shutdown=0
 trap '_shutdown=1; echo "Received SIGTERM, shutting down..."' SIGTERM
 
-cd /opt/computron_9000
+cd /opt/computron
 while [ $_shutdown -eq 0 ]; do
     echo "Starting app server..."
     gosu computron python3.12 main.py &
