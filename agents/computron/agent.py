@@ -9,7 +9,13 @@ from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
 from agents.goal_planner import goal_planner_tool
-from tools.memory import forget, remember
+from tools.memory import (
+    forget,
+    get_related_memories,
+    query_memories,
+    remember,
+    search_memories,
+)
 from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
@@ -92,7 +98,16 @@ SYSTEM_PROMPT = dedent(
         UPLOADED FILES — written to /home/computron/uploads/. Use describe_image(path, prompt)
         for image analysis (PNG, JPEG, GIF, WebP, BMP, TIFF).
 
-        MEMORY — remember(key, value) / forget(key). Store user preferences proactively.
+        MEMORY — Three-tier memory system for persistent storage:
+        - remember(key, value, category="semantic", tags=[], confidence=1.0) — Store a memory.
+          Categories: "semantic" (long-term facts/preferences), "episodic" (conversations),
+          "working" (session data). Tags help with organization. Confidence is 0.0-1.0.
+        - forget(key) — Remove a memory.
+        - search_memories(query, limit=10, category=None, tags=None, min_confidence=0.0) —
+          Fuzzy search across keys and values with optional filtering.
+        - query_memories(tags=None, category=None, created_after=None, created_before=None,
+          min_confidence=None, limit=100) — Structured queries with filters.
+        - get_related_memories(key, limit=5) — Find memories related by tags/category.
 
         SCRATCHPAD — save_to_scratchpad(key, value) / recall_from_scratchpad(key).
         Use for session data: intermediate results, sub-agent outputs, data you'll
@@ -111,6 +126,9 @@ TOOLS = [
     desktop_agent_tool,
     remember,
     forget,
+    search_memories,
+    query_memories,
+    get_related_memories,
     goal_planner_tool,
 ]
 
