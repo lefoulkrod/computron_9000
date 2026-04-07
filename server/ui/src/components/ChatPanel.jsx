@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import ChatMessages from './ChatMessages.jsx';
 import ChatInput from './ChatInput.jsx';
 import ContextUsageBadge from './ContextUsageBadge.jsx';
@@ -14,6 +14,9 @@ import styles from './ChatPanel.module.css';
  * header so the user can navigate to the full agent network view.
  */
 export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork }) {
+    const [draft, setDraft] = useState('');
+    const clearDraft = useCallback(() => setDraft(''), []);
+
     return (
         <div className={styles.panel}>
             <div className={styles.header}>
@@ -30,12 +33,14 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                     </button>
                 )}
             </div>
-            <ChatMessages messages={messages} onPreview={onPreview} />
+            <ChatMessages messages={messages} onPreview={onPreview} onStarterSelect={setDraft} />
             <ChatInput
                 onSend={onSend}
                 onStop={onStop}
                 isStreaming={isStreaming}
                 attachment={attachment}
+                draft={draft}
+                onDraftConsumed={clearDraft}
             />
         </div>
     );

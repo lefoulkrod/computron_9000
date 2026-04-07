@@ -1,4 +1,5 @@
 import Message from './Message.jsx';
+import StarterPrompts from './StarterPrompts.jsx';
 import useAutoScroll from '../hooks/useAutoScroll.js';
 import { useAgentState } from '../hooks/useAgentState.jsx';
 import styles from './ChatMessages.module.css';
@@ -11,7 +12,7 @@ import styles from './ChatMessages.module.css';
  * (same source as the activity view). Falls back to msg.entries for
  * loaded conversation history where no agent state exists.
  */
-export default function ChatMessages({ messages, onPreview }) {
+export default function ChatMessages({ messages, onPreview, onStarterSelect }) {
     const { agents, rootId } = useAgentState();
     // Scroll when messages change OR when the root agent's content grows.
     // We track the last entry's text length so scroll fires as tokens
@@ -21,16 +22,24 @@ export default function ChatMessages({ messages, onPreview }) {
     const scrollKey = lastEntry ? (lastEntry.content?.length || lastEntry.thinking?.length || 0) : 0;
     const { ref, onScroll } = useAutoScroll([messages, rootLog?.length, scrollKey]);
 
+    const isEmpty = messages.length === 0;
+
     return (
         <div className={styles.chatMessages} id="chatMessages" ref={ref} onScroll={onScroll}>
-            {messages.map((msg, idx) => {
-                if (msg.role === 'assistant' && msg.agentId) {
-                    const entries = agents[msg.agentId]?.activityLog;
-                    return <Message key={msg.id || idx} {...msg} entries={entries} onPreview={onPreview} />;
-                }
-                return <Message key={msg.id || idx} {...msg} onPreview={onPreview} />;
-            })}
-            <div />
+            {isEmpty ? (
+                <StarterPrompts onSelect={onStarterSelect} />
+            ) : (
+                <>
+                    {messages.map((msg, idx) => {
+                        if (msg.role === 'assistant' && msg.agentId) {
+                            const entries = agents[msg.agentId]?.activityLog;
+                            return <Message key={msg.id || idx} {...msg} entries={entries} onPreview={onPreview} />;
+                        }
+                        return <Message key={msg.id || idx} {...msg} onPreview={onPreview} />;
+                    })}
+                    <div />
+                </>
+            )}
         </div>
     );
 }
