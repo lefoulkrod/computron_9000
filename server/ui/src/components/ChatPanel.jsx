@@ -33,7 +33,7 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                     </button>
                 )}
             </div>
-            <ChatMessages messages={messages} onPreview={onPreview} onStarterSelect={setDraft} />
+            <ChatMessages messages={messages} onPreview={onPreview} onStarterSelect={(text) => onSend(text)} />
             <ChatInput
                 onSend={onSend}
                 onStop={onStop}

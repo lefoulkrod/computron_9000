@@ -2,7 +2,7 @@
 
 ## Architecture
 
-Computron 9000 runs as a single container. The app server (aiohttp + React), desktop environment (Xfce + VNC), browser (Chrome), and inference models all live inside one image. There is no "host mode" — all development happens through the container.
+Computron 9000 runs as a single container. The app server (aiohttp + React), desktop environment (Xfce + VNC), browser (Chrome), and inference models all live inside one image. Ollama runs on the host and is accessed via `--network=host`.
 
 ```
 Container (everything runs as computron)
@@ -15,7 +15,7 @@ Container (everything runs as computron)
   Inference (GPU models for image/music/video/grounding)
 
 Host
-  Ollama (:11434) — LLM inference
+  Ollama — LLM inference (accessed at localhost:11434 via --network=host)
   Docker — container runtime
 ```
 
@@ -39,23 +39,44 @@ just container-dev
 # After editing Python files, restart the app server:
 just container-restart-app
 
+# After editing .env (feature flags, tokens), restart the container:
+just container-stop && just container-dev
+
 # Watch logs:
-docker logs -f computron_virtual_computer
+just container-logs
 
 # Shell into the container:
 just container-shell
 ```
 
-The `container-dev` recipe mounts your local source at `/opt/computron_9000` inside the container. Edit files on your host, restart the app server to pick up changes. The desktop and VNC stay running across restarts.
+The `container-dev` recipe mounts your local source at `/opt/computron_9000` inside the container. Edit files on your host, restart the app server to pick up changes. The desktop and VNC stay running across app restarts.
 
-### Config Files
+**Note:** `container-restart-app` only restarts the Python process. Environment variable changes (`.env`) require a full container restart since they're baked in at `docker run` time.
 
-- `config.yaml` — container paths (`/var/lib/computron`, `/home/computron`).
+### Config
+
+- `config.yaml` — all configuration. Uses `${ENV_VAR:-default}` syntax for env var overrides. This is the single source of truth for what env vars the app reads.
+- `.env` — local dev overrides (gitignored). Passed to the container via `--env-file`.
+- `config.dev.yaml` — optional path override for dev (gitignored).
+
+### Feature Flags
+
+Optional capabilities are disabled by default and enabled via env vars:
+
+| Feature | Env Var | Requires |
+|---------|---------|----------|
+| Image generation | `ENABLE_IMAGE_GEN=1` | GPU + HF_TOKEN |
+| Music generation | `ENABLE_MUSIC_GEN=1` | GPU |
+| Desktop agent | `ENABLE_DESKTOP=1` | — |
+| Visual grounding | `ENABLE_GROUNDING=1` | GPU |
+| Custom tools | `ENABLE_CUSTOM_TOOLS=1` | — |
+
+Set these in `.env` for dev. Feature flags gate: tool registration, agent system prompts, skill registry, and UI elements.
 
 ## Project Structure
 
 ```
-agents/       Agent implementations (ollama, browser, coder, web, deep_research)
+agents/       Agent implementations (computron, browser, coder, desktop, deep_research)
 tools/        Tool modules (browser, desktop, virtual_computer, generation, memory, custom_tools)
 server/       aiohttp backend + React UI (server/ui/)
 models/       Model configuration and completion helpers
@@ -118,23 +139,12 @@ just ui-build  # Production build
 just ui-test   # Vitest
 ```
 
-## Container Build
+## Container Build & Publish
 
 ```sh
 just container-build   # Build image
+just publish           # Tag and push to ghcr.io/lefoulkrod/computron_9000
 ```
-
-The Dockerfile layers are ordered for cache efficiency:
-1. System packages (apt) — rarely changes
-2. Python 3.12 setup
-3. Agent packages (pip) — general-purpose libraries
-4. PyTorch + CUDA (~2.5 GB) — separate layer
-5. Image gen deps (diffusers)
-6. Music gen deps (ACE-Step)
-7. Pre-downloaded models (TAESD, Kokoro)
-8. Users, permissions, Xfce config
-9. App dependencies (cached on manifest change)
-10. App source + UI build (changes every build)
 
 ## Justfile Reference
 
@@ -148,6 +158,8 @@ Run `just` to see all available commands. Key ones:
 | `just container-restart-app` | Restart app server (desktop stays up) |
 | `just container-stop` | Stop the container |
 | `just container-shell` | Shell into the container |
+| `just container-logs` | Tail app logs |
+| `just publish` | Tag and push image to registry |
 | `just test` | Run all tests |
 | `just test-unit` | Run unit tests only |
 | `just test-file <path>` | Run tests for a specific file |
