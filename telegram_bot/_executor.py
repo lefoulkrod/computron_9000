@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Coroutine
 
 from aiogram import Bot
 from aiogram.types import FSInputFile, Message
 
 from agents.types import Data
 from sdk.events import AgentEvent
-from server.message_handler import handle_user_message
 from telegram_bot._formatter import TelegramFormatter
 from telegram_bot._state import ConversationMap
 
@@ -19,6 +18,10 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# Type alias for the handle_user_message callable.
+# AsyncGenerator[AgentEvent, None] — same signature as server.message_handler.handle_user_message
+HandleUserMessageFn = Callable[..., Coroutine[Any, Any, AsyncGenerator[AgentEvent, None]]]
 
 __all__ = ["TelegramTurnExecutor"]
 
@@ -28,13 +31,19 @@ class TelegramTurnExecutor:
 
     Usage::
 
-        executor = TelegramTurnExecutor(bot=bot, state=state)
+        executor = TelegramTurnExecutor(bot=bot, state=state, handle_fn=handle_user_message)
         await executor.execute(chat_id, text)
     """
 
-    def __init__(self, bot: Bot, state: ConversationMap) -> None:
+    def __init__(
+        self,
+        bot: Bot,
+        state: ConversationMap,
+        handle_fn: HandleUserMessageFn,
+    ) -> None:
         self._bot = bot
         self._state = state
+        self._handle_fn = handle_fn
         self._formatter = TelegramFormatter()
 
     # -- public API -----------------------------------------------------
@@ -64,7 +73,7 @@ class TelegramTurnExecutor:
         collected_files: list[Path] = []
 
         try:
-            async for event in handle_user_message(
+            async for event in await self._handle_fn(
                 conversation_id=conversation_id,
                 user_message=text,
                 agent_id=agent_id,

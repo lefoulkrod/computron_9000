@@ -59,7 +59,12 @@ class TelegramBotRunner:
                 logger.warning("TELEGRAM_CHAT_ID is not an integer: %s", env_chat_id)
 
         self._bot = Bot(token=token)
-        self._executor = TelegramTurnExecutor(bot=self._bot, state=self._state)
+
+        from server.message_handler import handle_user_message
+
+        self._executor = TelegramTurnExecutor(
+            bot=self._bot, state=self._state, handle_fn=handle_user_message,
+        )
         self._allowed_chat_ids = allowed
 
         # Register handlers
