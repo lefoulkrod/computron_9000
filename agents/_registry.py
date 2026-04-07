@@ -18,12 +18,6 @@ from agents.computron import (
     SYSTEM_PROMPT as _COMPUTRON_PROMPT,
     TOOLS as _COMPUTRON_TOOLS,
 )
-from agents.computron_skills import (
-    DESCRIPTION as _SKILLS_DESCRIPTION,
-    NAME as _SKILLS_NAME,
-    SYSTEM_PROMPT as _SKILLS_PROMPT,
-    TOOLS as _SKILLS_TOOLS,
-)
 from agents.goal_planner import (
     DESCRIPTION as _PLANNER_DESCRIPTION,
     NAME as _PLANNER_NAME,
@@ -36,7 +30,6 @@ _AGENT_REGISTRY: dict[str, tuple[str, str, str, list]] = {
     "computron": (_COMPUTRON_NAME, _COMPUTRON_DESCRIPTION, _COMPUTRON_PROMPT, _COMPUTRON_TOOLS),
     "browser": (_BROWSER_NAME, _BROWSER_DESCRIPTION, _BROWSER_PROMPT, _BROWSER_TOOLS),
     "coder": (_CODER_NAME, _CODER_DESCRIPTION, _CODER_PROMPT, _CODER_TOOLS),
-    "computron_skills": (_SKILLS_NAME, _SKILLS_DESCRIPTION, _SKILLS_PROMPT, _SKILLS_TOOLS),
     "goal_planner": (_PLANNER_NAME, _PLANNER_DESCRIPTION, _PLANNER_PROMPT, _PLANNER_TOOLS),
 }
 
