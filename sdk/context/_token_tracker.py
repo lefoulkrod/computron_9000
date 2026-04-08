@@ -1,5 +1,6 @@
 """Pluggable token counting and cumulative tracking."""
 
+import warnings
 from typing import Any, Protocol
 
 from ._models import ContextStats, TokenUsage
@@ -20,6 +21,13 @@ class OllamaTokenCounter:
         Use ``ChatResponseTokenCounter`` instead, which works with the
         normalized ``ChatResponse`` from any provider.
     """
+
+    def __init__(self) -> None:
+        warnings.warn(
+            "OllamaTokenCounter is deprecated, use ChatResponseTokenCounter instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     def extract_usage(self, response: Any) -> TokenUsage:
         """Read ``prompt_eval_count`` and ``eval_count`` from the response."""
