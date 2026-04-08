@@ -90,7 +90,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     )
 
     async with turn_scope(handler=_handler):
-        with agent_span("Test", agent_state=AgentState(agent.tools)):
+        async with agent_span("Test", agent_state=AgentState(agent.tools)):
             await run_turn(
                 history,
                 agent=agent,
