@@ -40,7 +40,7 @@ from conversations import (
 )
 from tools.desktop._lifecycle import start_desktop
 from tools.desktop._exec import DesktopExecError
-from telegram_bot import TelegramBotRunner
+from telegram import TelegramChannel
 
 logger = logging.getLogger(__name__)
 
@@ -437,14 +437,14 @@ async def _start_telegram_bot(app: web.Application) -> None:
     config: AppConfig = app["config"]
     if not config.telegram_bot.enabled:
         return
-    runner = TelegramBotRunner(config.telegram_bot)
+    runner = TelegramChannel(config.telegram_bot, default_model=config.goals.model)
     await runner.start()
     app["telegram_bot_runner"] = runner
 
 
 async def _stop_telegram_bot(app: web.Application) -> None:
     """Stop the Telegram bot runner if present."""
-    runner: TelegramBotRunner | None = app.get("telegram_bot_runner")
+    runner: TelegramChannel | None = app.get("telegram_bot_runner")
     if runner:
         await runner.stop()
 

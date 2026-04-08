@@ -224,6 +224,7 @@ class TelegramBotConfig(BaseModel):
     enabled: bool = False
     token: str = ""
     allowed_chat_ids: list[int] = []
+    model: str = ""  # LLM model to use; falls back to default_model param if empty
 
 
 class GoalsConfig(BaseModel):
