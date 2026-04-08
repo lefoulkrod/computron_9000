@@ -7,7 +7,7 @@ import logging
 import re
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +37,8 @@ class MemoryEntry:
     hidden: bool = False
     category: str = MemoryCategory.USER_PREFERENCE
     tags: list[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=lambda: datetime.utcnow())
-    updated_at: datetime = field(default_factory=lambda: datetime.utcnow())
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     access_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -61,8 +61,8 @@ class MemoryEntry:
             hidden=bool(data.get("hidden", False)),
             category=str(data.get("category", MemoryCategory.USER_PREFERENCE)),
             tags=list(data.get("tags", [])),
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.utcnow(),
-            updated_at=datetime.fromisoformat(data["updated_at"]) if "updated_at" in data else datetime.utcnow(),
+            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(timezone.utc),
+            updated_at=datetime.fromisoformat(data["updated_at"]) if "updated_at" in data else datetime.now(timezone.utc),
             access_count=int(data.get("access_count", 0)),
         )
 
@@ -199,7 +199,7 @@ async def remember(
     data = _load_raw()
     existing_hidden = data[key].hidden if key in data else False
     existing_count = data[key].access_count if key in data else 0
-    created_at = data[key].created_at if key in data else datetime.utcnow()
+    created_at = data[key].created_at if key in data else datetime.now(timezone.utc)
 
     data[key] = MemoryEntry(
         value=value,
@@ -207,7 +207,7 @@ async def remember(
         category=category,
         tags=tags or [],
         created_at=created_at,
-        updated_at=datetime.utcnow(),
+        updated_at=datetime.now(timezone.utc),
         access_count=existing_count,
     )
     _save_raw(data)
@@ -358,7 +358,7 @@ async def update_user_profile(
     profile["preferences"][preference_key] = {
         "value": value,
         "confidence": confidence,
-        "updated_at": datetime.utcnow().isoformat()
+        "updated_at": datetime.now(timezone.utc).isoformat()
     }
 
     _save_profile(profile)
