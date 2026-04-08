@@ -495,10 +495,7 @@ class Browser:
 
             from tools.browser.core._file_detection import build_download_info_from_path
 
-            info = build_download_info_from_path(
-                host_path=path,
-                container_dir=self._downloads_dir,
-            )
+            info = build_download_info_from_path(path)
             self._pending_downloads.append(info)
             self._download_event.set()
             logger.info(
@@ -1213,7 +1210,6 @@ class Browser:
                     download_info = await save_response_as_file(
                         response,
                         downloads_dir=self._downloads_dir or ".",
-                        container_dir=self._downloads_dir or "/tmp",
                     )
                 except Exception:
                     logger.exception("Failed to save file from response")
@@ -1317,7 +1313,6 @@ class Browser:
                 info = await save_response_as_file(
                     api_resp,
                     downloads_dir=self._downloads_dir or ".",
-                    container_dir=self._downloads_dir or "/tmp",
                 )
                 self._pending_downloads.append(info)
                 logger.info(

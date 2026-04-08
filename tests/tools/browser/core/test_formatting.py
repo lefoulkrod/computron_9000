@@ -62,7 +62,7 @@ class TestFormatSaveResult:
         """Produces the expected bracket format."""
         out = format_save_result(
             filename="page.md",
-            container_path="/home/computron/page.md",
+            path="/home/computron/page.md",
             size_bytes=12345,
         )
         assert out == "[Saved: page.md | /home/computron/page.md | 12345 bytes]"

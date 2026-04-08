@@ -39,18 +39,16 @@ _PAGE_CONTENT_TYPES = frozenset({
 
 
 class DownloadInfo(BaseModel):
-    """Metadata about a file downloaded by the browser.
+    """Metadata about a downloaded file.
 
     Attributes:
-        host_path: Absolute path on the host filesystem.
-        container_path: Path as seen from inside the container.
+        path: Absolute path to the saved file.
         content_type: MIME type of the downloaded file.
         size_bytes: File size in bytes.
         filename: The filename (basename) of the saved file.
     """
 
-    host_path: str
-    container_path: str
+    path: str
     content_type: str
     size_bytes: int
     filename: str
@@ -78,14 +76,12 @@ def is_file_content_type(content_type: str) -> bool:
 async def save_response_as_file(
     response: object,
     downloads_dir: str | Path,
-    container_dir: str,
 ) -> DownloadInfo:
     """Download the response body and save it to disk.
 
     Args:
         response: Playwright Response object with ``.body()`` and ``.url``.
-        downloads_dir: Host directory to save the file into.
-        container_dir: Container-side equivalent of downloads_dir.
+        downloads_dir: Directory to save the file into.
 
     Returns:
         DownloadInfo with the saved file's metadata.
@@ -124,15 +120,13 @@ async def save_response_as_file(
     dest.write_bytes(body)
 
     size = len(body)
-    container_path = f"{container_dir.rstrip('/')}/{basename}"
 
     logger.info(
         "Saved file download: %s (%s, %d bytes)", dest, ct, size,
     )
 
     return DownloadInfo(
-        host_path=str(dest),
-        container_path=container_path,
+        path=str(dest),
         content_type=ct,
         size_bytes=size,
         filename=basename,
@@ -183,8 +177,7 @@ async def _refetch_raw_bytes(response: object, url: str) -> bytes:
 
 
 def build_download_info_from_path(
-    host_path: str | Path,
-    container_dir: str,
+    path: str | Path,
     content_type: str | None = None,
 ) -> DownloadInfo:
     """Build a DownloadInfo from an already-saved file on disk.
@@ -192,21 +185,19 @@ def build_download_info_from_path(
     Used for Playwright download events where the file is saved automatically.
 
     Args:
-        host_path: Absolute path to the saved file.
-        container_dir: Container-side base directory.
+        path: Absolute path to the saved file.
         content_type: MIME type override. Guessed from filename if None.
 
     Returns:
         DownloadInfo with the file's metadata.
     """
-    p = Path(host_path)
+    p = Path(path)
     if content_type is None:
         content_type, _ = mimetypes.guess_type(p.name)
         content_type = content_type or "application/octet-stream"
 
     return DownloadInfo(
-        host_path=str(p),
-        container_path=f"{container_dir.rstrip('/')}/{p.name}",
+        path=str(p),
         content_type=content_type,
         size_bytes=p.stat().st_size if p.exists() else 0,
         filename=p.name,
@@ -224,7 +215,7 @@ def format_download_message(info: DownloadInfo) -> str:
     """
     size_str = _format_size(info.size_bytes)
     return (
-        f"Downloaded file: {info.container_path}\n"
+        f"Downloaded file: {info.path}\n"
         f"Type: {info.content_type}\n"
         f"Size: {size_str}\n"
         f"\nUse run_bash_cmd to inspect or process this file."
