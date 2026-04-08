@@ -17,6 +17,22 @@ logger = logging.getLogger(__name__)
 PORT = int(os.getenv("PORT", "8080"))
 
 
+async def initialize_services(_app: aiohttp.web.Application) -> None:
+    """Initialize all services including MCP."""
+    from tools.mcp import get_mcp_registry
+
+    registry = get_mcp_registry()
+    await registry.initialize()
+
+
+async def shutdown_services(_app: aiohttp.web.Application) -> None:
+    """Shutdown all services including MCP."""
+    from tools.mcp import get_mcp_registry
+
+    registry = get_mcp_registry()
+    await registry.shutdown()
+
+
 def main() -> None:
     """Create and run the aiohttp application instance.
 
@@ -44,6 +60,8 @@ def main() -> None:
             logger.warning("Executor threads did not finish within 5s; forcing exit")
             os._exit(0)
 
+    app.on_startup.append(initialize_services)
+    app.on_shutdown.append(shutdown_services)
     app.on_shutdown.append(_close_browser)
     app.on_cleanup.append(_shutdown_executor)
     logger.info("Starting server on port %s", PORT)

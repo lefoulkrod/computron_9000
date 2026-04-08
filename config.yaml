@@ -99,3 +99,12 @@ goals:
   num_ctx: 60000
   notifications:
     enabled: true
+
+# MCP (Model Context Protocol) configuration
+# MCP allows COMPUTRON_9000 to connect to external tool servers
+# See: https://modelcontextprotocol.io
+mcp:
+  enabled: false  # Set to true to enable MCP integration
+  tool_prefix: "mcp_"  # Prefix for MCP tool names
+  auto_discover: false  # Auto-discover local MCP servers
+  servers: []  # Empty list - add MCP servers here

@@ -236,6 +236,26 @@ class GoalsConfig(BaseModel):
     max_iterations: int = 0
 
 
+class MCPServerConfig(BaseModel):
+    """Configuration for a single MCP server connection."""
+
+    name: str
+    command: str  # Command to start the server (e.g., "npx", "python", "docker")
+    args: list[str] = Field(default_factory=list)  # Arguments for the command
+    env: dict[str, str] = Field(default_factory=dict)  # Environment variables
+    timeout: int = 30  # Connection timeout in seconds
+    enabled: bool = True
+
+
+class MCPConfig(BaseModel):
+    """Configuration for MCP client integration."""
+
+    enabled: bool = False
+    servers: list[MCPServerConfig] = Field(default_factory=list)
+    auto_discover: bool = False  # Auto-discover local MCP servers
+    tool_prefix: str = "mcp_"  # Prefix for MCP tool names
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -252,6 +272,7 @@ class AppConfig(BaseModel):
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
     goals: GoalsConfig = Field(default_factory=GoalsConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
 
 
 logger = logging.getLogger(__name__)
