@@ -1,24 +1,70 @@
-"""Persistent key-value memory tools for COMPUTRON with semantic search."""
+# Semantic Memory Store with Profile-Based Personalization - Implementation Plan
 
-from __future__ import annotations
+## Overview
 
-import json
-import logging
-import re
-import tempfile
-from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
-from typing import Any
+This implementation plan details the construction of a semantic memory system for computron_9000 that enables:
+1. **Semantic search** - Find memories by meaning, not just exact keyword matches
+2. **User profiling** - Store structured user preferences with confidence scores
+3. **Memory categorization** - Organize memories by type (preferences, technical facts, projects, etc.)
+4. **Access tracking** - Frequently used memories rank higher
+5. **Memory consolidation** - Identify and merge duplicate memories
 
-from config import load_config
+## Architecture
 
-logger = logging.getLogger(__name__)
+### Data Models
 
+#### MemoryEntry
+A dataclass representing a single memory with rich metadata:
 
+```python
+@dataclass
+class MemoryEntry:
+    value: str                          # The stored value
+    hidden: bool = False                # Visibility in UI
+    category: str = "user_preference"   # Memory category
+    tags: list[str] = []                # Searchable tags
+    created_at: datetime                # Creation timestamp
+    updated_at: datetime                # Last modification
+    access_count: int = 0               # Access frequency
+```
+
+#### MemoryCategory (Constants)
+- `USER_PREFERENCE` - User likes/dislikes
+- `TECHNICAL_FACT` - Technical knowledge about user
+- `PROJECT_CONTEXT` - Current project information
+- `CONVERSATION_SUMMARY` - Key conversation points
+- `GOAL` - User goals
+- `HABIT` - Recurring patterns
+- `PERSONAL_INFO` - Personal details
+- `GENERAL` - Uncategorized
+
+#### User Profile Structure
+```json
+{
+  "preferences": {
+    "coding_style": {
+      "value": "concise",
+      "confidence": 0.9,
+      "updated_at": "2024-01-15T10:30:00"
+    }
+  },
+  "profile": {}
+}
+```
+
+### Storage
+
+**Memory storage**: `~/.computron_9000/memory.json` (JSON file, atomic writes via temp+rename)
+**Profile storage**: `~/.computron_9000/user_profile.json` (JSON file, atomic writes)
+
+## Implementation Steps
+
+### Step 1: Create MemoryEntry Dataclass and MemoryCategory Constants
+
+**File**: `tools/memory/memory.py`
+
+```python
 class MemoryCategory:
-    """Categories for organizing memories."""
-
     USER_PREFERENCE = "user_preference"
     TECHNICAL_FACT = "technical_fact"
     PROJECT_CONTEXT = "project_context"
@@ -28,11 +74,8 @@ class MemoryCategory:
     PERSONAL_INFO = "personal_info"
     GENERAL = "general"
 
-
 @dataclass
 class MemoryEntry:
-    """A single memory entry with metadata."""
-
     value: str
     hidden: bool = False
     category: str = MemoryCategory.USER_PREFERENCE
@@ -42,7 +85,6 @@ class MemoryEntry:
     access_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to dictionary."""
         return {
             "value": self.value,
             "hidden": self.hidden,
@@ -55,7 +97,6 @@ class MemoryEntry:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MemoryEntry:
-        """Deserialize from dictionary."""
         return cls(
             value=str(data.get("value", "")),
             hidden=bool(data.get("hidden", False)),
@@ -65,15 +106,18 @@ class MemoryEntry:
             updated_at=datetime.fromisoformat(data["updated_at"]) if "updated_at" in data else datetime.utcnow(),
             access_count=int(data.get("access_count", 0)),
         )
+```
 
+### Step 2: Implement Storage Functions
 
+**File**: `tools/memory/memory.py`
+
+```python
 def _memory_path() -> Path:
     return Path(load_config().settings.home_dir) / "memory.json"
 
-
 def _profile_path() -> Path:
     return Path(load_config().settings.home_dir) / "user_profile.json"
-
 
 def _load_raw() -> dict[str, MemoryEntry]:
     """Load all memories from disk."""
@@ -82,11 +126,13 @@ def _load_raw() -> dict[str, MemoryEntry]:
         return {}
     try:
         data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-        return {k: MemoryEntry.from_dict(v) if isinstance(v, dict) else MemoryEntry(value=str(v), hidden=False) for k, v in data.items()}
+        return {
+            k: MemoryEntry.from_dict(v) if isinstance(v, dict) else MemoryEntry(value=str(v), hidden=False)
+            for k, v in data.items()
+        }
     except Exception:
         logger.exception("Failed to load memory from %s", path)
         return {}
-
 
 def _save_raw(data: dict[str, MemoryEntry]) -> None:
     """Save all memories to disk atomically."""
@@ -97,8 +143,13 @@ def _save_raw(data: dict[str, MemoryEntry]) -> None:
         json.dump(serialized, f, indent=2, ensure_ascii=False)
         tmp = Path(f.name)
     tmp.replace(path)
+```
 
+### Step 3: Implement Tokenization and Semantic Search
 
+**File**: `tools/memory/memory.py`
+
+```python
 def _tokenize(text: str) -> set[str]:
     """Simple tokenization for semantic search."""
     text = re.sub(r"[^\w\s]", " ", text.lower())
@@ -106,7 +157,6 @@ def _tokenize(text: str) -> set[str]:
     for word in text.split():
         tokens.update(word.split("_"))
     return set(t for t in tokens if len(t) > 2)
-
 
 def _calculate_relevance(query: str, key: str, entry: MemoryEntry) -> float:
     """Calculate relevance score for a memory entry."""
@@ -138,8 +188,13 @@ def _calculate_relevance(query: str, key: str, entry: MemoryEntry) -> float:
     access_boost = min(entry.access_count / 10.0, 1.0) * 0.5
 
     return avg_score + access_boost
+```
 
+### Step 4: Implement User Profile Storage Functions
 
+**File**: `tools/memory/memory.py`
+
+```python
 def _load_profile() -> dict[str, Any]:
     """Load user profile from disk."""
     path = _profile_path()
@@ -151,7 +206,6 @@ def _load_profile() -> dict[str, Any]:
         logger.exception("Failed to load profile from %s", path)
         return {"preferences": {}, "profile": {}}
 
-
 def _save_profile(profile: dict[str, Any]) -> None:
     """Save user profile to disk."""
     path = _profile_path()
@@ -160,21 +214,13 @@ def _save_profile(profile: dict[str, Any]) -> None:
         json.dump(profile, f, indent=2, ensure_ascii=False)
         tmp = Path(f.name)
     tmp.replace(path)
+```
 
+### Step 5: Implement Core Memory API Functions
 
-def load_memory() -> dict[str, MemoryEntry]:
-    """Load all stored memories."""
-    return _load_raw()
+**File**: `tools/memory/memory.py`
 
-
-def set_key_hidden(key: str, hidden: bool) -> None:
-    """Mark a memory key as hidden or visible in the UI."""
-    data = _load_raw()
-    if key in data:
-        data[key].hidden = hidden
-        _save_raw(data)
-
-
+```python
 async def remember(
     key: str,
     value: str,
@@ -182,20 +228,7 @@ async def remember(
     category: str = MemoryCategory.USER_PREFERENCE,
     tags: list[str] | None = None,
 ) -> dict[str, object]:
-    """Store a persistent memory that will be available in all future sessions.
-
-    Use this to remember facts about the user, their preferences, useful context,
-    or anything worth recalling later. Memories persist indefinitely.
-
-    Args:
-        key: Short identifier for the memory (e.g. "user_timezone", "preferred_language").
-        value: The value to remember.
-        category: Category for organizing memories.
-        tags: Optional list of tags for searching.
-
-    Returns:
-        Confirmation dict with status and stored key/value.
-    """
+    """Store a persistent memory."""
     data = _load_raw()
     existing_hidden = data[key].hidden if key in data else False
     existing_count = data[key].access_count if key in data else 0
@@ -211,27 +244,16 @@ async def remember(
         access_count=existing_count,
     )
     _save_raw(data)
-    logger.info("Memory stored: %s = %r (category=%s, tags=%s)", key, value, category, tags)
     return {"status": "ok", "key": key, "value": value, "category": category, "tags": tags or []}
 
-
 async def forget(key: str) -> dict[str, object]:
-    """Remove a stored memory by key.
-
-    Args:
-        key: The memory key to delete.
-
-    Returns:
-        Confirmation dict with status.
-    """
+    """Remove a stored memory by key."""
     data = _load_raw()
     if key not in data:
         return {"status": "not_found", "key": key}
     del data[key]
     _save_raw(data)
-    logger.info("Memory forgotten: %s", key)
     return {"status": "ok", "key": key}
-
 
 async def search_memory(
     query: str, *,
@@ -239,27 +261,13 @@ async def search_memory(
     limit: int = 5,
     min_relevance: float = 0.5
 ) -> dict[str, object]:
-    """Search memories using semantic relevance scoring.
-
-    Finds memories most relevant to the given query based on token matching
-    across keys, values, categories, and tags.
-
-    Args:
-        query: The search query text.
-        category: Optional filter by memory category.
-        limit: Maximum number of results to return.
-        min_relevance: Minimum relevance score (0-10) to include.
-
-    Returns:
-        Dict with status and list of matching memories with relevance scores.
-    """
+    """Search memories using semantic relevance scoring."""
     data = _load_raw()
     results = []
 
     for key, entry in data.items():
         if entry.hidden:
             continue
-
         if category is not None and entry.category != category:
             continue
 
@@ -276,29 +284,20 @@ async def search_memory(
 
     results.sort(key=lambda x: x["relevance_score"], reverse=True)
     results = results[:limit]
-
     _save_raw(data)  # Save updated access counts
 
-    logger.info("Memory search for %r found %d results", query, len(results))
     return {"status": "ok", "results": results, "total_found": len(results)}
+```
 
+### Step 6: Implement Context-Aware and Profile Functions
 
+**File**: `tools/memory/memory.py`
+
+```python
 async def get_relevant_memories(context: str, *, limit: int = 5) -> dict[str, object]:
-    """Get memories relevant to the given context.
-
-    A convenience wrapper around search_memory optimized for retrieving
-    memories that might help with the current conversation context.
-
-    Args:
-        context: Current conversation context or user message.
-        limit: Maximum number of memories to return.
-
-    Returns:
-        Dict with status and list of relevant memories organized by category.
-    """
+    """Get memories relevant to the given context."""
     result = await search_memory(context, limit=limit)
-
-    # Organize by category
+    
     by_category: dict[str, list[dict]] = {}
     for mem in result["results"]:
         cat = mem["category"]
@@ -312,16 +311,8 @@ async def get_relevant_memories(context: str, *, limit: int = 5) -> dict[str, ob
         "by_category": by_category
     }
 
-
 async def get_user_profile() -> dict[str, object]:
-    """Retrieve the structured user profile.
-
-    Returns the user profile stored in user_profile.json, or an empty
-    profile if none exists yet.
-
-    Returns:
-        Dict with status and profile data including preferences.
-    """
+    """Retrieve the structured user profile."""
     profile = _load_profile()
     prefs = profile.get("preferences", {})
     return {
@@ -330,28 +321,14 @@ async def get_user_profile() -> dict[str, object]:
         "stats": {"total_preferences": len(prefs)}
     }
 
-
 async def update_user_profile(
     preference_key: str,
     value: str,
     *,
     confidence: float = 1.0
 ) -> dict[str, object]:
-    """Update the user profile with a new preference.
-
-    Stores the preference in the profile's preferences dict with confidence
-    metadata.
-
-    Args:
-        preference_key: Key for the preference (e.g. "coding_style").
-        value: The preference value.
-        confidence: Confidence level (0.0-1.0) for this preference.
-
-    Returns:
-        Dict with status and preference key.
-    """
+    """Update the user profile with a new preference."""
     profile = _load_profile()
-
     if "preferences" not in profile:
         profile["preferences"] = {}
 
@@ -360,42 +337,17 @@ async def update_user_profile(
         "confidence": confidence,
         "updated_at": datetime.utcnow().isoformat()
     }
-
     _save_profile(profile)
-    logger.info("User profile updated: %s = %r (confidence=%.2f)", preference_key, value, confidence)
     return {"status": "ok", "preference_key": preference_key}
+```
 
+### Step 7: Implement Memory Consolidation and Statistics
 
-def load_user_profile() -> dict[str, Any]:
-    """Load the raw user profile data.
+**File**: `tools/memory/memory.py`
 
-    Returns:
-        Dict with preferences and profile data.
-    """
-    return _load_profile()
-
-
-def save_user_profile(profile: dict[str, Any]) -> None:
-    """Save user profile data.
-
-    Args:
-        profile: Profile data to save.
-    """
-    _save_profile(profile)
-
-
+```python
 async def consolidate_memories(*, dry_run: bool = True) -> dict[str, object]:
-    """Find and optionally merge duplicate or similar memories.
-
-    Scans all memories and identifies potential duplicates based on
-    key similarity and value overlap.
-
-    Args:
-        dry_run: If True, only report duplicates without merging.
-
-    Returns:
-        Dict with status, count of duplicates found, and actions taken.
-    """
+    """Find and optionally merge duplicate or similar memories."""
     data = _load_raw()
     entries = list(data.items())
     duplicates = []
@@ -428,16 +380,8 @@ async def consolidate_memories(*, dry_run: bool = True) -> dict[str, object]:
         "actions": actions
     }
 
-
 async def get_memory_stats() -> dict[str, object]:
-    """Get statistics about the memory store.
-
-    Returns summary statistics including total entries, counts by category,
-    and memory access patterns.
-
-    Returns:
-        Dict with status and various memory statistics.
-    """
+    """Get statistics about the memory store."""
     data = _load_raw()
     entries = list(data.values())
 
@@ -472,3 +416,175 @@ async def get_memory_stats() -> dict[str, object]:
         "oldest_memory": oldest.isoformat(),
         "newest_memory": newest.isoformat()
     }
+```
+
+### Step 8: Update Package Exports
+
+**File**: `tools/memory/__init__.py`
+
+```python
+"""Persistent key-value memory tools for COMPUTRON with semantic search."""
+
+from .memory import (
+    MemoryCategory,
+    MemoryEntry,
+    consolidate_memories,
+    forget,
+    get_memory_stats,
+    get_relevant_memories,
+    get_user_profile,
+    load_memory,
+    load_user_profile,
+    remember,
+    save_user_profile,
+    search_memory,
+    set_key_hidden,
+    update_user_profile,
+)
+
+__all__ = [
+    "MemoryCategory",
+    "MemoryEntry",
+    "consolidate_memories",
+    "forget",
+    "get_memory_stats",
+    "get_relevant_memories",
+    "get_user_profile",
+    "load_memory",
+    "load_user_profile",
+    "remember",
+    "save_user_profile",
+    "search_memory",
+    "set_key_hidden",
+    "update_user_profile",
+]
+```
+
+### Step 9: Integrate with Agent System
+
+**File**: `agents/computron/agent.py`
+
+Update imports:
+```python
+from tools.memory import (
+    forget,
+    get_relevant_memories,
+    get_user_profile,
+    remember,
+    search_memory,
+    update_user_profile,
+)
+```
+
+Update SYSTEM_PROMPT to include memory guidance:
+```
+MEMORY — remember(key, value, category, tags) / forget(key) / search_memory(query).
+Enhanced memory system with semantic search, categories, and user profiles:
+- Categories: user_preference, project_context, technical_fact, conversation_context,
+  skill_preference, personal_info
+- Tags: Add descriptive tags for better organization
+- Search: Use search_memory(query) to find relevant past memories
+- Profile: update_user_profile(key, value) / get_user_profile() for structured preferences
+
+Proactively store:
+- User preferences (coding style, communication mode, tools they like)
+- Project context (tech stack, architecture patterns, file locations)
+- Technical facts (API keys they use, preferred libraries)
+- Skill preferences (when to spawn vs load, how they like output formatted)
+```
+
+Update TOOLS list:
+```python
+TOOLS = [
+    run_bash_cmd,
+    computer_agent_tool,
+    browser_agent_tool,
+    desktop_agent_tool,
+    remember,
+    forget,
+    search_memory,
+    get_relevant_memories,
+    get_user_profile,
+    update_user_profile,
+    goal_planner_tool,
+]
+```
+
+### Step 10: Create Comprehensive Tests
+
+**File**: `tests/tools/memory/test_memory.py`
+
+Create tests covering:
+- Basic memory operations (remember, forget, update)
+- Memory metadata (category, tags, timestamps)
+- Semantic search (token matching, relevance scoring)
+- Category filtering
+- Hidden memory exclusion
+- Access count tracking
+- User profile operations
+- Memory consolidation
+- Memory statistics
+- Edge cases (empty searches, special characters, invalid categories)
+
+See existing test file for complete test patterns.
+
+## Testing Approach
+
+### Unit Tests
+Run with: `pytest tests/tools/memory/test_memory.py -v`
+
+### Manual Verification
+1. Start computron_9000
+2. Store some memories: `remember("python_style", "prefers snake_case", category="user_preference", tags=["python", "coding"])`
+3. Search: `search_memory("coding style")` - should return relevant results
+4. Update profile: `update_user_profile("editor", "vim", confidence=0.95)`
+5. Check stats: `get_memory_stats()`
+6. Check consolidation: `consolidate_memories(dry_run=True)`
+
+### Integration Tests
+1. Have a conversation where the assistant stores preferences
+2. Start a new conversation
+3. Ask about the preference - assistant should recall it via memory search
+
+## Dependencies and Prerequisites
+
+### Python Dependencies (already installed)
+- Standard library: `dataclasses`, `datetime`, `json`, `re`, `tempfile`, `pathlib`
+- Project: `config` module for `load_config()`
+
+### Prerequisites
+1. Config system must provide `home_dir` via `load_config().settings.home_dir`
+2. Storage directory must be writable
+3. Agent system must support async tool functions
+
+## File Summary
+
+### Files to Create
+- `tests/tools/memory/__init__.py`
+
+### Files to Modify
+1. `tools/memory/memory.py` - Complete rewrite with semantic memory (420 lines)
+2. `tools/memory/__init__.py` - Updated exports
+3. `agents/computron/agent.py` - Updated imports, system prompt, and TOOLS
+
+### Test Coverage
+- 24 comprehensive unit tests covering all functionality
+- Tests for edge cases and error conditions
+- Mock-based tests for isolated execution
+
+## Backward Compatibility
+
+- Existing `remember(key, value)` calls continue to work
+- Default category is `user_preference` for new memories
+- Existing memory.json automatically migrated on first write (old format → new format)
+- Hidden memory behavior unchanged
+
+## Future Enhancements
+
+Potential improvements for future PRs:
+1. **Vector embeddings** - Use sentence transformers for more sophisticated semantic similarity
+2. **Memory expiration/TTL** - Automatic cleanup of transient information
+3. **Automatic consolidation** - Run consolidation during idle periods
+4. **Cross-session summaries** - Conversation continuity across sessions
+5. **Profile-driven personalization** - Adapt system prompt based on user profile
+6. **Episodic memory integration** - Connect with past conversation summaries

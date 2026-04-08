@@ -30,7 +30,7 @@ from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_
 from sdk.providers import get_provider
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data, LLMOptions
-from config import load_config
+from config import AppConfig, load_config
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
@@ -40,6 +40,7 @@ from conversations import (
 )
 from tools.desktop._lifecycle import start_desktop
 from tools.desktop._exec import DesktopExecError
+from telegram import TelegramChannel
 
 logger = logging.getLogger(__name__)
 
@@ -381,6 +382,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     cfg = load_config()
     container_prefix = cfg.virtual_computer.container_working_dir
     app.router.add_route("GET", f"{container_prefix}/{{path:.*}}", container_file_handler)
+    app["config"] = cfg
 
     # UI routes
     app.router.add_route("GET", "/", index_handler)
@@ -392,6 +394,10 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Task runner lifecycle
     app.on_startup.append(_start_task_runner)
     app.on_cleanup.append(_stop_task_runner)
+
+    # Telegram bot lifecycle
+    app.on_startup.append(_start_telegram_bot)
+    app.on_cleanup.append(_stop_telegram_bot)
 
     return app
 
@@ -422,6 +428,23 @@ async def _start_task_runner(app: web.Application) -> None:
 async def _stop_task_runner(app: web.Application) -> None:
     """Gracefully stop the background task runner."""
     runner = app.get("task_runner")
+    if runner:
+        await runner.stop()
+
+
+async def _start_telegram_bot(app: web.Application) -> None:
+    """Start the Telegram bot if enabled in config."""
+    config: AppConfig = app["config"]
+    if not config.telegram_bot.enabled:
+        return
+    runner = TelegramChannel(config.telegram_bot, default_model=config.goals.model)
+    await runner.start()
+    app["telegram_bot_runner"] = runner
+
+
+async def _stop_telegram_bot(app: web.Application) -> None:
+    """Stop the Telegram bot runner if present."""
+    runner: TelegramChannel | None = app.get("telegram_bot_runner")
     if runner:
         await runner.stop()
 

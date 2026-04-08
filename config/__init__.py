@@ -218,6 +218,15 @@ class NotificationsConfig(BaseModel):
     max_attachment_size_mb: int = 50
 
 
+class TelegramBotConfig(BaseModel):
+    """Configuration for the bidirectional Telegram bot interface."""
+
+    enabled: bool = False
+    token: str = ""
+    allowed_chat_ids: list[int] = []
+    model: str = ""  # LLM model to use; falls back to default_model param if empty
+
+
 class GoalsConfig(BaseModel):
     """Configuration for the autonomous task engine."""
 
@@ -252,6 +261,7 @@ class AppConfig(BaseModel):
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
     goals: GoalsConfig = Field(default_factory=GoalsConfig)
+    telegram_bot: TelegramBotConfig = Field(default_factory=TelegramBotConfig)
 
 
 logger = logging.getLogger(__name__)

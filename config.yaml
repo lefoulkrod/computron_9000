@@ -99,3 +99,6 @@ goals:
   num_ctx: 60000
   notifications:
     enabled: true
+
+telegram_bot:
+  enabled: false
