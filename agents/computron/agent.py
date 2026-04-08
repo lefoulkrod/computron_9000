@@ -9,7 +9,14 @@ from agents.browser import browser_agent_tool
 from agents.coding import computer_agent_tool
 from agents.desktop import desktop_agent_tool
 from agents.goal_planner import goal_planner_tool
-from tools.memory import forget, remember
+from tools.memory import (
+    forget,
+    get_relevant_memories,
+    get_user_profile,
+    remember,
+    search_memory,
+    update_user_profile,
+)
 from tools.virtual_computer import run_bash_cmd
 
 logger = logging.getLogger(__name__)
@@ -92,7 +99,19 @@ SYSTEM_PROMPT = dedent(
         UPLOADED FILES — written to /home/computron/uploads/. Use describe_image(path, prompt)
         for image analysis (PNG, JPEG, GIF, WebP, BMP, TIFF).
 
-        MEMORY — remember(key, value) / forget(key). Store user preferences proactively.
+        MEMORY — remember(key, value, category, tags) / forget(key) / search_memory(query).
+        Enhanced memory system with semantic search, categories, and user profiles:
+        - Categories: user_preference, project_context, technical_fact, conversation_context,
+          skill_preference, personal_info
+        - Tags: Add descriptive tags for better organization
+        - Search: Use search_memory(query) to find relevant past memories
+        - Profile: update_user_profile(key, value) / get_user_profile() for structured preferences
+
+        Proactively store:
+        - User preferences (coding style, communication mode, tools they like)
+        - Project context (tech stack, architecture patterns, file locations)
+        - Technical facts (API keys they use, preferred libraries)
+        - Skill preferences (when to spawn vs load, how they like output formatted)
 
         SCRATCHPAD — save_to_scratchpad(key, value) / recall_from_scratchpad(key).
         Use for session data: intermediate results, sub-agent outputs, data you'll
@@ -111,6 +130,10 @@ TOOLS = [
     desktop_agent_tool,
     remember,
     forget,
+    search_memory,
+    get_relevant_memories,
+    get_user_profile,
+    update_user_profile,
     goal_planner_tool,
 ]
 
