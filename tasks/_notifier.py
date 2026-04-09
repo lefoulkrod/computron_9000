@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -89,13 +90,14 @@ class TelegramNotifier:
                 path,
             )
             return
+        # Read file content in thread to avoid blocking the event loop
+        content = await asyncio.to_thread(path.read_bytes)
         async with httpx.AsyncClient(timeout=120) as client:
-            with open(path, "rb") as f:
-                resp = await client.post(
-                    f"{self._base_url}/sendDocument",
-                    data={"chat_id": self._chat_id},
-                    files={"document": (path.name, f)},
-                )
+            resp = await client.post(
+                f"{self._base_url}/sendDocument",
+                data={"chat_id": self._chat_id},
+                files={"document": (path.name, content)},
+            )
             if resp.status_code != 200:
                 logger.error(
                     "Telegram sendDocument failed (%d): %s",
