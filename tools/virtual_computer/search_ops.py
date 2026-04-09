@@ -1,4 +1,4 @@
-"""Search operations: grep across files.
+"""Search operations: grep across files in the current workspace.
 
 Skips binary files; returns structured matches suitable for LLM consumption.
 """
@@ -26,14 +26,20 @@ def _iter_files(root: Path) -> Iterable[Path]:
 
 
 def _expand_globstar_zero_depth(pattern: str) -> set[str]:
-    """Expand a pattern so that each "**/" can also be zero directories."""
+    """Expand a pattern so that each "**/" can also be zero directories.
+
+    Example: "src/**/*.js" -> {"src/**/*.js", "src/*.js"}
+    Works for multiple occurrences by generating all combinations.
+    """
     pat = pattern.replace("\\", "/")
     token = "**/"
     if token not in pat:
         return {pat}
     parts = pat.split(token)
+    # Reconstruct with either token kept or removed at each junction
     variants: set[str] = set()
     n = len(parts) - 1
+    # Each bit in mask: 1 means keep token, 0 means drop
     for mask in range(1 << n):
         s = parts[0]
         for i in range(n):
@@ -48,7 +54,12 @@ def _apply_globs(
     include: list[str] | None,
     exclude: list[str] | None,
 ) -> Iterable[Path]:
-    """Filter paths by include/exclude patterns using Path.glob."""
+    """Filter paths by include/exclude patterns using Path.glob (globstar-on).
+
+    We expand include and exclude patterns using ``root.glob`` which supports
+    ``**`` for recursive matches. Only files are considered.
+    """
+    # Build sets of included/excluded file Paths for fast membership checks
     included: set[Path] | None = None
     excluded: set[Path] = set()
 
@@ -95,27 +106,35 @@ def grep(
     context: int = 2,
     max_results: int | None = 1000,
 ) -> GrepResult:
-    """Search files for a pattern.
+    """Search workspace files for a pattern.
 
     Args:
         pattern: Regex or literal pattern to search for.
-        path: File or directory to search in.
-        include_globs: Glob patterns to limit which files are searched.
-        exclude_globs: Glob patterns to exclude.
-        regex: Treat pattern as regex (default True).
+        path: File or directory to search in. Defaults to workspace root.
+        include_globs: Glob patterns to limit which files are searched
+            (e.g. ``"src/**/*.py"``). ``**`` matches recursively. Omit to search all.
+        exclude_globs: Glob patterns to exclude. Default excludes (.git, node_modules,
+            __pycache__, *.lock) are always applied.
+        regex: Treat pattern as regex (default True). If False, literal match.
         case_sensitive: Case-sensitive matching. Default False.
-        context: Lines of context before and after each match. Default 2.
+        context: Lines of context before and after each match. Default 2. Set 0 to disable.
         max_results: Cap on returned matches. Default 1000.
+
+    Returns:
+        GrepResult: Matches with ``file_path``, ``line_number``, ``line``, and context.
     """
     try:
+        # Default excludes that are always applied (globstar semantics)
         default_excludes = [
             ".git/**",
             "node_modules/**",
             "__pycache__/**",
             "**/*.lock",
         ]
+        # Merge default excludes with user-provided excludes
         exclude_globs = default_excludes if exclude_globs is None else exclude_globs + default_excludes
 
+        # Resolve the search root (file or directory)
         root_abs = Path(path)
         if not root_abs.exists():
             return GrepResult(
@@ -135,6 +154,7 @@ def grep(
         matches: list[GrepMatch] = []
         searched = 0
 
+        # Single file: search it directly, skip glob filtering
         if root_abs.is_file():
             file_iter = iter([root_abs])
         else:

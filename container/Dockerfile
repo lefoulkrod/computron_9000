@@ -20,7 +20,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       # Build tools & CLI
       software-properties-common curl gnupg2 xz-utils ca-certificates jq \
-      build-essential git sudo unzip wget gosu \
+      build-essential git sudo unzip wget gosu file \
       # Media
       ffmpeg imagemagick espeak-ng \
       # Search

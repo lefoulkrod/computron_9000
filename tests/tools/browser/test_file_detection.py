@@ -114,7 +114,7 @@ class TestSaveResponseAsFile:
         """Duplicate filenames get a UUID suffix."""
         (tmp_path / "report.pdf").write_bytes(b"existing")
         response = AsyncMock()
-        response.body = AsyncMock(return_value=b"new content")
+        response.body = AsyncMock(return_value=b"%PDF-1.4 new content")
         response.url = "https://example.com/report.pdf"
         response.headers = {"content-type": "application/pdf"}
 
@@ -198,16 +198,32 @@ class TestIsViewerHtml:
 
         assert _is_viewer_html(b"%PDF-1.4 content", "application/pdf") is False
 
-    def test_large_body_not_detected(self) -> None:
+    def test_large_viewer_html_detected_for_pdf(self) -> None:
+        """Large HTML bodies are still detected when magic bytes mismatch."""
         from tools.browser.core._file_detection import _is_viewer_html
 
-        assert _is_viewer_html(b"x" * 3000, "application/pdf") is False
+        # Any body that doesn't start with %PDF is detected as viewer HTML
+        big_html = b"<html>" + b"x" * 5000 + b"<embed src='x'>"
+        assert _is_viewer_html(big_html, "application/pdf") is True
+
+    def test_real_large_pdf_not_detected(self) -> None:
+        from tools.browser.core._file_detection import _is_viewer_html
+
+        assert _is_viewer_html(b"%PDF-1.4" + b"\x00" * 5000, "application/pdf") is False
 
     def test_html_content_type_not_detected(self) -> None:
         from tools.browser.core._file_detection import _is_viewer_html
 
         body = b"<html><body><embed src='x'></body></html>"
         assert _is_viewer_html(body, "text/html") is False
+
+    def test_unknown_type_uses_html_marker_fallback(self) -> None:
+        """Types without magic bytes fall back to HTML marker detection."""
+        from tools.browser.core._file_detection import _is_viewer_html
+
+        body = b"<html><body><embed src='x'></body></html>"
+        assert _is_viewer_html(body, "image/tiff") is True
+        assert _is_viewer_html(b"\x49\x49\x2a\x00", "image/tiff") is False
 
     def test_empty_body(self) -> None:
         from tools.browser.core._file_detection import _is_viewer_html

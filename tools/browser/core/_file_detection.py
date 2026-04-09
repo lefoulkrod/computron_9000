@@ -136,21 +136,39 @@ async def save_response_as_file(
 def _is_viewer_html(body: bytes, expected_ct: str) -> bool:
     """Return True if the body is a Chromium viewer HTML wrapper.
 
-    Chromium replaces PDF/media responses with a small HTML page containing
-    an ``<embed>`` tag. We detect this by checking for HTML markers in a
-    body that should be a non-HTML content type.
+    Chromium replaces PDF/media responses with a small HTML page.  Older
+    versions used an ``<embed>`` tag; newer versions use an ``<iframe>``
+    inside a shadow DOM ``<template>``.  Detection uses two checks:
+
+    1. Magic-byte mismatch — the expected content type implies specific leading
+       bytes (e.g. ``%PDF`` for ``application/pdf``).  If the body doesn't
+       start with those bytes it was almost certainly replaced by the viewer.
+    2. HTML marker fallback — for types without a known magic signature, look
+       for ``<html>`` plus ``<embed`` or ``<iframe`` in the first 8 KB.
     """
-    if not body or len(body) > 2048:
-        # Real files are usually larger; viewer HTML is tiny (~350 bytes)
+    if not body:
         return False
     base_ct = expected_ct.split(";")[0].strip().lower()
     if base_ct in ("text/html", "application/xhtml+xml"):
         return False
+
+    # Magic bytes for common file types Chrome's viewer intercepts
+    magic = _MAGIC_BYTES.get(base_ct)
+    if magic is not None:
+        return not body.startswith(magic)
+
+    # Fallback: look for HTML wrapper markers in the first 8 KB
     try:
-        text = body.decode("utf-8", errors="ignore").lower()
+        text = body[:8192].decode("utf-8", errors="ignore").lower()
     except Exception:
         return False
-    return "<html>" in text and "<embed" in text
+    return "<html>" in text and ("<embed" in text or "<iframe" in text)
+
+
+# Leading bytes for content types that Chrome's PDF/media viewer can replace.
+_MAGIC_BYTES: dict[str, bytes] = {
+    "application/pdf": b"%PDF",
+}
 
 
 async def _refetch_raw_bytes(response: object, url: str) -> bytes:

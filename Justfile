@@ -532,6 +532,7 @@ container-dev:
       --gpus all \
       --shm-size=256m \
       --network=host \
+      -e PYTHONDONTWRITEBYTECODE=1 \
       $env_file_args \
       -v "$state_dir/home:/home/computron:rw" \
       -v "$state_dir/state:/var/lib/computron:rw" \
