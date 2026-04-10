@@ -54,7 +54,6 @@ from .stat_ops import exists, is_dir, is_file
 #   -> agents.__init__ -> agents.media -> tools.virtual_computer
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "describe_image": (".describe_image", "describe_image"),
-    "install_os_packages": (".install_packages", "install_os_packages"),
     "send_file": (".file_output", "send_file"),
     "play_audio": (".play_audio", "play_audio"),
     "run_bash_cmd": (".run_bash_cmd", "run_bash_cmd"),
@@ -102,7 +101,6 @@ __all__ = [
     "exists",
     "grep",
     "head",
-    "install_os_packages",
     "insert_text",
     "is_dir",
     "is_file",
