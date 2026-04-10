@@ -63,6 +63,14 @@ class TaskExecutor:
         self._store.set_conversation_id(task_result.id, conversation_id)
 
         options = self._llm_options
+        # Apply task-level inference profile as defaults under global options
+        if task.profile:
+            from agents._profiles import apply_profile, get_profile
+            resolved_profile = get_profile(task.profile)
+            if resolved_profile:
+                options = apply_profile(resolved_profile, options)
+            else:
+                logger.warning("Unknown profile '%s' on task %s, ignoring", task.profile, task.id)
         agent = self._build_agent(task, options)
         set_model_options(options)
 
@@ -101,13 +109,11 @@ class TaskExecutor:
         return result or "", file_paths
 
     def _build_agent(self, task: Task, options: LLMOptions) -> Agent:
-        """Construct an Agent from registry or inline config."""
-        from agents import resolve_agent as _resolve_agent
-
+        """Construct an Agent from skills or inline config."""
         if task.agent_config:
             config = task.agent_config
             return Agent(
-                name=task.agent,
+                name="TASK_AGENT",
                 description=task.description,
                 instruction=config.get("system_prompt", ""),
                 tools=[],
@@ -115,14 +121,20 @@ class TaskExecutor:
                 options=options.to_options(),
             )
 
-        name, desc, prompt, tools = _resolve_agent(task.agent)
+        # Build agent from skills
+        loaded = AgentState(get_core_tools())
+        for skill_name in task.skills:
+            loaded.load(skill_name)
+
         return Agent(
-            name=name,
-            description=desc,
-            instruction=prompt,
-            tools=tools,
+            name="TASK_AGENT",
+            description=task.description,
+            instruction="Complete the task thoroughly. Use save_to_scratchpad to store important results.",
+            tools=loaded.tools,
             model=options.model or "",
+            think=options.think or False,
             options=options.to_options(),
+            max_iterations=options.max_iterations or 0,
         )
 
     def _build_instruction(

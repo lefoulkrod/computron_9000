@@ -6,8 +6,6 @@ import StopIcon from './icons/StopIcon.jsx';
 
 function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftConsumed }) {
     const [message, setMessage] = useState('');
-    const [selectedAgent, setSelectedAgent] = useState('computron');
-    const [agents, setAgents] = useState(['computron']);
 
     useEffect(() => {
         if (draft) {
@@ -15,18 +13,6 @@ function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftCons
             onDraftConsumed();
         }
     }, [draft, onDraftConsumed]);
-
-    useEffect(() => {
-        fetch('/api/agents')
-            .then(r => r.json())
-            .then(data => {
-                if (data.agents) {
-                    setAgents(data.agents);
-                    if (data.default) setSelectedAgent(data.default);
-                }
-            })
-            .catch(() => {});
-    }, []);
     const [fileData, setFileData] = useState(null);
     const [filePreview, setFilePreview] = useState(null);
     const [fileName, setFileName] = useState(null);
@@ -59,7 +45,7 @@ function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftCons
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!message.trim() && !fileData) return;
-        onSend(message.trim(), fileData, selectedAgent);
+        onSend(message.trim(), fileData);
         setMessage('');
         clearAttachment();
     };
@@ -148,15 +134,6 @@ function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftCons
                     />
                 </div>
                 <div className={styles.inputAreaButtons}>
-                    <select
-                        className={styles.agentSelect}
-                        value={selectedAgent}
-                        onChange={(e) => setSelectedAgent(e.target.value)}
-                    >
-                        {agents.map((a) => (
-                            <option key={a} value={a}>{a}</option>
-                        ))}
-                    </select>
                     <div className={styles.actionButtons}>
                     <button
                         type="button"

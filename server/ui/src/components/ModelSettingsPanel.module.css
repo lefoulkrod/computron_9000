@@ -184,6 +184,105 @@
     font-style: italic;
 }
 
+/* Section label */
+.sectionLabel {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text);
+    opacity: 0.4;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+}
+
+/* Preset grid */
+.presetGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+}
+
+.presetCard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    padding: 0.45rem 0.55rem;
+    background: var(--primary);
+    border: 1px solid var(--muted);
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 120ms ease;
+    box-shadow: none;
+}
+
+.presetCard:hover:not(:disabled) {
+    border-color: var(--text);
+}
+
+.presetActive {
+    border-color: #7aa2ff;
+    background: rgba(122, 162, 255, 0.08);
+}
+
+.presetName {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+}
+
+.presetDesc {
+    font-size: 0.65rem;
+    color: var(--text);
+    opacity: 0.4;
+    line-height: 1.2;
+}
+
+/* Advanced toggle */
+.advancedToggle {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: none;
+    border: none;
+    padding: 0.25rem 0;
+    margin-top: 0.15rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text);
+    opacity: 0.5;
+    cursor: pointer;
+    box-shadow: none;
+    letter-spacing: 0.03em;
+}
+
+.advancedToggle:hover {
+    opacity: 0.8;
+}
+
+.chevron {
+    width: 14px;
+    height: 14px;
+    transition: transform 150ms ease;
+}
+
+.chevronOpen {
+    transform: rotate(90deg);
+}
+
+/* Advanced section */
+.advancedSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--muted);
+}
+
 /* Info tooltip */
 .infoWrap {
     position: relative;

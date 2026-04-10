@@ -91,6 +91,7 @@ async def spawn_agent(
     instructions: str,
     skills: list[str],
     agent_name: str = "SUB_AGENT",
+    profile: str | None = None,
 ) -> str:
     """Spawn a sub-agent with specified skills to handle a task in isolation.
 
@@ -103,10 +104,13 @@ async def spawn_agent(
             EVERYTHING the agent needs — it has zero context from the parent.
         skills: Skills to load for this agent (e.g. ["browser"], ["coder", "browser"]).
         agent_name: Short UPPERCASE name for the UI (e.g. DATA_ANALYST).
+        profile: Optional inference profile ID (e.g. "code", "creative") to
+            tune temperature, top_k, and other inference parameters.
 
     Returns:
         Summary of what the sub-agent accomplished.
     """
+    from agents._profiles import apply_profile, get_profile
     from sdk.skills.agent_state import AgentState
 
     from sdk.tools._core import get_core_tools
@@ -118,6 +122,15 @@ async def spawn_agent(
             return f"Unknown skill: {skill_name}"
 
     model_options = get_model_options()
+
+    # Apply inference profile as defaults under per-request options
+    if profile and model_options:
+        resolved_profile = get_profile(profile)
+        if resolved_profile:
+            model_options = apply_profile(resolved_profile, model_options)
+        else:
+            logger.warning("Unknown profile '%s', ignoring", profile)
+
     effective_max_iterations = 0
     if model_options and model_options.max_iterations is not None:
         effective_max_iterations = model_options.max_iterations

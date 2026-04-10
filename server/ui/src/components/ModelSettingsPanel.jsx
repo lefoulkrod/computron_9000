@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import localStyles from './ModelSettingsPanel.module.css';
 
 const SETTING_TIPS = {
     model: 'Select the model to use for inference',
+    preset: 'Quick presets that configure temperature, thinking, and sampling for common workloads',
     context: 'Max context window in K tokens — use more for long docs, less to save memory',
     think: 'Let the model reason step-by-step before answering — good for math, logic, coding',
     thinkHistory: 'Store thinking in conversation history — disable for models that get confused by their own reasoning',
@@ -14,6 +15,13 @@ const SETTING_TIPS = {
     numPredict: '-1 = unlimited, 4096 = short replies, 16384+ = long code generation',
     turns: 'How many tool calls the agent can chain per message',
 };
+
+const PRESETS = [
+    { id: 'balanced', name: 'Balanced', description: 'Good for most tasks', values: { temperature: '0.7', think: true, topK: '', topP: '', repeatPenalty: '' } },
+    { id: 'creative', name: 'Creative', description: 'Writing & brainstorming', values: { temperature: '1.0', think: false, topK: '', topP: '0.95', repeatPenalty: '' } },
+    { id: 'precise', name: 'Precise', description: 'Facts & analysis', values: { temperature: '0.2', think: true, topK: '40', topP: '', repeatPenalty: '' } },
+    { id: 'code', name: 'Code', description: 'Programming & debugging', values: { temperature: '0.3', think: true, topK: '', topP: '', repeatPenalty: '' } },
+];
 
 function InfoTip({ text }) {
     const iconRef = useRef(null);
@@ -58,38 +66,115 @@ export default function ModelSettingsPanel({ settings, disabled }) {
         unlimitedTurns, setUnlimitedTurns: onUnlimitedTurnsChange,
         agentTurns, setAgentTurns: onAgentTurnsChange,
     } = settings;
+
+    const [selectedPreset, setSelectedPreset] = useState('balanced');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+
+    const applyPreset = useCallback((preset) => {
+        setSelectedPreset(preset.id);
+        onTemperatureChange(preset.values.temperature);
+        onThinkChange(preset.values.think);
+        onTopKChange(preset.values.topK);
+        onTopPChange(preset.values.topP);
+        onRepeatPenaltyChange(preset.values.repeatPenalty);
+    }, [onTemperatureChange, onThinkChange, onTopKChange, onTopPChange, onRepeatPenaltyChange]);
+
     return (
         <div className={localStyles.body}>
-                    <label className={localStyles.row}>
-                        <span className={localStyles.label}>Model<InfoTip text={SETTING_TIPS.model} /></span>
-                        <select
-                            className={localStyles.select}
-                            value={selectedModel}
-                            onChange={(e) => onModelChange(e.target.value)}
+            {/* Model selector */}
+            <label className={localStyles.row}>
+                <span className={localStyles.label}>Model<InfoTip text={SETTING_TIPS.model} /></span>
+                <select
+                    className={localStyles.select}
+                    value={selectedModel}
+                    onChange={(e) => onModelChange(e.target.value)}
+                    disabled={disabled}
+                    aria-label="Model name"
+                >
+                    {(models || []).map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                    ))}
+                </select>
+            </label>
+
+            {/* Preset cards */}
+            <div className={localStyles.sectionLabel}>
+                Preset<InfoTip text={SETTING_TIPS.preset} />
+            </div>
+            <div className={localStyles.presetGrid}>
+                {PRESETS.map((preset) => (
+                    <button
+                        key={preset.id}
+                        className={`${localStyles.presetCard} ${selectedPreset === preset.id ? localStyles.presetActive : ''}`}
+                        onClick={() => applyPreset(preset)}
+                        disabled={disabled}
+                    >
+                        <span className={localStyles.presetName}>{preset.name}</span>
+                        <span className={localStyles.presetDesc}>{preset.description}</span>
+                    </button>
+                ))}
+            </div>
+
+            {/* Context + Turns — always visible */}
+            <label className={localStyles.row}>
+                <span className={localStyles.label}>Context<InfoTip text={SETTING_TIPS.context} /></span>
+                <div className={localStyles.inputGroup}>
+                    <input
+                        type="number"
+                        className={localStyles.numInput}
+                        value={contextKb}
+                        onChange={(e) => onContextKbChange(e.target.value)}
+                        min={1}
+                        placeholder="auto"
+                        disabled={disabled}
+                        aria-label="Context size in K tokens"
+                    />
+                    <span className={localStyles.unit}>K tok</span>
+                </div>
+            </label>
+            <div className={localStyles.row}>
+                <span className={localStyles.label}>Turns<InfoTip text={SETTING_TIPS.turns} /></span>
+                <div className={localStyles.turnsGroup}>
+                    <label className={localStyles.toggleLabel}>
+                        <input
+                            type="checkbox"
+                            className={localStyles.toggleInput}
+                            checked={unlimitedTurns}
+                            onChange={(e) => onUnlimitedTurnsChange(e.target.checked)}
                             disabled={disabled}
-                            aria-label="Model name"
-                        >
-                            {(models || []).map((m) => (
-                                <option key={m} value={m}>{m}</option>
-                            ))}
-                        </select>
+                        />
+                        <span className={localStyles.toggle} />
                     </label>
-                    <label className={localStyles.row}>
-                        <span className={localStyles.label}>Context<InfoTip text={SETTING_TIPS.context} /></span>
-                        <div className={localStyles.inputGroup}>
-                            <input
-                                type="number"
-                                className={localStyles.numInput}
-                                value={contextKb}
-                                onChange={(e) => onContextKbChange(e.target.value)}
-                                min={1}
-                                placeholder="auto"
-                                disabled={disabled}
-                                aria-label="Context size in K tokens"
-                            />
-                            <span className={localStyles.unit}>K tok</span>
-                        </div>
-                    </label>
+                    {unlimitedTurns
+                        ? <span className={localStyles.turnsHint}>unlimited</span>
+                        : <input
+                            type="number"
+                            className={localStyles.numInput}
+                            value={agentTurns}
+                            onChange={(e) => onAgentTurnsChange(e.target.value)}
+                            min={1} step={1}
+                            placeholder="15"
+                            disabled={disabled}
+                            aria-label="Agent turn limit"
+                        />
+                    }
+                </div>
+            </div>
+
+            {/* Advanced toggle */}
+            <button
+                className={localStyles.advancedToggle}
+                onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+                <svg className={`${localStyles.chevron} ${showAdvanced ? localStyles.chevronOpen : ''}`} viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z" />
+                </svg>
+                Advanced
+            </button>
+
+            {/* Advanced settings */}
+            {showAdvanced && (
+                <div className={localStyles.advancedSection}>
                     <div className={localStyles.row}>
                         <span className={localStyles.label}>Think<InfoTip text={SETTING_TIPS.think} /></span>
                         <label className={localStyles.toggleLabel}>
@@ -97,7 +182,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                                 type="checkbox"
                                 className={localStyles.toggleInput}
                                 checked={think}
-                                onChange={(e) => onThinkChange(e.target.checked)}
+                                onChange={(e) => { onThinkChange(e.target.checked); setSelectedPreset(''); }}
                                 disabled={disabled}
                             />
                             <span className={localStyles.toggle} />
@@ -122,7 +207,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                             type="number"
                             className={localStyles.numInput}
                             value={temperature}
-                            onChange={(e) => onTemperatureChange(e.target.value)}
+                            onChange={(e) => { onTemperatureChange(e.target.value); setSelectedPreset(''); }}
                             min={0} max={2} step={0.1}
                             placeholder="auto"
                             disabled={disabled}
@@ -135,7 +220,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                             type="number"
                             className={localStyles.numInput}
                             value={topK}
-                            onChange={(e) => onTopKChange(e.target.value)}
+                            onChange={(e) => { onTopKChange(e.target.value); setSelectedPreset(''); }}
                             min={0} step={1}
                             placeholder="auto"
                             disabled={disabled}
@@ -148,7 +233,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                             type="number"
                             className={localStyles.numInput}
                             value={topP}
-                            onChange={(e) => onTopPChange(e.target.value)}
+                            onChange={(e) => { onTopPChange(e.target.value); setSelectedPreset(''); }}
                             min={0} max={1} step={0.05}
                             placeholder="auto"
                             disabled={disabled}
@@ -161,7 +246,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                             type="number"
                             className={localStyles.numInput}
                             value={repeatPenalty}
-                            onChange={(e) => onRepeatPenaltyChange(e.target.value)}
+                            onChange={(e) => { onRepeatPenaltyChange(e.target.value); setSelectedPreset(''); }}
                             min={0} step={0.05}
                             placeholder="auto"
                             disabled={disabled}
@@ -184,34 +269,8 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                             <span className={localStyles.unit}>tok</span>
                         </div>
                     </label>
-                    <div className={localStyles.row}>
-                        <span className={localStyles.label}>Turns<InfoTip text={SETTING_TIPS.turns} /></span>
-                        <div className={localStyles.turnsGroup}>
-                            <label className={localStyles.toggleLabel}>
-                                <input
-                                    type="checkbox"
-                                    className={localStyles.toggleInput}
-                                    checked={unlimitedTurns}
-                                    onChange={(e) => onUnlimitedTurnsChange(e.target.checked)}
-                                    disabled={disabled}
-                                />
-                                <span className={localStyles.toggle} />
-                            </label>
-                            {unlimitedTurns
-                                ? <span className={localStyles.turnsHint}>unlimited</span>
-                                : <input
-                                    type="number"
-                                    className={localStyles.numInput}
-                                    value={agentTurns}
-                                    onChange={(e) => onAgentTurnsChange(e.target.value)}
-                                    min={1} step={1}
-                                    placeholder="15"
-                                    disabled={disabled}
-                                    aria-label="Agent turn limit"
-                                />
-                            }
-                        </div>
-                    </div>
+                </div>
+            )}
         </div>
     );
 }

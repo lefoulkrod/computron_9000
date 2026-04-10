@@ -10,10 +10,9 @@ function _uuid() {
 /**
  * Build the request body for /api/chat including model options.
  */
-function _buildRequestBody(message, fileData, modelSettings, conversationId, agent) {
+function _buildRequestBody(message, fileData, modelSettings, conversationId) {
     const body = { message: message || '(uploaded file)' };
     if (conversationId) body.conversation_id = conversationId;
-    if (agent) body.agent = agent;
     if (fileData) {
         body.data = [fileData];
     }
@@ -176,12 +175,12 @@ export default function useStreamingChat(callbacks) {
     const abortControllerRef = useRef(null);
     const conversationIdRef = useRef(_uuid());
 
-    const sendMessage = useCallback(async (message, fileData, modelSettings, agent) => {
+    const sendMessage = useCallback(async (message, fileData, modelSettings) => {
         if (!message && !fileData) return;
 
         // If already streaming, send as a nudge (fire-and-forget)
         if (isStreamingRef.current) {
-            const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
+            const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
             fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

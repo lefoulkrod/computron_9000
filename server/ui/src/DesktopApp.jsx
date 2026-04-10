@@ -183,9 +183,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         setAttachment({ base64: base64Screenshot, contentType: 'image/png' });
     };
 
-    const handleSend = useCallback((message, fileData, agent) => {
+    const handleSend = useCallback((message, fileData) => {
         setAttachment(null);
-        sendMessage(message, fileData, modelSettings, agent);
+        sendMessage(message, fileData, modelSettings);
     }, [sendMessage, modelSettings]);
 
     const openDesktop = useCallback(async () => {

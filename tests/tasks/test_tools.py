@@ -92,24 +92,24 @@ class TestCreateGoal:
         first_id = by_desc["first task"].id
         assert by_desc["second task"].depends_on == [first_id]
 
-    async def test_task_agent_default(self):
-        """Task agent defaults to 'computron' when not specified."""
+    async def test_task_skills_default(self):
+        """Task skills default to empty list when not specified."""
         result = await create_goal("goal", tasks=[_TASK])
         goal_id = _extract_id(result)
 
         store = tasks.get_store()
         stored = store.list_tasks(goal_id)
-        assert stored[0].agent == "computron"
+        assert stored[0].skills == []
 
-    async def test_task_agent_override(self):
-        """Task agent is set when provided."""
-        task = {**_TASK, "agent": "browser"}
+    async def test_task_skills_override(self):
+        """Task skills are set when provided."""
+        task = {**_TASK, "skills": ["browser"]}
         result = await create_goal("goal", tasks=[task])
         goal_id = _extract_id(result)
 
         store = tasks.get_store()
         stored = store.list_tasks(goal_id)
-        assert stored[0].agent == "browser"
+        assert stored[0].skills == ["browser"]
 
     async def test_duplicate_key_returns_error(self):
         """Duplicate task keys return an error without writing anything."""

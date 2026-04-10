@@ -40,8 +40,8 @@ export default function MobileApp({ dark, onToggleTheme }) {
         newConversation: chatNewConversation,
     } = useStreamingChat(_stableCallbacks);
 
-    const handleSend = useCallback((message, fileData, agent) => {
-        sendMessage(message, fileData, modelSettings, agent);
+    const handleSend = useCallback((message, fileData) => {
+        sendMessage(message, fileData, modelSettings);
     }, [sendMessage, modelSettings]);
 
     const newConversation = useCallback(async () => {

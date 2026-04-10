@@ -4,9 +4,6 @@ from typing import Any
 
 from tasks import get_store
 
-# Agents valid for use in task definitions (subset of the full agent registry)
-_TASK_AGENTS = sorted({"computron", "browser", "coder"})
-
 
 async def begin_goal(
     description: str,
@@ -51,8 +48,9 @@ async def add_task(
     key: str,
     description: str,
     instruction: str,
-    agent: str = "computron",
+    skills: list[str] | None = None,
     depends_on: list[str] | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any] | str:
     """Add a task to a goal draft and return the updated draft.
 
@@ -64,9 +62,12 @@ async def add_task(
         key: Unique short identifier for this task (e.g. 'fetch_data').
         description: Short human-readable description.
         instruction: Full self-contained agent prompt.
-        agent: 'computron' (default), 'browser', or 'coder'.
+        skills: Skills to load for this task (e.g. ['browser'], ['coder', 'browser']).
+            Omit for a general-purpose agent with no pre-loaded skills.
         depends_on: Keys of tasks this task depends on. Omit to depend on the
             previous task. Pass [] for no dependencies (parallel execution).
+        profile: Optional inference profile ID (e.g. 'code', 'creative') to
+            tune inference parameters for this task.
     """
     if not isinstance(draft, dict) or "tasks" not in draft:
         return "Error: invalid draft. Start with begin_goal."
@@ -80,8 +81,14 @@ async def add_task(
         return f"Error: description is required for task '{key}'."
     if not instruction or not instruction.strip():
         return f"Error: instruction is required for task '{key}'."
-    if agent not in _TASK_AGENTS:
-        return f"Error: unknown agent '{agent}' for task '{key}'. Valid agents: {_TASK_AGENTS}."
+
+    # Validate skills against registry
+    if skills:
+        from sdk.skills import list_skills
+        available = {name for name, _ in list_skills()}
+        unknown = [s for s in skills if s not in available]
+        if unknown:
+            return f"Error: unknown skill(s) {unknown} for task '{key}'. Available: {sorted(available)}."
 
     # Default to previous task if depends_on is omitted and one exists
     resolved_deps = [existing_keys[-1]] if depends_on is None and existing_keys else (depends_on or [])
@@ -94,9 +101,11 @@ async def add_task(
         "key": key,
         "description": description.strip(),
         "instruction": instruction.strip(),
-        "agent": agent,
+        "skills": skills or [],
         "depends_on": resolved_deps,
     }
+    if profile:
+        task["profile"] = profile
     return {**draft, "tasks": [*draft["tasks"], task]}
 
 
@@ -138,13 +147,13 @@ async def create_goal(
                     "key": "research",
                     "description": "Find today's top AI news stories",
                     "instruction": "Browse news sites and find the top 5 AI stories published today. Return headlines, sources, and URLs.",
-                    "agent": "browser",
+                    "skills": ["browser"],
                 },
                 {
                     "key": "summarize",
                     "description": "Write a summary of the research",
                     "instruction": "Summarize the AI news stories from the research task into a concise briefing.",
-                    "agent": "coder",
+                    "skills": ["coder"],
                     "depends_on": ["research"],
                 },
             ],
@@ -158,12 +167,13 @@ async def create_goal(
             - instruction (str): Full, self-contained agent prompt. The
               executing agent has no conversation history — include all URLs,
               file paths, criteria, and output expectations.
-            - agent (str, optional): 'computron' (default), 'browser', or
-              'coder'.
+            - skills (list[str], optional): Skills to load for this task
+              (e.g. ['browser'], ['coder', 'browser']).
             - agent_config (dict, optional): Inline agent override with
               'system_prompt' and/or 'tools'.
             - depends_on (list[str], optional): Keys of tasks this task
               depends on.
+            - profile (str, optional): Inference profile ID.
         cron: Cron expression for recurring goals (e.g. '0 */2 * * *').
             Omit for one-shot goals, which spawn a run immediately.
         timezone: IANA timezone name (e.g. 'America/Chicago', 'UTC').
@@ -219,14 +229,17 @@ async def create_goal(
         dep_keys = t.get("depends_on") or []
         task_id = _new_id()
         key_to_id[key] = task_id
-        task_defs.append({
+        task_def: dict[str, Any] = {
             "id": task_id,
             "description": str(t["description"]).strip(),
             "instruction": str(t["instruction"]).strip(),
-            "agent": t.get("agent", "computron"),
+            "skills": t.get("skills", []),
             "agent_config": t.get("agent_config"),
             "depends_on": [key_to_id[k] for k in dep_keys],
-        })
+        }
+        if t.get("profile"):
+            task_def["profile"] = t["profile"]
+        task_defs.append(task_def)
 
     created_tasks = store.create_tasks(goal_id=goal.id, task_defs=task_defs)
 
@@ -238,7 +251,8 @@ async def create_goal(
     for key, task in zip(keys, created_tasks):
         dep_keys = tasks[keys.index(key)].get("depends_on") or []
         deps_note = f", depends_on={dep_keys}" if dep_keys else ""
-        lines.append(f"  - [{key}] {task.description} (id={task.id}, agent={task.agent}{deps_note})")
+        skills_note = f", skills={task.skills}" if task.skills else ""
+        lines.append(f"  - [{key}] {task.description} (id={task.id}{skills_note}{deps_note})")
 
     task_lines = "\n".join(lines)
     tz_note = f", timezone={goal.timezone}" if goal.timezone else ""
@@ -271,7 +285,7 @@ async def list_tasks(goal_id: str) -> str:
     tasks = store.list_tasks(goal_id)
     if not tasks:
         return "No tasks found for this goal."
-    lines = [f"- {t.description} (id={t.id}, agent={t.agent}, depends_on={t.depends_on})" for t in tasks]
+    lines = [f"- {t.description} (id={t.id}, skills={t.skills}, depends_on={t.depends_on})" for t in tasks]
     return "\n".join(lines)
 
 

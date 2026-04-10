@@ -63,8 +63,9 @@ def _ensure_builtins() -> None:
 
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
+    from skills.goal_planner import _SKILL as goal_planner_skill
 
-    for skill in (browser_skill, coder_skill):
+    for skill in (browser_skill, coder_skill, goal_planner_skill):
         register_skill(skill)
 
     features = load_config().features
