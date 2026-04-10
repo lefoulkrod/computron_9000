@@ -38,13 +38,18 @@ BASH_CMD_TIMEOUT: float = 600.0
 
 @truncate_args(cmd=500)
 async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdResult:
-    """Execute a bash command locally.
+    """Execute a bash command.
 
-    Runs one-shot commands under ``set -euo pipefail``.
+    Runs one-shot commands under ``set -euo pipefail``. Package installs
+    (pip, npm, apt) are auto-promoted to root.
 
-    For long-running processes, background them with ``&`` and redirect output::
+    For games, GUI apps, servers, and other long-running processes, background
+    them with ``&`` and redirect output::
 
         run_bash_cmd("python game.py > /tmp/game.log 2>&1 &")
+
+    Then check status with separate commands. NEVER run a long-lived process
+    in the foreground — it will block until timeout.
 
     Args:
         cmd: The bash command to execute.

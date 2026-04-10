@@ -10,15 +10,36 @@ logger = logging.getLogger(__name__)
 
 
 def exists(path: str) -> PathExistsResult:
-    """Check whether a path exists."""
+    """Check whether a path exists.
+
+    Args:
+        path: Relative or absolute path.
+
+    Returns:
+        PathExistsResult: ``exists``, ``is_file``, ``is_dir``, and normalized ``path``.
+    """
     return path_exists(path)
 
 
 def is_file(path: str) -> PathExistsResult:
-    """Check whether a path is an existing file."""
+    """Check whether a path is an existing file.
+
+    Args:
+        path: Relative or absolute path.
+
+    Returns:
+        PathExistsResult: with flags populated. ``exists`` may be False.
+    """
     return path_exists(path)
 
 
 def is_dir(path: str) -> PathExistsResult:
-    """Check whether a path is an existing directory."""
+    """Check whether a path is an existing directory.
+
+    Args:
+        path: Relative or absolute path.
+
+    Returns:
+        PathExistsResult: with flags populated. ``exists`` may be False.
+    """
     return path_exists(path)

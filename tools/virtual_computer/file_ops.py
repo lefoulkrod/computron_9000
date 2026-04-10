@@ -28,7 +28,15 @@ logger = logging.getLogger(__name__)
 
 @truncate_args(content=0)
 def write_file(path: str, content: str) -> WriteFileResult:
-    """Write UTF-8 text to a file, creating parent directories as needed."""
+    """Write UTF-8 text to a file, creating parent directories as needed.
+
+    Args:
+        path: File path (relative or absolute).
+        content: Text to write.
+
+    Returns:
+        WriteFileResult: Success flag and ``file_path``.
+    """
     try:
         file_path = Path(path)
         if file_path.parent and not file_path.parent.exists():
@@ -43,7 +51,14 @@ def write_file(path: str, content: str) -> WriteFileResult:
 
 
 def make_dirs(path: str) -> MakeDirsResult:
-    """Create a directory and any missing parents."""
+    """Create a directory and any missing parents.
+
+    Args:
+        path: Directory path (relative or absolute).
+
+    Returns:
+        MakeDirsResult: Success flag and ``dir_path``.
+    """
     try:
         abs_path = Path(path)
         abs_path.mkdir(parents=True, exist_ok=True)
@@ -55,7 +70,14 @@ def make_dirs(path: str) -> MakeDirsResult:
 
 
 def remove_path(path: str) -> RemovePathResult:
-    """Remove a file or directory (recursive). No-op if path doesn't exist."""
+    """Remove a file or directory (recursive). No-op if path doesn't exist.
+
+    Args:
+        path: Path to remove (relative or absolute).
+
+    Returns:
+        RemovePathResult: Success flag and ``path``.
+    """
     try:
         abs_path = Path(path)
         if not abs_path.exists():
@@ -74,7 +96,15 @@ def remove_path(path: str) -> RemovePathResult:
 
 
 def move_path(src: str, dst: str) -> MoveCopyResult:
-    """Move a file or directory, creating destination parents as needed."""
+    """Move a file or directory, creating destination parents as needed.
+
+    Args:
+        src: Source path (relative or absolute).
+        dst: Destination path (relative or absolute).
+
+    Returns:
+        MoveCopyResult: Success flag with ``src`` and ``dst``.
+    """
     try:
         src_abs = Path(src)
         dst_abs = Path(dst)
@@ -89,7 +119,15 @@ def move_path(src: str, dst: str) -> MoveCopyResult:
 
 
 def copy_path(src: str, dst: str) -> MoveCopyResult:
-    """Copy a file or directory (recursive, merges into existing dirs)."""
+    """Copy a file or directory (recursive, merges into existing dirs).
+
+    Args:
+        src: Source path (relative or absolute).
+        dst: Destination path (relative or absolute).
+
+    Returns:
+        MoveCopyResult: Success flag with ``src`` and ``dst``.
+    """
     try:
         src_abs = Path(src)
         dst_abs = Path(dst)
@@ -108,7 +146,15 @@ def copy_path(src: str, dst: str) -> MoveCopyResult:
 
 @truncate_args(content=0)
 def append_to_file(path: str, content: str) -> WriteFileResult:
-    """Append UTF-8 text to a file, creating the file and parents if needed."""
+    """Append UTF-8 text to a file, creating the file and parents if needed.
+
+    Args:
+        path: File path (relative or absolute).
+        content: Text to append.
+
+    Returns:
+        WriteFileResult: Success flag and ``file_path``.
+    """
     try:
         file_path = Path(path)
         if file_path.parent and not file_path.parent.exists():
@@ -124,7 +170,15 @@ def append_to_file(path: str, content: str) -> WriteFileResult:
 
 @truncate_args(content=0)
 def prepend_to_file(path: str, content: str) -> WriteFileResult:
-    """Prepend UTF-8 text to a file, creating the file if needed."""
+    """Prepend UTF-8 text to a file, creating the file if needed.
+
+    Args:
+        path: Relative or absolute path.
+        content: Text to prepend (UTF-8). Only ``str`` is accepted.
+
+    Returns:
+        WriteFileResult: Indicates success or failure with the ``file_path``.
+    """
     try:
         file_path = Path(path)
         if file_path.parent and not file_path.parent.exists():
@@ -155,7 +209,18 @@ def prepend_to_file(path: str, content: str) -> WriteFileResult:
 
 
 def write_files(files: list[tuple[str, str]]) -> list[WriteFileResult]:
-    """Write multiple text files in a batch."""
+    """Write multiple text files in a batch.
+
+    Each item is processed independently using ``write_file``.
+
+    Args:
+        files: A list of ``(path, content)`` tuples where ``content`` is ``str``
+            (written as UTF-8).
+
+    Returns:
+        list[WriteFileResult]: A list of results in the same order as inputs.
+        Examine individual items for success or error details.
+    """
     results: list[WriteFileResult] = []
     for path, content in files:
         results.append(write_file(path, content))
@@ -163,7 +228,14 @@ def write_files(files: list[tuple[str, str]]) -> list[WriteFileResult]:
 
 
 def path_exists(path: str) -> PathExistsResult:
-    """Check whether a path exists and its type (file or directory)."""
+    """Check whether a path exists and its type (file or directory).
+
+    Args:
+        path: Path to check (relative or absolute).
+
+    Returns:
+        PathExistsResult: ``exists``, ``is_file``, ``is_dir``, and ``path``.
+    """
     try:
         abs_path = Path(path)
         exists = abs_path.exists()
@@ -211,7 +283,15 @@ def _read_file_directory(path: str) -> ReadResult:
 
 
 def list_dir(path: str, *, include_hidden: bool = False) -> DirectoryReadResult:
-    """List directory contents."""
+    """List directory contents.
+
+    Args:
+        path: Directory path (relative or absolute).
+        include_hidden: Include entries starting with ``.``.
+
+    Returns:
+        DirectoryReadResult: Entries with ``name``, ``is_file``, ``is_dir``.
+    """
     result = _read_file_directory(path)
 
     if not isinstance(result, DirectoryReadResult):

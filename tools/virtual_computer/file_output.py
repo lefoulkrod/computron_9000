@@ -15,7 +15,7 @@ async def send_file(path: str) -> dict[str, str]:
     """Send a file to the user. Use this whenever the user should receive a file.
 
     Args:
-        path: Absolute path to the file.
+        path: Absolute path to the file (e.g. ``/home/computron/report.csv``).
 
     Returns:
         Dict with ``status`` and ``message``.
