@@ -6,7 +6,7 @@ from sdk.skills import Skill
 from tools.virtual_computer import (
     apply_text_patch,
     grep,
-    install_packages,
+    install_os_packages,
     list_dir,
     read_file,
     replace_in_file,
@@ -53,9 +53,10 @@ _SKILL = Skill(
         is directly accessible at localhost:<port>. Use ports 8000-8010 to avoid
         conflicts (8080 is taken by the app server).
 
-        INSTALLING PACKAGES — use install_packages(packages, manager) to install
-        system packages (apt), Python packages (pip), or Node packages (npm).
-        Do NOT use apt-get or pip install directly in run_bash_cmd.
+        INSTALLING OS PACKAGES — use install_os_packages(["ffmpeg", "jq"]) to
+        install system packages via apt. For Python packages use
+        run_bash_cmd("pip install ..."). For Node packages use
+        run_bash_cmd("npm install ...").
 
         GIT & GITHUB — git and the GitHub CLI (gh) are available. Use gh for
         creating PRs, issues, checking CI status, browsing repos, etc.
@@ -72,6 +73,6 @@ _SKILL = Skill(
         apply_text_patch,
         replace_in_file,
         run_bash_cmd,
-        install_packages,
+        install_os_packages,
     ],
 )

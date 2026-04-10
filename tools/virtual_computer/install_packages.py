@@ -1,7 +1,7 @@
-"""Tool for installing system and language packages.
+"""Tool for installing system packages via apt.
 
-Runs package managers with elevated privileges so the agent doesn't
-need raw ``sudo`` access in its bash commands.
+Runs apt-get with sudo so the agent doesn't need raw ``sudo`` access
+in its bash commands.  For pip/npm packages use ``run_bash_cmd`` directly.
 """
 
 import asyncio
@@ -12,18 +12,15 @@ logger = logging.getLogger(__name__)
 
 _INSTALL_TIMEOUT: float = 300.0
 
-_SUPPORTED_MANAGERS = frozenset({"apt", "pip", "npm"})
 
+async def install_os_packages(packages: list[str]) -> str:
+    """Install OS-level system packages via apt.
 
-async def install_packages(
-    packages: list[str],
-    manager: str = "apt",
-) -> str:
-    """Install one or more packages using the specified package manager.
+    For Python packages use ``run_bash_cmd("pip install ...")``.
+    For Node packages use ``run_bash_cmd("npm install ...")``.
 
     Args:
-        packages: Package names to install.
-        manager: One of ``"apt"``, ``"pip"``, or ``"npm"``.
+        packages: Apt package names to install (e.g. ``["ffmpeg", "jq"]``).
 
     Returns:
         A summary of the installation result.
@@ -31,20 +28,10 @@ async def install_packages(
     if not packages:
         return "Error: No packages specified."
 
-    manager = manager.lower().strip()
-    if manager not in _SUPPORTED_MANAGERS:
-        return "Error: Unsupported manager %r. Use one of: %s" % (manager, ", ".join(sorted(_SUPPORTED_MANAGERS)))
-
     safe_pkgs = [shlex.quote(p) for p in packages]
+    cmd = "sudo -n apt-get update -qq && sudo -n apt-get install -y %s" % " ".join(safe_pkgs)
 
-    if manager == "apt":
-        cmd = "sudo -n apt-get update -qq && sudo -n apt-get install -y %s" % " ".join(safe_pkgs)
-    elif manager == "pip":
-        cmd = "sudo -n pip install %s" % " ".join(safe_pkgs)
-    else:
-        cmd = "sudo -n npm install -g %s" % " ".join(safe_pkgs)
-
-    logger.info("Installing packages (%s): %s", manager, packages)
+    logger.info("Installing OS packages: %s", packages)
 
     try:
         proc = await asyncio.create_subprocess_shell(
@@ -69,7 +56,7 @@ async def install_packages(
 
     if exit_code == 0:
         logger.info("Successfully installed: %s", packages)
-        return "Installed %s via %s.\n%s" % (", ".join(packages), manager, stdout)
+        return "Installed %s.\n%s" % (", ".join(packages), stdout)
 
     logger.warning("Install exited %d for: %s", exit_code, packages)
     return "Install failed (exit %d).\nstdout: %s\nstderr: %s" % (exit_code, stdout, stderr)
