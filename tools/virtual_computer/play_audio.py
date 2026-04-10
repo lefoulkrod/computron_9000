@@ -19,7 +19,7 @@ async def play_audio(path: str) -> dict[str, str]:
     then pass its path here.
 
     Args:
-        path: Absolute path to the audio file (e.g. ``/home/computron/speech.wav``).
+        path: Absolute path to the audio file.
 
     Returns:
         Dict with ``status`` and ``message``.
