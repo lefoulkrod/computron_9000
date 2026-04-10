@@ -39,9 +39,6 @@ logs/
 # Environment variables
 .env
 
-# Developer config override
-config.dev.yaml
-
 # Node projects
 node_modules/
 **/node_modules/
