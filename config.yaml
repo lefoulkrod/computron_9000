@@ -1,14 +1,14 @@
 settings:
-  home_dir: /home/larry/.computron_9000
+  home_dir: /var/lib/computron
 virtual_computer:
-  container_name: computron_virtual_computer
-  container_user: computron
-  home_dir: /home/larry/.computron_9000/container_home
-  container_working_dir: /home/computron
-inference_container:
-  container_name: computron_inference
-  home_dir: /home/larry/.computron_9000/container_home
-  container_working_dir: /output
+  home_dir: /home/computron
+
+features:
+  image_generation: ${ENABLE_IMAGE_GEN:-false}
+  music_generation: ${ENABLE_MUSIC_GEN:-false}
+  desktop: ${ENABLE_DESKTOP:-false}
+  visual_grounding: ${ENABLE_GROUNDING:-false}
+  custom_tools: ${ENABLE_CUSTOM_TOOLS:-false}
 
 tools:
   web:
@@ -16,8 +16,8 @@ tools:
       state_file: ".browser-state.json"
       no_save_state: false
       timeout: 6000
+      search_engine_id: ${GOOGLE_SEARCH_ENGINE_ID}
   browser:
-    channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
     headless: false  # true = no GUI, false = visible browser window
     human:
       pointer:
@@ -45,8 +45,13 @@ agents:
   file_system:
     think: false
 
+reddit:
+  client_id: ${REDDIT_CLIENT_ID:-}
+  client_secret: ${REDDIT_CLIENT_SECRET:-}
+  user_agent: ${REDDIT_USER_AGENT:-}
+
 desktop:
-  display: ":1"
+  display: ":0"
   resolution: "1280x720"
   websocket_port: 6080
   screenshot_quality: 70
@@ -80,10 +85,10 @@ skills:
   max_skills: 200
   single_conversation_extraction: true
 
-# LLM settings. If LLM_HOST env var is set and non-blank, it overrides this value.
-# Otherwise, this YAML value is used as the default.
 llm:
   provider: ollama
+  host: ${LLM_HOST}
+  api_key: ${LLM_API_KEY}
 
 parallel:
   enabled: true

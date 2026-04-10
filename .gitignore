@@ -23,6 +23,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Runtime caches (created when source is mounted in container-dev)
+.cache/
+
 # Logs
 logs/
 *.log

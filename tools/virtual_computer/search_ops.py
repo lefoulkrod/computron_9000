@@ -12,10 +12,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Iterable
-    from pathlib import Path
 
 from ._fs_internal import is_binary_file
-from ._path_utils import resolve_under_home
 from .models import GrepMatch, GrepResult
 
 logger = logging.getLogger(__name__)
@@ -133,12 +131,11 @@ def grep(
             "__pycache__/**",
             "**/*.lock",
         ]
-
         # Merge default excludes with user-provided excludes
         exclude_globs = default_excludes if exclude_globs is None else exclude_globs + default_excludes
 
         # Resolve the search root (file or directory)
-        root_abs, _home, root_rel = resolve_under_home(path)
+        root_abs = Path(path)
         if not root_abs.exists():
             return GrepResult(
                 success=False,
@@ -173,8 +170,7 @@ def grep(
                 continue
             searched += 1
             all_lines = text.splitlines(keepends=False)
-            rel_path = str(fpath.relative_to(root_abs)) if fpath.is_relative_to(root_abs) else str(fpath)
-            file_display = f"{root_rel}/{rel_path}" if root_rel else rel_path
+            file_display = str(fpath)
             for i, line in enumerate(all_lines):
                 if patt.search(line):
                     before = all_lines[max(0, i - ctx) : i] if ctx > 0 else None

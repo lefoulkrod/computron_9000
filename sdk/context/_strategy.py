@@ -140,6 +140,7 @@ _SUMMARIZE_PROMPT = (
     "- Do NOT echo these instructions — replace them with actual content."
 )
 
+
 def _build_summarize_prompt(objective: str = "") -> str:
     """Build the summarizer system prompt, optionally injecting the objective."""
     if objective:
@@ -153,6 +154,27 @@ def _build_summarize_prompt(objective: str = "") -> str:
 
 
 _SUMMARY_PREFIX = "[Conversation summary — earlier messages were compacted]\n\n"
+
+# Prefix for the synthetic user message that replaces the stale pinned
+# first user message after intent extraction (experiment 29).
+_INTENT_PREFIX = "[User intent history]\n"
+
+# Prompt for extracting the user's current intent from multiple user
+# messages.  Only called when the compactable range contains more than
+# one user message, indicating the user changed topics or refined their
+# request during the conversation.
+_INTENT_EXTRACTION_PROMPT = (
+    "You will be given a sequence of user messages from a multi-turn "
+    "conversation with an AI assistant. The user may have changed topics "
+    "or given new instructions over the course of the conversation.\n\n"
+    "Write a concise history of the user's inputs that shows how their "
+    "requests evolved. Start with the original request and trace through "
+    "topic changes, refinements, and redirections to arrive at the current "
+    "intent. Use a compact format — one line per phase. Mark the current "
+    "active request clearly with [CURRENT] prefix.\n\n"
+    "Output ONLY the history. Be concise — each line should be one "
+    "sentence max."
+)
 
 
 class TriggerPoint(StrEnum):
@@ -401,17 +423,10 @@ class LLMCompactionStrategy:
         """Summarize old messages and replace them with a compact summary."""
         non_system = history.non_system_messages
 
-        # Pin the first user message — it contains the original request and
-        # must never be summarized away.
+        # Pin the first user message — it will be kept but may be updated
+        # with an extracted intent history if the user changed topics.
         first_user_idx, has_pinned = _find_first_user(non_system)
         pin_offset = 1 if has_pinned else 0
-
-        # Extract the objective from the pinned first user message.
-        objective = ""
-        if has_pinned:
-            content = non_system[first_user_idx].get("content", "")
-            if isinstance(content, str):
-                objective = content
 
         body = non_system[pin_offset:]
         keep_count = _count_kept_by_assistant_groups(
@@ -424,6 +439,15 @@ class LLMCompactionStrategy:
         if not compactable:
             return
 
+        # Collect all user messages before history mutation for intent
+        # extraction.  Includes the pinned message, compactable, and kept.
+        all_user_contents = []
+        for m in non_system:
+            if m.get("role") == "user":
+                content = m.get("content") or ""
+                if content and not content.startswith(_SUMMARY_PREFIX):
+                    all_user_contents.append(content)
+
         # Extract any prior summary so we can merge facts forward.
         prior_summary = _extract_prior_summary(compactable)
 
@@ -435,7 +459,7 @@ class LLMCompactionStrategy:
         t0 = _time.monotonic()
         try:
             summary, model_name = await self._summarize(
-                compactable, prior_summary, objective,
+                compactable, prior_summary,
             )
         except TimeoutError:
             logger.warning(
@@ -449,6 +473,23 @@ class LLMCompactionStrategy:
             _unload_model(resolved_model)
             return
         elapsed = _time.monotonic() - t0
+
+        # Extract user intent if multiple user messages exist (experiment 29).
+        # When the user changes topics mid-conversation, the pinned first
+        # message becomes stale.  Replace it with an LLM-extracted intent
+        # history that tracks how the user's requests evolved.
+        intent_history = None
+        if has_pinned and len(all_user_contents) > 1:
+            try:
+                intent_history = await self._extract_intent(all_user_contents)
+                logger.info(
+                    "LLMCompactionStrategy: extracted intent from %d user messages",
+                    len(all_user_contents),
+                )
+            except Exception:
+                logger.exception(
+                    "Intent extraction failed, keeping original pinned message",
+                )
 
         # Persist the summarization event for quality evaluation.
         record = SummaryRecord(
@@ -467,7 +508,19 @@ class LLMCompactionStrategy:
             options=resolved_options if isinstance(resolved_options, dict) else {},
             elapsed_seconds=round(elapsed, 1),
             source_history=history.instance_id,
+            user_message_post_compaction=intent_history,
         )
+
+        # Save the pinned user message content before mutation. On the first
+        # compaction this is the user's real original message; on subsequent
+        # compactions it's the previous intent history. The true original is
+        # in the earliest summary record (by created_at).
+        if has_pinned:
+            pinned_idx = 1 if history.system_message is not None else 0
+            record.user_message_pre_compaction = (
+                history.get_mutable(pinned_idx).get("content") or ""
+            )
+
         save_summary_record(record)
 
         # Determine the range to drop within the full history list.
@@ -483,6 +536,14 @@ class LLMCompactionStrategy:
             "role": "assistant",
             "content": _SUMMARY_PREFIX + summary,
         })
+
+        # Update the pinned first user message with the extracted intent
+        # history so the agent sees the current objective, not the stale
+        # original request.
+        if intent_history is not None and has_pinned:
+            pinned_idx = 1 if history.system_message is not None else 0
+            pinned_msg = history.get_mutable(pinned_idx)
+            pinned_msg["content"] = _INTENT_PREFIX + intent_history
 
         # Unload the summarizer model to free VRAM for the main agent.
         _unload_model(model_name)
@@ -579,6 +640,41 @@ class LLMCompactionStrategy:
             timeout=_CALL_TIMEOUT,
         )
         return response.message.content or "", model
+
+    async def _extract_intent(self, user_messages: list[str]) -> str:
+        """Extract the user's current intent from multiple user messages.
+
+        Called during compaction when the conversation has more than one
+        user message, indicating the user may have changed topics.  Uses
+        the same model as the summarizer.
+        """
+        cfg = load_config()
+        provider = get_provider()
+        model, options = self._resolve_model(cfg)
+
+        # Build the user content with numbered messages.
+        # Truncate individual messages to keep the input focused.
+        user_content = ""
+        for i, msg in enumerate(user_messages):
+            text = msg[:500] + "..." if len(msg) > 500 else msg
+            user_content += f"\n--- Message {i + 1} ---\n{text}\n"
+
+        response = await asyncio.wait_for(
+            provider.chat(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _INTENT_EXTRACTION_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+                think=False,
+                options={
+                    **(options if isinstance(options, dict) else {}),
+                    "temperature": 0,
+                },
+            ),
+            timeout=60,
+        )
+        return response.message.content or ""
 
     def _resolve_model(self, cfg: object) -> tuple[str, dict]:
         """Determine which model and options to use for summarization."""

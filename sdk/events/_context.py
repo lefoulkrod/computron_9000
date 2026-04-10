@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import itertools
 import logging
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
-    from collections.abc import Generator
+    from collections.abc import AsyncGenerator
 
 from agents.types import LLMOptions
 
@@ -93,12 +93,12 @@ def get_current_depth() -> int:
     return max(0, len(stack) - 1) if stack else 0
 
 
-@contextmanager
-def agent_span(
+@asynccontextmanager
+async def agent_span(
     agent_name: str | None = None,
     instruction: str | None = None,
     agent_state: AgentState | None = None,
-) -> Generator[str, None, None]:
+) -> AsyncGenerator[str, None]:
     """Push an attribution frame for the duration of the block.
 
     Events published inside will be tagged with the given agent name and an
@@ -107,6 +107,9 @@ def agent_span(
     When an AgentState is passed, the span borrows it (useful for multi-turn
     agents whose skills should survive across turns). Otherwise a fresh
     empty AgentState is created.
+
+    On exit, releases any ephemeral browser context created by this agent
+    (sub-agents only, depth > 0).
 
     Args:
         agent_name: Human-readable agent name for event attribution.
@@ -118,7 +121,7 @@ def agent_span(
         str: The context id pushed onto the stack.
 
     Example:
-        with agent_span("Browser Agent", instruction="Browse example.com"):
+        async with agent_span("Browser Agent", instruction="Browse example.com"):
             publish_event(AgentEvent(payload=ContentPayload(type="content", thinking="Navigating...")))
     """
     stack = _context_stack.get()
@@ -153,6 +156,14 @@ def agent_span(
         status = "stopped" if isinstance(exc, StopRequestedError) else "error"
         raise
     finally:
+        # Release ephemeral browser context for sub-agents (depth > 0).
+        if depth > 0:
+            try:
+                from tools.browser.core import release_agent_browser
+                await release_agent_browser(context_id)
+            except Exception:  # noqa: BLE001
+                logger.debug("No browser context to release for '%s'", context_id)
+
         logger.info(
             "Agent completed: %s (id=%s, status=%s, depth=%d)",
             agent_name, context_id, status, depth,

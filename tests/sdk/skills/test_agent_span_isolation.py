@@ -17,12 +17,13 @@ def _make_tool(name: str):
 class TestAgentSpanAgentStateIsolation:
     """Verify agent_span resets and restores the AgentState ContextVar."""
 
-    def test_agent_span_creates_fresh_agent_state(self):
+    @pytest.mark.asyncio
+    async def test_agent_span_creates_fresh_agent_state(self):
         """Inside an agent_span, a fresh AgentState is created."""
         parent = AgentState([_make_tool("parent_tool")])
         token = _active_agent_state.set(parent)
         try:
-            with agent_span("child"):
+            async with agent_span("child"):
                 child = _active_agent_state.get()
                 assert child is not None
                 assert child is not parent
@@ -30,12 +31,13 @@ class TestAgentSpanAgentStateIsolation:
         finally:
             _active_agent_state.reset(token)
 
-    def test_agent_span_restores_parent(self):
+    @pytest.mark.asyncio
+    async def test_agent_span_restores_parent(self):
         """After exiting agent_span, the parent's AgentState is restored."""
         parent = AgentState([_make_tool("parent_tool")])
         token = _active_agent_state.set(parent)
         try:
-            with agent_span("child"):
+            async with agent_span("child"):
                 child = _active_agent_state.get()
                 assert child is not parent
 
@@ -43,17 +45,18 @@ class TestAgentSpanAgentStateIsolation:
         finally:
             _active_agent_state.reset(token)
 
-    def test_nested_spans(self):
+    @pytest.mark.asyncio
+    async def test_nested_spans(self):
         """Nested agent_spans each get their own isolated scope."""
         root = AgentState([_make_tool("root")])
         token = _active_agent_state.set(root)
         try:
-            with agent_span("level1", agent_state=AgentState([_make_tool("l1")])):
+            async with agent_span("level1", agent_state=AgentState([_make_tool("l1")])):
                 level1 = _active_agent_state.get()
                 assert level1 is not root
                 assert len(level1.tools) == 1
 
-                with agent_span("level2", agent_state=AgentState([_make_tool("l2")])):
+                async with agent_span("level2", agent_state=AgentState([_make_tool("l2")])):
                     level2 = _active_agent_state.get()
                     assert level2 is not level1
                     assert len(level2.tools) == 1
@@ -64,9 +67,10 @@ class TestAgentSpanAgentStateIsolation:
         finally:
             _active_agent_state.reset(token)
 
-    def test_default_creates_empty_agent_state(self):
+    @pytest.mark.asyncio
+    async def test_default_creates_empty_agent_state(self):
         """Without any setup, agent_span creates an empty AgentState."""
-        with agent_span("clean"):
+        async with agent_span("clean"):
             ls = _active_agent_state.get()
             assert ls is not None
             assert ls.tools == []

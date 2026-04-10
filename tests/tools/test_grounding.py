@@ -126,25 +126,10 @@ def test_parse_response_uses_coordinates_fallback() -> None:
 # ── run_grounding tests ───────────────────────────────────────────────
 
 
-class _FakeInferenceConfig:
-    home_dir = "/tmp/test_grounding_home"
-    container_name = "test_inference"
-    container_working_dir = "/home/testuser"
-
-
-class _FakeConfig:
-    inference_container = _FakeInferenceConfig()
-
-
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_run_grounding_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """run_grounding should write screenshot to .vision/, exec podman, and return parsed result."""
-    fake_cfg = _FakeConfig()
-    fake_cfg.inference_container.home_dir = str(tmp_path)
-
-    monkeypatch.setattr("tools._grounding.load_config", lambda: fake_cfg)
-
+async def test_run_grounding_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_grounding should write screenshot to /tmp/.vision/, run locally, and return parsed result."""
     fake_result = subprocess.CompletedProcess(
         args=[],
         returncode=0,
@@ -159,41 +144,18 @@ async def test_run_grounding_success(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert response.x == 640
     assert response.y == 360
 
-    # Verify screenshot was written to .vision/ subdirectory
-    # Default agent_id is None → "default", so filename is grounding_default.png
-    screenshot_path = tmp_path / ".vision" / "grounding_default.png"
+    # Verify screenshot was written to /tmp/.vision/
+    screenshot_path = Path("/tmp/.vision/grounding_default.png")
     assert screenshot_path.exists()
     assert screenshot_path.read_bytes() == b"fake-png-bytes"
+    # Clean up
+    screenshot_path.unlink(missing_ok=True)
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_run_grounding_custom_filename(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Custom screenshot_filename should be used for the file on disk."""
-    fake_cfg = _FakeConfig()
-    fake_cfg.inference_container.home_dir = str(tmp_path)
-
-    monkeypatch.setattr("tools._grounding.load_config", lambda: fake_cfg)
-
-    fake_result = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout=_VALID_SERVER_OUTPUT.encode(), stderr=b"",
-    )
-    monkeypatch.setattr("tools._grounding.subprocess.run", lambda *a, **kw: fake_result)
-
-    await run_grounding(b"png", "task", screenshot_filename="browser_screenshot.png")
-
-    assert (tmp_path / ".vision" / "browser_screenshot.png").exists()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_run_grounding_uses_ground_from_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+async def test_run_grounding_uses_ground_from_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """run_grounding should use ground_from_path (no base64) in the exec script."""
-    fake_cfg = _FakeConfig()
-    fake_cfg.inference_container.home_dir = str(tmp_path)
-
-    monkeypatch.setattr("tools._grounding.load_config", lambda: fake_cfg)
-
     captured_args: list = []
 
     def capture_run(*args, **kwargs):
@@ -206,26 +168,22 @@ async def test_run_grounding_uses_ground_from_path(monkeypatch: pytest.MonkeyPat
 
     await run_grounding(b"png", "task")
 
-    # The script should reference ground_from_path, not ground + base64
     script_cmd = captured_args[0][0]  # first positional arg to subprocess.run
     script_text = script_cmd[-1]  # last element is the -c script
     assert "ground_from_path" in script_text
     assert "base64" not in script_text
+    # Should use local path, not container path
+    assert "/tmp/.vision/" in script_text
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_run_grounding_subprocess_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Non-zero exit code from podman exec should raise RuntimeError."""
-    fake_cfg = _FakeConfig()
-    fake_cfg.inference_container.home_dir = str(tmp_path)
-
-    monkeypatch.setattr("tools._grounding.load_config", lambda: fake_cfg)
-
+async def test_run_grounding_subprocess_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-zero exit code should raise RuntimeError."""
     fake_result = subprocess.CompletedProcess(
-        args=[], returncode=1, stdout=b"", stderr=b"container not found",
+        args=[], returncode=1, stdout=b"", stderr=b"model not found",
     )
     monkeypatch.setattr("tools._grounding.subprocess.run", lambda *a, **kw: fake_result)
 
-    with pytest.raises(RuntimeError, match="container not found"):
+    with pytest.raises(RuntimeError, match="model not found"):
         await run_grounding(b"png", "task")

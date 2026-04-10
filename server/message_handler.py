@@ -195,7 +195,7 @@ async def _run_turn(
         if dispatcher:
             dispatcher.subscribe(event_buffer.handle_event)
 
-        with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state):
+        async with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state):
             conversation.history.append({"role": "user", "content": user_content})
             _refresh_system_message(conversation.history, active_agent.instruction)
 

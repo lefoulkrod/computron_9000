@@ -140,7 +140,7 @@ async def spawn_agent(
     )
     _log_spawn(agent_name, skills, instructions)
 
-    with agent_span(agent_name, instruction=instructions, agent_state=loaded):
+    async with agent_span(agent_name, instruction=instructions, agent_state=loaded):
         conv_id = get_conversation_id() or "default"
         short_id = _uuid.uuid4().hex[:8]
         instance_id = f"{conv_id}/{agent_name}_{short_id}"
@@ -184,14 +184,6 @@ async def spawn_agent(
             _log_spawn_error(agent_name, str(exc))
             logger.exception("Unexpected error in spawned agent '%s'", agent_name)
             raise
-        finally:
-            agent_id = get_current_agent_id()
-            if agent_id:
-                try:
-                    from tools.browser.core import release_agent_browser
-                    await release_agent_browser(agent_id)
-                except Exception:  # noqa: BLE001
-                    logger.debug("No browser context to release for '%s'", agent_id)
 
     result = (result_text or "").strip()
     _log_spawn_complete(agent_name, result)

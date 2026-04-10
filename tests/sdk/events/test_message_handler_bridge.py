@@ -39,7 +39,7 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
         await asyncio.sleep(0)
 
         # Nested agent event: passes through with content intact
-        with agent_span("nested"):
+        async with agent_span("nested"):
             publish_event(AgentEvent(payload=ContentPayload(type="content", content="secret", thinking="hidden")))
         await asyncio.sleep(0)
 

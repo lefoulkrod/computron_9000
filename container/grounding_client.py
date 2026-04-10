@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 
 SERVER_URL = "http://127.0.0.1:18902"
-SERVER_SCRIPT = "/opt/inference/grounding_server.py"
+SERVER_SCRIPT = "/opt/computron/container/grounding_server.py"
 _PID_FILE = "/tmp/grounding_server.pid"
 # First launch downloads ~31GB of model weights + loads into VRAM.
 # Subsequent starts only need ~20s for model loading from cache.

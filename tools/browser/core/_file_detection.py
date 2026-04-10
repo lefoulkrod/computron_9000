@@ -39,18 +39,16 @@ _PAGE_CONTENT_TYPES = frozenset({
 
 
 class DownloadInfo(BaseModel):
-    """Metadata about a file downloaded by the browser.
+    """Metadata about a downloaded file.
 
     Attributes:
-        host_path: Absolute path on the host filesystem.
-        container_path: Path as seen from inside the container.
+        path: Absolute path to the saved file.
         content_type: MIME type of the downloaded file.
         size_bytes: File size in bytes.
         filename: The filename (basename) of the saved file.
     """
 
-    host_path: str
-    container_path: str
+    path: str
     content_type: str
     size_bytes: int
     filename: str
@@ -78,14 +76,12 @@ def is_file_content_type(content_type: str) -> bool:
 async def save_response_as_file(
     response: object,
     downloads_dir: str | Path,
-    container_dir: str,
 ) -> DownloadInfo:
     """Download the response body and save it to disk.
 
     Args:
         response: Playwright Response object with ``.body()`` and ``.url``.
-        downloads_dir: Host directory to save the file into.
-        container_dir: Container-side equivalent of downloads_dir.
+        downloads_dir: Directory to save the file into.
 
     Returns:
         DownloadInfo with the saved file's metadata.
@@ -124,15 +120,13 @@ async def save_response_as_file(
     dest.write_bytes(body)
 
     size = len(body)
-    container_path = f"{container_dir.rstrip('/')}/{basename}"
 
     logger.info(
         "Saved file download: %s (%s, %d bytes)", dest, ct, size,
     )
 
     return DownloadInfo(
-        host_path=str(dest),
-        container_path=container_path,
+        path=str(dest),
         content_type=ct,
         size_bytes=size,
         filename=basename,
@@ -142,21 +136,39 @@ async def save_response_as_file(
 def _is_viewer_html(body: bytes, expected_ct: str) -> bool:
     """Return True if the body is a Chromium viewer HTML wrapper.
 
-    Chromium replaces PDF/media responses with a small HTML page containing
-    an ``<embed>`` tag. We detect this by checking for HTML markers in a
-    body that should be a non-HTML content type.
+    Chromium replaces PDF/media responses with a small HTML page.  Older
+    versions used an ``<embed>`` tag; newer versions use an ``<iframe>``
+    inside a shadow DOM ``<template>``.  Detection uses two checks:
+
+    1. Magic-byte mismatch — the expected content type implies specific leading
+       bytes (e.g. ``%PDF`` for ``application/pdf``).  If the body doesn't
+       start with those bytes it was almost certainly replaced by the viewer.
+    2. HTML marker fallback — for types without a known magic signature, look
+       for ``<html>`` plus ``<embed`` or ``<iframe`` in the first 8 KB.
     """
-    if not body or len(body) > 2048:
-        # Real files are usually larger; viewer HTML is tiny (~350 bytes)
+    if not body:
         return False
     base_ct = expected_ct.split(";")[0].strip().lower()
     if base_ct in ("text/html", "application/xhtml+xml"):
         return False
+
+    # Magic bytes for common file types Chrome's viewer intercepts
+    magic = _MAGIC_BYTES.get(base_ct)
+    if magic is not None:
+        return not body.startswith(magic)
+
+    # Fallback: look for HTML wrapper markers in the first 8 KB
     try:
-        text = body.decode("utf-8", errors="ignore").lower()
+        text = body[:8192].decode("utf-8", errors="ignore").lower()
     except Exception:
         return False
-    return "<html>" in text and "<embed" in text
+    return "<html>" in text and ("<embed" in text or "<iframe" in text)
+
+
+# Leading bytes for content types that Chrome's PDF/media viewer can replace.
+_MAGIC_BYTES: dict[str, bytes] = {
+    "application/pdf": b"%PDF",
+}
 
 
 async def _refetch_raw_bytes(response: object, url: str) -> bytes:
@@ -183,8 +195,7 @@ async def _refetch_raw_bytes(response: object, url: str) -> bytes:
 
 
 def build_download_info_from_path(
-    host_path: str | Path,
-    container_dir: str,
+    path: str | Path,
     content_type: str | None = None,
 ) -> DownloadInfo:
     """Build a DownloadInfo from an already-saved file on disk.
@@ -192,21 +203,19 @@ def build_download_info_from_path(
     Used for Playwright download events where the file is saved automatically.
 
     Args:
-        host_path: Absolute path to the saved file.
-        container_dir: Container-side base directory.
+        path: Absolute path to the saved file.
         content_type: MIME type override. Guessed from filename if None.
 
     Returns:
         DownloadInfo with the file's metadata.
     """
-    p = Path(host_path)
+    p = Path(path)
     if content_type is None:
         content_type, _ = mimetypes.guess_type(p.name)
         content_type = content_type or "application/octet-stream"
 
     return DownloadInfo(
-        host_path=str(p),
-        container_path=f"{container_dir.rstrip('/')}/{p.name}",
+        path=str(p),
         content_type=content_type,
         size_bytes=p.stat().st_size if p.exists() else 0,
         filename=p.name,
@@ -224,7 +233,7 @@ def format_download_message(info: DownloadInfo) -> str:
     """
     size_str = _format_size(info.size_bytes)
     return (
-        f"Downloaded file: {info.container_path}\n"
+        f"Downloaded file: {info.path}\n"
         f"Type: {info.content_type}\n"
         f"Size: {size_str}\n"
         f"\nUse run_bash_cmd to inspect or process this file."

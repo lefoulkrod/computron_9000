@@ -1,4 +1,4 @@
-"""Tool for analyzing images from the virtual computer using the vision model."""
+"""Tool for analyzing images using the vision model."""
 
 from __future__ import annotations
 
@@ -15,25 +15,26 @@ from config import load_config
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_IMAGE_TYPES = frozenset({
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "image/bmp",
-    "image/tiff",
-})
+_SUPPORTED_IMAGE_TYPES = frozenset(
+    {
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/bmp",
+        "image/tiff",
+    }
+)
 
 
 async def describe_image(
     path: str,
     prompt: str = "Describe this image concisely. List key visual elements and any readable text.",
 ) -> str:
-    """Analyze an image file from the virtual computer using the vision model.
+    """Analyze an image file using the vision model.
 
     Args:
-        path: Absolute path inside the container
-            (e.g. ``/home/computron/uploads/photo.jpg``).
+        path: Absolute path to the image file
         prompt: Question or instruction about the image.
 
     Returns:
@@ -42,33 +43,29 @@ async def describe_image(
     t0 = asyncio.get_event_loop().time()
 
     cfg = load_config()
-    container_home = cfg.virtual_computer.container_working_dir.rstrip("/") + "/"
-    host_home = cfg.virtual_computer.home_dir
+    file_path = Path(path)
 
-    if not path.startswith(container_home):
-        return f"Error: Path must be inside {container_home}. Got: {path}"
+    if not file_path.exists():
+        return "Error: File not found: %s" % path
 
-    relative = path[len(container_home):]
-    host_path = Path(host_home) / relative
+    if not file_path.is_file():
+        return "Error: Path is not a file: %s" % path
 
-    if not host_path.exists():
-        return f"Error: File not found: {path}"
-
-    if not host_path.is_file():
-        return f"Error: Path is not a file: {path}"
-
-    content_type, _ = mimetypes.guess_type(host_path.name)
+    content_type, _ = mimetypes.guess_type(file_path.name)
     if content_type not in _SUPPORTED_IMAGE_TYPES:
-        return (
-            f"Error: Unsupported image type '{content_type}' for {host_path.name}. "
-            f"Supported: {', '.join(sorted(_SUPPORTED_IMAGE_TYPES))}"
+        return "Error: Unsupported image type '%s' for %s. Supported: %s" % (
+            content_type,
+            file_path.name,
+            ", ".join(sorted(_SUPPORTED_IMAGE_TYPES)),
         )
 
     try:
-        raw = host_path.read_bytes()
+        raw = file_path.read_bytes()
+    except PermissionError:
+        return "Error: Permission denied: %s" % path
     except OSError as exc:
-        logger.exception("Failed to read image file %s", host_path)
-        return f"Error: Failed to read file: {exc}"
+        logger.exception("Failed to read image file %s", path)
+        return "Error: Failed to read file: %s" % exc
 
     encoded = base64.b64encode(raw).decode("ascii")
 
@@ -88,7 +85,7 @@ async def describe_image(
         )
     except Exception as exc:
         logger.exception("Vision model failed for image %s", path)
-        return f"Error: Vision model failed: {exc}"
+        return "Error: Vision model failed: %s" % exc
 
     answer = cast(str | None, getattr(response, "response", None))
     if answer is None:
@@ -98,8 +95,11 @@ async def describe_image(
 
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
-        "describe_image", vision.model,
-        prompt, answer, elapsed_ms,
+        "describe_image",
+        vision.model,
+        prompt,
+        answer,
+        elapsed_ms,
         image_source=path,
     )
 

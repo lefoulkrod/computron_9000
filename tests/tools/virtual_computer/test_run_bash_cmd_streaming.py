@@ -1,91 +1,53 @@
-"""Tests for run_bash_cmd streaming and thread-cleanup behaviour."""
+"""Tests for run_bash_cmd timeout behaviour."""
 
 from __future__ import annotations
 
-import threading
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tools.virtual_computer.run_bash_cmd import RunBashCmdError, run_bash_cmd
 
 
-def _make_config(container_name: str = "computron") -> MagicMock:
+def _make_config(home_dir: str = "/tmp") -> MagicMock:
     cfg = MagicMock()
-    cfg.virtual_computer.container_name = container_name
-    cfg.virtual_computer.container_user = "user"
-    cfg.virtual_computer.container_working_dir = "/workspace"
+    cfg.virtual_computer.home_dir = home_dir
     return cfg
-
-
-def _make_podman_client(container_name: str = "computron") -> tuple[MagicMock, MagicMock]:
-    """Return (mock_PodmanClient_class, mock_api_client)."""
-    mock_container = MagicMock()
-    mock_container.name = container_name
-
-    mock_api_client = MagicMock()
-
-    mock_client = MagicMock()
-    mock_client.containers.list.return_value = [mock_container]
-    mock_client.api = mock_api_client
-
-    mock_podman_cls = MagicMock()
-    mock_podman_cls.return_value.from_env.return_value = mock_client
-
-    return mock_podman_cls, mock_api_client
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_timeout_closes_exec_response_to_unblock_thread() -> None:
-    """Closing the exec response on timeout unblocks the stream thread promptly.
+async def test_timeout_kills_process() -> None:
+    """A command that exceeds the timeout should raise RunBashCmdError.
 
-    The stream thread blocks in stream_frames() (simulated by waiting on an Event).
-    The fix calls response.close() when the command times out; the mock close()
-    sets the Event, allowing the thread to exit.  If close() is never called,
-    thread_unblocked is never set and the assertion fails.
+    The subprocess is mocked to hang forever; the timeout logic in run_bash_cmd
+    should kill it and raise.
     """
-    close_called = threading.Event()
-    thread_unblocked = threading.Event()
+    mock_proc = AsyncMock()
+    mock_proc.returncode = -9
+    mock_proc.stdout = AsyncMock()
+    mock_proc.stderr = AsyncMock()
 
-    class _StuckResponse:
-        def raise_for_status(self) -> None:
-            pass
+    # Make the streams hang so the timeout fires
+    async def _hang_read(_n: int = -1) -> bytes:
+        await asyncio.sleep(999)
+        return b""  # pragma: no cover
 
-        def close(self) -> None:
-            close_called.set()
+    mock_proc.stdout.read = _hang_read
+    mock_proc.stderr.read = _hang_read
+    mock_proc.kill = MagicMock()
+    mock_proc.wait = AsyncMock()
 
-    # Generator that blocks on blocking I/O until the response is closed.
-    def _blocking_stream_frames(resp: object, demux: bool = False):  # noqa: ANN202
-        close_called.wait(timeout=5.0)  # blocks the executor thread
-        thread_unblocked.set()
-        return
-        yield  # pragma: no cover — makes this a generator function
-
-    stuck_resp = _StuckResponse()
-
-    def _api_post(path: str, **kwargs: object) -> MagicMock:
-        if "start" in path:
-            return stuck_resp
-        # exec-create response
-        resp = MagicMock()
-        resp.json.return_value = {"Id": "fake-exec-id"}
-        return resp
-
-    mock_podman_cls, mock_api_client = _make_podman_client()
-    mock_api_client.post.side_effect = _api_post
+    async def _create_subprocess_shell(*args, **kwargs):
+        return mock_proc
 
     with (
-        patch("tools.virtual_computer.run_bash_cmd.PodmanClient", mock_podman_cls),
-        patch("tools.virtual_computer.run_bash_cmd.stream_frames", side_effect=_blocking_stream_frames),
+        patch("tools.virtual_computer.run_bash_cmd.asyncio.create_subprocess_shell",
+              side_effect=_create_subprocess_shell),
         patch("tools.virtual_computer.run_bash_cmd.publish_event"),
-        patch("tools.virtual_computer.run_bash_cmd.load_config", return_value=_make_config()),
-        patch("tools.virtual_computer.run_bash_cmd.get_current_workspace_folder", return_value=None),
+        patch("tools.virtual_computer.run_bash_cmd.load_config",
+              return_value=_make_config()),
     ):
         with pytest.raises(RunBashCmdError, match="Timeout"):
             await run_bash_cmd("sleep 999", timeout=0.05)
-
-    # Thread must unblock promptly — response.close() should have been called.
-    assert thread_unblocked.wait(timeout=2.0), (
-        "stream thread did not exit after timeout: response.close() was not called"
-    )

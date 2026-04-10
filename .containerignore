@@ -1,0 +1,12 @@
+# Dev-only files that should not be baked into the container image
+config.dev.yaml
+.env
+.venv/
+__pycache__/
+.git/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+tests/
+node_modules/
+*.egg-info/

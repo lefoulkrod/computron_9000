@@ -1,56 +1,32 @@
-"""Tool for running bash commands in a container with guardrails.
+"""Tool for running bash commands locally with guardrails.
 
-Adds deny patterns, per-command timeouts, and strict bash flags to ensure only
-short-lived, test-oriented commands execute in the headless execution environment.
+Adds deny patterns, per-command timeouts, and strict bash flags.
 """
 
 import asyncio
-import json
 import logging
-import re
+import shlex
 import uuid
-from typing import TYPE_CHECKING, Any
 
-from podman import PodmanClient
-from podman.api import stream_frames
-from podman.domain.containers import Container
 from pydantic import BaseModel
 
+from config import load_config
 from sdk.events import AgentEvent, TerminalOutputPayload, publish_event
 from tools._truncation import truncate_args
-from config import load_config
-from tools.virtual_computer.workspace import get_current_workspace_folder
-
-if TYPE_CHECKING:
-    from podman.domain.containers import Container
+from tools.virtual_computer._policy import is_allowed_command as _is_allowed_command
 
 logger = logging.getLogger(__name__)
 
 
 class RunBashCmdError(Exception):
-    """Error raised when a bash command execution fails in the container.
-
-    Args:
-        message: Error message describing the failure.
-    """
+    """Error raised when a bash command execution fails."""
 
     def __init__(self, message: str) -> None:
-        """Initialize RunBashCmdError.
-
-        Args:
-            message (str): Error message describing the failure.
-        """
         super().__init__(message)
 
 
 class BashCmdResult(BaseModel):
-    """Validated result for a bash command executed in a container.
-
-    Attributes:
-    stdout: Standard output from the command.
-    stderr: Standard error from the command.
-    exit_code: Exit code from the command execution.
-    """
+    """Result for a bash command execution."""
 
     stdout: str | None
     stderr: str | None
@@ -59,13 +35,10 @@ class BashCmdResult(BaseModel):
 
 BASH_CMD_TIMEOUT: float = 600.0
 
-# Re-export for internal use within this module.
-from tools.virtual_computer._policy import is_allowed_command as _is_allowed_command
-
 
 @truncate_args(cmd=500)
 async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdResult:
-    """Execute a bash command in the virtual computer container.
+    """Execute a bash command.
 
     Runs one-shot commands under ``set -euo pipefail``. Package installs
     (pip, npm, apt) are auto-promoted to root.
@@ -85,48 +58,17 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
     Returns:
         BashCmdResult: ``stdout``, ``stderr``, and ``exit_code``.
     """
-
-    def _raise_container_not_found(container_name: str) -> None:
-        msg = f"Container '{container_name}' not found."
-        logger.error(msg)
-        raise RunBashCmdError(msg)
-
     try:
-        # Enforce execution policy (deny patterns) BEFORE any container operations.
-        # This ensures clearly-blocked commands fail fast with exit code 126 and do
-        # not depend on a running container for test environments.
+        # Enforce execution policy (deny patterns) before running.
         if not _is_allowed_command(cmd):
             msg = "Command is not allowed by execution policy"
             logger.error("%s: %s", msg, cmd)
             return BashCmdResult(stdout=None, stderr=msg, exit_code=126)
 
         config = load_config()
-        container_name = config.virtual_computer.container_name
-        container_user = config.virtual_computer.container_user
-        client = PodmanClient().from_env()
-        containers = client.containers.list()
-        container: Container | None = next((c for c in containers if c.name == container_name), None)
-        if container is None:
-            _raise_container_not_found(container_name)
-            return BashCmdResult(stdout=None, stderr=None, exit_code=None)
+        workdir = config.virtual_computer.home_dir
 
-        # Add strict flags to ensure one-shot behavior
-        strict_cmd = f"set -euo pipefail; {cmd}"
-        exec_args = ["bash", "-c", strict_cmd]
-
-        workspace_folder = get_current_workspace_folder()
-        container_working_dir = config.virtual_computer.container_working_dir.rstrip("/")
-        workdir = f"{container_working_dir}/{workspace_folder}" if workspace_folder else container_working_dir
-
-        loop = asyncio.get_running_loop()
-
-        # Package installs need root to write to system site-packages.
-        # Promote pip/pip3/npm/apt-get/apt install commands to root automatically.
-        _is_pkg_install = re.search(
-            r"\bpip3?\s+install\b|\bnpm\s+install\b|\bapt(?:-get)?\s+install\b",
-            cmd,
-        )
-        exec_user = "root" if _is_pkg_install else container_user
+        strict_cmd = "set -euo pipefail; %s" % cmd
 
         # Publish a "running" event so the UI shows the command immediately.
         cmd_id = uuid.uuid4().hex
@@ -137,122 +79,57 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
             status="running",
         )))
 
-        # Use the lower-level Podman API to stream output in real time.
-        # 1. Create exec instance  2. Start with stream=True
-        # 3. Read frames and publish chunks  4. Inspect exec for exit code
-        api_client = client.api
-
-        exec_data = {
-            "AttachStderr": True,
-            "AttachStdout": True,
-            "AttachStdin": False,
-            "Cmd": exec_args,
-            "Tty": False,
-            "User": exec_user,
-            "WorkingDir": workdir,
-        }
-
-        create_resp = api_client.post(
-            f"/containers/{container.name}/exec",
-            data=json.dumps(exec_data),
+        proc = await asyncio.create_subprocess_exec(
+            "bash", "-c", strict_cmd,
+            cwd=workdir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        create_resp.raise_for_status()
-        exec_id = create_resp.json()["Id"]
-
-        # Bridge sync streaming iterator -> async via queue in a thread
-        queue: asyncio.Queue[tuple[bytes | None, bytes | None] | None] = asyncio.Queue()
-
-        # Shared reference so the timeout handler can close the response and
-        # unblock the thread (closing the socket interrupts iter_content).
-        _exec_resp: list[Any] = []
-
-        def _stream_sync() -> None:
-            """Run in a thread: start exec, read frames, push to queue."""
-            start_resp = api_client.post(
-                f"/exec/{exec_id}/start",
-                data=json.dumps({"Detach": False, "Tty": False}),
-                stream=True,
-            )
-            start_resp.raise_for_status()
-            _exec_resp.append(start_resp)
-            # APIResponse proxies attribute access to the underlying
-            # requests.Response, so stream_frames works at runtime.
-            try:
-                for frame in stream_frames(start_resp, demux=True):  # type: ignore[arg-type]
-                    loop.call_soon_threadsafe(queue.put_nowait, frame)  # type: ignore[arg-type]
-            except Exception:
-                # Connection was closed (e.g. on timeout); exit cleanly.
-                pass
-            # Sentinel to signal stream ended
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, None)
-            except RuntimeError:
-                pass  # Event loop already closed
 
         stdout_parts: list[str] = []
         stderr_parts: list[str] = []
 
+        async def _read_stream(
+            stream: asyncio.StreamReader | None,
+            parts: list[str],
+            is_stderr: bool,
+        ) -> None:
+            if stream is None:
+                return
+            while True:
+                chunk = await stream.read(4096)
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                parts.append(text)
+                publish_event(AgentEvent(payload=TerminalOutputPayload(
+                    type="terminal_output",
+                    cmd_id=cmd_id,
+                    cmd=cmd,
+                    status="streaming",
+                    stdout=None if is_stderr else text,
+                    stderr=text if is_stderr else None,
+                )))
+
         try:
-            # Start the streaming thread — it pushes frames into queue and
-            # sends a None sentinel when done.
-            stream_task = loop.run_in_executor(None, _stream_sync)
-
-            async def _consume_stream() -> None:
-                while True:
-                    frame = await queue.get()
-                    if frame is None:
-                        break
-                    stdout_chunk, stderr_chunk = frame
-                    chunk_out = None
-                    chunk_err = None
-                    if stdout_chunk:
-                        chunk_out = stdout_chunk.decode("utf-8", errors="replace")
-                        stdout_parts.append(chunk_out)
-                    if stderr_chunk:
-                        chunk_err = stderr_chunk.decode("utf-8", errors="replace")
-                        stderr_parts.append(chunk_err)
-                    if chunk_out or chunk_err:
-                        publish_event(AgentEvent(payload=TerminalOutputPayload(
-                            type="terminal_output",
-                            cmd_id=cmd_id,
-                            cmd=cmd,
-                            status="streaming",
-                            stdout=chunk_out,
-                            stderr=chunk_err,
-                        )))
-
-            # Only wait_for the async consumer — it cancels cleanly.
-            # Do NOT gather with stream_task: in Python 3.12+, wait_for
-            # waits for the gathered future to fully cancel before raising
-            # TimeoutError, but run_in_executor futures can't be cancelled
-            # (the thread keeps running), causing a deadlock.
-            await asyncio.wait_for(_consume_stream(), timeout=timeout)
-            # If the consumer exited normally, wait for the thread too.
-            await stream_task
+            await asyncio.wait_for(
+                asyncio.gather(
+                    _read_stream(proc.stdout, stdout_parts, is_stderr=False),
+                    _read_stream(proc.stderr, stderr_parts, is_stderr=True),
+                ),
+                timeout=timeout,
+            )
+            await proc.wait()
         except TimeoutError:
-            # Close the exec response to unblock _stream_sync's iter_content
-            # call so the thread can exit instead of leaking until process shutdown.
-            if _exec_resp:
-                _exec_resp[0].close()
-            # Give the thread a moment to exit after socket close.
-            try:
-                await asyncio.wait_for(asyncio.shield(stream_task), timeout=2.0)
-            except (TimeoutError, asyncio.CancelledError):
-                stream_task.cancel()
-            logger.exception("Timeout after %s seconds running bash command: %s", timeout, cmd)
-            msg = f"Timeout after {timeout} seconds running bash command: {cmd}"
+            proc.kill()
+            await proc.wait()
+            logger.error("Timeout after %s seconds running bash command: %s", timeout, cmd)
+            msg = "Timeout after %s seconds running bash command: %s" % (timeout, cmd)
             raise RunBashCmdError(msg) from None
 
-        # Retrieve exit code from the completed exec instance
-        inspect_resp = api_client.get(f"/exec/{exec_id}/json")
-        inspect_resp.raise_for_status()
-        exit_code = inspect_resp.json().get("ExitCode")
-
+        exit_code = proc.returncode
         stdout = "".join(stdout_parts).strip() or None
         stderr = "".join(stderr_parts).strip() or None
-
-        logger.debug("parsed stdout: %r", stdout)
-        logger.debug("parsed stderr: %r", stderr)
 
         # Publish the completed event with final output and exit code.
         publish_event(AgentEvent(payload=TerminalOutputPayload(
@@ -268,9 +145,11 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         return BashCmdResult(
             stdout=stdout,
             stderr=stderr,
-            exit_code=exit_code if exit_code is not None else None,
+            exit_code=exit_code,
         )
+    except RunBashCmdError:
+        raise
     except Exception as exc:
-        logger.exception("Failed to execute bash command '%s' in container.", cmd)
-        msg = f"Execution failed: {exc}"
+        logger.exception("Failed to execute bash command: %s", cmd)
+        msg = "Execution failed: %s" % exc
         raise RunBashCmdError(msg) from exc

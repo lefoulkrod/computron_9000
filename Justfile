@@ -39,12 +39,6 @@ setup home_dir=`echo "$HOME/.computron_9000"`:
         echo "   Install from: https://nodejs.org/ or use nvm/fnm"
     fi
     
-    # Check if podman is installed
-    if ! command -v podman &> /dev/null; then
-        echo "⚠️  Podman is not installed. Some features may not work."
-        echo "   Install from: https://podman.io/getting-started/installation"
-    fi
-    
     # Create virtual environment (idempotent)
     if [ -d ".venv" ]; then
         echo "📦 Python virtual environment already exists at .venv — skipping creation"
@@ -60,33 +54,6 @@ setup home_dir=`echo "$HOME/.computron_9000"`:
     # Install the project in editable mode so imports work without PYTHONPATH
     echo "🧩 Installing project in editable mode..."
     uv pip install -e .
-    
-    # Install Playwright browser(s)
-    echo "🎭 Ensuring Playwright Chromium is installed..."
-    # Don't fail the whole setup if this step has issues (network, permissions)
-        if uv run python -c "from pathlib import Path; import sys; driver_dir = Path.home() / '.cache' / 'ms-playwright'; exists = any((driver_dir / 'chromium' / p).exists() for p in ('chromium','chrome-linux')); sys.exit(0 if exists else 1)"; then
-        echo "✅ Playwright Chromium already present"
-    else
-        if uv run playwright install chromium; then
-            echo "✅ Playwright Chromium installed"
-        else
-            echo "⚠️  Playwright browser install failed. You can try manually:"
-            echo "   • just playwright-install            # default chromium"
-            echo "   • just playwright-install firefox    # firefox"
-            echo "   • just playwright-install-all        # all + Linux deps (may require sudo)"
-        fi
-    fi
-
-    # Enable Podman user API socket if available
-    if command -v podman &> /dev/null && command -v systemctl &> /dev/null; then
-        echo "🔌 Enabling Podman API socket (user)..."
-        if systemctl --user enable --now podman.socket; then
-            echo "✅ Podman API socket enabled."
-        else
-            echo "⚠️  Could not enable Podman user socket automatically."
-            echo "   You can enable it later with: just podman-enable-socket"
-        fi
-    fi
     
     # Install UI dependencies if Node.js is available
     if command -v node &> /dev/null && command -v npm &> /dev/null; then
@@ -120,75 +87,11 @@ setup home_dir=`echo "$HOME/.computron_9000"`:
     
     echo ""
     echo "🎉 Setup complete! You can now:"
-    echo "   • Run the app: just run"
+    echo "   • Build container: just container-build"
+    echo "   • Start dev container: just container-dev"
     echo "   • Run tests: just test"
-    echo "   • Start UI dev server: just ui-dev"
-    echo "   • Build UI: just ui-build"
-    echo "   • Run full dev stack: just dev-full"
     echo "   • See all commands: just"
 
-# Run the main application
-run:
-    uv run main.py
-
-# Run the application in development mode with auto-reload
-dev:
-    uv run python main.py --dev
-
-# Run backend API and UI dev server concurrently with graceful shutdown
-dev-full:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "🚀 Starting full development stack (backend + UI)"
-
-    # Ensure UI dependencies are installed
-    if command -v node &> /dev/null && command -v npm &> /dev/null; then
-        if [ ! -d "{{UI_DIR}}/node_modules" ]; then
-            echo "📦 Installing UI dependencies..."
-            pushd {{UI_DIR}} >/dev/null
-            if [ -f "package-lock.json" ]; then
-                npm ci
-            else
-                npm install
-            fi
-            popd >/dev/null
-        fi
-    else
-        echo "⚠️  Node.js/npm not found. UI dev server will be skipped."
-    fi
-
-    # Start backend
-    uv run python main.py --dev &
-    BACKEND_PID=$!
-
-    # Start UI if tools available
-    if command -v node &> /dev/null && command -v npm &> /dev/null; then
-        pushd {{UI_DIR}} >/dev/null
-        npm run dev &
-        UI_PID=$!
-        popd >/dev/null
-    else
-        UI_PID=""
-    fi
-
-    cleanup() {
-        echo "\n🧹 Shutting down..."
-        if [ -n "${UI_PID}" ]; then
-            kill ${UI_PID} 2>/dev/null || true
-            wait ${UI_PID} 2>/dev/null || true
-        fi
-        kill ${BACKEND_PID} 2>/dev/null || true
-        wait ${BACKEND_PID} 2>/dev/null || true
-        echo "✅ All processes stopped"
-    }
-    trap cleanup INT TERM
-
-    # Wait for background processes
-    if [ -n "${UI_PID}" ]; then
-        wait ${BACKEND_PID} ${UI_PID}
-    else
-        wait ${BACKEND_PID}
-    fi
 
 
 # =============================================
@@ -241,10 +144,6 @@ test-cov:
 # Run only unit tests
 test-unit:
     PYTHONPATH=. uv run pytest -m unit
-
-# Run only integration tests  
-test-integration:
-    PYTHONPATH=. uv run pytest -m integration
 
 # Run tests for a specific file or pattern
 test-file file:
@@ -515,21 +414,21 @@ info:
 
 
 # =============================================
-# 🐳 Containers (Podman)
+# 🐳 Containers (Docker)
 # =============================================
-# Build Podman image 'computron_9000:latest'
+# Build Docker image 'computron_9000:latest'
 container-build:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed. Please install it first:"
+        echo "   https://docs.docker.com/engine/install/"
         exit 1
     fi
-    
+
     echo "🏗️  Building container image..."
-    podman build --format docker -f container/Dockerfile -t computron_9000:latest .
+    docker build -f container/Dockerfile -t computron_9000:latest .
     echo "✅ Container image built successfully!"
 
 # Start 'computron_virtual_computer' container (create volumes)
@@ -537,38 +436,28 @@ container-start:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed. Please install it first:"
+        echo "   https://docs.docker.com/engine/install/"
         exit 1
     fi
-    
-    if ! [ -f "config.yaml" ]; then
-        echo "❌ config.yaml not found. Please ensure you're in the project root."
-        exit 1
-    fi
-    
-    if ! podman image exists computron_9000:latest; then
+
+    if ! docker image inspect computron_9000:latest &> /dev/null; then
         echo "❌ Container image not found. Building first..."
         just container-build
     fi
-    
-    if podman container exists computron_virtual_computer; then
-        if [ "$(podman container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
+
+    if docker container inspect computron_virtual_computer &> /dev/null; then
+        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
             echo "ℹ️  Container 'computron_virtual_computer' is already running"
             exit 0
         else
             echo "🗑️  Removing stopped container..."
-            podman rm computron_virtual_computer
+            docker rm computron_virtual_computer
         fi
     fi
-    
+
     echo "🚀 Starting container..."
-    home_dir=$(awk '/^virtual_computer:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
-    if [ ! -d "$home_dir" ]; then
-        echo "📁 Creating home directory: $home_dir"
-        mkdir -p "$home_dir"
-    fi
 
     # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
     hf_token_args=""
@@ -587,32 +476,124 @@ container-start:
         echo "🔑 GITHUB_TOKEN detected, passing to container"
     fi
 
-    podman run -d --rm \
+    docker run -d --rm \
       --name computron_virtual_computer \
-      --userns=keep-id \
-      --group-add keep-groups \
-      --device nvidia.com/gpu=all \
+      --gpus all \
+      --shm-size=256m \
       --network=host \
       $hf_token_args \
       $github_args \
-      -v "$home_dir:/home/computron:rw,z" \
+      -v computron_home:/home/computron:rw \
+      -v computron_state:/var/lib/computron:rw \
       computron_9000:latest
 
     echo "✅ Container 'computron_virtual_computer' started successfully!"
+
+# Start container with source code mounted for development
+container-dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed. Please install it first:"
+        echo "   https://docs.docker.com/engine/install/"
+        exit 1
+    fi
+
+    if ! docker image inspect computron_9000:latest &> /dev/null; then
+        echo "❌ Container image not found. Building first..."
+        just container-build
+    fi
+
+    if docker container inspect computron_virtual_computer &> /dev/null; then
+        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
+            echo "ℹ️  Container 'computron_virtual_computer' is already running"
+            exit 0
+        else
+            echo "🗑️  Removing stopped container..."
+            docker rm computron_virtual_computer
+        fi
+    fi
+
+    echo "🚀 Starting dev container (source mounted)..."
+
+    # Pass .env file if it exists
+    env_file_args=""
+    if [ -f .env ]; then
+        env_file_args="--env-file .env"
+    fi
+
+    # Bind mount state to ~/.computron_9000/ for easy host access during dev
+    state_dir="$HOME/.computron_9000"
+    mkdir -p "$state_dir/state" "$state_dir/home"
+
+    docker run -d --rm \
+      --name computron_virtual_computer \
+      --gpus all \
+      --shm-size=256m \
+      --network=host \
+      -e PYTHONDONTWRITEBYTECODE=1 \
+      $env_file_args \
+      -v "$state_dir/home:/home/computron:rw" \
+      -v "$state_dir/state:/var/lib/computron:rw" \
+      -v "$(pwd):/opt/computron:rw" \
+      computron_9000:latest
+
+    echo "✅ Dev container started (source at /opt/computron)"
+    echo "   State at: $state_dir/"
+    echo "   Edit files locally, then: just container-restart-app"
+
+# Restart app server + inference server (desktop/VNC stay up)
+# Rebuild React UI inside the dev container
+container-rebuild-ui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if docker container inspect computron_virtual_computer &> /dev/null && \
+       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+        echo "🔧 Rebuilding UI..."
+        docker exec computron_virtual_computer \
+          bash -c "cd /opt/computron/server/ui && npm run build"
+        echo "✅ UI rebuilt"
+    else
+        echo "❌ Container is not running. Start it with: just container-dev"
+        exit 1
+    fi
+
+# Restart app server + inference server (desktop/VNC stay up)
+container-restart-app:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if docker container inspect computron_virtual_computer &> /dev/null && \
+       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+        echo "🔄 Restarting app + inference servers..."
+        # Kill inference server by process name (PID file can be stale).
+        # pkill exits 1 if no match — ignore that.
+        docker exec computron_virtual_computer \
+          pkill -9 -f "inference_server.py" 2>/dev/null || true
+        docker exec computron_virtual_computer \
+          rm -f /tmp/inference_server.pid 2>/dev/null || true
+        # Kill app server (entrypoint auto-restarts in 2s)
+        docker exec computron_virtual_computer \
+          pkill -f "python3.12 main.py" 2>/dev/null || true
+        echo "✅ Servers restarting (app in 2s, inference on next request)"
+    else
+        echo "❌ Container is not running. Start it with: just container-dev"
+        exit 1
+    fi
 
 # Stop 'computron_virtual_computer' container
 container-stop:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed"
         exit 1
     fi
-    
-    if podman container exists computron_virtual_computer; then
+
+    if docker container inspect computron_virtual_computer &> /dev/null; then
         echo "🛑 Stopping container..."
-        podman stop computron_virtual_computer
+        docker stop computron_virtual_computer
         echo "✅ Container stopped"
     else
         echo "ℹ️  Container 'computron_virtual_computer' is not running"
@@ -622,16 +603,16 @@ container-stop:
 container-shell:
     #!/usr/bin/env bash
     set -euo pipefail
-    
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
+
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed"
         exit 1
     fi
-    
-    if podman container exists computron_virtual_computer; then
-        if [ -n "$(podman ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+
+    if docker container inspect computron_virtual_computer &> /dev/null; then
+        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
             echo "🐚 Opening shell in container..."
-            podman exec -it computron_virtual_computer bash
+            docker exec -it computron_virtual_computer bash
         else
             echo "❌ Container 'computron_virtual_computer' exists but is not running"
             echo "   Start it with: just container-start"
@@ -647,22 +628,20 @@ container-shell:
 container-status:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed"
         exit 1
     fi
-    
+
     echo "📊 Container Status:"
-    if podman container exists computron_virtual_computer; then
+    if docker container inspect computron_virtual_computer &> /dev/null; then
         echo "   Name: computron_virtual_computer"
-        if [ -n "$(podman ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
+        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
             echo "   Status: running"
             echo "   ✅ Container is running and ready"
             echo "   🐚 Access with: just container-shell"
         else
-            # Fallback: extract status from JSON (avoids Go templates in shell)
-            status=$(podman container inspect computron_virtual_computer | grep -m1 '"Status"' | sed -E 's/.*"Status"\s*:\s*"([^"]+)".*/\1/')
-            status=${status:-unknown}
+            status=$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}' 2>/dev/null || echo "unknown")
             echo "   Status: $status"
             echo "   ⚠️  Container exists but is not running"
             echo "   🚀 Start with: just container-start"
@@ -672,167 +651,50 @@ container-status:
         echo "   🚀 Create and start with: just container-start"
     fi
 
-# Build inference container image
-inference-build:
+# Publish image to GitHub Container Registry
+publish registry="ghcr.io/lefoulkrod/computron_9000":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
+    if ! docker image inspect computron_9000:latest &> /dev/null; then
+        echo "❌ No local image. Run: just container-build"
         exit 1
     fi
 
-    echo "🏗️  Building inference container image..."
-    podman build --format docker -f container/Dockerfile.inference -t computron_inference:latest .
-    echo "✅ Inference container image built successfully!"
+    sha=$(git rev-parse --short HEAD)
+    branch=$(git branch --show-current | tr '/' '-')
+    tag="${branch}-${sha}"
 
-# Start 'computron_inference' container with GPU
-inference-start:
+    echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
+    docker tag computron_9000:latest "{{registry}}:${tag}"
+    docker tag computron_9000:latest "{{registry}}:${branch}-latest"
+
+    # Auto-login if GITHUB_PACKAGES_TOKEN is set
+    if [ -n "${GITHUB_PACKAGES_TOKEN:-}" ]; then
+        echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
+    fi
+
+    echo "🚀 Pushing ($(docker images computron_9000:latest --format '{{{{.Size}}}}'))..."
+    docker push "{{registry}}:${tag}"
+    docker push "{{registry}}:${branch}-latest"
+
+    echo "✅ Published:"
+    echo "   {{registry}}:${tag}"
+    echo "   {{registry}}:${branch}-latest"
+
+# View app server logs (follow mode)
+container-logs:
+    docker logs -f computron_virtual_computer
+
+# View inference server logs (follow mode)
+inference-logs:
+    docker exec computron_virtual_computer tail -f /tmp/inference_server.log
+
+# View both app + inference logs side by side
+logs:
     #!/usr/bin/env bash
     set -euo pipefail
+    docker logs -f computron_virtual_computer 2>&1 | sed 's/^/[app] /' &
+    docker exec computron_virtual_computer tail -f /tmp/inference_server.log 2>/dev/null | sed 's/^/[inference] /' &
+    wait
 
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed. Please install it first:"
-        echo "   https://podman.io/getting-started/installation"
-        exit 1
-    fi
-
-    if ! podman image exists computron_inference:latest; then
-        echo "❌ Inference image not found. Building first..."
-        just inference-build
-    fi
-
-    if podman container exists computron_inference; then
-        if [ "$(podman container inspect computron_inference --format '{{{{.State.Status}}}}')" = "running" ]; then
-            echo "ℹ️  Container 'computron_inference' is already running"
-            exit 0
-        else
-            echo "🗑️  Removing stopped container..."
-            podman rm computron_inference
-        fi
-    fi
-
-    echo "🚀 Starting inference container..."
-    home_dir=$(awk '/^inference_container:/ {found=1} found && /home_dir:/ {print $2; exit}' config.yaml)
-    if [ ! -d "$home_dir" ]; then
-        echo "📁 Creating home directory: $home_dir"
-        mkdir -p "$home_dir"
-    fi
-
-    # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
-    hf_token_args=""
-    if [ -n "${HF_TOKEN:-}" ]; then
-        hf_token_args="-e HF_TOKEN=$HF_TOKEN"
-        echo "🔑 HF_TOKEN detected, passing to container"
-    fi
-
-    # Only bind-mount the shared output directory — not the full home.
-    # This prevents stale user-installed packages from shadowing
-    # system packages inside the container.
-    podman run -d --rm \
-      --name computron_inference \
-      --device nvidia.com/gpu=all \
-      $hf_token_args \
-      -v "$home_dir:/output:rw,z" \
-      computron_inference:latest
-
-    echo "✅ Container 'computron_inference' started successfully!"
-
-# Stop 'computron_inference' container
-inference-stop:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
-        exit 1
-    fi
-
-    if podman container exists computron_inference; then
-        echo "🛑 Stopping inference container..."
-        podman stop computron_inference
-        echo "✅ Inference container stopped"
-    else
-        echo "ℹ️  Container 'computron_inference' is not running"
-    fi
-
-# Open interactive shell in inference container
-inference-shell:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
-        exit 1
-    fi
-
-    if podman container exists computron_inference; then
-        if [ -n "$(podman ps -q --filter name=^computron_inference$ --filter status=running)" ]; then
-            echo "🐚 Opening shell in inference container..."
-            podman exec -it computron_inference bash
-        else
-            echo "❌ Container 'computron_inference' exists but is not running"
-            echo "   Start it with: just inference-start"
-            exit 1
-        fi
-    else
-        echo "❌ Container 'computron_inference' does not exist"
-        echo "   Start it with: just inference-start"
-        exit 1
-    fi
-
-# Get inference container status
-inference-status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v podman &> /dev/null; then
-        echo "❌ Podman is not installed"
-        exit 1
-    fi
-
-    echo "📊 Inference Container Status:"
-    if podman container exists computron_inference; then
-        echo "   Name: computron_inference"
-        if [ -n "$(podman ps -q --filter name=^computron_inference$ --filter status=running)" ]; then
-            echo "   Status: running"
-            echo "   ✅ Container is running and ready"
-            echo "   🐚 Access with: just inference-shell"
-        else
-            status=$(podman container inspect computron_inference | grep -m1 '"Status"' | sed -E 's/.*"Status"\s*:\s*"([^"]+)".*/\1/')
-            status=${status:-unknown}
-            echo "   Status: $status"
-            echo "   ⚠️  Container exists but is not running"
-            echo "   🚀 Start with: just inference-start"
-        fi
-    else
-        echo "   ❌ Container does not exist"
-        echo "   🚀 Create and start with: just inference-start"
-    fi
-
-# Start both containers (inference + virtual computer)
-start-all: inference-start container-start
-
-# Stop both containers
-stop-all: inference-stop container-stop
-
-# Podman helpers
-# Enable and start the Podman API socket for the current user
-podman-enable-socket:
-    @echo "Enabling Podman API socket (user)..."
-    systemctl --user enable --now podman.socket
-    @echo "✅ Podman API socket enabled."
-    @echo "Tip: For Docker-compatible clients, set:"
-    @echo "     export DOCKER_HOST=unix:///run/user/$$(id -u)/podman/podman.sock"
-
-
-# =============================================
-# 🎭 Playwright
-# =============================================
-# Install Playwright browser (default: chromium)
-playwright-install browser='chromium':
-    uv run playwright install {{browser}}
-
-# Install all Playwright browsers + Linux system deps
-playwright-install-all:
-    uv run playwright install --with-deps

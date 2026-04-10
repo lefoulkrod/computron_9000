@@ -4,10 +4,17 @@ import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
 
-function ChatInput({ onSend, onStop, isStreaming, attachment }) {
+function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftConsumed }) {
     const [message, setMessage] = useState('');
     const [selectedAgent, setSelectedAgent] = useState('computron');
     const [agents, setAgents] = useState(['computron']);
+
+    useEffect(() => {
+        if (draft) {
+            setMessage(draft);
+            onDraftConsumed();
+        }
+    }, [draft, onDraftConsumed]);
 
     useEffect(() => {
         fetch('/api/agents')

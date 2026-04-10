@@ -8,7 +8,6 @@ These tests validate that:
 """
 
 from pathlib import Path
-from unittest import mock
 import tempfile
 import pytest
 
@@ -16,73 +15,64 @@ from tools.virtual_computer.patching import apply_text_patch
 from tools.virtual_computer.file_ops import write_file
 
 
-class DummyConfig:
-    class VirtualComputer:
-        def __init__(self, home_dir: str) -> None:
-            self.home_dir = home_dir
-
-    def __init__(self, home_dir: str) -> None:
-        self.virtual_computer = self.VirtualComputer(home_dir)
-
-
 @pytest.mark.unit
 def test_css_replace_brace_with_property() -> None:
     """Replacing a closing brace with a property should produce clean diff."""
     with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            css = ".window:hover {\n}\n/* tail */\n"
-            write_file("style.css", css)
+        target = str(Path(tmp_home) / "style.css")
+        css = ".window:hover {\n}\n/* tail */\n"
+        write_file(target, css)
 
-            res = apply_text_patch(
-                "style.css",
-                old_text=".window:hover {\n}",
-                new_text=".window:hover {\n  box-shadow: 0 4px 15px rgba(0, 0, 0, 20%);\n}",
-            )
-            assert res.success, res.error
+        res = apply_text_patch(
+            target,
+            old_text=".window:hover {\n}",
+            new_text=".window:hover {\n  box-shadow: 0 4px 15px rgba(0, 0, 0, 20%);\n}",
+        )
+        assert res.success, res.error
 
-            content = Path(tmp_home, "style.css").read_text(encoding="utf-8")
-            assert "box-shadow: 0 4px 15px rgba(0, 0, 0, 20%);" in content
-            assert "/* tail */" in content
+        content = Path(target).read_text(encoding="utf-8")
+        assert "box-shadow: 0 4px 15px rgba(0, 0, 0, 20%);" in content
+        assert "/* tail */" in content
 
 
 @pytest.mark.unit
 def test_css_replace_specific_property_only() -> None:
     """Replacing one property should not alter adjacent properties."""
     with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            css = (
-                "body {\n"
-                "  background: white;\n"
-                "  border: 1px solid #ccc;\n"
-                "  box-shadow: 0 2px 10px rgba(0,0,0,10%);\n"
-                "  margin: 1rem;\n"
-                "}\n"
-            )
-            write_file("style.css", css)
+        target = str(Path(tmp_home) / "style.css")
+        css = (
+            "body {\n"
+            "  background: white;\n"
+            "  border: 1px solid #ccc;\n"
+            "  box-shadow: 0 2px 10px rgba(0,0,0,10%);\n"
+            "  margin: 1rem;\n"
+            "}\n"
+        )
+        write_file(target, css)
 
-            res = apply_text_patch(
-                "style.css",
-                old_text="  box-shadow: 0 2px 10px rgba(0,0,0,10%);",
-                new_text="  box-shadow: 0 2px 10px rgba(0, 0, 0, 10%);",
-            )
-            assert res.success, res.error
+        res = apply_text_patch(
+            target,
+            old_text="  box-shadow: 0 2px 10px rgba(0,0,0,10%);",
+            new_text="  box-shadow: 0 2px 10px rgba(0, 0, 0, 10%);",
+        )
+        assert res.success, res.error
 
-            content = Path(tmp_home, "style.css").read_text(encoding="utf-8")
-            assert "  box-shadow: 0 2px 10px rgba(0, 0, 0, 10%);\n" in content
-            assert "  margin: 1rem;\n" in content
-            assert "  border: 1px solid #ccc;\n" in content
+        content = Path(target).read_text(encoding="utf-8")
+        assert "  box-shadow: 0 2px 10px rgba(0, 0, 0, 10%);\n" in content
+        assert "  margin: 1rem;\n" in content
+        assert "  border: 1px solid #ccc;\n" in content
 
 
 @pytest.mark.unit
 def test_css_no_match_returns_error() -> None:
     """Non-matching text returns descriptive error."""
     with tempfile.TemporaryDirectory() as tmp_home:
-        with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            write_file("style.css", "body { color: red; }\n")
-            res = apply_text_patch(
-                "style.css",
-                old_text="color: blue;",
-                new_text="color: green;",
-            )
-            assert not res.success
-            assert "No match found" in (res.error or "")
+        target = str(Path(tmp_home) / "style.css")
+        write_file(target, "body { color: red; }\n")
+        res = apply_text_patch(
+            target,
+            old_text="color: blue;",
+            new_text="color: green;",
+        )
+        assert not res.success
+        assert "No match found" in (res.error or "")

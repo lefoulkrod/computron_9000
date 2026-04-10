@@ -12,7 +12,7 @@ const DesktopIcon = () => (
   </svg>
 );
 
-export default function Header({ dark, onToggleTheme, onNewConversation, audio, muted, onToggleMute, onAudioEnded, onOpenDesktop }) {
+export default function Header({ dark, onToggleTheme, onNewConversation, audio, muted, onToggleMute, onAudioEnded, desktopEnabled, onOpenDesktop }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -34,7 +34,7 @@ export default function Header({ dark, onToggleTheme, onNewConversation, audio, 
             onToggleMute={onToggleMute}
             onEnded={onAudioEnded}
           />
-          {onOpenDesktop && (
+          {desktopEnabled && (
             <button
               onClick={onOpenDesktop}
               className={styles.iconButton}

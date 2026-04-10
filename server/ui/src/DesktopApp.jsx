@@ -16,6 +16,7 @@ import AgentActivityView from './components/AgentActivityView.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import FlyoutPanel from './components/FlyoutPanel.jsx';
 import GoalsView from './components/goals/GoalsView.jsx';
+import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
 import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
@@ -62,6 +63,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [networkViewOpen, setNetworkViewOpen] = useState(false);
     const [nudgeToast, setNudgeToast] = useState(null);
 
+    const features = useFeatures();
     const modelSettings = useModelSettings();
     const goalsState = useGoals(flyoutPanel === 'goals');
     const goalsActive = flyoutPanel === 'goals';
@@ -275,12 +277,14 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
                 onAudioEnded={() => setPendingAudio(null)}
+                desktopEnabled={features.desktop}
                 onOpenDesktop={openDesktop}
             />
 
             <div className={styles.bodyRow}>
                 {/* Icon sidebar */}
                 <Sidebar
+                    hiddenPanels={features.custom_tools ? [] : ['tools']}
                     activePanel={networkViewOpen ? 'agents' : flyoutPanel}
                     onPanelToggle={(panel) => {
                         if (panel === 'agents') {

@@ -52,6 +52,10 @@ _SKILL = Skill(
         is directly accessible at localhost:<port>. Use ports 8000-8010 to avoid
         conflicts (8080 is taken by the app server).
 
+        INSTALLING PACKAGES — use run_bash_cmd("sudo apt-get install -y ...")
+        for system packages, "pip install ..." for Python, "npm install ..."
+        for Node.
+
         GIT & GITHUB — git and the GitHub CLI (gh) are available. Use gh for
         creating PRs, issues, checking CI status, browsing repos, etc.
 

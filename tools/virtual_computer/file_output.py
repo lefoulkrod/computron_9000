@@ -1,4 +1,4 @@
-"""Tool for reading a file from the virtual computer and sending it to the UI."""
+"""Tool for reading a file and sending it to the UI."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import mimetypes
 from pathlib import Path
 
 from sdk.events import AgentEvent, FileOutputPayload, publish_event
-from config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -16,47 +15,42 @@ async def send_file(path: str) -> dict[str, str]:
     """Send a file to the user. Use this whenever the user should receive a file.
 
     Args:
-        path: Absolute path inside the container (e.g. ``/home/computron/report.csv``).
+        path: Absolute path to the file.
 
     Returns:
         Dict with ``status`` and ``message``.
     """
-    cfg = load_config()
-    container_home = cfg.virtual_computer.container_working_dir.rstrip("/") + "/"
-    host_home = cfg.virtual_computer.home_dir
+    file_path = Path(path)
 
-    if not path.startswith(container_home):
+    try:
+        if not file_path.exists():
+            return {"status": "error", "message": "File not found: %s" % path}
+
+        if not file_path.is_file():
+            return {"status": "error", "message": "Path is not a file: %s" % path}
+
+        content_type, _ = mimetypes.guess_type(file_path.name)
+        if content_type is None:
+            content_type = "application/octet-stream"
+
+        filename = file_path.name
+        file_size = file_path.stat().st_size
+
+        payload = FileOutputPayload(
+            type="file_output",
+            filename=filename,
+            content_type=content_type,
+            path=path,
+        )
+        publish_event(AgentEvent(payload=payload))
+        logger.info("Emitted file_output event for %s (%s, %d bytes)", filename, content_type, file_size)
+
         return {
-            "status": "error",
-            "message": f"Path must be inside {container_home}. Got: {path}",
+            "status": "ok",
+            "message": "File '%s' (%d bytes, %s) sent to the UI." % (filename, file_size, content_type),
         }
-
-    relative = path[len(container_home) :]
-    host_path = Path(host_home) / relative
-
-    if not host_path.exists():
-        return {"status": "error", "message": f"File not found: {path}"}
-
-    if not host_path.is_file():
-        return {"status": "error", "message": f"Path is not a file: {path}"}
-
-    content_type, _ = mimetypes.guess_type(host_path.name)
-    if content_type is None:
-        content_type = "application/octet-stream"
-
-    filename = host_path.name
-    file_size = host_path.stat().st_size
-
-    payload = FileOutputPayload(
-        type="file_output",
-        filename=filename,
-        content_type=content_type,
-        path=path,
-    )
-    publish_event(AgentEvent(payload=payload))
-    logger.info("Emitted file_output event for %s (%s, %d bytes)", filename, content_type, file_size)
-
-    return {
-        "status": "ok",
-        "message": f"File '{filename}' ({file_size} bytes, {content_type}) sent to the UI.",
-    }
+    except PermissionError:
+        return {"status": "error", "message": "Permission denied: %s" % path}
+    except OSError as exc:
+        logger.exception("Failed to send file %s", path)
+        return {"status": "error", "message": "Failed to read file: %s" % exc}

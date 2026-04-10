@@ -9,7 +9,6 @@ dependencies = [
     "pyyaml",
     "playwright==1.52.0",
     "beautifulsoup4",
-    "podman==5.4.0.1",
     "ollama>=0.6",
     "cachetools>=5.5.2",
     "python-dotenv>=1.1.0",

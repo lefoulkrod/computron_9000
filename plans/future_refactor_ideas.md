@@ -50,3 +50,41 @@ None of this is actually used — all agent tools return `str`. The typed-result
 ## Eliminate integration tests
 
 Server tests (tests/server/) trigger real Ollama HTTP calls during `create_app()` import/startup, even though test logic uses monkeypatched fakes. All tests should run without external services. Audit the app startup path to eliminate the Ollama call.
+
+## Add streaming progress to grounding tool
+
+`tools/_grounding.py` uses a blocking `subprocess.run()` with a 31-minute timeout. When the UI-TARS model (~33 GB) downloads for the first time, the UI goes silent with no progress. Image and music generation both stream JSONL progress events. The grounding tool should do the same.
+
+## Simplify inference client/server communication
+
+Now that inference runs in the same container as the app, the HTTP client/server layer between `inference_client.py` and `inference_server.py` is unnecessary overhead. The server was originally in a separate container, so HTTP was the only option. The separate *process* is still valuable (GPU memory isolation, NF4 weights can't be freed in-process, idle shutdown to reclaim VRAM), but the HTTP layer could be replaced with direct subprocess stdio. The streaming JSONL protocol is already line-based, so the generation tools could spawn the server script directly and read its stdout instead of going through HTTP. This would remove the health check polling, port management, and urllib dependency.
+
+## Slim image variant (no GPU deps)
+
+The full image is ~9 GB, mostly PyTorch + diffusers + ACE-Step. Users who only want chat, browsing, and coding don't need any of that. A `computron_9000:slim` image that skips the GPU layers would be ~3 GB and much faster to pull. Could be a separate Dockerfile stage or a build arg that skips the torch/diffusers/ACE-Step layers.
+
+## Fix thinking-only responses ending sub-agent turns
+
+`run_turn()` in `sdk/turn/_execution.py` ends the turn when the model produces no tool calls (`if not tool_calls: return final_content`). This doesn't distinguish between "agent gave a final answer" and "model emitted only thinking tokens and stopped." When the model produces thinking but no content and no tool calls, the turn returns `None`, and `spawn_agent` returns an empty string to the parent — silently losing all the sub-agent's work.
+
+**Observed:** CODEBASE_ANALYZER sub-agent ran 15 iterations reading files, went through 3 compaction cycles, then on its final iteration the model produced only `Thinking: Now let me read the server files...` with no content or tool calls. Parent got `""` back, tried the scratchpad (empty), then redid all the analysis itself.
+
+**Fix:** The completion signal should be "content with no tool calls", not just "no tool calls":
+- Content + no tool calls → done (agent gave its final answer)
+- No content + no tool calls + thinking → incomplete; inject a system message ("Continue — provide your response or next tool call") and retry
+- Cap retries at 2-3 to prevent infinite loops on a truly stuck model
+- After exhausting retries, fall back to using the thinking text as the result
+
+## Skip model unload for cloud models
+
+`_unload_model()` in `sdk/context/_strategy.py` runs `ollama stop <model>` after every compaction to free VRAM. This fails silently for cloud models (e.g. `kimi-k2.5:cloud`) since they aren't loaded in Ollama. Check for a `:cloud` suffix (or whatever convention distinguishes remote models) and skip the subprocess call.
+
+## Rename context_id to agent_id in agent_span
+
+`agent_span` in `sdk/events/_context.py` yields a value called `context_id` internally, but it's the agent's unique identifier — used as the key in `_agent_browsers`, passed to `release_agent_browser`, returned by `get_current_agent_id()`, and stamped on every `AgentEvent`. The name `context_id` is confusing because `ContextManager` and `BrowserContext` are also "contexts" in this codebase.
+
+Rename `context_id` → `agent_id` throughout `_context.py`, and rename `_context_stack` → `_agent_stack` (it stores `(agent_id, agent_name)` tuples). `_make_child_context_id` → `_make_child_agent_id`. The public API (`get_current_agent_id`) already uses the right name.
+
+## Optimize FLUX model downloads
+
+`_download_model()` in `container/inference_server.py` uses `snapshot_download()` which pulls the entire HuggingFace repo. FLUX repos contain both single-file weights (e.g. `flux1-schnell.safetensors`, ~24 GB) and diffusers-sharded weights (`transformer/`, ~24 GB) — downloading both doubles the size from ~34 GB to ~58 GB per model. Use `allow_patterns` to skip single-file weights, or switch to `from_pretrained()` which only fetches what the pipeline needs.

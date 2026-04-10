@@ -35,30 +35,28 @@ async def save_page_content(filename: str) -> str:
 
     config = load_config()
     home_dir = Path(config.virtual_computer.home_dir)
-    container_working_dir = config.virtual_computer.container_working_dir.rstrip("/")
 
-    host_path = home_dir / filename
-    container_path = f"{container_working_dir}/{filename}"
+    dest = home_dir / filename
 
-    logger.info("Saving page content from %s to %s", view.url, host_path)
+    logger.info("Saving page content from %s to %s", view.url, dest)
 
     try:
         raw_html = await view.frame.content()
         content = html_to_markdown(raw_html)
         home_dir.mkdir(parents=True, exist_ok=True)
-        host_path.write_text(content, encoding="utf-8")
-        size = host_path.stat().st_size
+        dest.write_text(content, encoding="utf-8")
+        size = dest.stat().st_size
 
-        logger.info("Saved %d bytes to %s", size, host_path)
+        logger.info("Saved %d bytes to %s", size, dest)
         return format_save_result(
             filename=filename,
-            container_path=container_path,
+            path=str(dest),
             size_bytes=size,
         )
     except BrowserToolError:
         raise
     except Exception as exc:
-        logger.exception("Failed to save page content to %s", host_path)
+        logger.exception("Failed to save page content to %s", dest)
         raise BrowserToolError(str(exc), tool="save_page_content") from exc
 
 

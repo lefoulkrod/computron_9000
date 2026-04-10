@@ -1,47 +1,29 @@
-"""Integration test for write_file_in_home_dir with config mocking.
+"""Integration test for write_file with absolute paths.
 
-Tests writing a file in the virtual computer's home directory, ensuring correct file creation and cleanup.
+Tests writing a file in a temporary directory, ensuring correct file creation and cleanup.
 """
 
-import os
-import tempfile
 from pathlib import Path
-from unittest import mock
+import tempfile
 
 import pytest
 
 from tools.virtual_computer.file_ops import write_file
 
-class DummyConfig:
-    class VirtualComputer:
-        def __init__(self, home_dir: str) -> None:
-            self.home_dir = home_dir
-    def __init__(self, home_dir: str) -> None:
-        self.virtual_computer = self.VirtualComputer(home_dir)
 
-@pytest.mark.asyncio
 @pytest.mark.unit
-async def test_write_file_in_home_dir_creates_and_cleans_file():
-    """Test write_file_in_home_dir writes and cleans up a file in the mocked home dir.
-
-    Args:
-        None
-    Returns:
-        None
-    Raises:
-        AssertionError: If file is not written or not cleaned up.
-    """
+def test_write_file_creates_and_cleans_file():
+    """Test write_file writes and cleans up a file in a temp directory."""
     with tempfile.TemporaryDirectory() as tmp_home:
-        test_file = "test_integration_file.txt"
+        target = str(Path(tmp_home) / "test_file.txt")
         test_content = "integration test content"
-        file_path = Path(tmp_home) / test_file
-    with mock.patch("config.load_config", return_value=DummyConfig(tmp_home)):
-            # Write file
-            res = write_file(test_file, test_content)
-            assert res.success, res.error
-            assert file_path.exists(), "File was not created in the mocked home dir."
-            with file_path.open("r", encoding="utf-8") as f:
-                assert f.read() == test_content, "File content does not match."
-            # Cleanup
-            file_path.unlink()
-            assert not file_path.exists(), "File was not deleted after test."
+
+        # Write file
+        res = write_file(target, test_content)
+        assert res.success, res.error
+        assert Path(target).exists(), "File was not created."
+        assert Path(target).read_text(encoding="utf-8") == test_content
+
+        # Cleanup
+        Path(target).unlink()
+        assert not Path(target).exists(), "File was not deleted after test."
