@@ -284,6 +284,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
             <div className={styles.bodyRow}>
                 {/* Icon sidebar */}
                 <Sidebar
+                    hiddenPanels={features.custom_tools ? [] : ['tools']}
                     activePanel={networkViewOpen ? 'agents' : flyoutPanel}
                     onPanelToggle={(panel) => {
                         if (panel === 'agents') {

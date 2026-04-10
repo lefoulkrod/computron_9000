@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 async def play_audio(path: str) -> dict[str, str]:
     """Play an audio file in the browser.
 
+    Supports WAV, MP3, OGG, FLAC, etc. Generate the audio file first,
+    then pass its path here.
+
     Args:
         path: Absolute path to the audio file.
 

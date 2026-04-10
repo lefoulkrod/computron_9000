@@ -4,6 +4,7 @@ FROM docker.io/ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
     DISPLAY=:99
 
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
@@ -19,7 +20,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       # Build tools & CLI
       software-properties-common curl gnupg2 xz-utils ca-certificates jq \
-      build-essential git sudo unzip wget gosu \
+      build-essential git sudo unzip wget gosu file \
       # Media
       ffmpeg imagemagick espeak-ng \
       # Search
@@ -104,9 +105,14 @@ RUN python3.12 -m ensurepip --upgrade && \
     ln -sf /usr/local/bin/pip /usr/local/bin/pip3 && \
     python3.12 -m pip install --no-cache-dir --upgrade pip
 
+# ── PyTorch + CUDA ────────────────────────────────────────────────────────────
+# ~2.5 GB — separate layer, rarely changes. Placed before agent packages so
+# additions to the package list below don't bust this expensive cache layer.
+RUN python3.12 -m pip install --no-cache-dir \
+      torch torchaudio torchvision
+
 # ── Agent packages (general) ─────────────────────────────────────────────────
 # Pre-installed so the agent can import them immediately without pip install.
-# Separate layer from torch so changes here don't re-download 2.5 GB.
 RUN python3.12 -m pip install --no-cache-dir \
       # HTTP / scraping
       requests httpx beautifulsoup4 lxml \
@@ -129,11 +135,6 @@ RUN python3.12 -m pip install --no-cache-dir \
       pytest \
       # Web servers (agent can build quick prototypes)
       flask flask-socketio blinker
-
-# ── PyTorch + CUDA ────────────────────────────────────────────────────────────
-# ~2.5 GB — separate layer, rarely changes.
-RUN python3.12 -m pip install --no-cache-dir \
-      torch torchaudio torchvision
 
 # ── Image generation (Flux via diffusers) ─────────────────────────────────────
 RUN python3.12 -m pip install --no-cache-dir \
@@ -168,7 +169,7 @@ RUN mkdir -p /opt/kokoro && \
 # ── User & permissions ───────────────────────────────────────────────────────
 # Single user: computron runs the app server, agent tools, and desktop.
 # App code is root-owned (read-only). State and home are both owned by computron.
-RUN useradd --create-home --shell /bin/bash computron && \
+RUN useradd --create-home --shell /bin/bash --uid 1000 computron && \
     passwd -d computron && \
     mkdir -p /var/lib/computron && \
     chown computron:computron /var/lib/computron && \
@@ -220,7 +221,7 @@ RUN chmod 755 /opt/desktop/a11y_tree.py && \
     mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # ── App dependencies (cached unless manifests change) ────────────────────────
-WORKDIR /opt/computron_9000
+WORKDIR /opt/computron
 COPY pyproject.toml uv.lock ./
 RUN uv pip install --system --no-cache -e . 2>/dev/null || true
 
@@ -228,13 +229,13 @@ COPY server/ui/package.json server/ui/package-lock.json server/ui/
 RUN cd server/ui && npm ci
 
 # ── App source ───────────────────────────────────────────────────────────────
-COPY . /opt/computron_9000/
+COPY . /opt/computron/
 RUN uv pip install --system --no-cache -e .
 RUN cd server/ui && npm run build
 
 # Lock down app directory
-RUN chown -R root:root /opt/computron_9000 && \
-    chmod -R 755 /opt/computron_9000
+RUN chown -R root:root /opt/computron && \
+    chmod -R 755 /opt/computron
 
 # ── Entrypoint (late COPY so edits don't bust app/UI cache) ─────────────────
 COPY container/entrypoint.sh /opt/entrypoint.sh

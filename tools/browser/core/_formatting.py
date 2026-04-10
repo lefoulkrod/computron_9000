@@ -94,20 +94,20 @@ def format_javascript_result(
 def format_save_result(
     *,
     filename: str,
-    container_path: str,
+    path: str,
     size_bytes: int,
 ) -> str:
     """Format a save-content result for the LLM.
 
     Args:
         filename: The filename that was saved.
-        container_path: Absolute path accessible from inside the container.
+        path: Absolute path where the file was saved.
         size_bytes: File size in bytes.
 
     Returns:
         Formatted string like ``[Saved: page.md | /home/computron/page.md | 12345 bytes]``.
     """
-    return f"[Saved: {filename} | {container_path} | {size_bytes} bytes]"
+    return f"[Saved: {filename} | {path} | {size_bytes} bytes]"
 
 
 __all__ = [

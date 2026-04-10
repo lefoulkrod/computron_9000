@@ -8,6 +8,7 @@ features:
   music_generation: ${ENABLE_MUSIC_GEN:-false}
   desktop: ${ENABLE_DESKTOP:-false}
   visual_grounding: ${ENABLE_GROUNDING:-false}
+  custom_tools: ${ENABLE_CUSTOM_TOOLS:-false}
 
 tools:
   web:
@@ -17,7 +18,6 @@ tools:
       timeout: 6000
       search_engine_id: ${GOOGLE_SEARCH_ENGINE_ID}
   browser:
-    channel: chrome  # "chrome" = system Chrome, null = bundled Chromium
     headless: false  # true = no GUI, false = visible browser window
     human:
       pointer:

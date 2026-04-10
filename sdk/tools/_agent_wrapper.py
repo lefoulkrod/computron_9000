@@ -315,7 +315,7 @@ Returns:
             "Spawning sub-agent '%s' (tool=%s, max_iter=%d, instruction=%.100s)",
             agent.name, func_name, effective_max_iterations, instructions,
         )
-        with agent_span(agent.name, instruction=instructions, agent_state=AgentState(get_core_tools() + agent.tools)):
+        async with agent_span(agent.name, instruction=instructions, agent_state=AgentState(get_core_tools() + agent.tools)):
             conv_id = get_conversation_id() or "default"
             short_id = _uuid.uuid4().hex[:8]
             instance_id = f"{conv_id}/{name}_{short_id}"
@@ -347,32 +347,22 @@ Returns:
                 sub_agent_id=short_id,
             ))
 
-            try:
-                # For string results, single pass without retry
-                if result_type is str:
-                    return await _run_agent_turn(
-                        history=history,
-                        agent=agent,
-                        hooks=hooks,
-                    )  # type: ignore[return-value]
-
-                # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
-                return await _run_with_json_retry(
+            # For string results, single pass without retry
+            if result_type is str:
+                return await _run_agent_turn(
                     history=history,
                     agent=agent,
-                    result_type=result_type,
                     hooks=hooks,
-                    max_attempts=5,
-                )
-            finally:
-                # Release ephemeral browser context if one was created.
-                agent_id = get_current_agent_id()
-                if agent_id:
-                    try:
-                        from tools.browser.core import release_agent_browser
-                        await release_agent_browser(agent_id)
-                    except Exception:  # noqa: BLE001
-                        logger.debug("No browser context to release for '%s'", agent_id)
+                )  # type: ignore[return-value]
+
+            # For non-string result types, retry the tool loop up to 5 times if JSON parse fails
+            return await _run_with_json_retry(
+                history=history,
+                agent=agent,
+                result_type=result_type,
+                hooks=hooks,
+                max_attempts=5,
+            )
 
     # Give the tool function a deterministic, agent-derived name so the LLM can
     # distinguish multiple agent tools. We assume name values are unique.

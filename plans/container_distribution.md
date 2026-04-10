@@ -58,7 +58,7 @@ Two users:
 | `/home/computron` | `computron:computron` | `755` | read/write | read/write |
 | `/tmp` | (world-writable) | `1777` | read/write | read/write |
 | `/var/lib/computron_9000` | `computron_app:computron_app` | `750` | **read only** (via group) | read/write |
-| `/opt/computron_9000` | `root:root` | `755` | read only | read only |
+| `/opt/computron` | `root:root` | `755` | read only | read only |
 
 Agent subprocesses spawned with explicit user:
 ```python
@@ -376,8 +376,8 @@ Add app layers at the end. Move the existing `USER computron` / `WORKDIR` / git 
 
 ```dockerfile
 # ── App source & dependencies ────────────────────────────────────────
-COPY . /opt/computron_9000/
-WORKDIR /opt/computron_9000
+COPY . /opt/computron/
+WORKDIR /opt/computron
 RUN uv pip install --system --no-cache -e .
 
 # Build UI
@@ -389,8 +389,8 @@ RUN useradd --create-home --shell /bin/bash computron_app && \
     mkdir -p /var/lib/computron_9000 && \
     chown computron_app:computron_app /var/lib/computron_9000 && \
     chmod 750 /var/lib/computron_9000 && \
-    chown -R root:root /opt/computron_9000 && \
-    chmod -R 755 /opt/computron_9000 && \
+    chown -R root:root /opt/computron && \
+    chmod -R 755 /opt/computron && \
     echo 'computron_app ALL=(root) NOPASSWD: /usr/bin/apt-get install *' >> /etc/sudoers
 
 # Install gosu for privilege dropping in entrypoint
@@ -426,7 +426,7 @@ websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &
 echo "Desktop ready on :99, VNC on 5900, WebSocket on 6080"
 
 # Start app server as computron_app (replaces sleep infinity)
-cd /opt/computron_9000
+cd /opt/computron
 exec gosu computron_app python main.py
 ```
 
@@ -450,7 +450,7 @@ container-dev:
       --network=host \
       $env_args \
       -v "$home_dir:/home/computron:rw,z" \
-      -v "$(pwd):/opt/computron_9000:rw,z" \
+      -v "$(pwd):/opt/computron:rw,z" \
       computron_9000:latest
 ```
 
@@ -498,7 +498,7 @@ Remove `"podman==5.4.0.1"`. The inference container uses `podman` CLI via subpro
 3. `just container-start` — container starts, desktop + app both come up
 4. `http://localhost:8080` — UI loads, can chat
 5. Agent can: run bash commands, read/write in `/home/computron` and `/tmp`, read `/var/lib/computron_9000`
-6. Agent cannot: write to `/var/lib/computron_9000`, modify `/opt/computron_9000`
+6. Agent cannot: write to `/var/lib/computron_9000`, modify `/opt/computron`
 7. Browser tools: Chrome starts via CDP, pages load, downloads work, sub-agent contexts inherit logins
 8. `just container-dev` — source-mounted mode, edit on host, changes reflected in container
 9. `install_packages` tool: apt/pip/npm all work with correct permissions

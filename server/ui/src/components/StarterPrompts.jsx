@@ -9,7 +9,7 @@ const PROMPTS = [
     {
         icon: '💻',
         title: 'Write some code',
-        text: 'Write a Python script that scrapes headlines from Hacker News',
+        text: 'Write an HTML snake game',
     },
     {
         icon: '🌐',

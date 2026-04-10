@@ -101,28 +101,24 @@ class TestSaveResponseAsFile:
         response.url = "https://example.com/docs/report.pdf"
         response.headers = {"content-type": "application/pdf"}
 
-        info = await save_response_as_file(
-            response, downloads_dir=tmp_path, container_dir="/home/computron",
-        )
+        info = await save_response_as_file(response, downloads_dir=tmp_path)
 
         assert info.filename == "report.pdf"
         assert info.content_type == "application/pdf"
         assert info.size_bytes == len(body)
-        assert info.container_path == "/home/computron/report.pdf"
-        assert Path(info.host_path).read_bytes() == body
+        assert info.path == str(tmp_path / "report.pdf")
+        assert Path(info.path).read_bytes() == body
 
     @pytest.mark.asyncio
     async def test_deduplicates_filename(self, tmp_path: Path) -> None:
         """Duplicate filenames get a UUID suffix."""
         (tmp_path / "report.pdf").write_bytes(b"existing")
         response = AsyncMock()
-        response.body = AsyncMock(return_value=b"new content")
+        response.body = AsyncMock(return_value=b"%PDF-1.4 new content")
         response.url = "https://example.com/report.pdf"
         response.headers = {"content-type": "application/pdf"}
 
-        info = await save_response_as_file(
-            response, downloads_dir=tmp_path, container_dir="/home/computron",
-        )
+        info = await save_response_as_file(response, downloads_dir=tmp_path)
 
         assert info.filename != "report.pdf"
         assert info.filename.startswith("report_")
@@ -136,9 +132,7 @@ class TestSaveResponseAsFile:
         response.url = f"https://example.com/{'x' * 201}"
         response.headers = {"content-type": "image/png"}
 
-        info = await save_response_as_file(
-            response, downloads_dir=tmp_path, container_dir="/tmp",
-        )
+        info = await save_response_as_file(response, downloads_dir=tmp_path)
 
         assert info.filename.endswith(".png")
         assert len(info.filename) < 50
@@ -175,12 +169,10 @@ class TestSaveResponseAsFile:
         response.headers = {"content-type": "application/pdf"}
         response.frame = mock_frame
 
-        info = await save_response_as_file(
-            response, downloads_dir=tmp_path, container_dir="/home/computron",
-        )
+        info = await save_response_as_file(response, downloads_dir=tmp_path)
 
         assert info.size_bytes == len(real_pdf)
-        assert Path(info.host_path).read_bytes() == real_pdf
+        assert Path(info.path).read_bytes() == real_pdf
 
 
 # ---------------------------------------------------------------------------
@@ -206,16 +198,32 @@ class TestIsViewerHtml:
 
         assert _is_viewer_html(b"%PDF-1.4 content", "application/pdf") is False
 
-    def test_large_body_not_detected(self) -> None:
+    def test_large_viewer_html_detected_for_pdf(self) -> None:
+        """Large HTML bodies are still detected when magic bytes mismatch."""
         from tools.browser.core._file_detection import _is_viewer_html
 
-        assert _is_viewer_html(b"x" * 3000, "application/pdf") is False
+        # Any body that doesn't start with %PDF is detected as viewer HTML
+        big_html = b"<html>" + b"x" * 5000 + b"<embed src='x'>"
+        assert _is_viewer_html(big_html, "application/pdf") is True
+
+    def test_real_large_pdf_not_detected(self) -> None:
+        from tools.browser.core._file_detection import _is_viewer_html
+
+        assert _is_viewer_html(b"%PDF-1.4" + b"\x00" * 5000, "application/pdf") is False
 
     def test_html_content_type_not_detected(self) -> None:
         from tools.browser.core._file_detection import _is_viewer_html
 
         body = b"<html><body><embed src='x'></body></html>"
         assert _is_viewer_html(body, "text/html") is False
+
+    def test_unknown_type_uses_html_marker_fallback(self) -> None:
+        """Types without magic bytes fall back to HTML marker detection."""
+        from tools.browser.core._file_detection import _is_viewer_html
+
+        body = b"<html><body><embed src='x'></body></html>"
+        assert _is_viewer_html(body, "image/tiff") is True
+        assert _is_viewer_html(b"\x49\x49\x2a\x00", "image/tiff") is False
 
     def test_empty_body(self) -> None:
         from tools.browser.core._file_detection import _is_viewer_html
@@ -235,17 +243,17 @@ class TestBuildDownloadInfoFromPath:
     def test_builds_info(self, tmp_path: Path) -> None:
         f = tmp_path / "data.csv"
         f.write_text("a,b,c\n1,2,3")
-        info = build_download_info_from_path(f, container_dir="/home/computron")
+        info = build_download_info_from_path(f)
 
         assert info.filename == "data.csv"
         assert info.content_type == "text/csv"
         assert info.size_bytes > 0
-        assert info.container_path == "/home/computron/data.csv"
+        assert info.path == str(f)
 
     def test_unknown_extension(self, tmp_path: Path) -> None:
         f = tmp_path / "mystery.xyz123"
         f.write_bytes(b"\x00\x01")
-        info = build_download_info_from_path(f, container_dir="/tmp")
+        info = build_download_info_from_path(f)
 
         assert info.content_type == "application/octet-stream"
 
@@ -261,8 +269,7 @@ class TestFormatDownloadMessage:
 
     def test_message_contains_path(self) -> None:
         info = DownloadInfo(
-            host_path="/host/file.pdf",
-            container_path="/home/computron/file.pdf",
+            path="/home/computron/file.pdf",
             content_type="application/pdf",
             size_bytes=12345,
             filename="file.pdf",
@@ -289,8 +296,7 @@ class TestOpenUrlFileDetection:
 
         pdf_body = b"%PDF-1.4 test"
         download_info = DownloadInfo(
-            host_path=str(tmp_path / "test.pdf"),
-            container_path="/home/computron/test.pdf",
+            path="/home/computron/test.pdf",
             content_type="application/pdf",
             size_bytes=len(pdf_body),
             filename="test.pdf",
@@ -381,8 +387,7 @@ class TestFormatResultFileDetection:
         from tools.browser.interactions import _format_result
 
         download_info = DownloadInfo(
-            host_path="/host/doc.pdf",
-            container_path="/home/computron/doc.pdf",
+            path="/home/computron/doc.pdf",
             content_type="application/pdf",
             size_bytes=5000,
             filename="doc.pdf",

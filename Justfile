@@ -532,13 +532,14 @@ container-dev:
       --gpus all \
       --shm-size=256m \
       --network=host \
+      -e PYTHONDONTWRITEBYTECODE=1 \
       $env_file_args \
       -v "$state_dir/home:/home/computron:rw" \
       -v "$state_dir/state:/var/lib/computron:rw" \
-      -v "$(pwd):/opt/computron_9000:rw" \
+      -v "$(pwd):/opt/computron:rw" \
       computron_9000:latest
 
-    echo "✅ Dev container started (source at /opt/computron_9000)"
+    echo "✅ Dev container started (source at /opt/computron)"
     echo "   State at: $state_dir/"
     echo "   Edit files locally, then: just container-restart-app"
 
@@ -551,7 +552,7 @@ container-rebuild-ui:
        [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
         echo "🔧 Rebuilding UI..."
         docker exec computron_virtual_computer \
-          bash -c "cd /opt/computron_9000/server/ui && npm run build"
+          bash -c "cd /opt/computron/server/ui && npm run build"
         echo "✅ UI rebuilt"
     else
         echo "❌ Container is not running. Start it with: just container-dev"

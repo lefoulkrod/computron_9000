@@ -74,8 +74,13 @@ async def emit_screenshot(page: Page) -> None:
     """
     try:
         await _emit_screenshot(page)
-    except Exception:  # noqa: BLE001
-        logger.debug("Failed to emit screenshot", exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        url = getattr(page, "url", "unknown")
+        closed = page.is_closed() if hasattr(page, "is_closed") else "?"
+        logger.warning(
+            "Screenshot failed (page=%s, closed=%s)", url, closed,
+            exc_info=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +168,11 @@ class _ScreenshotEmitter:
                     return
                 # Otherwise loop to pick up the latest page reference.
         except Exception as exc:  # noqa: BLE001 - best-effort, never crash interactions
-            logger.debug("Background screenshot emitter failed: %s", exc)
+            url = getattr(self._pending_page, "url", "unknown") if self._pending_page else "no page"
+            logger.warning(
+                "Progressive screenshot failed (page=%s)", url,
+                exc_info=True,
+            )
 
     async def wait(self) -> None:
         """Await the in-flight capture task, if any.
@@ -230,7 +239,12 @@ def emit_screenshot_after[F: Callable[..., Any]](func: F) -> F:
             page = await browser.current_page()
             await _emit_screenshot(page)
         except Exception as exc:  # noqa: BLE001 - never fail the tool call
-            logger.debug("Failed to emit post-tool screenshot: %s", exc)
+            page_url = getattr(page, "url", "unknown") if page else "no page"
+            closed = page.is_closed() if page and hasattr(page, "is_closed") else "?"
+            logger.warning(
+                "Post-tool screenshot failed (page=%s, closed=%s)",
+                page_url, closed, exc_info=True,
+            )
 
         return result
 

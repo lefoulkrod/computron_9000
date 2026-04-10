@@ -15,7 +15,7 @@ export LLM_HOST="${LLM_HOST:-http://localhost:11434}"
 # ── Fix volume-mount ownership ───────────────────────────────────────────────
 # When host directories are bind-mounted, they may arrive owned by the host
 # user (e.g. UID 1000).  Ensure the container users own their directories.
-chown computron:computron /home/computron
+chown -R computron:computron /home/computron /var/lib/computron
 chmod 755 /home/computron
 mkdir -p /home/computron/Desktop /home/computron/downloads
 
@@ -23,10 +23,7 @@ mkdir -p /home/computron/Desktop /home/computron/downloads
 if [ ! -d /home/computron/.config/xfce4/panel ]; then
     mkdir -p /home/computron/.config/xfce4
     cp -rn /etc/xdg/xfce4/* /home/computron/.config/xfce4/ 2>/dev/null
-    chown -R computron:computron /home/computron/.config
 fi
-chown -R computron:computron /home/computron/Desktop /home/computron/downloads
-chown -R computron:computron /var/lib/computron
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
 Xvfb :99 -screen 0 1280x720x24 -ac &
@@ -73,7 +70,7 @@ echo "Desktop ready on :99, VNC on 5900, noVNC on 6080"
 _shutdown=0
 trap '_shutdown=1; echo "Received SIGTERM, shutting down..."' SIGTERM
 
-cd /opt/computron_9000
+cd /opt/computron
 while [ $_shutdown -eq 0 ]; do
     echo "Starting app server..."
     gosu computron python3.12 main.py &

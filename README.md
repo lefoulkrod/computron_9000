@@ -228,11 +228,13 @@ docker run -d --name computron --shm-size=256m \
 
 ### Ports
 
-| Port | Service |
-|------|---------|
-| 8080 | Web UI |
-| 5900 | VNC (connect with any VNC viewer to watch the agent's desktop) |
-| 6080 | noVNC (browser-based VNC at `http://localhost:6080/vnc.html`) |
+Since the container uses `--network=host`, these ports are exposed directly on your machine:
+
+| Port | Service | Configurable |
+|------|---------|-------------|
+| 8080 | Web UI | Yes — set `PORT` env var (e.g. `-e PORT=9090`) |
+| 5900 | VNC (connect with any VNC viewer to watch the agent's desktop) | No |
+| 6080 | noVNC (browser-based VNC at `http://localhost:6080/vnc.html`) | No |
 
 ### Data Persistence
 

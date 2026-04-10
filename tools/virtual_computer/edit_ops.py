@@ -28,7 +28,16 @@ def replace_in_file(
     pattern: str,
     replacement: str,
 ) -> ReplaceInFileResult:
-    """Replace all occurrences of a literal string in a text file."""
+    """Replace all occurrences of a literal string in a text file.
+
+    Args:
+        path: File path.
+        pattern: Literal string to find. All occurrences are replaced.
+        replacement: Replacement text.
+
+    Returns:
+        ReplaceInFileResult: Success flag, ``file_path``, and count of replacements.
+    """
     try:
         abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():
@@ -77,7 +86,18 @@ def insert_text(
     where: str = "after",
     occurrences: str = "first",
 ) -> InsertTextResult:
-    """Insert text relative to a literal anchor string within a file."""
+    """Insert text relative to a literal anchor string within a file.
+
+    Args:
+        path: File path.
+        anchor: Literal string to locate the insertion point.
+        text: Text to insert or replace with.
+        where: One of ``{"after","before","replace"}``. Default "after".
+        occurrences: One of ``{"first","all"}``. Default "first".
+
+    Returns:
+        InsertTextResult: Success, relative path, and count of occurrences changed.
+    """
     if where not in _WHERE_VALUES:
         return InsertTextResult(
             success=False,

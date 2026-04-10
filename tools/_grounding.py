@@ -77,7 +77,7 @@ async def run_grounding(
     screenshot_path.write_bytes(screenshot_bytes)
 
     script = (
-        "import sys; sys.path.insert(0, '/opt/computron_9000/container'); "
+        "import sys; sys.path.insert(0, '/opt/computron/container'); "
         "import json; "
         "from grounding_client import ground_from_path; "
         "result = ground_from_path(%s, %s); "

@@ -175,8 +175,7 @@ class TestPerformInteractionPopup:
         new_page = FakePage(url="about:blank")
 
         download_info = DownloadInfo(
-            host_path="/tmp/rules.pdf",
-            container_path="/home/computron/rules.pdf",
+            path="/home/computron/rules.pdf",
             content_type="application/pdf",
             size_bytes=50000,
             filename="rules.pdf",
@@ -343,7 +342,7 @@ class TestHandleDownloadRename:
         info = browser._pending_downloads[0]
         assert info.filename == "BoardRules_March2026.pdf"
         assert info.content_type == "application/pdf"
-        assert info.container_path == str(tmp_path / "BoardRules_March2026.pdf")
+        assert info.path == str(tmp_path / "BoardRules_March2026.pdf")
         # Original UUID file should have been moved
         assert not uuid_file.exists()
         assert (tmp_path / "BoardRules_March2026.pdf").exists()

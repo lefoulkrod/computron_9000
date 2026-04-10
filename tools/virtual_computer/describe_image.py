@@ -15,14 +15,16 @@ from config import load_config
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_IMAGE_TYPES = frozenset({
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "image/bmp",
-    "image/tiff",
-})
+_SUPPORTED_IMAGE_TYPES = frozenset(
+    {
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/bmp",
+        "image/tiff",
+    }
+)
 
 
 async def describe_image(
@@ -32,7 +34,7 @@ async def describe_image(
     """Analyze an image file using the vision model.
 
     Args:
-        path: Absolute path to the image file.
+        path: Absolute path to the image file
         prompt: Question or instruction about the image.
 
     Returns:
@@ -51,9 +53,10 @@ async def describe_image(
 
     content_type, _ = mimetypes.guess_type(file_path.name)
     if content_type not in _SUPPORTED_IMAGE_TYPES:
-        return (
-            "Error: Unsupported image type '%s' for %s. "
-            "Supported: %s" % (content_type, file_path.name, ", ".join(sorted(_SUPPORTED_IMAGE_TYPES)))
+        return "Error: Unsupported image type '%s' for %s. Supported: %s" % (
+            content_type,
+            file_path.name,
+            ", ".join(sorted(_SUPPORTED_IMAGE_TYPES)),
         )
 
     try:
@@ -92,8 +95,11 @@ async def describe_image(
 
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
-        "describe_image", vision.model,
-        prompt, answer, elapsed_ms,
+        "describe_image",
+        vision.model,
+        prompt,
+        answer,
+        elapsed_ms,
         image_source=path,
     )
 

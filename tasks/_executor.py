@@ -103,7 +103,7 @@ class TaskExecutor:
             dispatcher = get_current_dispatcher()
             if dispatcher:
                 dispatcher.subscribe(_capture_file_output)
-            with agent_span(agent.name, instruction=instruction, agent_state=AgentState(get_core_tools() + (agent.tools or []))):
+            async with agent_span(agent.name, instruction=instruction, agent_state=AgentState(get_core_tools() + (agent.tools or []))):
                 result = await run_turn(history, agent, hooks=hooks)
 
         return result or "", file_paths

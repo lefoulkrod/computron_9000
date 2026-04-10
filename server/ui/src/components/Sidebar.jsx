@@ -24,10 +24,10 @@ function SidebarIcon({ path, icon, lines }) {
     );
 }
 
-export default function Sidebar({ activePanel, onPanelToggle }) {
+export default function Sidebar({ activePanel, onPanelToggle, hiddenPanels = [] }) {
     return (
         <div className={styles.sidebar}>
-            {PANELS.map((panel) => {
+            {PANELS.filter((p) => !hiddenPanels.includes(p.id)).map((panel) => {
                 if (panel.id === 'sep') {
                     return <div key="sep" className={styles.sep} />;
                 }

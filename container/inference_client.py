@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 
 SERVER_URL = "http://127.0.0.1:18901"
-SERVER_SCRIPT = "/opt/computron_9000/container/inference_server.py"
+SERVER_SCRIPT = "/opt/computron/container/inference_server.py"
 
 _PID_FILE = "/tmp/inference_server.pid"
 STARTUP_TIMEOUT = 120  # max seconds to wait for server to come up

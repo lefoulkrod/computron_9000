@@ -41,6 +41,15 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
 
     Content is returned with embedded line numbers (``cat -n`` style).
     Files over 2000 lines are automatically truncated when no range is given.
+    Use ``start``/``end`` or ``grep`` to read specific sections of large files.
+
+    Args:
+        path: File path (relative or absolute).
+        start: First line to read (1-based, inclusive). Omit to start at 1.
+        end: Last line to read (1-based, inclusive). Omit to read to EOF.
+
+    Returns:
+        ReadTextResult: ``content`` with line numbers, ``total_lines``, and optional range info.
     """
     try:
         abs_path = Path(path)
@@ -108,12 +117,28 @@ def read_file(path: str, start: int | None = None, end: int | None = None) -> Re
 
 
 def head(path: str, n: int = 200) -> ReadTextResult:
-    """Read the first n lines of a UTF-8 text file."""
+    """Read the first n lines of a UTF-8 text file.
+
+    Args:
+        path: File path (relative or absolute).
+        n: Number of lines to return. Defaults to 200.
+
+    Returns:
+        ReadTextResult: Content of the first n lines with range metadata.
+    """
     return read_file(path, start=1, end=max(1, n))
 
 
 def tail(path: str, n: int = 200) -> ReadTextResult:
-    """Read the last n lines of a UTF-8 text file."""
+    """Read the last n lines of a UTF-8 text file.
+
+    Args:
+        path: File path (relative or absolute).
+        n: Number of lines to return. Defaults to 200.
+
+    Returns:
+        ReadTextResult: Content of the last n lines with range metadata.
+    """
     try:
         abs_path = Path(path)
         if not abs_path.exists() or not abs_path.is_file():

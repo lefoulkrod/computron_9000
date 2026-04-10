@@ -10,7 +10,6 @@ from __future__ import annotations
 import atexit
 import asyncio
 import time
-import json
 import logging
 import os
 import secrets
@@ -60,13 +59,6 @@ class ActiveView(NamedTuple):
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_UA = (
-    # Keep in sync with Playwright's bundled Chromium version (currently 136).
-    # Only used when launching bundled Chromium (channel=None).  When a real
-    # Chrome channel is specified the browser's native UA is kept as-is so
-    # that the User-Agent string and Sec-CH-UA client-hint headers stay in sync.
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
-)
 
 
 # Small jitter so every run isn't pixel-identical
@@ -118,7 +110,10 @@ const _makeNative = (fn, nativeName) => {
 # existence, not just its value.
 # ---------------------------------------------------------------------------
 
-_CHROME_CHANNEL_PATCHES_JS = r"""
+_ANTI_BOT_SCRIPT = (
+    "// --- Stealth patches to reduce automation detection ---\n"
+    + _MAKE_NATIVE_JS
+    + r"""
 // webdriver flag — delete it entirely so navigator.webdriver is undefined.
 // In a real non-automated Chrome the property does not exist at all.
 // --disable-blink-features=AutomationControlled prevents Playwright from
@@ -126,237 +121,7 @@ _CHROME_CHANNEL_PATCHES_JS = r"""
 delete Navigator.prototype.webdriver;
 delete navigator.webdriver;
 """
-
-# ---------------------------------------------------------------------------
-# Full patch set for bundled Chromium (channel=None).
-# Bundled Chromium is missing native Chrome properties (plugins, brands,
-# chrome.runtime, etc.) and needs window/permissions fixes that headed
-# real Chrome handles correctly on its own.
-# ---------------------------------------------------------------------------
-
-_CHROMIUM_ONLY_PATCHES_JS = r"""
-// 1) webdriver flag — delete it entirely so navigator.webdriver is undefined.
-// See comment on _CHROME_CHANNEL_PATCHES_JS for rationale.
-delete Navigator.prototype.webdriver;
-delete navigator.webdriver;
-
-// 2) outerWidth/outerHeight — must not exceed screen dimensions
-// (Playwright's maximized window can exceed the emulated screen size, which is impossible in a real browser)
-Object.defineProperty(window, 'outerWidth',  { get: () => screen.width,        configurable: true });
-Object.defineProperty(window, 'outerHeight', { get: () => screen.height + 74,  configurable: true });
-
-// 3) Permissions API — intercept notifications query but keep the function looking native
-// Query a non-sensitive permission to get a real PermissionStatus object, then override
-// its state to 'prompt' (the default in a fresh Chrome install).  This way instanceof
-// PermissionStatus passes and the prototype chain looks genuine.
-// Also override Notification.permission to match — bot.sannysoft.com catches the mismatch
-// between Notification.permission ('denied' in headless) and permissionStatus.state ('prompt').
-(function() {
-  const _orig = window.navigator.permissions.query.bind(window.navigator.permissions);
-  const _patched = _makeNative(function query(parameters) {
-    if (parameters.name === 'notifications') {
-      return _orig({ name: 'geolocation' }).then(function(status) {
-        Object.defineProperty(status, 'state', { get: () => 'prompt', configurable: true });
-        Object.defineProperty(status, 'onchange', { value: null, writable: true, configurable: true });
-        return status;
-      });
-    }
-    return _orig(parameters);
-  }, 'query');
-  Object.defineProperty(window.navigator.permissions, 'query', {
-    value: _patched, writable: true, configurable: true,
-  });
-  Object.defineProperty(Notification, 'permission', {
-    get: _makeNative(() => 'default', 'get permission'),
-    configurable: true,
-  });
-})();
-
-// 4) languages
-Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-
-// 5) platform
-Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-
-// 6) chrome runtime object — Chromium sets window.chrome (loadTimes/csi/app) but NOT runtime.
-// Real Chrome always has window.chrome.runtime (even without extensions).
-window.chrome = window.chrome || {};
-if (!window.chrome.runtime) {
-  window.chrome.runtime = {};
-}
-
-// 7) plugins — use a Proxy wrapping the real PluginArray so instanceof checks pass.
-// Object.setPrototypeOf(array, PluginArray.prototype) doesn't fool instanceof.
-(function() {
-  const _fakeData = [
-    { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-    { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-    { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: '' },
-    { name: 'Microsoft Edge PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-    { name: 'WebKit built-in PDF', filename: 'internal-pdf-viewer', description: '' },
-  ];
-  const _real = navigator.plugins;  // genuine PluginArray — keeps type identity
-  const _proxy = new Proxy(_real, {
-    get(target, prop, receiver) {
-      if (prop === 'length') return _fakeData.length;
-      // Indexed access: proxy[0], proxy[1], ...
-      if (typeof prop === 'string' && /^\d+$/.test(prop)) {
-        return _fakeData[Number(prop)];
-      }
-      if (prop === 'item') return _makeNative(function item(i) { return _fakeData[i]; }, 'item');
-      if (prop === 'namedItem') return _makeNative(function namedItem(n) {
-        return _fakeData.find(p => p.name === n) || null;
-      }, 'namedItem');
-      if (prop === 'refresh') return _makeNative(function refresh() {}, 'refresh');
-      if (prop === Symbol.iterator) return function* () {
-        for (let i = 0; i < _fakeData.length; i++) yield _fakeData[i];
-      };
-      if (prop === Symbol.toStringTag) return 'PluginArray';
-      return Reflect.get(target, prop, receiver);
-    },
-  });
-  Object.defineProperty(navigator, 'plugins', { get: () => _proxy, configurable: true });
-})();
-
-// 8) WebGL vendor/renderer — patch both WebGL1 and WebGL2
-(function() {
-  function _patchWebGL(proto) {
-    if (!proto) return;
-    const _origGetParam = proto.getParameter;
-    proto.getParameter = _makeNative(function getParameter(parameter) {
-      if (parameter === 37445) return 'Intel Inc.';            // UNMASKED_VENDOR_WEBGL
-      if (parameter === 37446) return 'Intel(R) UHD Graphics'; // UNMASKED_RENDERER_WEBGL
-      return _origGetParam.call(this, parameter);
-    }, 'getParameter');
-  }
-  _patchWebGL(WebGLRenderingContext.prototype);
-  if (typeof WebGL2RenderingContext !== 'undefined') {
-    _patchWebGL(WebGL2RenderingContext.prototype);
-  }
-})();
-
-// 9) userAgentData — add "Google Chrome" brand (Playwright only exposes "Chromium")
-(function() {
-  const _uad = navigator.userAgentData;
-  if (!_uad) return;
-  const ver = (_uad.brands.find(b => b.brand === 'Chromium') || {}).version || '136';
-  const brands = [
-    { brand: 'Not.A/Brand', version: '99' },
-    { brand: 'Chromium',    version: ver },
-    { brand: 'Google Chrome', version: ver },
-  ];
-  Object.defineProperty(navigator, 'userAgentData', {
-    get: () => new Proxy(_uad, {
-      get(t, prop) {
-        if (prop === 'brands') return brands;
-        const val = t[prop];
-        return typeof val === 'function' ? val.bind(t) : val;
-      }
-    }),
-    configurable: true
-  });
-})();
-
-// 10) Missing API stubs — CreepJS flags these as absent in headless/automation environments
-(function() {
-  // a) navigator.connection (Network Information API)
-  if (!navigator.connection) {
-    const _conn = {
-      downlink: 10, downlinkMax: Infinity, effectiveType: '4g',
-      rtt: 50, saveData: false, type: 'wifi',
-      addEventListener: _makeNative(function addEventListener() {}, 'addEventListener'),
-      removeEventListener: _makeNative(function removeEventListener() {}, 'removeEventListener'),
-    };
-    Object.defineProperty(navigator, 'connection', {
-      get: _makeNative(function connection() { return _conn; }, 'get connection'),
-      configurable: true, enumerable: true,
-    });
-  }
-
-  // b) navigator.share() / navigator.canShare() (Web Share API)
-  if (!navigator.share) {
-    Object.defineProperty(navigator, 'share', {
-      value: _makeNative(function share() {
-        return Promise.reject(new DOMException('Share canceled', 'AbortError'));
-      }, 'share'),
-      writable: true, configurable: true,
-    });
-  }
-  if (!navigator.canShare) {
-    Object.defineProperty(navigator, 'canShare', {
-      value: _makeNative(function canShare() { return false; }, 'canShare'),
-      writable: true, configurable: true,
-    });
-  }
-
-  // c) Content Index API on ServiceWorkerRegistration
-  if (typeof ServiceWorkerRegistration !== 'undefined' && !ServiceWorkerRegistration.prototype.index) {
-    ServiceWorkerRegistration.prototype.index = {
-      add: _makeNative(function add() { return Promise.resolve(); }, 'add'),
-      delete: _makeNative(function delete_() { return Promise.resolve(); }, 'delete'),
-      getAll: _makeNative(function getAll() { return Promise.resolve([]); }, 'getAll'),
-    };
-  }
-
-  // d) navigator.contacts (Contact Picker API)
-  if (!navigator.contacts) {
-    const _contacts = {
-      select: _makeNative(function select() {
-        return Promise.reject(new DOMException('Contact picker unavailable', 'InvalidStateError'));
-      }, 'select'),
-      getProperties: _makeNative(function getProperties() {
-        return Promise.resolve(['email', 'name', 'tel']);
-      }, 'getProperties'),
-    };
-    Object.defineProperty(navigator, 'contacts', {
-      get: _makeNative(function contacts() { return _contacts; }, 'get contacts'),
-      configurable: true, enumerable: true,
-    });
-  }
-
-  // e) navigator.windowControlsOverlay (Window Controls Overlay API — "noTaskbar" flag)
-  if (!navigator.windowControlsOverlay) {
-    const _wco = {
-      visible: false,
-      getTitlebarAreaRect: _makeNative(function getTitlebarAreaRect() {
-        return new DOMRect(0, 0, 0, 0);
-      }, 'getTitlebarAreaRect'),
-      addEventListener: _makeNative(function addEventListener() {}, 'addEventListener'),
-      removeEventListener: _makeNative(function removeEventListener() {}, 'removeEventListener'),
-    };
-    Object.defineProperty(navigator, 'windowControlsOverlay', {
-      get: _makeNative(function windowControlsOverlay() { return _wco; }, 'get windowControlsOverlay'),
-      configurable: true, enumerable: true,
-    });
-  }
-})();
-"""
-
-
-def _build_anti_bot_script(*, use_channel: bool) -> str:
-    """Assemble the anti-bot init script for the given browser mode.
-
-    Args:
-        use_channel: True when launching a real Chrome channel (``"chrome"``),
-            False for bundled Chromium.  Real Chrome only needs the webdriver
-            patch — everything else (plugins, brands, permissions, window
-            dimensions, missing APIs) is already correct natively and patching
-            it would replace real functions with spoofed ones that are
-            themselves detectable.
-    """
-    parts = ["// --- Stealth patches to reduce automation detection ---"]
-    parts.append(_MAKE_NATIVE_JS)
-    if use_channel:
-        parts.append(_CHROME_CHANNEL_PATCHES_JS)
-    else:
-        parts.append(_CHROMIUM_ONLY_PATCHES_JS)
-    return "\n".join(parts)
-
-
-# Pre-built scripts for import convenience (e.g. tests).
-# ANTI_BOT_INIT_SCRIPT is the full Chromium script for backward compatibility.
-ANTI_BOT_INIT_SCRIPT = _build_anti_bot_script(use_channel=False)
-ANTI_BOT_INIT_SCRIPT_CHROME = _build_anti_bot_script(use_channel=True)
+)
 
 # Force all shadow DOM attachments to use open mode so the DOM walker
 # in page_view.py can traverse shadow roots.  Closed shadow roots
@@ -402,7 +167,6 @@ class Browser:
         extra_headers: dict[str, str] | None = None,
         pw: Playwright | None = None,
         pw_browser: Any = None,
-        use_channel: bool = False,
         profile_dir: str = "",
     ) -> None:
         """Initialize the browser wrapper.
@@ -413,16 +177,13 @@ class Browser:
             pw: The Playwright driver instance used to launch the browser.
             pw_browser: The Playwright Browser object. Present on the root
                 browser so sub-agents can create new contexts on it.
-            use_channel: True when using a real Chrome channel. Disables
-                viewport overrides so the OS window manager controls sizing.
-            profile_dir: Path to the Chromium user-data-dir.
+            profile_dir: Path to the browser session state directory.
         """
         self._context: BrowserContext = context
         self._profile_dir: str = profile_dir
         self._extra_headers: dict[str, str] = extra_headers or {}
         self._pw: Playwright | None = pw
         self._pw_browser: Any = pw_browser
-        self._use_channel: bool = use_channel
         self._closed: bool = False
         self._active_frame: Frame | None = None
         self._pending_downloads: list[DownloadInfo] = []
@@ -495,10 +256,7 @@ class Browser:
 
             from tools.browser.core._file_detection import build_download_info_from_path
 
-            info = build_download_info_from_path(
-                host_path=path,
-                container_dir=self._downloads_dir,
-            )
+            info = build_download_info_from_path(path)
             self._pending_downloads.append(info)
             self._download_event.set()
             logger.info(
@@ -514,98 +272,23 @@ class Browser:
         self._pending_downloads.clear()
         return downloads
 
-    @staticmethod
-    def _cleanup_stale_profile_locks(profile_path: Path) -> None:
-        """Remove stale Chromium lock files left by a previous unclean shutdown.
-
-        Chromium creates ``SingletonLock``, ``SingletonCookie``, and
-        ``SingletonSocket`` symlinks inside the user-data directory.
-        ``SingletonLock`` points to ``<hostname>-<pid>``.  If that PID is no
-        longer running we can safely remove all three files so that a fresh
-        browser can start.
-        """
-        lock = profile_path / "SingletonLock"
-        if not lock.is_symlink() and not lock.exists():
-            return
-
-        try:
-            target = os.readlink(lock)
-        except OSError:
-            return
-
-        # Format is "<hostname>-<pid>"
-        parts = target.rsplit("-", 1)
-        if len(parts) == 2:
-            try:
-                pid = int(parts[1])
-            except ValueError:
-                pid = None
-
-            if pid is not None:
-                try:
-                    # Signal 0 checks existence without actually signalling.
-                    os.kill(pid, 0)
-                    # Process is alive — don't touch the locks.
-                    return
-                except ProcessLookupError:
-                    pass  # PID is dead — stale lock, clean up below.
-                except PermissionError:
-                    # Process exists but we can't signal it — leave locks alone.
-                    return
-
-        # Remove stale lock files.
-        for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
-            target_path = profile_path / name
-            try:
-                target_path.unlink(missing_ok=True)
-                logger.info("Removed stale browser lock file: %s", target_path)
-            except OSError as exc:
-                logger.warning("Could not remove stale lock %s: %s", target_path, exc)
-
-    @staticmethod
-    def _mark_profile_clean_exit(profile_path: Path) -> None:
-        """Patch the Chromium ``Preferences`` file so the next launch won't
-        show the "Restore pages?" / "Chrome didn't shut down correctly" bubble.
-
-        Chrome checks ``profile.exit_type``; if it's ``"Crashed"`` or missing
-        it shows the restore prompt.  Writing ``"Normal"`` before launch
-        prevents that.
-        """
-        prefs_file = profile_path / "Default" / "Preferences"
-        if not prefs_file.exists():
-            return
-        try:
-            prefs = json.loads(prefs_file.read_text(encoding="utf-8"))
-            profile_section = prefs.setdefault("profile", {})
-            if profile_section.get("exit_type") != "Normal":
-                profile_section["exit_type"] = "Normal"
-                profile_section["exited_cleanly"] = True
-                prefs_file.write_text(
-                    json.dumps(prefs, separators=(",", ":")),
-                    encoding="utf-8",
-                )
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.debug("Could not patch profile exit_type: %s", exc)
-
     @classmethod
     async def start(
         cls,
         profile_dir: str,
         *,
-        channel: str | None = None,
         headless: bool = False,
-        user_agent: str = DEFAULT_UA,
         locale: str = "en-US",
         timezone_id: str = "America/Chicago",
         proxy: ProxySettings | None = None,
         accept_downloads: bool = True,
         downloads_path: str | None = None,
-        geolocation: Geolocation | None = None,  # {"latitude": 37.7749, "longitude": -122.4194}
-        permissions: list[str] | None = None,  # e.g. ["geolocation", "clipboard-read", "clipboard-write"]
-        extra_headers: dict[str, str] | None = None,  # sent with every request
-        args: list[str] | None = None,  # extra Chromium args
+        geolocation: Geolocation | None = None,
+        permissions: list[str] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        args: list[str] | None = None,
     ) -> Browser:
-        """Launch Chrome and create a browser context.
+        """Launch system Chrome and create a browser context.
 
         Uses ``chromium.launch()`` which returns a ``Browser`` object,
         allowing sub-agents to create additional contexts on the same
@@ -616,16 +299,12 @@ class Browser:
 
         Args:
             profile_dir: Directory for session state persistence.
-            channel: Browser channel (``"chrome"`` for system Chrome, ``None``
-                for bundled Chromium).
             headless: Whether to launch without a visible window.
-            user_agent: User-Agent string to present to websites.
             locale: BCP 47 locale tag.
             timezone_id: IANA timezone ID to emulate.
             proxy: Optional proxy settings for the browser.
             accept_downloads: Whether to allow automatic downloads.
-            downloads_path: Directory where downloaded files are saved. Defaults to a
-                system temp directory if not provided.
+            downloads_path: Directory where downloaded files are saved.
             geolocation: Optional geolocation to emulate.
             permissions: Optional list of permissions to grant to all pages.
             extra_headers: Additional default HTTP headers for all requests.
@@ -637,13 +316,7 @@ class Browser:
         profile_path = Path(profile_dir).expanduser().resolve()
         profile_path.mkdir(parents=True, exist_ok=True)
 
-        _use_channel = channel is not None
-
-        # -----------------------------------------------------------------
-        # Chromium args — real Chrome needs fewer overrides since it already
-        # has correct TLS fingerprint, client hints, and native APIs.
-        # -----------------------------------------------------------------
-        chromium_args = [
+        chrome_args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-features=AutomationControlled",
             "--no-default-browser-check",
@@ -655,17 +328,9 @@ class Browser:
             "--webrtc-ip-handling-policy=disable_non_proxied_udp",
             "--disable-pdf-viewer",
         ]
-        if not _use_channel:
-            chromium_args.extend([
-                "--disable-features=IsolateOrigins,site-per-process",
-                "--enable-features=NetworkService,NetworkServiceInProcess",
-                "--ignore-certificate-errors",
-                "--enable-unsafe-swiftshader",
-            ])
         if args:
-            chromium_args.extend(args)
+            chrome_args.extend(args)
 
-        # Resolve and create downloads directory if specified
         resolved_downloads_path: str | None = None
         if downloads_path:
             dl_path = Path(downloads_path).expanduser().resolve()
@@ -675,9 +340,9 @@ class Browser:
         viewport = _viewport()
 
         launch_kwargs: dict[str, Any] = dict(
-            channel=channel,
+            channel="chrome",
             headless=headless,
-            args=chromium_args,
+            args=chrome_args,
         )
         if resolved_downloads_path:
             launch_kwargs["downloads_path"] = resolved_downloads_path
@@ -719,23 +384,16 @@ class Browser:
         )
         if proxy:
             context_kwargs["proxy"] = proxy
-        if not _use_channel:
-            context_kwargs["user_agent"] = user_agent
 
         context = await pw_browser.new_context(**context_kwargs)
 
-        # HTTP headers to look like a normal browser.
         headers = {
             "Accept-Language": "%s,en;q=0.9" % locale,
             **(extra_headers or {}),
         }
-        if not _use_channel:
-            headers["Accept-Encoding"] = "gzip, deflate, br"
         await context.set_extra_http_headers(headers)
 
-        # Anti-bot JS shims
-        anti_bot = _build_anti_bot_script(use_channel=_use_channel)
-        await context.add_init_script(anti_bot)
+        await context.add_init_script(_ANTI_BOT_SCRIPT)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
 
         return cls(
@@ -743,7 +401,6 @@ class Browser:
             extra_headers=headers,
             pw=pw,
             pw_browser=pw_browser,
-            use_channel=_use_channel,
             profile_dir=str(profile_path),
         )
 
@@ -781,15 +438,13 @@ class Browser:
         # Apply the same HTTP headers and anti-bot patches as the root.
         headers = dict(root_browser._extra_headers)
         await context.set_extra_http_headers(headers)
-        anti_bot = _build_anti_bot_script(use_channel=root_browser._use_channel)
-        await context.add_init_script(anti_bot)
+        await context.add_init_script(_ANTI_BOT_SCRIPT)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
 
         instance = cls(
             context=context,
             extra_headers=headers,
             pw=None,  # ephemeral — does not own the Playwright driver
-            use_channel=root_browser._use_channel,
             profile_dir="",
         )
         instance._downloads_dir = root_browser._downloads_dir
@@ -1138,48 +793,8 @@ class Browser:
                     exc,
                 )
 
-            # Chrome with --no-sandbox can detach from the Playwright driver's
-            # process group and survive pw.stop().  Kill any orphaned Chrome
-            # process that is still holding the profile lock.
-            self._kill_orphaned_chrome()
-
         if context_exc:
             logger.debug("Browser.close completed with suppressed context exception")
-
-    def _kill_orphaned_chrome(self) -> None:
-        """Kill any Chrome process still holding the profile lock.
-
-        Chrome launched with ``--no-sandbox`` can detach from the Playwright
-        driver's process group and survive ``pw.stop()``.  This reads the PID
-        from the ``SingletonLock`` symlink and sends SIGKILL if the process is
-        still alive.
-        """
-        if not self._profile_dir:
-            return
-        lock = Path(self._profile_dir) / "SingletonLock"
-        try:
-            target = os.readlink(lock)
-        except OSError:
-            return
-
-        parts = target.rsplit("-", 1)
-        if len(parts) != 2:
-            return
-        try:
-            pid = int(parts[1])
-        except ValueError:
-            return
-
-        try:
-            os.kill(pid, 0)  # Check if alive
-        except (ProcessLookupError, PermissionError):
-            return
-
-        logger.info("Killing orphaned Chrome process (pid %d)", pid)
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError, OSError):
-            pass
 
     async def _finalize_action(
         self,
@@ -1213,7 +828,6 @@ class Browser:
                     download_info = await save_response_as_file(
                         response,
                         downloads_dir=self._downloads_dir or ".",
-                        container_dir=self._downloads_dir or "/tmp",
                     )
                 except Exception:
                     logger.exception("Failed to save file from response")
@@ -1317,7 +931,6 @@ class Browser:
                 info = await save_response_as_file(
                     api_resp,
                     downloads_dir=self._downloads_dir or ".",
-                    container_dir=self._downloads_dir or "/tmp",
                 )
                 self._pending_downloads.append(info)
                 logger.info(
@@ -1489,11 +1102,9 @@ async def _get_root_browser() -> Browser:
         config = load_config()
         profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
         downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
-        channel = config.tools.browser.channel
         headless = config.tools.browser.headless
         _browser = await Browser.start(
             str(profile_path),
-            channel=channel,
             headless=headless,
             downloads_path=downloads_dir,
         )
