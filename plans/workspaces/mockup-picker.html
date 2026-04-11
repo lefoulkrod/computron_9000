@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace Picker Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --primary: #0b0b0c;
+    --secondary: #1b1b1d;
+    --muted: #3a3a3c;
+    --text: #f3f3f3;
+    --accent: #7b8cff;
+    --font-mono: 'Share Tech Mono', 'Fira Mono', 'Consolas', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--primary);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  .header {
+    height: 36px;
+    border-bottom: 1px solid var(--muted);
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+  .logo {
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+    margin-right: 4px;
+  }
+  .tab-bar {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    margin-left: 12px;
+    margin-right: auto;
+  }
+  .tab {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  .tab.active { color: var(--text); font-weight: 600; }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 8px; right: 8px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+  }
+  .sep { width: 1px; height: 14px; background: var(--muted); opacity: 0.4; }
+  .add-tab {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  /* ── Picker overlay ──────────────────────────────────── */
+  .picker {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+    padding: 3rem 2rem;
+  }
+  .picker-heading {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    letter-spacing: 0.02em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .card {
+    background: var(--secondary);
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    padding: 1.25rem;
+    cursor: pointer;
+    transition: border-color 150ms, box-shadow 150ms;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 130px;
+    text-align: left;
+    font-size: inherit;
+    color: var(--text);
+  }
+  .card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .card.is-open { border-color: var(--accent); }
+
+  .card-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .card-desc { font-size: 11px; color: var(--muted); line-height: 1.4; flex: 1; }
+  .card-stats {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: auto;
+  }
+  .card-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(123,140,255,0.12);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-top: 4px;
+    align-self: flex-start;
+  }
+
+  .create-card {
+    background: var(--secondary);
+    border: 1px dashed var(--muted);
+    border-radius: 8px;
+    padding: 1.25rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 130px;
+    color: var(--muted);
+    gap: 0.25rem;
+    transition: border-color 150ms, color 150ms;
+    font-size: inherit;
+    text-align: center;
+  }
+  .create-card:hover { color: var(--text); border-color: var(--accent); }
+  .create-icon { font-size: 24px; line-height: 1; }
+  .create-label { font-size: 12px; font-weight: 500; }
+</style>
+</head>
+<body>
+
+  <!-- Header — [+] tab is highlighted to show this is what you see after clicking it -->
+  <div class="header">
+    <div class="logo">CT9K</div>
+    <div class="tab-bar">
+      <button class="tab">Default Workspace</button>
+      <div class="sep"></div>
+      <button class="tab">Research Project</button>
+      <button class="add-tab" title="Open or create workspace">+</button>
+    </div>
+  </div>
+
+  <!-- Picker -->
+  <div class="picker">
+    <div class="picker-heading">Select a Workspace</div>
+    <div class="grid">
+      <button class="card is-open">
+        <div class="card-name">Default Workspace</div>
+        <div class="card-desc"></div>
+        <div class="card-stats">
+          <span>12 convos</span>
+          <span>247 MB</span>
+        </div>
+        <div class="card-badge">OPEN</div>
+      </button>
+
+      <button class="card is-open">
+        <div class="card-name">Research Project</div>
+        <div class="card-desc">Browser-based deep research tasks</div>
+        <div class="card-stats">
+          <span>7 convos</span>
+          <span>82 MB</span>
+        </div>
+        <div class="card-badge">OPEN</div>
+      </button>
+
+      <button class="card">
+        <div class="card-name">Client Demo</div>
+        <div class="card-desc">Demo environment for client presentations</div>
+        <div class="card-stats">
+          <span>1 convo</span>
+          <span>15 MB</span>
+        </div>
+      </button>
+
+      <button class="card">
+        <div class="card-name">Side Project</div>
+        <div class="card-desc">Experimental code generation workspace</div>
+        <div class="card-stats">
+          <span>3 convos</span>
+          <span>41 MB</span>
+        </div>
+      </button>
+
+      <button class="create-card">
+        <div class="create-icon">+</div>
+        <div class="create-label">Create Workspace</div>
+      </button>
+    </div>
+  </div>
+
+</body>
+</html>
