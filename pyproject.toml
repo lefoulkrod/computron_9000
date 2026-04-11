@@ -24,7 +24,8 @@ test = [
     "pytest>=7.0.0,<8.0.0",
     "pytest-asyncio",
     "pytest-aiohttp",
-    "pytest-watch"
+    "pytest-watch",
+    "pytest-playwright",
 ]
 dev = [
     "ruff",
@@ -132,7 +133,7 @@ addopts = [
 ]
 markers = [
     "unit: marks tests as unit tests",
-    "integration: marks tests as integration tests", 
+    "integration: marks tests as integration tests",
     "slow: marks tests as slow running",
 ]
 asyncio_mode = "auto"

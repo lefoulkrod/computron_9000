@@ -91,19 +91,37 @@ main.py       Entry point
 ## Testing
 
 ```sh
-just test              # All tests
+just test              # All unit tests
 just test-unit         # Unit tests only
 just test-file <path>  # Specific file
+just e2e               # E2E browser tests (container must be running)
+just e2e-install       # Install Playwright browsers (one-time)
 ```
 
-All tests are unit tests — no Ollama, no network, no containers. Tests run on the host with `PYTHONPATH=. uv run pytest`.
+### Unit Tests
 
-### Test Conventions
+All unit tests run on the host — no Ollama, no network, no containers. Tests run with `PYTHONPATH=. uv run pytest`.
 
 - Place tests in `tests/` mirroring source structure
 - Mark with `@pytest.mark.unit`
 - Use descriptive names, Google-style docstrings
 - Never patch around test failures
+
+### E2E Tests
+
+End-to-end tests use Playwright (Python) to drive a real browser against the running app. Tests live in `e2e/` at the repo root.
+
+```sh
+# 1. Start a throwaway container
+just container-test
+
+# 2. In another terminal, run e2e tests
+just e2e
+```
+
+- Container must be running on `:8080` before running tests
+- Tests run headless by default
+- `just setup` installs Playwright browsers automatically
 
 ## Code Quality
 
@@ -160,9 +178,11 @@ Run `just` to see all available commands. Key ones:
 | `just container-shell` | Shell into the container |
 | `just container-logs` | Tail app logs |
 | `just publish` | Tag and push image to registry |
-| `just test` | Run all tests |
+| `just test` | Run all unit tests |
 | `just test-unit` | Run unit tests only |
 | `just test-file <path>` | Run tests for a specific file |
+| `just e2e` | Run e2e browser tests (container must be running) |
+| `just e2e-install` | Install Playwright browsers |
 | `just lint` | Lint with ruff |
 | `just typecheck` | Type check with mypy |
 | `just format` | Auto-format with ruff |

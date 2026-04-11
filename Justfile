@@ -81,15 +81,21 @@ setup home_dir=`echo "$HOME/.computron_9000"`:
     mkdir -p "{{home_dir}}/custom_tools/scripts"
     echo "✅ Directories ready at {{home_dir}}"
 
+    # Install Playwright browsers for e2e tests
+    echo "🎭 Installing Playwright browsers..."
+    uv run playwright install chromium
+
     # Run a quick test
     echo "🧪 Running quick health check..."
     uv run python -c "import agents, tools, utils; print('✅ All imports successful!')"
     
     echo ""
     echo "🎉 Setup complete! You can now:"
-    echo "   • Build container: just container-build"
-    echo "   • Start dev container: just container-dev"
+    echo "   • Build container:  just container-build"
+    echo "   • Test in container: just container-test"
+    echo "   • Dev container:    just container-dev"
     echo "   • Run tests: just test"
+    echo "   • Run e2e tests: just e2e"
     echo "   • See all commands: just"
 
 
@@ -160,6 +166,14 @@ test-verbose:
 # Run quick tests (exclude slow ones)
 test-quick:
     PYTHONPATH=. uv run pytest -m "not slow"
+
+# Install Playwright browsers (one-time setup)
+e2e-install:
+    uv run playwright install chromium
+
+# Run e2e tests (container must be running on :8080)
+e2e *args:
+    PYTHONPATH=. uv run pytest e2e/ {{args}}
 
 
 # =============================================
@@ -416,279 +430,117 @@ info:
 # =============================================
 # 🐳 Containers (Docker)
 # =============================================
-# Build Docker image 'computron_9000:latest'
-container-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install it first:"
-        echo "   https://docs.docker.com/engine/install/"
-        exit 1
-    fi
 
+_ctr_name := "computron_virtual_computer"
+
+# Build the container image
+container-build:
     echo "🏗️  Building container image..."
     docker build -f container/Dockerfile -t computron_9000:latest .
-    echo "✅ Container image built successfully!"
 
-# Start 'computron_virtual_computer' container (create volumes)
+# Build UI inside a throwaway container (fixes root-owned dist files)
+container-build-ui:
+    docker run --rm -v "$(pwd):/opt/computron:rw" computron_9000:latest \
+      bash -c "cd /opt/computron/server/ui && npm run build"
+
+# Run a throwaway container with latest source — builds UI, no persistent state
+container-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker image inspect computron_9000:latest &>/dev/null || just container-build
+    just container-build-ui
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
+    echo "🚀 Throwaway container (ctrl+c to discard)"
+    docker run --rm -it \
+      --gpus all --shm-size=256m --network=host \
+      $env_args \
+      -v "$(pwd):/opt/computron:rw" \
+      computron_9000:latest
+
+# Start container for regular use (named volumes for persistent state)
 container-start:
     #!/usr/bin/env bash
     set -euo pipefail
-    
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install it first:"
-        echo "   https://docs.docker.com/engine/install/"
-        exit 1
+    docker image inspect computron_9000:latest &>/dev/null || just container-build
+    if docker ps -q --filter name=^{{_ctr_name}}$ 2>/dev/null | grep -q .; then
+        echo "ℹ️  Already running"; exit 0
     fi
-
-    if ! docker image inspect computron_9000:latest &> /dev/null; then
-        echo "❌ Container image not found. Building first..."
-        just container-build
-    fi
-
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
-            echo "ℹ️  Container 'computron_virtual_computer' is already running"
-            exit 0
-        else
-            echo "🗑️  Removing stopped container..."
-            docker rm computron_virtual_computer
-        fi
-    fi
-
-    echo "🚀 Starting container..."
-
-    # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
-    hf_token_args=""
-    if [ -n "${HF_TOKEN:-}" ]; then
-        hf_token_args="-e HF_TOKEN=$HF_TOKEN"
-        echo "🔑 HF_TOKEN detected, passing to container"
-    fi
-
-    # Pass GITHUB_TOKEN and GITHUB_USER if set (for publishing repos / GitHub Pages)
-    github_args=""
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        github_args="-e GITHUB_TOKEN=$GITHUB_TOKEN"
-        if [ -n "${GITHUB_USER:-}" ]; then
-            github_args="$github_args -e GITHUB_USER=$GITHUB_USER"
-        fi
-        echo "🔑 GITHUB_TOKEN detected, passing to container"
-    fi
-
+    docker rm -f {{_ctr_name}} 2>/dev/null || true
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
     docker run -d --rm \
-      --name computron_virtual_computer \
-      --gpus all \
-      --shm-size=256m \
-      --network=host \
-      $hf_token_args \
-      $github_args \
+      --name {{_ctr_name}} \
+      --gpus all --shm-size=256m --network=host \
+      $env_args \
       -v computron_home:/home/computron:rw \
       -v computron_state:/var/lib/computron:rw \
       computron_9000:latest
+    echo "✅ Started"
 
-    echo "✅ Container 'computron_virtual_computer' started successfully!"
-
-# Start container with source code mounted for development
+# Start container for development (source + state mounted to host)
 container-dev:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install it first:"
-        echo "   https://docs.docker.com/engine/install/"
-        exit 1
+    docker image inspect computron_9000:latest &>/dev/null || just container-build
+    if docker ps -q --filter name=^{{_ctr_name}}$ 2>/dev/null | grep -q .; then
+        echo "ℹ️  Already running"; exit 0
     fi
-
-    if ! docker image inspect computron_9000:latest &> /dev/null; then
-        echo "❌ Container image not found. Building first..."
-        just container-build
-    fi
-
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
-            echo "ℹ️  Container 'computron_virtual_computer' is already running"
-            exit 0
-        else
-            echo "🗑️  Removing stopped container..."
-            docker rm computron_virtual_computer
-        fi
-    fi
-
-    echo "🚀 Starting dev container (source mounted)..."
-
-    # Pass .env file if it exists
-    env_file_args=""
-    if [ -f .env ]; then
-        env_file_args="--env-file .env"
-    fi
-
-    # Bind mount state to ~/.computron_9000/ for easy host access during dev
+    docker rm -f {{_ctr_name}} 2>/dev/null || true
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
     state_dir="$HOME/.computron_9000"
     mkdir -p "$state_dir/state" "$state_dir/home"
-
     docker run -d --rm \
-      --name computron_virtual_computer \
-      --gpus all \
-      --shm-size=256m \
-      --network=host \
+      --name {{_ctr_name}} \
+      --gpus all --shm-size=256m --network=host \
       -e PYTHONDONTWRITEBYTECODE=1 \
-      $env_file_args \
+      $env_args \
       -v "$state_dir/home:/home/computron:rw" \
       -v "$state_dir/state:/var/lib/computron:rw" \
       -v "$(pwd):/opt/computron:rw" \
       computron_9000:latest
+    echo "✅ Dev container started (source mounted, state at $state_dir/)"
 
-    echo "✅ Dev container started (source at /opt/computron)"
-    echo "   State at: $state_dir/"
-    echo "   Edit files locally, then: just container-restart-app"
-
-# Restart app server + inference server (desktop/VNC stay up)
-# Rebuild React UI inside the dev container
+# Rebuild React UI inside the running container
 container-rebuild-ui:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if docker container inspect computron_virtual_computer &> /dev/null && \
-       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-        echo "🔧 Rebuilding UI..."
-        docker exec computron_virtual_computer \
-          bash -c "cd /opt/computron/server/ui && npm run build"
-        echo "✅ UI rebuilt"
-    else
-        echo "❌ Container is not running. Start it with: just container-dev"
-        exit 1
-    fi
+    docker exec {{_ctr_name}} bash -c "cd /opt/computron/server/ui && npm run build"
 
-# Restart app server + inference server (desktop/VNC stay up)
+# Restart app + inference servers (desktop/VNC stay up)
 container-restart-app:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if docker container inspect computron_virtual_computer &> /dev/null && \
-       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-        echo "🔄 Restarting app + inference servers..."
-        # Kill inference server by process name (PID file can be stale).
-        # pkill exits 1 if no match — ignore that.
-        docker exec computron_virtual_computer \
-          pkill -9 -f "inference_server.py" 2>/dev/null || true
-        docker exec computron_virtual_computer \
-          rm -f /tmp/inference_server.pid 2>/dev/null || true
-        # Kill app server (entrypoint auto-restarts in 2s)
-        docker exec computron_virtual_computer \
-          pkill -f "python3.12 main.py" 2>/dev/null || true
-        echo "✅ Servers restarting (app in 2s, inference on next request)"
-    else
-        echo "❌ Container is not running. Start it with: just container-dev"
-        exit 1
-    fi
+    docker exec {{_ctr_name}} pkill -9 -f "inference_server.py" 2>/dev/null || true
+    docker exec {{_ctr_name}} rm -f /tmp/inference_server.pid 2>/dev/null || true
+    docker exec {{_ctr_name}} pkill -f "python3.12 main.py" 2>/dev/null || true
+    echo "✅ Servers restarting"
 
-# Stop 'computron_virtual_computer' container
+# Stop the container
 container-stop:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed"
-        exit 1
-    fi
+    docker stop {{_ctr_name}} 2>/dev/null || echo "ℹ️  Not running"
 
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        echo "🛑 Stopping container..."
-        docker stop computron_virtual_computer
-        echo "✅ Container stopped"
-    else
-        echo "ℹ️  Container 'computron_virtual_computer' is not running"
-    fi
-
-# Open interactive shell in container
+# Open a shell in the running container
 container-shell:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    docker exec -it {{_ctr_name}} bash
 
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed"
-        exit 1
-    fi
+# Follow app server logs
+container-logs:
+    docker logs -f {{_ctr_name}}
 
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-            echo "🐚 Opening shell in container..."
-            docker exec -it computron_virtual_computer bash
-        else
-            echo "❌ Container 'computron_virtual_computer' exists but is not running"
-            echo "   Start it with: just container-start"
-            exit 1
-        fi
-    else
-        echo "❌ Container 'computron_virtual_computer' does not exist"
-        echo "   Start it with: just container-start"
-        exit 1
-    fi
-
-# Get container status and info
-container-status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed"
-        exit 1
-    fi
-
-    echo "📊 Container Status:"
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        echo "   Name: computron_virtual_computer"
-        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-            echo "   Status: running"
-            echo "   ✅ Container is running and ready"
-            echo "   🐚 Access with: just container-shell"
-        else
-            status=$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}' 2>/dev/null || echo "unknown")
-            echo "   Status: $status"
-            echo "   ⚠️  Container exists but is not running"
-            echo "   🚀 Start with: just container-start"
-        fi
-    else
-        echo "   ❌ Container does not exist"
-        echo "   🚀 Create and start with: just container-start"
-    fi
+# Follow inference server logs
+container-inference-logs:
+    docker exec {{_ctr_name}} tail -f /tmp/inference_server.log
 
 # Publish image to GitHub Container Registry
 publish registry="ghcr.io/lefoulkrod/computron_9000":
     #!/usr/bin/env bash
     set -euo pipefail
-
-    if ! docker image inspect computron_9000:latest &> /dev/null; then
-        echo "❌ No local image. Run: just container-build"
-        exit 1
-    fi
-
+    docker image inspect computron_9000:latest &>/dev/null || { echo "❌ No image. Run: just container-build"; exit 1; }
     sha=$(git rev-parse --short HEAD)
     branch=$(git branch --show-current | tr '/' '-')
     tag="${branch}-${sha}"
-
     echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
     docker tag computron_9000:latest "{{registry}}:${tag}"
     docker tag computron_9000:latest "{{registry}}:${branch}-latest"
-
-    # Auto-login if GITHUB_PACKAGES_TOKEN is set
-    if [ -n "${GITHUB_PACKAGES_TOKEN:-}" ]; then
-        echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
-    fi
-
-    echo "🚀 Pushing ($(docker images computron_9000:latest --format '{{{{.Size}}}}'))..."
+    [ -n "${GITHUB_PACKAGES_TOKEN:-}" ] && echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
     docker push "{{registry}}:${tag}"
     docker push "{{registry}}:${branch}-latest"
-
-    echo "✅ Published:"
-    echo "   {{registry}}:${tag}"
-    echo "   {{registry}}:${branch}-latest"
-
-# View app server logs (follow mode)
-container-logs:
-    docker logs -f computron_virtual_computer
-
-# View inference server logs (follow mode)
-inference-logs:
-    docker exec computron_virtual_computer tail -f /tmp/inference_server.log
+    echo "✅ Published: {{registry}}:${tag}"
 
 # View both app + inference logs side by side
 logs:

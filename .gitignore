@@ -18,6 +18,8 @@ dist/
 .coverage.*
 htmlcov/
 .pytest_cache/
+test-results/
+playwright-report/
 
 # Type checking and linting caches
 .mypy_cache/

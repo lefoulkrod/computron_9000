@@ -13,7 +13,8 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - `sdk/` — Internal SDK (events, tool definitions)
 - `utils/` — Shared utilities (cache, shutdown)
 - `config/` — Configuration loading
-- `tests/` — Test suite, mirrors source structure
+- `tests/` — Unit test suite, mirrors source structure
+- `e2e/` — Playwright end-to-end browser tests
 - `main.py` — Application entry point
 
 ## Commands
@@ -24,10 +25,10 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - `just dev-full` — Start backend + UI dev server together
 
 ### Testing
-- `just test` — Run all tests (`PYTHONPATH=. uv run pytest`)
+- `just test` — Run all unit tests (`PYTHONPATH=. uv run pytest`)
 - `just test-unit` — Run unit tests only (`PYTHONPATH=. uv run pytest -m unit`)
-- `just test-integration` — Run integration tests only
 - `just test-file <path>` — Run tests for a specific file
+- `just e2e` — Run Playwright e2e tests (container must be running on :8080)
 
 ### Quality (only run when asked)
 - `just lint` — Lint with ruff (`uv run ruff check .`)
@@ -54,13 +55,14 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Write python code compatible with Python 3.12.10
 - Never put implementation details in docstrings
 - Add comments to explain non-obvious code
+- Import from the submodule, not the package — `from tools.virtual_computer.describe_image import describe_image`, not `from tools.virtual_computer import describe_image`. Package `__init__.py` re-exports are for external consumers; internal code should import from the defining module to avoid shadowing issues with lazy imports.
 - You may ignore Ruff(I001)
 
 ## Testing Conventions
 
 - Write tests for new features/bugs; descriptive names, Google-style docstrings
 - Place tests in `tests/` mirroring source structure
-- Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
+- Add `@pytest.mark.unit` for unit tests
 - Only run tests when instructed or before committing.
 - Only run quality checks when asked
 - NEVER PATCH AROUND TEST FAILURES
