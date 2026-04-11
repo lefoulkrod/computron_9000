@@ -203,6 +203,74 @@ WorkspaceContext(workspace_id="research-project")
 
 Every system that reads/writes data (conversations, memory, fs tools, goals) receives a `WorkspaceContext` instead of building paths from global config.
 
+### Filesystem Isolation via Bubblewrap
+
+Agent commands currently run as bare subprocesses in the container (`asyncio.create_subprocess_exec` in `run_bash_cmd.py`). With workspaces, all agent subprocess execution is wrapped in **bubblewrap (`bwrap`)** to enforce filesystem isolation at the OS level.
+
+**Why bubblewrap, not just path rewriting:**
+- Path rewriting is fragile — a bug in path resolution leaks across workspaces
+- Agent-executed code (scripts, pip installs, Node programs) wouldn't respect app-level path rules
+- bwrap uses Linux namespaces — the kernel enforces isolation, not the app
+- Lightweight: no container overhead, ~1ms startup, no daemon
+
+**How it works:**
+
+The workspace's `home/` directory is bind-mounted as `/home/computron` inside a new mount namespace. The agent process sees the same `/home/computron` path it always did, but it's backed by workspace-specific storage.
+
+```
+# Conceptual bwrap invocation for workspace "research-project":
+bwrap \
+  --ro-bind / /                                            # read-only base filesystem
+  --dev /dev                                               # device nodes
+  --proc /proc                                             # procfs
+  --tmpfs /tmp                                             # fresh /tmp per command
+  --bind ~/.computron_9000/workspaces/research-project/home /home/computron  # workspace home (read-write)
+  --chdir /home/computron                                  # working directory
+  --unshare-pid                                            # PID namespace isolation
+  --die-with-parent                                        # clean up on server exit
+  -- bash -c "set -euo pipefail; <agent_command>"
+```
+
+**What the agent sees inside the sandbox:**
+- `/home/computron` → workspace-specific, read-write
+- `/tmp` → fresh tmpfs per command (no cross-workspace leaks)
+- Everything else → read-only bind from the container (system packages, Python, Node, etc.)
+- Can't write outside `/home/computron` or `/tmp`
+
+**Implementation in `run_bash_cmd.py`:**
+
+Currently:
+```python
+proc = await asyncio.create_subprocess_exec(
+    "bash", "-c", strict_cmd,
+    cwd=workdir, ...
+)
+```
+
+Becomes:
+```python
+bwrap_args = workspace_context.bwrap_args()  # returns the bwrap flag list
+proc = await asyncio.create_subprocess_exec(
+    "bwrap", *bwrap_args,
+    "--", "bash", "-c", strict_cmd,
+    ...
+)
+```
+
+`WorkspaceContext.bwrap_args()` builds the flag list based on the workspace's `home/` path. This is the single point where isolation is enforced — all other tools that execute subprocesses (custom tools executor, desktop commands) go through the same wrapper.
+
+**Shared read-only resources** (no duplication across workspaces):
+- System packages (`/usr`, `/lib`, `/bin`, `/opt`)
+- Python/Node interpreters and site-packages
+- Ollama, CUDA, PyTorch binaries
+- The app itself (`/opt/computron`)
+
+**Per-workspace read-write:**
+- `/home/computron` (bind-mounted from workspace `home/`)
+- `/tmp` (fresh tmpfs)
+
+**Fallback:** If `bwrap` is not available (e.g., dev machine without it installed), fall back to directory-based isolation (set `cwd` to workspace home, rely on app-level path resolution). Log a warning on startup.
+
 ### Multi-Tab Server State
 
 Since multiple workspaces can be active simultaneously:
@@ -246,16 +314,21 @@ On first run with workspaces enabled:
 
 ### Phase 1: Backend — WorkspaceContext + Storage
 - `WorkspaceContext` model and workspace registry (CRUD)
+- `WorkspaceContext.bwrap_args()` — builds bwrap flag list for subprocess isolation
 - Refactor `conversations/_store.py` to accept workspace context
 - Refactor `tools/memory/` to accept workspace context
 - Refactor `tools/fs/` path resolution to use workspace home dir
 - Migration logic for existing data
 - API endpoints for workspace CRUD
 
-### Phase 2: Backend — Multi-Workspace Concurrency
+### Phase 2: Backend — Bubblewrap Isolation + Multi-Workspace Concurrency
+- Wrap `run_bash_cmd.py` subprocess execution in bwrap
+- Wrap `custom_tools/executor.py` subprocess execution in bwrap
+- Wrap `desktop/_exec.py` subprocess execution in bwrap
+- Graceful fallback when bwrap is not installed (directory isolation + warning)
+- Add bwrap to container Dockerfile
 - Key conversation state by `(workspace_id, conversation_id)`
 - Route `/api/chat` requests to correct workspace context
-- Ensure agent tool calls (fs, memory, bash) use the correct workspace's paths
 - Tab state persistence (open tabs, active tab)
 
 ### Phase 3: Frontend — Tabs + Picker
@@ -277,8 +350,9 @@ On first run with workspaces enabled:
 ## Files to Modify (Key)
 
 **New files:**
-- `workspaces/_models.py` — `Workspace`, `WorkspaceContext`, `WorkspaceRegistry`
+- `workspaces/_models.py` — `Workspace`, `WorkspaceContext` (including `bwrap_args()`), `WorkspaceRegistry`
 - `workspaces/_store.py` — CRUD, migration, tab state persistence
+- `workspaces/_sandbox.py` — bwrap wrapper: availability check, arg builder, fallback logic
 - `server/ui/src/components/WorkspaceTabs.jsx` — tab bar component
 - `server/ui/src/components/WorkspacePicker.jsx` — full-screen picker
 - `server/ui/src/components/CreateWorkspaceDialog.jsx` — creation dialog
@@ -289,7 +363,11 @@ On first run with workspaces enabled:
 - `conversations/_store.py` — accept `WorkspaceContext` for all operations
 - `tools/memory/memory.py` — workspace-scoped memory file path
 - `tools/fs/` — resolve paths against workspace home dir
+- `tools/virtual_computer/run_bash_cmd.py` — wrap subprocess in bwrap
 - `tools/virtual_computer/receive_file.py` — upload to workspace home
+- `tools/custom_tools/executor.py` — wrap subprocess in bwrap
+- `tools/desktop/_exec.py` — wrap subprocess in bwrap
+- `container/Dockerfile` — add `bubblewrap` package
 - `server/message_handler.py` — key conversations by workspace, route requests
 - `server/aiohttp_app.py` — workspace API endpoints, workspace_id in existing routes
 - `server/ui/src/components/Header.jsx` — embed tab bar
@@ -309,3 +387,7 @@ On first run with workspaces enabled:
 - Close tab → reopen from picker → workspace data intact
 - App restart → same tabs reopen
 - Delete workspace → files removed, tab closes, can't delete default
+- **bwrap isolation:** agent `run_bash_cmd` in workspace A cannot read/write files in workspace B's home
+- **bwrap isolation:** agent can still read system packages, run python/node (read-only base FS)
+- **bwrap isolation:** `touch /etc/test` from agent fails (read-only outside home)
+- **bwrap fallback:** if `bwrap` binary is removed, commands still run with directory-based isolation + warning logged
