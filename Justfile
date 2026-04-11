@@ -171,9 +171,42 @@ test-quick:
 e2e-install:
     uv run playwright install chromium
 
-# Run e2e tests (container must be running on :8080)
+# Run e2e tests — starts a throwaway container on :9090, runs tests, stops it
 e2e *args:
-    PYTHONPATH=. uv run pytest e2e/ {{args}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    port=9090
+    name="computron_e2e"
+    docker image inspect computron_9000:latest &>/dev/null || just container-build
+    just container-build-ui
+    docker rm -f "$name" 2>/dev/null || true
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
+    docker run -d --rm --name "$name" \
+      --gpus all --shm-size=256m --network=host \
+      -e PORT=$port \
+      $env_args \
+      -v "$(pwd):/opt/computron:rw" \
+      computron_9000:latest \
+      bash -c "cd /opt/computron && exec python3.12 main.py"
+    # Wait for app server
+    ready=false
+    for i in $(seq 1 30); do
+      if curl -s "http://localhost:$port/api/settings" >/dev/null 2>&1; then
+        ready=true; break
+      fi
+      sleep 2
+    done
+    if [ "$ready" = false ]; then
+      echo "❌ App server did not start on :$port"
+      docker logs "$name" 2>&1 | tail -20
+      docker stop "$name" 2>/dev/null || true
+      exit 1
+    fi
+    # Run tests, capture exit code
+    rc=0
+    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest e2e/ "$@" || rc=$?
+    docker stop "$name" 2>/dev/null || true
+    exit $rc
 
 
 # =============================================

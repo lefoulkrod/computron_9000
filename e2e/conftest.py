@@ -1,8 +1,10 @@
 """Shared fixtures for e2e tests."""
 
+import os
+
 import pytest
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = os.environ.get("COMPUTRON_URL", "http://localhost:8080")
 
 
 @pytest.fixture(scope="session")
