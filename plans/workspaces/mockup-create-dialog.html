@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Workspace Dialog Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --primary: #0b0b0c;
+    --secondary: #1b1b1d;
+    --muted: #3a3a3c;
+    --text: #f3f3f3;
+    --accent: #7b8cff;
+    --font-mono: 'Share Tech Mono', 'Fira Mono', 'Consolas', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--primary);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Backdrop */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Dialog */
+  .dialog {
+    background: var(--secondary);
+    border: 1px solid var(--muted);
+    border-radius: 10px;
+    padding: 1.5rem;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+  }
+
+  .field { margin-bottom: 1rem; }
+
+  .label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 5px;
+    letter-spacing: 0.02em;
+  }
+
+  .input, .textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--primary);
+    border: 1px solid var(--muted);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms;
+  }
+  .input:focus, .textarea:focus { border-color: var(--accent); }
+  .textarea { resize: vertical; min-height: 60px; }
+
+  .starter-section { margin-bottom: 1.25rem; }
+
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .radio-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .radio-option input[type="radio"] {
+    accent-color: var(--accent);
+    margin: 0;
+  }
+
+  .clone-select {
+    padding: 4px 8px;
+    font-size: 11px;
+    background: var(--primary);
+    border: 1px solid var(--muted);
+    border-radius: 4px;
+    color: var(--text);
+    margin-left: 4px;
+    outline: none;
+  }
+  .clone-select:focus { border-color: var(--accent); }
+
+  .upload-btn {
+    font-size: 11px;
+    padding: 3px 10px;
+    margin-left: 4px;
+    background: var(--primary);
+    border: 1px solid var(--muted);
+    border-radius: 4px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .upload-btn:hover { border-color: var(--accent); }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  .cancel-btn {
+    padding: 6px 16px;
+    font-size: 12px;
+    background: none;
+    border: 1px solid var(--muted);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    box-shadow: none;
+  }
+  .cancel-btn:hover { background: var(--muted); }
+
+  .create-btn {
+    padding: 6px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 120ms;
+  }
+  .create-btn:hover { background: #6b7bef; }
+  .create-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+  <div class="backdrop">
+    <div class="dialog">
+      <div class="title">Create Workspace</div>
+
+      <div class="field">
+        <label class="label">Name</label>
+        <input class="input" type="text" placeholder="My Workspace" value="Client Demo">
+      </div>
+
+      <div class="field">
+        <label class="label">Description (optional)</label>
+        <textarea class="textarea" rows="2" placeholder="What is this workspace for?">Demo environment for client presentations</textarea>
+      </div>
+
+      <div class="starter-section">
+        <div class="label" style="margin-bottom: 8px;">Starter files</div>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="starter" checked>
+            Empty workspace
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="starter">
+            Clone files from
+            <select class="clone-select">
+              <option>Default Workspace</option>
+              <option>Research Project</option>
+            </select>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="starter">
+            Upload files
+            <button class="upload-btn">Choose Files</button>
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="cancel-btn">Cancel</button>
+        <button class="create-btn">Create</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

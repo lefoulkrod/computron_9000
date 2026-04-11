@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace Tabs Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --primary: #0b0b0c;
+    --secondary: #1b1b1d;
+    --muted: #3a3a3c;
+    --text: #f3f3f3;
+    --accent: #7b8cff;
+    --green: #34d399;
+    --danger: #c0392b;
+    --font-mono: 'Share Tech Mono', 'Fira Mono', 'Consolas', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--primary);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  .header {
+    height: 36px;
+    border-bottom: 1px solid var(--muted);
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+  .logo {
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+    margin-right: 4px;
+  }
+
+  /* ── Tab bar ─────────────────────────────────────────── */
+  .tab-bar {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    margin-left: 12px;
+    margin-right: auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+
+  .tab {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 120ms, background 120ms;
+    letter-spacing: 0.01em;
+  }
+  .tab:hover { color: var(--text); background: var(--secondary); }
+
+  .tab.active { color: var(--text); font-weight: 600; }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 8px; right: 8px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* Running indicator */
+  .tab.running { color: var(--green); }
+  .tab.running.active { color: var(--text); }
+  .tab .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 6px;
+    flex-shrink: 0;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .sep {
+    width: 1px; height: 14px;
+    background: var(--muted);
+    opacity: 0.4;
+    flex-shrink: 0;
+  }
+
+  .add-tab {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 14px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 120ms;
+  }
+  .add-tab:hover { color: var(--text); }
+
+  /* ── Actions ─────────────────────────────────────────── */
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    width: 26px; height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    background: none;
+    color: var(--muted);
+    border: none;
+    cursor: pointer;
+    transition: background 120ms, color 120ms;
+  }
+  .icon-btn:hover { background: var(--secondary); color: var(--text); }
+
+  /* ── Body ────────────────────────────────────────────── */
+  .body-row {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 44px;
+    background: var(--secondary);
+    border-right: 1px solid var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 10px;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .sidebar-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .sidebar-icon:hover { background: var(--muted); color: var(--text); }
+  .sidebar-sep {
+    width: 20px; height: 1px;
+    background: var(--muted);
+    margin: 3px 0;
+  }
+
+  .main-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  /* ── Context menu ────────────────────────────────────── */
+  .context-menu {
+    position: fixed;
+    background: var(--secondary);
+    border: 1px solid var(--muted);
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    z-index: 100;
+    font-size: 12px;
+    display: none;
+  }
+  .context-menu.visible { display: block; }
+  .menu-item {
+    display: block;
+    width: 100%;
+    padding: 6px 14px;
+    background: none;
+    border: none;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .menu-item:hover { background: var(--muted); }
+  .menu-divider {
+    height: 1px;
+    background: var(--muted);
+    margin: 4px 0;
+    opacity: 0.5;
+  }
+  .menu-item.danger { color: var(--danger); }
+  .menu-item.danger:hover { background: rgba(192,57,43,0.15); }
+
+  /* ── Annotation ──────────────────────────────────────── */
+  .annotation {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--secondary);
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 500px;
+    text-align: center;
+  }
+  .annotation kbd {
+    background: var(--primary);
+    border: 1px solid var(--muted);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+
+  <!-- Header with tabs -->
+  <div class="header">
+    <div class="logo">CT9K</div>
+    <div class="tab-bar">
+      <button class="tab active" id="tab-default">Default Workspace</button>
+      <div class="sep"></div>
+      <button class="tab running" id="tab-research"><span class="dot"></span>Research Project</button>
+      <div class="sep"></div>
+      <button class="tab" id="tab-client">Client Demo</button>
+      <button class="add-tab" id="add-tab" title="Open or create workspace">+</button>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" title="Theme">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <button class="icon-btn" title="New conversation">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="body-row">
+    <div class="sidebar">
+      <button class="sidebar-icon">AG</button>
+      <button class="sidebar-icon">GL</button>
+      <button class="sidebar-icon">ST</button>
+      <button class="sidebar-icon">ME</button>
+      <div class="sidebar-sep"></div>
+      <button class="sidebar-icon">CV</button>
+      <button class="sidebar-icon">TL</button>
+    </div>
+    <div class="main-content" id="main-label">
+      Chat panel scoped to active workspace
+    </div>
+  </div>
+
+  <!-- Context menu -->
+  <div class="context-menu" id="ctx-menu">
+    <button class="menu-item">Rename</button>
+    <button class="menu-item">Workspace Info</button>
+    <div class="menu-divider"></div>
+    <button class="menu-item">Close Tab</button>
+    <button class="menu-item danger">Delete Workspace</button>
+  </div>
+
+  <div class="annotation">
+    Click tabs to switch &middot; <kbd>right-click</kbd> a tab for context menu &middot; green dot = running agent
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab');
+    const label = document.getElementById('main-label');
+    const ctxMenu = document.getElementById('ctx-menu');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        label.textContent = `Chat panel for: ${tab.textContent.trim()}`;
+        ctxMenu.classList.remove('visible');
+      });
+      tab.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        ctxMenu.style.left = e.clientX + 'px';
+        ctxMenu.style.top = e.clientY + 'px';
+        ctxMenu.classList.add('visible');
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!ctxMenu.contains(e.target)) ctxMenu.classList.remove('visible');
+    });
+  </script>
+</body>
+</html>
