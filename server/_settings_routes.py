@@ -4,47 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
-from typing import Any
 
 from aiohttp import web
 
-from config import load_config
+from settings import load_settings, save_settings
 
 logger = logging.getLogger(__name__)
-
-_SETTINGS_FILE = "settings.json"
-
-
-def _settings_path() -> Path:
-    cfg = load_config()
-    return Path(cfg.settings.home_dir) / _SETTINGS_FILE
-
-
-def load_settings() -> dict[str, Any]:
-    """Load settings from disk. Returns defaults if file doesn't exist."""
-    path = _settings_path()
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except Exception:
-            logger.warning("Failed to read settings file, using defaults")
-    return {
-        "setup_complete": False,
-        "default_agent": "computron",
-        "vision_model": "",
-        "compaction_model": "",
-    }
-
-
-def save_settings(data: dict[str, Any]) -> dict[str, Any]:
-    """Merge data into settings and write to disk."""
-    current = load_settings()
-    current.update(data)
-    path = _settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(current, indent=2))
-    return current
 
 
 async def handle_get_settings(_request: web.Request) -> web.Response:
@@ -59,7 +24,13 @@ async def handle_update_settings(request: web.Request) -> web.Response:
     except (json.JSONDecodeError, UnicodeDecodeError):
         return web.json_response({"error": "Invalid JSON"}, status=400)
 
+    was_complete = load_settings().get("setup_complete", False)
     saved = save_settings(body)
+
+    if not was_complete and saved.get("setup_complete"):
+        from setup import mark_ready
+        mark_ready(request.app)
+
     return web.json_response(saved)
 
 

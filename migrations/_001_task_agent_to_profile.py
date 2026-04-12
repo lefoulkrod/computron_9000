@@ -7,29 +7,32 @@ them to the new ``agent_profile`` field that references an AgentProfile ID.
 Mapping:
   - "browser"   → "research_agent"
   - "coder"     → "code_expert"
-  - "computron" → removed (uses default)
+  - "computron" → "computron"
 
 Also strips intermediate fields (``skills``, ``profile``, ``agent_config``)
 that were part of a never-shipped format.
 
-A backup of each modified goal file is saved as ``{goal_id}.pre_migration_001.json``.
+A backup of each modified goal file is saved under
+``{state_dir}/.backups/001_task_agent_to_profile/goals/{goal_id}.json``.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import shutil
 from pathlib import Path
 
+from migrations._backup import backup_file
 from migrations._runner import _register
 
 logger = logging.getLogger(__name__)
 
-_AGENT_TO_PROFILE: dict[str, str | None] = {
+# Profile IDs below must match the filenames in agents/default_profiles/
+# (installed by migration 002_install_default_profiles).
+_AGENT_TO_PROFILE: dict[str, str] = {
     "browser": "research_agent",
     "coder": "code_expert",
-    "computron": None,
+    "computron": "computron",
 }
 
 _STRIP_FIELDS = {"skills", "profile", "agent_config"}
@@ -45,6 +48,9 @@ def _migrate_task(task: dict) -> bool:
         profile_id = _AGENT_TO_PROFILE.get(agent)
         if profile_id:
             task["agent_profile"] = profile_id
+        else:
+            # Unknown legacy agent — default to computron
+            task["agent_profile"] = "computron"
         changed = True
 
     # Strip intermediate/legacy fields
@@ -66,9 +72,6 @@ def migrate(state_dir: Path) -> None:
 
     migrated_count = 0
     for goal_path in goals_dir.glob("*.json"):
-        # Skip backup files from previous migration runs
-        if ".pre_migration_" in goal_path.name:
-            continue
         try:
             data = json.loads(goal_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
@@ -86,9 +89,8 @@ def migrate(state_dir: Path) -> None:
 
         if file_changed:
             # Back up the original before writing
-            backup_path = goal_path.with_suffix(f".pre_migration_001.json")
-            shutil.copy2(goal_path, backup_path)
-            logger.info("Backed up %s → %s", goal_path.name, backup_path.name)
+            backup_path = backup_file(state_dir, "001_task_agent_to_profile", goal_path)
+            logger.info("Backed up %s → %s", goal_path.name, backup_path)
 
             # Write migrated data
             goal_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")

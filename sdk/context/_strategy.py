@@ -684,7 +684,7 @@ class LLMCompactionStrategy:
 
         # Check settings.json (set by setup wizard / system settings)
         try:
-            from server._settings_routes import load_settings
+            from settings import load_settings
             compaction_model = load_settings().get("compaction_model")
             if compaction_model:
                 return compaction_model, {}

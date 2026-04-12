@@ -25,11 +25,6 @@ def _isolate_profiles(tmp_path, monkeypatch):
         "agents._agent_profiles._profiles_dir",
         lambda: tmp_path / "agent_profiles",
     )
-    # Disable default installation so tests start clean
-    monkeypatch.setattr(
-        "agents._agent_profiles._DEFAULT_PROFILES_DIR",
-        tmp_path / "no_defaults",
-    )
 
 
 def _make_profile(**overrides):

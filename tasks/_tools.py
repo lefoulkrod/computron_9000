@@ -8,7 +8,7 @@ from tasks import get_store
 def _default_agent() -> str:
     """Return the default agent profile ID from settings."""
     try:
-        from server._settings_routes import load_settings
+        from settings import load_settings
         return load_settings().get("default_agent") or "computron"
     except Exception:
         return "computron"

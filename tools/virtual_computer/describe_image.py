@@ -69,7 +69,7 @@ async def describe_image(
 
     encoded = base64.b64encode(raw).decode("ascii")
 
-    from server._settings_routes import load_settings
+    from settings import load_settings
     vision_model = load_settings().get("vision_model")
     if not vision_model:
         return "Error: No vision model configured. Set one in Settings > System."

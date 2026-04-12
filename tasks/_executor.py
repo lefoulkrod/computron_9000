@@ -88,7 +88,11 @@ class TaskExecutor:
             from agents._agent_profiles import build_llm_options, get_agent_profile
             profile = get_agent_profile(task.agent_profile)
             if profile:
-                return build_llm_options(profile)
+                options = build_llm_options(profile)
+                if not options.model:
+                    msg = "No model set on profile '%s'" % task.agent_profile
+                    raise RuntimeError(msg)
+                return options
             logger.warning("Agent profile '%s' not found for task %s, using config defaults",
                            task.agent_profile, task.id)
 

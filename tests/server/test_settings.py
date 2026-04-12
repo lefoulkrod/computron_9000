@@ -1,17 +1,17 @@
-"""Tests for server._settings_routes settings persistence."""
+"""Tests for settings persistence."""
 
 import json
 
 import pytest
 
-from server._settings_routes import load_settings, save_settings, _settings_path
+from settings import load_settings, save_settings
 
 
 @pytest.fixture(autouse=True)
 def _isolate_settings(tmp_path, monkeypatch):
     """Point settings at a temp directory."""
     monkeypatch.setattr(
-        "server._settings_routes._settings_path",
+        "settings._settings_path",
         lambda: tmp_path / "settings.json",
     )
 

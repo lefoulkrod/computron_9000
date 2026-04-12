@@ -345,7 +345,7 @@ async def handle_user_message(
 
     # Resolve the agent profile
     if not profile_id:
-        from server._settings_routes import load_settings
+        from settings import load_settings
         profile_id = load_settings().get("default_agent", "computron")
     profile = get_agent_profile(profile_id)
     if profile is None:

@@ -390,9 +390,18 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     if STATIC_DIR.exists():
         app.router.add_static("/static", STATIC_DIR, show_index=False)
 
-    # Data migrations (must run before task runner reads state)
+    # Phase 1: Data migrations — synchronous, must complete before anything
+    # else reads state.  No user interaction needed.
     app.on_startup.append(_run_data_migrations)
-    # Task runner lifecycle
+
+    # Phase 2: Setup readiness — an asyncio.Event that subsystems wait on.
+    # If the setup wizard has already been completed, the event is set
+    # immediately.  Otherwise it fires when the wizard finishes (via
+    # setup.mark_ready).
+    app.on_startup.append(_init_ready_signal)
+
+    # Phase 3: Deferred subsystems — start in background tasks that await
+    # the ready event before doing real work.
     app.on_startup.append(_start_task_runner)
     app.on_cleanup.append(_stop_task_runner)
 
@@ -408,31 +417,57 @@ async def _run_data_migrations(_app: web.Application) -> None:
     run_migrations(state_dir)
 
 
+async def _init_ready_signal(app: web.Application) -> None:
+    """Create the ready event and set it immediately if setup is already done."""
+    import setup
+
+    app["ready"] = asyncio.Event()
+    if setup.is_ready():
+        app["ready"].set()
+        logger.info("Setup already complete — ready signal set")
+    else:
+        logger.info("Setup not complete — subsystems will wait for ready signal")
+
+
 async def _start_task_runner(app: web.Application) -> None:
-    """Initialize the task store and start the background runner."""
+    """Start the task runner in a background task that waits for setup."""
     config = load_config()
     if not config.goals.enabled:
         return
-    goals_dir = Path(config.goals.goals_dir or Path(config.settings.home_dir) / "goals")
-    from tasks import TaskExecutor, TaskRunner, TelegramNotifier, init_store
 
-    store = init_store(goals_dir, default_timezone=config.goals.timezone)
-    executor = TaskExecutor(store)
+    async def _deferred() -> None:
+        try:
+            if not app["ready"].is_set():
+                logger.info("Task runner waiting for setup to complete")
+            await app["ready"].wait()
+            logger.info("Task runner ready signal received — starting")
+            from tasks import TaskExecutor, TaskRunner, TelegramNotifier, get_store
 
-    notifier = None
-    if config.goals.notifications.enabled:
+            store = get_store()
+            executor = TaskExecutor(store)
 
-        notifier = TelegramNotifier(config.goals.notifications)
-        if not notifier.enabled:
             notifier = None
+            if config.goals.notifications.enabled:
+                notifier = TelegramNotifier(config.goals.notifications)
+                if not notifier.enabled:
+                    notifier = None
 
-    runner = TaskRunner(store, executor, config.goals, notifier=notifier)
-    app["task_runner"] = runner
-    await runner.start()
+            runner = TaskRunner(store, executor, config.goals, notifier=notifier)
+            app["task_runner"] = runner
+            await runner.start()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Failed to start task runner")
+
+    app["_task_runner_init"] = asyncio.create_task(_deferred(), name="task-runner-init")
 
 
 async def _stop_task_runner(app: web.Application) -> None:
     """Gracefully stop the background task runner."""
+    init_task = app.get("_task_runner_init")
+    if init_task and not init_task.done():
+        init_task.cancel()
     runner = app.get("task_runner")
     if runner:
         await runner.stop()

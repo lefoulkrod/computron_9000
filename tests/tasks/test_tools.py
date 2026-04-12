@@ -13,7 +13,9 @@ _TASK = {"key": "t1", "description": "task 1", "instruction": "do the thing"}
 @pytest.fixture(autouse=True)
 def _init_store(tmp_path):
     """Initialize the global store for each test."""
-    tasks.init_store(tmp_path / "goals")
+    from tasks._file_store import FileTaskStore
+
+    tasks._store = FileTaskStore(tmp_path / "goals")
     yield
     tasks._store = None
 

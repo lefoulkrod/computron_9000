@@ -2,10 +2,9 @@
 
 Public API::
 
-    from tasks import init_store, get_store
+    from tasks import get_store
 
-    store = init_store(goals_dir)  # call once at startup
-    store = get_store()            # use anywhere after init
+    store = get_store()  # lazily initialized on first call
 """
 
 from __future__ import annotations
@@ -18,22 +17,15 @@ from tasks._store import TaskStore
 _store: TaskStore | None = None
 
 
-def init_store(goals_dir: Path, default_timezone: str = "UTC") -> FileTaskStore:
-    """Initialize the global task store. Call once at startup."""
-    global _store  # noqa: PLW0603
-    _store = FileTaskStore(goals_dir, default_timezone=default_timezone)
-    return _store
-
-
 def get_store() -> TaskStore:
-    """Return the initialized task store.
-
-    Raises:
-        RuntimeError: If ``init_store`` has not been called yet.
-    """
+    """Return the task store, lazily initializing on first access."""
+    global _store  # noqa: PLW0603
     if _store is None:
-        msg = "TaskStore not initialized — call init_store() first"
-        raise RuntimeError(msg)
+        from config import load_config
+
+        cfg = load_config()
+        goals_dir = Path(cfg.goals.goals_dir or Path(cfg.settings.home_dir) / "goals")
+        _store = FileTaskStore(goals_dir, default_timezone=cfg.goals.timezone)
     return _store
 
 
@@ -48,7 +40,6 @@ __all__ = [
     "begin_goal",
     "commit_goal",
     "get_store",
-    "init_store",
     "list_goals",
     "list_tasks",
     "trigger_goal",

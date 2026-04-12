@@ -60,8 +60,8 @@ class TestMigration001:
         assert tasks[0]["agent_profile"] == "code_expert"
         assert "agent" not in tasks[0]
 
-    def test_computron_maps_to_none(self, state_dir):
-        """Legacy agent='computron' is removed with no agent_profile set."""
+    def test_computron_maps_to_computron_profile(self, state_dir):
+        """Legacy agent='computron' maps to agent_profile='computron'."""
         goal_path = _write_goal(state_dir / "goals", "g1", [{
             "id": "t1", "goal_id": "g1",
             "description": "general", "instruction": "do",
@@ -69,8 +69,8 @@ class TestMigration001:
         }])
         migrate(state_dir)
         tasks = _read_tasks(goal_path)
+        assert tasks[0]["agent_profile"] == "computron"
         assert "agent" not in tasks[0]
-        assert "agent_profile" not in tasks[0]
 
     def test_strips_skills_field(self, state_dir):
         """Legacy 'skills' field is removed."""
@@ -113,7 +113,7 @@ class TestMigration001:
             "agent": "browser", "depends_on": [],
         }])
         migrate(state_dir)
-        backup = state_dir / "goals" / "g1.pre_migration_001.json"
+        backup = state_dir / ".backups" / "001_task_agent_to_profile" / "goals" / "g1.json"
         assert backup.exists()
         # Backup should contain the original agent field
         backup_tasks = json.loads(backup.read_text())["tasks"]
@@ -127,7 +127,7 @@ class TestMigration001:
             "agent_profile": "code_expert", "depends_on": [],
         }])
         migrate(state_dir)
-        backup = state_dir / "goals" / "g1.pre_migration_001.json"
+        backup = state_dir / ".backups" / "001_task_agent_to_profile" / "goals" / "g1.json"
         assert not backup.exists()
 
     def test_idempotent(self, state_dir):
