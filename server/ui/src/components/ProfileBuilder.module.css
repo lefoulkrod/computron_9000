@@ -178,75 +178,12 @@
 }
 
 /* ---- Identity ---- */
-.identityRow {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 0.5rem;
-}
-
-.iconPicker {
-    width: 44px;
-    height: 44px;
-    font-size: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 0;
-    cursor: pointer;
-    flex-shrink: 0;
-    box-shadow: none;
-    transition: border-color 0.15s;
-}
-
-.iconPicker:hover {
-    border-color: var(--color-accent);
-}
-
-.emojiGrid {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 4px;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 2px;
-    padding: 0.4rem;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 0;
-    box-shadow: var(--shadow);
-    z-index: 50;
-}
-
-.emojiOption {
-    width: 34px;
-    height: 34px;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    padding: 0;
-    box-shadow: none;
-}
-
-.emojiOption:hover {
-    background: var(--muted);
-    border-color: var(--muted);
-    filter: none;
-}
-
 .nameInput {
-    flex: 1;
+    width: 100%;
     min-width: 0;
     height: 38px;
     font-size: 1.05rem;
+    margin-bottom: 0.5rem;
     font-weight: 600;
     padding: 0 0.55rem;
     background: var(--secondary);

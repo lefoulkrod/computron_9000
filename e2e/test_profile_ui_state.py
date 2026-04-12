@@ -17,7 +17,6 @@ def test_profile_ui_reflects_saved_state(page: Page):
         "id": profile_id,
         "name": "UI State Test",
         "description": "Verifies UI reflects saved state",
-        "icon": "🔬",
         "model": model_name,
         "system_prompt": "You are a test agent for UI verification.",
         "skills": ["coder", "browser"],
@@ -45,7 +44,6 @@ def test_profile_ui_reflects_saved_state(page: Page):
         expect(page.locator("input[placeholder='Short description']")).to_have_value(
             "Verifies UI reflects saved state"
         )
-        expect(page.locator("[class*='iconPicker']")).to_contain_text("🔬")
 
         # --- Model ---
         if model_name:

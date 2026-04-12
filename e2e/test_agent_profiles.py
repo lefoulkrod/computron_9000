@@ -28,11 +28,6 @@ def test_create_profile_persists_all_settings(page: Page):
     name_input.fill("Test Agent")
     page.locator("input[placeholder='Short description']").fill("A test profile created by e2e")
 
-    # Pick an icon (first emoji in the grid)
-    page.locator("[class*='iconPicker']").click()
-    picked_icon = page.locator("[class*='emojiOption']").first.inner_text().strip()
-    page.locator("[class*='emojiOption']").first.click()
-
     # --- Model (first available) ---
     model_select = page.locator("select").first
     model_options = model_select.locator("option").all()
@@ -82,7 +77,6 @@ def test_create_profile_persists_all_settings(page: Page):
     # Identity
     assert created["name"] == "Test Agent"
     assert created["description"] == "A test profile created by e2e"
-    assert created["icon"] == picked_icon
 
     # Model
     if selected_model:

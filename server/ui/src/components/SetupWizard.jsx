@@ -68,6 +68,40 @@ function ModelCard({ model, selected, onSelect }) {
     );
 }
 
+function ModelsErrorPanel({ error, onRetry, loading }) {
+    return (
+        <div className={styles.errorPanel}>
+            <div className={styles.errorTitle}>Can't reach Ollama</div>
+            <div className={styles.errorMessage}>{error.message}</div>
+            {error.llmHost && (
+                <div className={styles.errorDetail}>
+                    Trying: <code>{error.llmHost}</code>
+                </div>
+            )}
+            <ul className={styles.errorHints}>
+                <li>Make sure Ollama is running on the host (<code>ollama serve</code>).</li>
+                <li>
+                    On macOS / Windows / WSL2, pass{' '}
+                    <code>-e LLM_HOST=http://host.docker.internal:11434</code> when starting
+                    the container.
+                </li>
+                <li>
+                    On Linux, make sure the container was started with{' '}
+                    <code>--network=host</code>.
+                </li>
+            </ul>
+            <button
+                className={styles.retryBtn}
+                type="button"
+                onClick={onRetry}
+                disabled={loading}
+            >
+                {loading ? 'Retrying…' : 'Retry'}
+            </button>
+        </div>
+    );
+}
+
 export default function SetupWizard({ onComplete }) {
     const [step, setStep] = useState(0);
     const [allModels, setAllModels] = useState([]);
@@ -75,24 +109,48 @@ export default function SetupWizard({ onComplete }) {
     const [selectedMain, setSelectedMain] = useState(null);
     const [selectedVision, setSelectedVision] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [modelsError, setModelsError] = useState(null);
+    const [modelsLoading, setModelsLoading] = useState(false);
 
-    // Fetch all models when entering step 1
+    const fetchModels = useCallback(async (url, setter) => {
+        setModelsLoading(true);
+        setModelsError(null);
+        try {
+            const res = await fetch(url);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setModelsError({
+                    message: data.message || `Request failed (${res.status})`,
+                    llmHost: data.llm_host || null,
+                });
+                return;
+            }
+            setter(data.models || []);
+        } catch (err) {
+            setModelsError({ message: err.message, llmHost: null });
+        } finally {
+            setModelsLoading(false);
+        }
+    }, []);
+
+    // Fetch all models when entering step 1 (list empty == not-yet-fetched or retry)
     useEffect(() => {
         if (step !== 1 || allModels.length > 0) return;
-        fetch('/api/models')
-            .then((res) => res.json())
-            .then((data) => setAllModels(data.models || []))
-            .catch(() => {});
-    }, [step, allModels.length]);
+        fetchModels('/api/models', setAllModels);
+    }, [step, allModels.length, fetchModels]);
 
     // Fetch vision models when entering step 2
     useEffect(() => {
         if (step !== 2 || visionModels.length > 0) return;
-        fetch('/api/models?capability=vision')
-            .then((res) => res.json())
-            .then((data) => setVisionModels(data.models || []))
-            .catch(() => {});
-    }, [step, visionModels.length]);
+        fetchModels('/api/models?capability=vision', setVisionModels);
+    }, [step, visionModels.length, fetchModels]);
+
+    // Retry re-runs the fetch for the current step by clearing its list.
+    const retryFetch = () => {
+        setModelsError(null);
+        if (step === 1) setAllModels([]);
+        else if (step === 2) setVisionModels([]);
+    };
 
     const [error, setError] = useState(null);
 
@@ -143,8 +201,8 @@ export default function SetupWizard({ onComplete }) {
 
     const buttonLabel =
         step === 0 ? 'Get Started'
-        : step === 3 ? 'Start Chatting'
-        : 'Continue';
+            : step === 3 ? 'Start Chatting'
+                : 'Continue';
 
     const handleNext = () => {
         if (step === 3) {
@@ -162,7 +220,6 @@ export default function SetupWizard({ onComplete }) {
                 {/* Step 0: Welcome */}
                 {step === 0 && (
                     <div className={styles.stepContent}>
-                        <div className={styles.stepIcon}>&#9889;</div>
                         <h1 className={styles.title}>Welcome to Computron</h1>
                         <p className={styles.subtitle}>
                             Let's get you set up. We'll pick a main model and a vision model
@@ -180,16 +237,22 @@ export default function SetupWizard({ onComplete }) {
                             You can change individual profiles later in Settings &gt; Agent Profiles.
                         </p>
                         <p className={styles.hint}>Suggested: kimi-k2.5:cloud</p>
-                        <div className={styles.modelList}>
-                            {allModels.map((m) => (
-                                <ModelCard
-                                    key={m.name}
-                                    model={m}
-                                    selected={selectedMain === m.name}
-                                    onSelect={setSelectedMain}
-                                />
-                            ))}
-                        </div>
+                        {modelsError ? (
+                            <ModelsErrorPanel error={modelsError} onRetry={retryFetch} loading={modelsLoading} />
+                        ) : modelsLoading ? (
+                            <p className={styles.hint}>Loading models…</p>
+                        ) : (
+                            <div className={styles.modelList}>
+                                {allModels.map((m) => (
+                                    <ModelCard
+                                        key={m.name}
+                                        model={m}
+                                        selected={selectedMain === m.name}
+                                        onSelect={setSelectedMain}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -202,16 +265,22 @@ export default function SetupWizard({ onComplete }) {
                             This can be a smaller model since it only processes images.
                         </p>
                         <p className={styles.hint}>Suggested: qwen3.5 — Filtered to models with vision capability</p>
-                        <div className={styles.modelList}>
-                            {visionModels.map((m) => (
-                                <ModelCard
-                                    key={m.name}
-                                    model={m}
-                                    selected={selectedVision === m.name}
-                                    onSelect={setSelectedVision}
-                                />
-                            ))}
-                        </div>
+                        {modelsError ? (
+                            <ModelsErrorPanel error={modelsError} onRetry={retryFetch} loading={modelsLoading} />
+                        ) : modelsLoading ? (
+                            <p className={styles.hint}>Loading models…</p>
+                        ) : (
+                            <div className={styles.modelList}>
+                                {visionModels.map((m) => (
+                                    <ModelCard
+                                        key={m.name}
+                                        model={m}
+                                        selected={selectedVision === m.name}
+                                        onSelect={setSelectedVision}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 

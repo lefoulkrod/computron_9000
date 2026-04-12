@@ -28,7 +28,6 @@ class AgentProfile(BaseModel):
     id: str
     name: str
     description: str = ""
-    icon: str = ""
     system_prompt: str = ""
     model: str = ""
     skills: list[str] = Field(default_factory=list)

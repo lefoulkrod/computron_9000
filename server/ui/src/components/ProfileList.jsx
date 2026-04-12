@@ -5,7 +5,7 @@ function Badge({ className, children }) {
 }
 
 function ProfileItem({ profile, selected, onSelect }) {
-    const { id, name, description, icon, skills, temperature, think } = profile;
+    const { id, name, description, skills, temperature, think } = profile;
 
     return (
         <li
@@ -16,7 +16,6 @@ function ProfileItem({ profile, selected, onSelect }) {
             data-testid={`profile-item-${id}`}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(id); } }}
         >
-            <span className={styles.icon}>{icon}</span>
             <div className={styles.itemBody}>
                 <span className={styles.name}>{name}</span>
                 {description && (

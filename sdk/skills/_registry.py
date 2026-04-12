@@ -42,7 +42,6 @@ def register_skill(skill: Skill) -> None:
         skill: The skill to register. Overwrites any existing skill with
             the same name.
     """
-    _ensure_builtins()
     if skill.name in _SKILL_REGISTRY:
         logger.warning("Overwriting existing skill '%s'", skill.name)
     _SKILL_REGISTRY[skill.name] = skill
@@ -53,11 +52,16 @@ _builtins_registered = False
 
 
 def _ensure_builtins() -> None:
-    """Register all built-in skills on first call."""
+    """Register all built-in skills on first call.
+
+    The flag is flipped only after every built-in is registered. If the
+    call is interrupted (exception, cancellation) the flag stays False
+    so the next caller retries cleanly — otherwise the registry would
+    be permanently empty for the life of the process.
+    """
     global _builtins_registered
     if _builtins_registered:
         return
-    _builtins_registered = True
 
     from config import load_config
 
@@ -78,6 +82,8 @@ def _ensure_builtins() -> None:
     if features.music_generation:
         from skills.music_generation import _SKILL as music_skill
         register_skill(music_skill)
+
+    _builtins_registered = True
 
 
 def get_skill(name: str) -> Skill | None:

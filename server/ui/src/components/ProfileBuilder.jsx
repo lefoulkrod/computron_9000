@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
+import ChevronRightIcon from './icons/ChevronRightIcon';
 
 const PRESETS = {
     balanced: { temperature: 0.7 },
@@ -18,7 +19,7 @@ const PRESET_META = [
 const INFERENCE_FIELDS = ['temperature', 'top_k', 'top_p', 'repeat_penalty', 'think'];
 
 const HELP_SECTIONS = [
-    { title: 'Icon & Name', body: 'Click the icon to pick a different emoji. The name is how this profile appears in the profile list and agent selector.' },
+    { title: 'Name', body: 'How this profile appears in the profile list and agent selector.' },
     { title: 'Description', body: 'A short summary of what this profile is tuned for. Shown below the name in the profile list.' },
     { title: 'Model', body: 'The Ollama model to use when this profile is active. Leave blank to use the system default.' },
     { title: 'System Prompt', body: 'Instructions prepended to every conversation. Controls the agent\'s personality, constraints, and behavior. Supports markdown.' },
@@ -56,18 +57,6 @@ function _cloneProfile(profile) {
     return JSON.parse(JSON.stringify(profile));
 }
 
-function ChevronIcon({ open }) {
-    return (
-        <svg
-            className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}
-            viewBox="0 0 16 16"
-            fill="currentColor"
-        >
-            <path d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z" />
-        </svg>
-    );
-}
-
 const ADVANCED_HELP = {
     temperature: '0.0 = deterministic, 0.7 = general, 1.0+ = creative',
     top_k: '10 = factual, 40 = general, 100+ = creative',
@@ -82,11 +71,9 @@ const ADVANCED_HELP = {
 export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate, models, availableSkills }) {
     const [draft, setDraft] = useState(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
-    const [showIconPicker, setShowIconPicker] = useState(false);
 
     // Clone profile into local draft whenever the prop changes
     useEffect(() => {
-        setShowIconPicker(false);
         setShowAdvanced(false);
         if (profile) {
             setDraft(_cloneProfile(profile));
@@ -201,35 +188,13 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                     {/* 1. Identity */}
                     <section className={styles.section}>
                         <div className={styles.sectionLabel}>Identity</div>
-                        <div className={styles.identityRow}>
-                            <div style={{ position: 'relative' }}>
-                                <button
-                                    className={styles.iconPicker}
-                                    onClick={() => setShowIconPicker(v => !v)}
-                                    title="Change icon"
-                                >
-                                    {draft.icon || '\u{1F916}'}
-                                </button>
-                                {showIconPicker && (
-                                    <div className={styles.emojiGrid}>
-                                        {['🤖','💻','🔍','✍️','📊','🧪','🔧','🎯','🌐','📝','🧠','🚀','📡','🎨','🛡️','⚡','🔬','📈','🗂️','💡'].map(e => (
-                                            <button
-                                                key={e}
-                                                className={styles.emojiOption}
-                                                onClick={() => { update('icon', e); setShowIconPicker(false); }}
-                                            >{e}</button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                            <input
-                                className={styles.nameInput}
-                                type="text"
-                                value={draft.name || ''}
-                                onChange={(e) => update('name', e.target.value)}
-                                placeholder="Profile name"
-                            />
-                        </div>
+                        <input
+                            className={styles.nameInput}
+                            type="text"
+                            value={draft.name || ''}
+                            onChange={(e) => update('name', e.target.value)}
+                            placeholder="Profile name"
+                        />
                         <input
                             className={styles.textInput}
                             type="text"
@@ -311,7 +276,7 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                             className={styles.advancedToggle}
                             onClick={() => setShowAdvanced((v) => !v)}
                         >
-                            <ChevronIcon open={showAdvanced} />
+                            <ChevronRightIcon className={`${styles.chevron} ${showAdvanced ? styles.chevronOpen : ''}`} />
                             Advanced Settings
                         </button>
 

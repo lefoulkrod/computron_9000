@@ -17,7 +17,6 @@ def _create_profile(page: Page, name: str) -> str:
         "id": profile_id,
         "name": name,
         "description": "test profile",
-        "icon": "🧪",
         "model": "",
         "skills": [],
     })
@@ -69,7 +68,6 @@ def test_duplicate_profile(page: Page):
         profiles = page.request.get("/api/profiles").json()
         copies = [p for p in profiles if "Dup Source" in p["name"] and p["id"] != profile_id]
         assert len(copies) == 1, f"Expected 1 copy, got {len(copies)}"
-        assert copies[0]["icon"] == "🧪"
 
         _delete_profile(page, copies[0]["id"])
     finally:

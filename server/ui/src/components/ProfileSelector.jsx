@@ -27,7 +27,7 @@ export default function ProfileSelector({ selectedId, onChange, disabled, refres
         >
             {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                    {p.icon} {p.name}
+                    {p.name}
                 </option>
             ))}
         </select>

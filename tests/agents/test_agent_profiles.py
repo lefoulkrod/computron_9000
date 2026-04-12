@@ -54,7 +54,7 @@ class TestAgentProfileModel:
         """Profile with all fields set."""
         p = AgentProfile(
             id="full", name="Full", model="m",
-            description="desc", icon="🔥",
+            description="desc",
             system_prompt="prompt", skills=["coder", "browser"],
             temperature=0.5, top_k=40, top_p=0.9,
             repeat_penalty=1.1, num_predict=1000,

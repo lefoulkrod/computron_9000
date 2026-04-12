@@ -1,7 +1,6 @@
 """The agents package contains AI agent definitions."""
 
 __all__ = [
-    "AVAILABLE_AGENTS",
     "AgentProfile",
     "build_llm_options",
     "delete_agent_profile",
@@ -9,7 +8,6 @@ __all__ = [
     "get_agent_profile",
     "get_default_profile",
     "list_agent_profiles",
-    "resolve_agent",
     "save_agent_profile",
     "set_model_on_profiles",
 ]
@@ -17,16 +15,7 @@ __all__ = [
 
 def __getattr__(name: str) -> object:
     """Lazy imports to avoid circular dependency with sdk."""
-    if name in ("AVAILABLE_AGENTS", "resolve_agent"):
-        from agents._registry import AVAILABLE_AGENTS, resolve_agent
-        return {"AVAILABLE_AGENTS": AVAILABLE_AGENTS, "resolve_agent": resolve_agent}[name]
-
-    _profile_names = (
-        "AgentProfile", "build_llm_options", "delete_agent_profile",
-        "duplicate_agent_profile", "get_agent_profile", "get_default_profile",
-        "list_agent_profiles", "save_agent_profile", "set_model_on_profiles",
-    )
-    if name in _profile_names:
+    if name in __all__:
         from agents._agent_profiles import (
             AgentProfile,
             build_llm_options,
