@@ -1,22 +1,38 @@
-# COMPUTRON 9000
+# COMPUTRON
 
 A self-hosted AI assistant that runs entirely inside a single container. It can browse the web, write and run code, control a Linux desktop, generate images and music — all on your own hardware.
 
-![COMPUTRON_9000 Logo](image.png)
+![COMPUTRON Logo](image.png)
 
-## Try It
+## Prerequisites
 
-Just need [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://ollama.com/) running:
+- [Docker](https://docs.docker.com/get-docker/)
+- [Ollama](https://ollama.com/) running on the host
+
+Pull at least one model before starting. You need a main model and a vision model — if your main model supports vision, one model covers both.
 
 ```bash
-ollama pull qwen3.5:4b
-ollama pull qwen3:32b
-docker run -d --name computron --shm-size=256m --network=host ghcr.io/lefoulkrod/computron_9000:latest
+ollama pull kimi-k2.5    # main model
+ollama pull qwen3.5      # vision model
 ```
 
-`qwen3.5:4b` is the vision model (required — used for desktop screenshots). `qwen3:32b` is the chat model — swap it for any [Ollama model](https://ollama.com/library) you like, or use a cloud model (`ollama login && ollama pull qwen3:32b-cloud`) to skip local GPU for chat. There are no cloud vision models available, so `qwen3.5:4b` must run locally (~3 GB VRAM).
+Cloud models skip local GPU but still need to be pulled so they appear in the app: `ollama login && ollama pull kimi-k2.5:cloud`
 
-Open **[http://localhost:8080](http://localhost:8080)**. Chat, browse the web, write code, control the desktop.
+Any Ollama model works. The setup wizard shows what you have pulled and filters to vision-capable models where needed.
+
+| Role | Suggested | Notes |
+|------|-----------|-------|
+| Main | `kimi-k2.5` | Also used for compaction (context summarization) |
+| Vision | `qwen3.5` | Must have vision capability — or use your main model if it supports vision |
+
+## Quick Start
+
+```bash
+docker run -d --name computron --shm-size=256m --network=host \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+Open **[http://localhost:8080](http://localhost:8080)**. The setup wizard walks you through picking your main model and vision model on first launch.
 
 Data won't persist when the container is removed. When you're ready to keep it, add volumes:
 
@@ -30,7 +46,7 @@ docker run -d --name computron --shm-size=256m \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
-Conversations, memory, custom tools, and generated files now survive restarts.
+Conversations, memory, custom tools, agent profiles, and generated files now survive restarts.
 
 ### Enable GPU Features
 
@@ -71,6 +87,7 @@ These features are disabled by default and may change or be removed in future ve
 ## Features
 
 - **Chat** — talk to the agent, ask it to do things
+- **Agent Profiles** — reusable configurations bundling model, system prompt, skills, and inference parameters. Ship with 4 defaults, create your own in Settings.
 - **Browser automation** — controls Chrome with human-like clicking, typing, and scrolling
 - **Desktop control** — sees and interacts with the full Linux desktop via screenshots and accessibility tree
 - **Code execution** — writes and runs Python, installs packages, builds projects
@@ -128,8 +145,9 @@ sudo systemctl restart docker
 # 3. Install Ollama
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# 4. Pull a chat model
-ollama pull qwen3:32b
+# 4. Pull a main model and a vision model
+ollama pull kimi-k2.5
+ollama pull qwen3.5
 ```
 
 ### Windows (WSL2)
@@ -152,8 +170,9 @@ wsl --install -d Ubuntu
 # 5. Install Ollama inside WSL2
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# 6. Pull a chat model
-ollama pull qwen3:32b
+# 6. Pull a main model and a vision model
+ollama pull kimi-k2.5
+ollama pull qwen3.5
 ```
 
 ### Running with GPU
@@ -204,8 +223,6 @@ Pass these with `-e` when running the container:
 |----------|----------|---------|
 | `LLM_HOST` | No | Ollama URL. Defaults to `http://localhost:11434`. Override only if Ollama runs elsewhere. |
 | `HF_TOKEN` | For image gen | HuggingFace token. Required for FLUX.1 (gated model). |
-| `GITHUB_TOKEN` | No | GitHub personal access token for repo operations. |
-| `GITHUB_USER` | No | GitHub username (used with GITHUB_TOKEN). |
 | `ENABLE_IMAGE_GEN` | No | Set to `1` to enable image generation (requires GPU + HF_TOKEN). |
 | `ENABLE_MUSIC_GEN` | No | Set to `1` to enable music generation (requires GPU). |
 | `ENABLE_DESKTOP` | No | Set to `1` to enable the desktop agent (GUI automation via Xfce). |
@@ -243,22 +260,18 @@ Named volumes survive container restarts and upgrades:
 | Volume | Contents |
 |--------|----------|
 | `computron_home` | Agent workspace, downloads, generated media, model cache |
-| `computron_state` | Conversations, memory, custom tools, goals |
+| `computron_state` | Conversations, memory, custom tools, agent profiles, goals |
 
 To start fresh: `docker volume rm computron_home computron_state`
 
 ### Ollama Models
 
-These run on your host Ollama instance. Change the chat model in the UI.
+These run on your host Ollama instance. The setup wizard helps you pick models on first launch. You can change them later in Settings > System.
 
-| Role | Default Model | What It Does |
-|------|--------------|--------------|
-| Chat | *(your choice)* | Main conversation model |
-| Vision | `qwen3.5:4b` | Analyzes screenshots for the desktop agent |
-| Summary | `kimi-k2.5:cloud` | Compresses conversation context |
-| Goals | `kimi-k2.5:cloud` | Plans and executes autonomous tasks |
-
-Cloud models work without a local GPU: `ollama login && ollama pull qwen3:32b-cloud`
+| Role | Tested With | What It Does |
+|------|------------|--------------|
+| Main | `kimi-k2.5` | Chat, code generation, autonomous tasks, and context summarization |
+| Vision | `qwen3.5` | Image descriptions and screenshot analysis |
 
 ### GPU Models
 
@@ -278,7 +291,7 @@ GPU models load on demand and unload after idle timeout to free VRAM. Only one g
 | Use Case | VRAM Needed |
 |----------|-------------|
 | Chat only (Ollama cloud models) | 0 GB |
-| Chat + local Ollama (e.g. qwen3:32b) | 24 GB |
+| Chat + local Ollama (e.g. kimi-k2.5) | 24 GB |
 | Image generation | 8-10 GB |
 | Music generation | ~10 GB |
 | Desktop grounding | ~15 GB |
