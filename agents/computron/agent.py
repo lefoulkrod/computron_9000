@@ -53,12 +53,14 @@ def _build_system_prompt() -> str:
       load "coder" to edit a single file, load "goal_planner" to create
       autonomous goals).
 
-    - spawn_agent(instructions, skills, agent_name, profile) — runs a
-      sub-agent in its OWN context. Use for heavy tasks that produce lots
-      of intermediate output (long browsing sessions, multi-file code
+    - spawn_agent(instructions, agent_name, profile) — runs a sub-agent
+      in its OWN context. Use for heavy tasks that produce lots of
+      intermediate output (long browsing sessions, multi-file code
       generation). The sub-agent's tool calls and results don't consume
-      your context. Sub-agents can combine multiple skills
-      (e.g. skills=["browser", "coder"]).
+      your context. Use profile to select an agent profile that defines
+      the model, skills, and behavior (e.g. profile="code_expert",
+      profile="research_agent"). Call list_agent_profiles() to see
+      available profiles.
 
     Call list_available_skills() to see what skills are available.
 

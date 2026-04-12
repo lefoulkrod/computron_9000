@@ -13,7 +13,7 @@ import styles from './ChatPanel.module.css';
  * When sub-agents have been spawned, a network indicator appears in the
  * header so the user can navigate to the full agent network view.
  */
-export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork }) {
+export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork, selectedProfileId, onProfileChange, profileRefreshSignal }) {
     const [draft, setDraft] = useState('');
     const clearDraft = useCallback(() => setDraft(''), []);
 
@@ -41,6 +41,9 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                 attachment={attachment}
                 draft={draft}
                 onDraftConsumed={clearDraft}
+                selectedProfileId={selectedProfileId}
+                onProfileChange={onProfileChange}
+                profileRefreshSignal={profileRefreshSignal}
             />
         </div>
     );

@@ -236,7 +236,7 @@ async def run_turn(
                     "role": "assistant",
                     "content": content,
                     "tool_calls": serialized_tool_calls,
-                    "thinking": thinking if agent.persist_thinking else None,
+                    "thinking": thinking,
                     "agent_name": get_current_agent_name(),
                 }
                 history.append(assistant_message)

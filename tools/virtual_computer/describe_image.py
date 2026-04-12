@@ -69,19 +69,19 @@ async def describe_image(
 
     encoded = base64.b64encode(raw).decode("ascii")
 
-    if cfg.vision is None:
-        return "Error: Vision model configuration missing."
-    vision = cfg.vision
+    from server._settings_routes import load_settings
+    vision_model = load_settings().get("vision_model")
+    if not vision_model:
+        return "Error: No vision model configured. Set one in Settings > System."
+
     host = cfg.llm.host if getattr(cfg, "llm", None) else None
     client = AsyncClient(host=host) if host else AsyncClient()
 
     try:
         response = await client.generate(
-            model=vision.model,
+            model=vision_model,
             prompt=prompt,
-            options=vision.options,
             images=[Image(value=encoded)],
-            think=vision.think,
         )
     except Exception as exc:
         logger.exception("Vision model failed for image %s", path)
@@ -96,7 +96,7 @@ async def describe_image(
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
         "describe_image",
-        vision.model,
+        vision_model,
         prompt,
         answer,
         elapsed_ms,

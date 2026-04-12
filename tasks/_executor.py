@@ -28,24 +28,6 @@ class TaskExecutor:
 
     def __init__(self, store: TaskStore) -> None:
         self._store = store
-        self._llm_options = self._build_llm_options()
-
-    @staticmethod
-    def _build_llm_options() -> LLMOptions:
-        """Build LLMOptions from GoalsConfig (called once at init)."""
-        cfg = load_config().goals
-        if not cfg.model:
-            msg = (
-                "goals.model is not set in config.yaml. "
-                "The task runner needs a model to execute tasks."
-            )
-            raise RuntimeError(msg)
-        return LLMOptions(
-            model=cfg.model,
-            num_ctx=cfg.num_ctx or None,
-            think=cfg.think or None,
-            max_iterations=cfg.max_iterations or None,
-        )
 
     async def run(self, task_result: TaskResult, task: Task) -> tuple[str, list[str]]:
         """Execute a task and return (result_text, file_output_paths)."""
@@ -62,15 +44,7 @@ class TaskExecutor:
         conversation_id = f"goals/{run.goal_id}/{run.id}/{task_result.id}"
         self._store.set_conversation_id(task_result.id, conversation_id)
 
-        options = self._llm_options
-        # Apply task-level inference profile as defaults under global options
-        if task.profile:
-            from agents._profiles import apply_profile, get_profile
-            resolved_profile = get_profile(task.profile)
-            if resolved_profile:
-                options = apply_profile(resolved_profile, options)
-            else:
-                logger.warning("Unknown profile '%s' on task %s, ignoring", task.profile, task.id)
+        options = self._build_options(task)
         agent = self._build_agent(task, options)
         set_model_options(options)
 
@@ -108,28 +82,52 @@ class TaskExecutor:
 
         return result or "", file_paths
 
-    def _build_agent(self, task: Task, options: LLMOptions) -> Agent:
-        """Construct an Agent from skills or inline config."""
-        if task.agent_config:
-            config = task.agent_config
-            return Agent(
-                name="TASK_AGENT",
-                description=task.description,
-                instruction=config.get("system_prompt", ""),
-                tools=[],
-                model=options.model or "",
-                options=options.to_options(),
-            )
+    def _build_options(self, task: Task) -> LLMOptions:
+        """Build LLMOptions from the task's agent profile or config defaults."""
+        if task.agent_profile:
+            from agents._agent_profiles import build_llm_options, get_agent_profile
+            profile = get_agent_profile(task.agent_profile)
+            if profile:
+                return build_llm_options(profile)
+            logger.warning("Agent profile '%s' not found for task %s, using config defaults",
+                           task.agent_profile, task.id)
 
-        # Build agent from skills
+        # Fall back to goals config defaults
+        cfg = load_config().goals
+        if not cfg.model:
+            msg = (
+                "goals.model is not set in config.yaml. "
+                "The task runner needs a model to execute tasks."
+            )
+            raise RuntimeError(msg)
+        return LLMOptions(
+            model=cfg.model,
+            num_ctx=cfg.num_ctx or None,
+            think=cfg.think or None,
+            max_iterations=cfg.max_iterations or None,
+        )
+
+    def _build_agent(self, task: Task, options: LLMOptions) -> Agent:
+        """Construct an Agent from the task's agent profile."""
+        system_prompt = "Complete the task thoroughly. Use save_to_scratchpad to store important results."
+        skills_to_load: list[str] = []
+
+        if task.agent_profile:
+            from agents._agent_profiles import get_agent_profile
+            profile = get_agent_profile(task.agent_profile)
+            if profile:
+                if profile.system_prompt:
+                    system_prompt = profile.system_prompt
+                skills_to_load = list(profile.skills)
+
         loaded = AgentState(get_core_tools())
-        for skill_name in task.skills:
+        for skill_name in skills_to_load:
             loaded.load(skill_name)
 
         return Agent(
             name="TASK_AGENT",
             description=task.description,
-            instruction="Complete the task thoroughly. Use save_to_scratchpad to store important results.",
+            instruction=system_prompt,
             tools=loaded.tools,
             model=options.model or "",
             think=options.think or False,

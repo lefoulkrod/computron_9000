@@ -1,0 +1,33 @@
+.select {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    height: 26px;
+    padding: 0 0.4rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--muted);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    appearance: auto;
+    outline: none;
+    transition: border-color 120ms ease;
+}
+
+.select option {
+    background: var(--secondary);
+    color: var(--text);
+}
+
+.select:hover:not(:disabled) {
+    border-color: var(--text);
+}
+
+.select:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -3,8 +3,9 @@ import styles from './ChatInput.module.css';
 import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
+import ProfileSelector from './ProfileSelector.jsx';
 
-function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftConsumed }) {
+function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftConsumed, selectedProfileId, onProfileChange, profileRefreshSignal }) {
     const [message, setMessage] = useState('');
 
     useEffect(() => {
@@ -134,6 +135,12 @@ function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftCons
                     />
                 </div>
                 <div className={styles.inputAreaButtons}>
+                    <ProfileSelector
+                        selectedId={selectedProfileId}
+                        onChange={onProfileChange}
+                        disabled={isStreaming}
+                        refreshSignal={profileRefreshSignal}
+                    />
                     <div className={styles.actionButtons}>
                     <button
                         type="button"

@@ -307,7 +307,6 @@ Returns:
             tools=tools,
             model=model_options.model if model_options and model_options.model else "",
             think=model_options.think if model_options and model_options.think is not None else False,
-            persist_thinking=model_options.persist_thinking if model_options and model_options.persist_thinking is not None else True,
             options=model_options.to_options() if model_options else {},
             max_iterations=effective_max_iterations,
         )

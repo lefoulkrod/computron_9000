@@ -12,43 +12,8 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Agent",
     "Data",
-    "InferenceProfile",
     "LLMOptions",
 ]
-
-
-class InferenceProfile(BaseModel):
-    """Named preset for LLM inference parameters.
-
-    Profiles decouple per-task tuning from global app settings. When applied,
-    profile values act as defaults that per-request LLMOptions can override.
-
-    Model is intentionally excluded — model selection stays global.
-    """
-
-    id: str
-    name: str
-    description: str
-    temperature: float | None = None
-    top_k: int | None = None
-    top_p: float | None = None
-    repeat_penalty: float | None = None
-    num_predict: int | None = None
-    reasoning_effort: str | None = None
-    think: bool | None = None
-    max_iterations: int | None = None
-
-    def to_options(self) -> dict[str, Any]:
-        """Build a provider options dict containing only explicitly set values."""
-        mapping: dict[str, Any] = {
-            "temperature": self.temperature,
-            "top_k": self.top_k,
-            "top_p": self.top_p,
-            "repeat_penalty": self.repeat_penalty,
-            "num_predict": self.num_predict,
-            "reasoning_effort": self.reasoning_effort,
-        }
-        return {k: v for k, v in mapping.items() if v is not None}
 
 
 class LLMOptions(BaseModel):
@@ -67,7 +32,6 @@ class LLMOptions(BaseModel):
         top_p: Nucleus sampling probability threshold.
         repeat_penalty: Penalty applied to repeated tokens.
         reasoning_effort: Reasoning effort level (``low``, ``medium``, ``high``).
-        persist_thinking: Whether to store thinking in conversation history.
     """
 
     model: str | None = None
@@ -80,7 +44,6 @@ class LLMOptions(BaseModel):
     repeat_penalty: float | None = None
     reasoning_effort: str | None = None
     max_iterations: int | None = None
-    persist_thinking: bool | None = None
 
     def to_options(self) -> dict[str, Any]:
         """Build a provider options dict containing only explicitly set values."""
@@ -107,7 +70,6 @@ class Agent(BaseModel):
         options: Model options (e.g., num_ctx).
         tools: List of callable tools available to the agent.
         think: Whether the model should think. Not all models support thinking.
-        persist_thinking: Whether to store thinking in conversation history.
         max_iterations: Maximum tool-call loop iterations before forced stop.
     """
 
@@ -118,7 +80,6 @@ class Agent(BaseModel):
     options: dict[str, Any]
     tools: list[Callable[..., Any]]
     think: bool = False
-    persist_thinking: bool = True
     max_iterations: int = 0
 
 

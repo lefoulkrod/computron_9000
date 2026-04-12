@@ -26,11 +26,13 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 import asyncio
 
 from server._feature_routes import register_feature_routes
+from server._model_routes import register_model_routes
+from server._profile_routes import register_profile_routes
+from server._settings_routes import register_settings_routes
 from server._task_routes import register_task_routes
-from server.message_handler import AVAILABLE_AGENTS, handle_user_message, reset_message_history, resume_conversation
-from sdk.providers import get_provider
+from server.message_handler import handle_user_message, reset_message_history, resume_conversation
 from sdk.turn import is_turn_active, queue_nudge, request_stop
-from agents.types import Data, LLMOptions
+from agents.types import Data
 from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.memory import forget as forget_memory
@@ -65,9 +67,8 @@ class ChatRequest(BaseModel):
 
     message: str
     data: list[Attachment] | None = None
-    options: LLMOptions | None = None
+    profile_id: str | None = None
     conversation_id: str | None = None
-    agent: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +187,9 @@ async def chat_handler(request: Request) -> StreamResponse:
     return await stream_events(
         request,
         handle_user_message(
-            user_query, data_objs, options=payload.options,
-            conversation_id=payload.conversation_id, agent=payload.agent,
+            user_query, data_objs,
+            profile_id=payload.profile_id,
+            conversation_id=payload.conversation_id,
         ),
     )
 
@@ -257,18 +259,6 @@ async def delete_custom_tool_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def list_agents_handler(_request: Request) -> Response:
-    """Return the list of available agent IDs."""
-    return web.json_response({"agents": AVAILABLE_AGENTS, "default": "computron"})
-
-
-async def list_models_handler(_request: Request) -> Response:
-    """Return available models from the provider."""
-    provider = get_provider()
-    models = await provider.list_models()
-    return web.json_response({
-        "models": models,
-    })
 
 
 async def list_memory_handler(_request: Request) -> Response:
@@ -358,8 +348,6 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.router.add_route("POST", "/api/chat", chat_handler)
     app.router.add_route("POST", "/api/chat/stop", stop_handler)
     app.router.add_route("DELETE", "/api/chat/history", delete_history_handler)
-    app.router.add_route("GET", "/api/agents", list_agents_handler)
-    app.router.add_route("GET", "/api/models", list_models_handler)
     app.router.add_route("GET", "/api/custom-tools", list_custom_tools_handler)
     app.router.add_route("DELETE", "/api/custom-tools/{name}", delete_custom_tool_handler)
     app.router.add_route("GET", "/api/memory", list_memory_handler)
@@ -368,6 +356,15 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
 
     # Feature flags
     register_feature_routes(app)
+
+    # Models + agents
+    register_model_routes(app)
+
+    # Agent profiles
+    register_profile_routes(app)
+
+    # Application settings
+    register_settings_routes(app)
 
     # Desktop API
     app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)
@@ -393,11 +390,22 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     if STATIC_DIR.exists():
         app.router.add_static("/static", STATIC_DIR, show_index=False)
 
+    # Data migrations (must run before task runner reads state)
+    app.on_startup.append(_run_data_migrations)
     # Task runner lifecycle
     app.on_startup.append(_start_task_runner)
     app.on_cleanup.append(_stop_task_runner)
 
     return app
+
+
+async def _run_data_migrations(_app: web.Application) -> None:
+    """Run pending data migrations against the state directory."""
+    from migrations import run_migrations
+
+    config = load_config()
+    state_dir = Path(config.settings.home_dir)
+    run_migrations(state_dir)
 
 
 async def _start_task_runner(app: web.Application) -> None:

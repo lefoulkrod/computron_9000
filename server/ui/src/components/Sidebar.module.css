@@ -40,3 +40,7 @@
     background: var(--muted);
     margin: 3px 0;
 }
+
+.spacer {
+    flex: 1;
+}

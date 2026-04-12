@@ -52,6 +52,7 @@ class OllamaProvider:
 
     def __init__(self, host: str | None = None) -> None:
         self._client = AsyncClient(host=host, timeout=_DEFAULT_TIMEOUT)
+        self._model_cache: list[dict[str, Any]] | None = None
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
@@ -183,6 +184,47 @@ class OllamaProvider:
         """Return available model names from the Ollama server."""
         response = await self._client.list()
         return [m.model for m in response.models if m.model is not None]
+
+    async def list_models_detailed(self) -> list[dict[str, Any]]:
+        """Return models with metadata from the Ollama server.
+
+        For each model, calls ``show`` to retrieve capabilities. Results
+        are cached in memory — call ``invalidate_model_cache()`` to refresh.
+        """
+        if self._model_cache is not None:
+            return self._model_cache
+
+        response = await self._client.list()
+        results: list[dict[str, Any]] = []
+        for m in response.models:
+            if m.model is None:
+                continue
+            name = m.model
+            details = getattr(m, "details", None)
+
+            # Fetch capabilities via show()
+            capabilities: list[str] = []
+            try:
+                show_resp = await self._client.show(name)
+                capabilities = list(getattr(show_resp, "capabilities", None) or [])
+            except Exception:
+                logger.debug("Failed to fetch capabilities for model '%s'", name)
+
+            results.append({
+                "name": name,
+                "parameter_size": getattr(details, "parameter_size", None) if details else None,
+                "quantization_level": getattr(details, "quantization_level", None) if details else None,
+                "family": getattr(details, "family", None) if details else None,
+                "capabilities": capabilities,
+                "is_cloud": name.endswith(":cloud"),
+            })
+
+        self._model_cache = results
+        return results
+
+    def invalidate_model_cache(self) -> None:
+        """Clear the cached model metadata so the next call re-fetches."""
+        self._model_cache = None
 
 
 # ---------------------------------------------------------------------------

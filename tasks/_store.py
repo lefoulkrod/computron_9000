@@ -45,8 +45,7 @@ class TaskStore(Protocol):
         goal_id: str,
         description: str,
         instruction: str,
-        skills_or_agent: str | list[str] = "",
-        agent_config: dict | None = None,
+        agent_profile: str | None = None,
         depends_on: list[str] | None = None,
     ) -> Task:
         """Create a task definition belonging to a goal."""

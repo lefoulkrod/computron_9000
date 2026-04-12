@@ -18,11 +18,12 @@ _SKILL = Skill(
         Completed dependency results are automatically appended to a task's
         instruction at execution time — do not use template syntax like {{key}}.
 
-        SKILL SELECTION — each task specifies which skills to load:
-        - "browser": web browsing, scraping, form filling
-        - "coder": code, files, scripts, analysis
-        - Omit skills for a general-purpose agent
-        - Combine skills for multi-capability tasks (e.g. ["browser", "coder"])
+        AGENT PROFILES — each task can specify an agent_profile to configure
+        the executing agent's model, skills, system prompt, and inference params:
+        - "code_expert": coder skill, low temp, thinking enabled
+        - "research_agent": browser + coder skills, medium temp
+        - "creative_writer": high temp, top_p sampling
+        - Omit agent_profile for the default Computron agent
 
         Task instructions must be fully self-contained — include all URLs, file
         paths, criteria, and output expectations. The executing agent has no

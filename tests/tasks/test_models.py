@@ -25,7 +25,7 @@ class TestModels:
     def test_task_defaults(self):
         """Task gets sensible defaults."""
         t = Task(goal_id="g1", description="do thing", instruction="prompt")
-        assert t.skills == []
+        assert t.agent_profile is None
         assert t.depends_on == []
         assert t.max_retries == 3
 

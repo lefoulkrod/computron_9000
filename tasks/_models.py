@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -38,11 +38,9 @@ class Task(BaseModel):
     goal_id: str
     description: str
     instruction: str
-    skills: list[str] = Field(default_factory=list)
-    agent_config: dict[str, Any] | None = None
+    agent_profile: str | None = None
     depends_on: list[str] = Field(default_factory=list)
     max_retries: int = 3
-    profile: str | None = None
 
 
 class Run(BaseModel):

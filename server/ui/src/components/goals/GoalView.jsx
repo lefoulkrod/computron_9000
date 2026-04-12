@@ -139,7 +139,7 @@ export default function GoalView({ goal, onBack, onDeleteGoal, onDeleteRun, onPa
                                         <div className={styles.taskDefInfo}>
                                             <div className={styles.taskDefHeader}>
                                                 <span className={styles.taskDefName}>{task.description}</span>
-                                                <span className={styles.agentBadge}>{task.agent}</span>
+                                                <span className={styles.agentBadge}>{task.agent_profile_name || task.agent_profile || '—'}</span>
                                             </div>
                                             {task.depends_on?.length > 0 ? (
                                                 <div className={styles.taskDefMeta}>

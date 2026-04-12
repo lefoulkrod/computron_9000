@@ -5,9 +5,8 @@ results are stored as plain strings in tool messages — Pydantic models are
 normalized via _normalize_tool_result and str()-converted, exceptions become
 their string representation, and dicts are str()-converted.
 
-Additional tests verify the ``persist_thinking`` flag on ``Agent`` controls
-whether thinking content is retained in the conversation history while still
-being emitted to the UI via events.
+Additional tests verify that thinking content is always persisted in the
+conversation history.
 """
 
 from __future__ import annotations
@@ -184,13 +183,13 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
     assert "exit_code" in content
 
 
-# ── persist_thinking tests ──────────────────────────────────────────────
+# ── thinking persistence tests ─────────────────────────────────────────
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_persist_thinking_true_stores_thinking_in_history(monkeypatch):
-    """When persist_thinking=True, thinking is stored in the assistant message."""
+async def test_thinking_always_persisted_in_history(monkeypatch):
+    """Thinking content is always stored in the assistant message."""
     resp = _make_response(content="hello", thinking="deep thought")
 
     import sdk.turn._execution as mod
@@ -201,47 +200,12 @@ async def test_persist_thinking_true_stores_thinking_in_history(monkeypatch):
     agent = Agent(
         name="Test", description="d", instruction="x",
         model="dummy", options={}, tools=[],
-        persist_thinking=True,
     )
     async with agent_span("Test", agent_state=AgentState(agent.tools)):
         await run_turn(history, agent=agent)
 
     assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
     assert assistant_msg["thinking"] == "deep thought"
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_persist_thinking_false_excludes_thinking_from_history(monkeypatch):
-    """When persist_thinking=False, thinking is None in history but still emitted."""
-    resp = _make_response(content="hello", thinking="deep thought")
-
-    import sdk.turn._execution as mod
-
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp]))
-
-    # Capture events to verify thinking is still emitted
-    emitted_events = []
-    original_publish = mod.publish_event
-
-    def _capture_publish(event):
-        emitted_events.append(event)
-        return original_publish(event)
-
-    monkeypatch.setattr(mod, "publish_event", _capture_publish)
-
-    history = ConversationHistory([{"role": "system", "content": "x"}])
-    agent = Agent(
-        name="Test", description="d", instruction="x",
-        model="dummy", options={}, tools=[],
-        persist_thinking=False,
-    )
-    async with agent_span("Test", agent_state=AgentState(agent.tools)):
-        await run_turn(history, agent=agent)
-
-    # History should NOT contain thinking
-    assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
-    assert assistant_msg["thinking"] is None
 
     # But thinking should still be emitted via events
     from sdk.events import ContentPayload

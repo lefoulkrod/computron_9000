@@ -4,7 +4,6 @@ import Header from './components/Header.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
 import MobileSettingsDrawer from './components/MobileSettingsDrawer.jsx';
-import useModelSettings from './hooks/useModelSettings.js';
 import useStreamingChat from './hooks/useStreamingChat.js';
 import { useToast } from './components/ToastProvider.jsx';
 import styles from './MobileApp.module.css';
@@ -16,7 +15,10 @@ const _noop = () => {};
 export default function MobileApp({ dark, onToggleTheme }) {
     const [drawerOpen, setDrawerOpen] = useState(false);
 
-    const modelSettings = useModelSettings();
+    // Profile-based configuration — default to 'computron'
+    const [selectedProfileId] = useState(() => {
+        return localStorage.getItem('computron_profile_id') || 'computron';
+    });
     const { addToast } = useToast();
 
     const _stableCallbacks = useRef({
@@ -41,8 +43,8 @@ export default function MobileApp({ dark, onToggleTheme }) {
     } = useStreamingChat(_stableCallbacks);
 
     const handleSend = useCallback((message, fileData) => {
-        sendMessage(message, fileData, modelSettings);
-    }, [sendMessage, modelSettings]);
+        sendMessage(message, fileData, selectedProfileId);
+    }, [sendMessage, selectedProfileId]);
 
     const newConversation = useCallback(async () => {
         await chatNewConversation();
@@ -73,7 +75,6 @@ export default function MobileApp({ dark, onToggleTheme }) {
             <MobileSettingsDrawer
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
-                modelSettings={modelSettings}
                 isStreaming={isStreaming}
                 onLoadConversation={loadConversation}
             />

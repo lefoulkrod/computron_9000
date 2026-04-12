@@ -682,10 +682,19 @@ class LLMCompactionStrategy:
         if self._summary_model:
             return self._summary_model, {}
 
-        # Use the summary section from config
+        # Check settings.json (set by setup wizard / system settings)
+        try:
+            from server._settings_routes import load_settings
+            compaction_model = load_settings().get("compaction_model")
+            if compaction_model:
+                return compaction_model, {}
+        except Exception:
+            pass
+
+        # Fall back to the summary section from config.yaml
         summary_cfg = getattr(cfg, "summary", None)
         if summary_cfg is None:
-            msg = "No summary model configured. Add a 'summary' section to config.yaml."
+            msg = "No summary model configured. Set one in Settings > System."
             raise RuntimeError(msg)
         return summary_cfg.model, summary_cfg.options
 

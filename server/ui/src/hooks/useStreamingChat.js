@@ -8,28 +8,15 @@ function _uuid() {
 }
 
 /**
- * Build the request body for /api/chat including model options.
+ * Build the request body for /api/chat.
  */
-function _buildRequestBody(message, fileData, modelSettings, conversationId) {
+function _buildRequestBody(message, fileData, profileId, conversationId) {
     const body = { message: message || '(uploaded file)' };
     if (conversationId) body.conversation_id = conversationId;
     if (fileData) {
         body.data = [fileData];
     }
-    const opts = {};
-    const { selectedModel, contextKb, think, persistThinking, temperature, topK, topP, repeatPenalty,
-        numPredict, unlimitedTurns, agentTurns } = modelSettings;
-    if (selectedModel) opts.model = selectedModel;
-    if (contextKb !== '') opts.num_ctx = parseInt(contextKb, 10) * 1000;
-    opts.think = think;
-    if (persistThinking !== undefined) opts.persist_thinking = persistThinking;
-    if (temperature !== '') opts.temperature = parseFloat(temperature);
-    if (topK !== '') opts.top_k = parseInt(topK, 10);
-    if (topP !== '') opts.top_p = parseFloat(topP);
-    if (repeatPenalty !== '') opts.repeat_penalty = parseFloat(repeatPenalty);
-    if (numPredict !== '' && numPredict !== undefined) opts.num_predict = parseInt(numPredict, 10);
-    if (!unlimitedTurns && agentTurns !== '') opts.max_iterations = parseInt(agentTurns, 10);
-    if (Object.keys(opts).length > 0) body.options = opts;
+    if (profileId) body.profile_id = profileId;
     return body;
 }
 
@@ -210,7 +197,7 @@ export default function useStreamingChat(callbacks) {
             { id: placeholderId, role: 'assistant', placeholder: true },
         ]);
 
-        const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current, agent);
+        const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
 
         // IDs for pending animation frame flushes. Declared here so the
         // finally block can cancel them if the stream errors or aborts.

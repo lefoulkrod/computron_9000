@@ -98,6 +98,7 @@ async def agent_span(
     agent_name: str | None = None,
     instruction: str | None = None,
     agent_state: AgentState | None = None,
+    profile_name: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Push an attribution frame for the duration of the block.
 
@@ -116,6 +117,7 @@ async def agent_span(
         instruction: The instruction or user message this agent was given.
         agent_state: AgentState to use for this span. A fresh empty one is
             created when None.
+        profile_name: Name of the agent profile, shown in the UI.
 
     Yields:
         str: The context id pushed onto the stack.
@@ -145,6 +147,7 @@ async def agent_span(
         agent_name=agent_name or "",
         parent_agent_id=parent_id,
         instruction=instruction,
+        profile_name=profile_name,
     )))
 
     status = "success"

@@ -219,6 +219,7 @@ class AgentStartedPayload(BaseModel):
         agent_name: Human-readable agent name.
         parent_agent_id: Context id of the parent agent, or None for root.
         instruction: The instruction or user message this agent was given.
+        profile_name: Name of the agent profile used, if any.
     """
 
     type: Literal["agent_started"]
@@ -226,6 +227,7 @@ class AgentStartedPayload(BaseModel):
     agent_name: str
     parent_agent_id: str | None = None
     instruction: str | None = None
+    profile_name: str | None = None
 
 
 class AgentCompletedPayload(BaseModel):

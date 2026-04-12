@@ -5,6 +5,15 @@ from typing import Any
 from tasks import get_store
 
 
+def _default_agent() -> str:
+    """Return the default agent profile ID from settings."""
+    try:
+        from server._settings_routes import load_settings
+        return load_settings().get("default_agent") or "computron"
+    except Exception:
+        return "computron"
+
+
 async def begin_goal(
     description: str,
     cron: str | None = None,
@@ -48,9 +57,8 @@ async def add_task(
     key: str,
     description: str,
     instruction: str,
-    skills: list[str] | None = None,
     depends_on: list[str] | None = None,
-    profile: str | None = None,
+    agent_profile: str | None = None,
 ) -> dict[str, Any] | str:
     """Add a task to a goal draft and return the updated draft.
 
@@ -62,12 +70,11 @@ async def add_task(
         key: Unique short identifier for this task (e.g. 'fetch_data').
         description: Short human-readable description.
         instruction: Full self-contained agent prompt.
-        skills: Skills to load for this task (e.g. ['browser'], ['coder', 'browser']).
-            Omit for a general-purpose agent with no pre-loaded skills.
         depends_on: Keys of tasks this task depends on. Omit to depend on the
             previous task. Pass [] for no dependencies (parallel execution).
-        profile: Optional inference profile ID (e.g. 'code', 'creative') to
-            tune inference parameters for this task.
+        agent_profile: Agent profile ID (e.g. 'code_expert',
+            'research_agent'). Uses the default agent from settings if omitted.
+            Call list_agent_profiles() to see available profiles.
     """
     if not isinstance(draft, dict) or "tasks" not in draft:
         return "Error: invalid draft. Start with begin_goal."
@@ -82,13 +89,13 @@ async def add_task(
     if not instruction or not instruction.strip():
         return f"Error: instruction is required for task '{key}'."
 
-    # Validate skills against registry
-    if skills:
-        from sdk.skills import list_skills
-        available = {name for name, _ in list_skills()}
-        unknown = [s for s in skills if s not in available]
-        if unknown:
-            return f"Error: unknown skill(s) {unknown} for task '{key}'. Available: {sorted(available)}."
+    # Validate agent_profile exists
+    if agent_profile:
+        from agents._agent_profiles import get_agent_profile
+        if get_agent_profile(agent_profile) is None:
+            from agents._agent_profiles import list_agent_profiles
+            available = [p.id for p in list_agent_profiles()]
+            return f"Error: unknown agent profile '{agent_profile}' for task '{key}'. Available: {available}."
 
     # Default to previous task if depends_on is omitted and one exists
     resolved_deps = [existing_keys[-1]] if depends_on is None and existing_keys else (depends_on or [])
@@ -101,11 +108,9 @@ async def add_task(
         "key": key,
         "description": description.strip(),
         "instruction": instruction.strip(),
-        "skills": skills or [],
         "depends_on": resolved_deps,
     }
-    if profile:
-        task["profile"] = profile
+    task["agent_profile"] = agent_profile or _default_agent()
     return {**draft, "tasks": [*draft["tasks"], task]}
 
 
@@ -146,14 +151,14 @@ async def create_goal(
                 {
                     "key": "research",
                     "description": "Find today's top AI news stories",
-                    "instruction": "Browse news sites and find the top 5 AI stories published today. Return headlines, sources, and URLs.",
-                    "skills": ["browser"],
+                    "instruction": "Browse news sites and find the top 5 AI stories published today.",
+                    "agent_profile": "research_agent",
                 },
                 {
                     "key": "summarize",
                     "description": "Write a summary of the research",
-                    "instruction": "Summarize the AI news stories from the research task into a concise briefing.",
-                    "skills": ["coder"],
+                    "instruction": "Summarize the AI news stories into a concise briefing.",
+                    "agent_profile": "creative_writer",
                     "depends_on": ["research"],
                 },
             ],
@@ -167,13 +172,12 @@ async def create_goal(
             - instruction (str): Full, self-contained agent prompt. The
               executing agent has no conversation history — include all URLs,
               file paths, criteria, and output expectations.
-            - skills (list[str], optional): Skills to load for this task
-              (e.g. ['browser'], ['coder', 'browser']).
-            - agent_config (dict, optional): Inline agent override with
-              'system_prompt' and/or 'tools'.
+            - agent_profile (str): Agent profile ID (e.g.
+              'code_expert', 'research_agent'). Determines model, skills,
+              system prompt, and inference parameters. Defaults to
+              'computron' if omitted.
             - depends_on (list[str], optional): Keys of tasks this task
               depends on.
-            - profile (str, optional): Inference profile ID.
         cron: Cron expression for recurring goals (e.g. '0 */2 * * *').
             Omit for one-shot goals, which spawn a run immediately.
         timezone: IANA timezone name (e.g. 'America/Chicago', 'UTC').
@@ -233,12 +237,9 @@ async def create_goal(
             "id": task_id,
             "description": str(t["description"]).strip(),
             "instruction": str(t["instruction"]).strip(),
-            "skills": t.get("skills", []),
-            "agent_config": t.get("agent_config"),
             "depends_on": [key_to_id[k] for k in dep_keys],
         }
-        if t.get("profile"):
-            task_def["profile"] = t["profile"]
+        task_def["agent_profile"] = t.get("agent_profile") or _default_agent()
         task_defs.append(task_def)
 
     created_tasks = store.create_tasks(goal_id=goal.id, task_defs=task_defs)
@@ -251,8 +252,8 @@ async def create_goal(
     for key, task in zip(keys, created_tasks):
         dep_keys = tasks[keys.index(key)].get("depends_on") or []
         deps_note = f", depends_on={dep_keys}" if dep_keys else ""
-        skills_note = f", skills={task.skills}" if task.skills else ""
-        lines.append(f"  - [{key}] {task.description} (id={task.id}{skills_note}{deps_note})")
+        profile_note = f", profile={task.agent_profile}" if task.agent_profile else ""
+        lines.append(f"  - [{key}] {task.description} (id={task.id}{profile_note}{deps_note})")
 
     task_lines = "\n".join(lines)
     tz_note = f", timezone={goal.timezone}" if goal.timezone else ""
@@ -285,7 +286,7 @@ async def list_tasks(goal_id: str) -> str:
     tasks = store.list_tasks(goal_id)
     if not tasks:
         return "No tasks found for this goal."
-    lines = [f"- {t.description} (id={t.id}, skills={t.skills}, depends_on={t.depends_on})" for t in tasks]
+    lines = [f"- {t.description} (id={t.id}, profile={t.agent_profile}, depends_on={t.depends_on})" for t in tasks]
     return "\n".join(lines)
 
 

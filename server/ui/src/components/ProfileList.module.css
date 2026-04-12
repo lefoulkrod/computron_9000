@@ -1,0 +1,181 @@
+.panel {
+    --radius: 0;
+    width: 40%;
+    min-width: 280px;
+    max-width: 420px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--primary);
+    border-right: 1px solid var(--muted);
+    flex-shrink: 0;
+}
+
+.panel * {
+    border-radius: 0;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--muted);
+    background: var(--primary);
+    flex-shrink: 0;
+}
+
+.headerLabel {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+    opacity: 0.7;
+}
+
+.newBtn {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.newBtn:hover {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+}
+
+.list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.list::-webkit-scrollbar-thumb {
+    background: var(--muted);
+    border-radius: 4px;
+}
+
+.list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.divider {
+    height: 1px;
+    background: var(--muted);
+    margin: 0;
+}
+
+.item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--muted);
+    border-left: 2px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+    list-style: none;
+    outline: none;
+}
+
+.item:hover {
+    background: var(--primary);
+}
+
+.itemActive {
+    background: rgba(123, 140, 255, 0.12);
+    border-left: 2px solid #7b8cff;
+}
+
+.itemActive:hover {
+    background: rgba(123, 140, 255, 0.16);
+}
+
+.icon {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
+    font-size: 1.15rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.itemBody {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+}
+
+.desc {
+    font-size: 0.72rem;
+    color: var(--text);
+    opacity: 0.5;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.15rem;
+}
+
+.badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    padding: 0.1em 0.45em;
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.badgeSystem {
+    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+
+.badgeSkill {
+    background: color-mix(in srgb, var(--color-success) 12%, transparent);
+    color: var(--color-success);
+    border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+.badgeParam {
+    background: rgba(150, 150, 170, 0.1);
+    color: var(--text);
+    opacity: 0.5;
+    border: 1px solid var(--muted);
+}

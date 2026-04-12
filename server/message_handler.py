@@ -16,11 +16,16 @@ from sdk.events import (
     set_model_options,
 )
 from sdk.turn import turn_scope
-from agents.types import Agent, Data, LLMOptions
+from agents.types import Agent, Data
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
-from agents import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
+from agents._agent_profiles import (
+    AgentProfile,
+    build_llm_options,
+    get_agent_profile,
+    get_default_profile,
+)
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
@@ -39,9 +44,50 @@ from sdk.skills.agent_state import AgentState
 from sdk.tools._core import get_core_tools
 from sdk.turn._turn import StopRequestedError
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
 logger = logging.getLogger(__name__)
+_console = Console(stderr=True)
 
 _DEFAULT_CONVERSATION_ID = "default"
+
+
+def _log_turn_start(profile, options) -> None:
+    """Print a Rich panel showing the active profile and its settings."""
+    body = Text()
+    body.append("profile: ", style="bold")
+    body.append(profile.name, style="bright_magenta")
+    body.append(f" ({profile.id})", style="dim")
+    body.append("\nmodel:   ", style="bold")
+    body.append(options.model or "—", style="bright_yellow")
+    if profile.skills:
+        body.append("\nskills:  ", style="bold")
+        body.append(", ".join(profile.skills), style="bright_cyan")
+    params = []
+    if options.temperature is not None:
+        params.append(f"temp={options.temperature}")
+    if options.top_k is not None:
+        params.append(f"top_k={options.top_k}")
+    if options.top_p is not None:
+        params.append(f"top_p={options.top_p}")
+    if options.think:
+        params.append("think")
+    if options.num_ctx is not None:
+        params.append(f"ctx={options.num_ctx}")
+    if options.max_iterations is not None:
+        params.append(f"max_iter={options.max_iterations}")
+    if params:
+        body.append("\nparams:  ", style="bold")
+        body.append(", ".join(params), style="dim")
+
+    _console.print(Panel(
+        body,
+        title="[bold bright_magenta]🤖 Agent Turn[/bold bright_magenta]",
+        border_style="bright_magenta",
+        expand=False,
+    ))
 
 
 @dataclass
@@ -128,17 +174,23 @@ def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str
     )
 
 
-def _build_agent(agent_id: str | None, options: LLMOptions) -> Agent:
-    """Construct an Agent from a registry ID and LLM options."""
-    agent_name, agent_desc, agent_prompt, agent_tools = _resolve_agent(agent_id)
+def _build_agent_from_profile(profile: AgentProfile) -> Agent:
+    """Construct an Agent from an AgentProfile."""
+    from tools.memory import forget, remember
+    from tools.virtual_computer.run_bash_cmd import run_bash_cmd
+
+    options = build_llm_options(profile)
+
+    # Base tools every profile gets (on top of core tools added in _run_turn)
+    agent_tools = [run_bash_cmd, remember, forget]
+
     return Agent(
-        name=agent_name,
-        description=agent_desc,
-        instruction=agent_prompt,
+        name=profile.name.upper(),
+        description=profile.description,
+        instruction=profile.system_prompt,
         tools=agent_tools,
-        model=options.model,  # type: ignore[arg-type]  # validated by caller
+        model=options.model or "",
         think=options.think or False,
-        persist_thinking=options.persist_thinking if options.persist_thinking is not None else True,
         options=options.to_options(),
         max_iterations=options.max_iterations or 0,
     )
@@ -164,26 +216,32 @@ async def _run_turn(
     *,
     conversation: _Conversation,
     active_agent: Agent,
+    profile: AgentProfile,
     user_content: str,
-    options: LLMOptions,
     conversation_id: str | None,
     handler: Callable[[AgentEvent], object],
     is_new_conversation: bool = False,
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
+    options = build_llm_options(profile)
     logger.info(
         "Turn started: conv=%s agent=%s message=%.80s",
         conversation_id or _DEFAULT_CONVERSATION_ID,
         active_agent.name,
         user_content,
     )
+    _log_turn_start(profile, options)
     set_model_options(options)
 
     ctx_manager = _ensure_context_manager(conversation, active_agent)
     conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
 
     # Fresh AgentState each turn, restored from persisted skill names.
+    # Pre-load skills from the profile.
     agent_state = AgentState(get_core_tools() + active_agent.tools)
+    for skill_name in profile.skills:
+        if agent_state.load(skill_name) is not None:
+            logger.info("Pre-loaded profile skill '%s' for conv=%s", skill_name, conv_id)
     for skill_name in load_loaded_skills(conv_id):
         if agent_state.load(skill_name) is not None:
             logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
@@ -195,9 +253,14 @@ async def _run_turn(
         if dispatcher:
             dispatcher.subscribe(event_buffer.handle_event)
 
-        async with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state):
+        async with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state, profile_name=profile.name):
             conversation.history.append({"role": "user", "content": user_content})
-            _refresh_system_message(conversation.history, active_agent.instruction)
+            # Build full system prompt: profile prompt + loaded skill prompts
+            full_prompt = active_agent.instruction
+            skill_prompt = agent_state.build_skill_prompt()
+            if skill_prompt:
+                full_prompt = full_prompt + "\n" + skill_prompt
+            _refresh_system_message(conversation.history, full_prompt)
 
             hooks = default_hooks(
                 active_agent,
@@ -258,18 +321,16 @@ async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None,
     *,
-    options: LLMOptions,
+    profile_id: str | None = None,
     conversation_id: str | None = None,
-    agent: str | None = None,
 ) -> AsyncGenerator[AgentEvent, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
     Args:
         message: The user's message.
         data: Optional sequence of file attachment data.
-        options: LLM inference options for this turn.
+        profile_id: Agent profile to use. Falls back to Computron default.
         conversation_id: Optional conversation identifier for isolation.
-        agent: Optional agent identifier to use for this turn.
 
     Yields:
         AgentEvent: Events from the LLM.
@@ -282,8 +343,18 @@ async def handle_user_message(
     if data:
         user_content = _augment_message_with_attachments(message, data)
 
-    if not options.model:
-        msg = "No model specified. The UI must send a model in the request options."
+    # Resolve the agent profile
+    if not profile_id:
+        from server._settings_routes import load_settings
+        profile_id = load_settings().get("default_agent", "computron")
+    profile = get_agent_profile(profile_id)
+    if profile is None:
+        logger.warning("Profile '%s' not found, falling back to computron", profile_id)
+        profile = get_default_profile()
+
+    # build_llm_options handles model inheritance from Computron
+    if not profile.model and not build_llm_options(profile).model:
+        msg = "No model configured. Complete the setup wizard to select a model."
         raise ValueError(msg)
 
     try:
@@ -296,15 +367,15 @@ async def handle_user_message(
             except Exception:  # pragma: no cover - defensive logging
                 logger.exception("Failed to enqueue AgentEvent in message handler")
 
-        active_agent = _build_agent(agent, options)
+        active_agent = _build_agent_from_profile(profile)
 
         async def _producer() -> None:
             try:
                 await _run_turn(
                     conversation=conversation,
                     active_agent=active_agent,
+                    profile=profile,
                     user_content=user_content,
-                    options=options,
                     conversation_id=conversation_id,
                     handler=_queue_handler,
                     is_new_conversation=is_new_conversation,

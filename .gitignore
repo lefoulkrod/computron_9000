@@ -28,6 +28,10 @@ playwright-report/
 # Runtime caches (created when source is mounted in container-dev)
 .cache/
 
+# Data migration state
+.migrations.json
+*.pre_migration_*.json
+
 # Logs
 logs/
 *.log

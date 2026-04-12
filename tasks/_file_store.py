@@ -121,32 +121,18 @@ class FileTaskStore:
         goal_id: str,
         description: str,
         instruction: str,
-        skills_or_agent: str | list[str] = "",
-        agent_config: dict | None = None,
+        agent_profile: str | None = None,
         depends_on: list[str] | None = None,
     ) -> Task:
-        """Create a task definition belonging to a goal.
-
-        ``skills_or_agent`` accepts either a list of skill names or a
-        legacy agent string (for backward compatibility with tests).
-        """
-        if isinstance(skills_or_agent, str):
-            # Legacy compat: map old agent names to skill lists
-            agent_to_skills: dict[str, list[str]] = {
-                "browser": ["browser"],
-                "coder": ["coder"],
-                "computron": [],
-            }
-            skills = agent_to_skills.get(skills_or_agent, [])
-        else:
-            skills = skills_or_agent
-        return self.create_tasks(goal_id, [{
+        """Create a task definition belonging to a goal."""
+        td: dict = {
             "description": description,
             "instruction": instruction,
-            "skills": skills,
-            "agent_config": agent_config,
             "depends_on": depends_on or [],
-        }])[0]
+        }
+        if agent_profile:
+            td["agent_profile"] = agent_profile
+        return self.create_tasks(goal_id, [td])[0]
 
     def create_tasks(
         self,
@@ -167,26 +153,12 @@ class FileTaskStore:
         self._write_json(path, data)
         return created
 
-    @staticmethod
-    def _migrate_task_data(t: dict) -> dict:
-        """Migrate legacy task data that used 'agent' to 'skills'."""
-        if "agent" in t and "skills" not in t:
-            agent = t.pop("agent")
-            # Map old agent names to skill lists
-            agent_to_skills: dict[str, list[str]] = {
-                "browser": ["browser"],
-                "coder": ["coder"],
-                "computron": [],
-            }
-            t["skills"] = agent_to_skills.get(agent, [])
-        return t
-
     def list_tasks(self, goal_id: str) -> list[Task]:
         """List task definitions for a goal."""
         data = self._read_json(self._goal_path(goal_id))
         if not data:
             return []
-        return [Task(**self._migrate_task_data(t)) for t in data.get("tasks", [])]
+        return [Task(**t) for t in data.get("tasks", [])]
 
     def get_task(self, task_id: str) -> Task | None:
         """Return a task by ID, or None if not found."""

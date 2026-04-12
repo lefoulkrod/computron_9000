@@ -8,7 +8,12 @@ import FilePreview from './components/FilePreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
-import ModelSettingsPanel from './components/ModelSettingsPanel.jsx';
+import SettingsPage from './components/SettingsPage.jsx';
+import SystemSettings from './components/SystemSettings.jsx';
+import ProfileList from './components/ProfileList.jsx';
+import ProfileBuilder from './components/ProfileBuilder.jsx';
+import SetupWizard from './components/SetupWizard.jsx';
+import useAgentProfiles from './hooks/useAgentProfiles.js';
 import TerminalPanel from './components/TerminalOutput.jsx';
 import GenerationPreview from './components/GenerationPreview.jsx';
 import AgentNetwork from './components/AgentNetwork.jsx';
@@ -18,7 +23,7 @@ import FlyoutPanel from './components/FlyoutPanel.jsx';
 import GoalsView from './components/goals/GoalsView.jsx';
 import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
-import useModelSettings from './hooks/useModelSettings.js';
+// useModelSettings removed — replaced by profile-based configuration
 import useStreamingChat from './hooks/useStreamingChat.js';
 import { AgentStateProvider, useAgentState, useAgentDispatch } from './hooks/useAgentState.jsx';
 import { useToast } from './components/ToastProvider.jsx';
@@ -64,7 +69,33 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [nudgeToast, setNudgeToast] = useState(null);
 
     const features = useFeatures();
-    const modelSettings = useModelSettings();
+    const [selectedProfileId, setSelectedProfileId] = useState(() => {
+        return localStorage.getItem('computron_profile_id') || 'computron';
+    });
+    const handleProfileChange = useCallback((id) => {
+        setSelectedProfileId(id);
+        localStorage.setItem('computron_profile_id', id);
+    }, []);
+
+    // Setup wizard state
+    const [setupComplete, setSetupComplete] = useState(null); // null = loading
+    const [settingsTab, setSettingsTab] = useState('profiles');
+
+    useEffect(() => {
+        fetch('/api/settings').then(r => r.json()).then(data => {
+            setSetupComplete(data.setup_complete || false);
+        }).catch(() => setSetupComplete(false));
+    }, []);
+
+    // Agent profiles for the settings page builder
+    const profilesHook = useAgentProfiles();
+    const [allModels, setAllModels] = useState([]);
+    useEffect(() => {
+        fetch('/api/models').then(r => r.json()).then(data => {
+            setAllModels(data.models || []);
+        }).catch(() => {});
+    }, []);
+
     const goalsState = useGoals(flyoutPanel === 'goals');
     const goalsActive = flyoutPanel === 'goals';
     const { addToast } = useToast();
@@ -185,8 +216,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     const handleSend = useCallback((message, fileData) => {
         setAttachment(null);
-        sendMessage(message, fileData, modelSettings);
-    }, [sendMessage, modelSettings]);
+        sendMessage(message, fileData, selectedProfileId);
+    }, [sendMessage, selectedProfileId]);
 
     const openDesktop = useCallback(async () => {
         if (userDesktopOpen) return;
@@ -266,6 +297,21 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const showGeneration = generationPreview && !closedPanels.has('generation');
     const hasAnyPanel = showBrowser || showDesktop || showTerminal || showGeneration;
 
+    // Show setup wizard if setup is not complete
+    if (setupComplete === false) {
+        return (
+            <SetupWizard onComplete={() => {
+                setSetupComplete(true);
+                profilesHook.refresh();
+            }} />
+        );
+    }
+
+    // Still loading setup status
+    if (setupComplete === null) {
+        return null;
+    }
+
     return (
         <div className={styles.appShell}>
             {/* Slim header */}
@@ -304,18 +350,14 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 />
 
                 {/* Flyout panel (settings, memory, goals, etc.) — not for 'agents' which controls the main view */}
-                {flyoutPanel && flyoutPanel !== 'agents' && flyoutPanel !== 'goals' && (
+                {flyoutPanel && flyoutPanel !== 'agents' && flyoutPanel !== 'goals' && flyoutPanel !== 'settings' && (
                     <FlyoutPanel
-                        title={flyoutPanel === 'settings' ? 'Model Settings'
-                            : flyoutPanel === 'memory' ? 'Memory'
+                        title={flyoutPanel === 'memory' ? 'Memory'
                             : flyoutPanel === 'conversations' ? 'Conversations'
                             : flyoutPanel === 'tools' ? 'Custom Tools'
                             : 'Panel'}
                         onClose={() => setFlyoutPanel(null)}
                     >
-                        {flyoutPanel === 'settings' && (
-                            <ModelSettingsPanel settings={modelSettings} disabled={isStreaming} />
-                        )}
                         {flyoutPanel === 'memory' && (
                             <MemoryPanel refreshSignal={memoryRefreshSignal} />
                         )}
@@ -330,6 +372,56 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
                 {/* Main content area */}
                 <div className={styles.mainContent}>
+                    {/* Settings page — full view when settings icon clicked */}
+                    {flyoutPanel === 'settings' && (
+                        <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab}>
+                            {settingsTab === 'profiles' && (
+                                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                                    <ProfileList
+                                        profiles={profilesHook.profiles}
+                                        selectedId={profilesHook.selectedProfileId}
+                                        onSelect={profilesHook.setSelectedProfileId}
+                                        onNew={async () => {
+                                            const result = await profilesHook.createProfile({
+                                                id: `custom_${Date.now()}`,
+                                                name: 'New Profile',
+                                                description: '',
+                                                icon: '🤖',
+                                                model: allModels[0]?.name || '',
+                                                system_prompt: '',
+                                                skills: [],
+                                            });
+                                            if (result) profilesHook.setSelectedProfileId(result.id);
+                                        }}
+                                    />
+                                    <ProfileBuilder
+                                        profile={profilesHook.profiles.find(p => p.id === profilesHook.selectedProfileId) || null}
+                                        onSave={async (updated) => {
+                                            await profilesHook.updateProfile(updated.id, updated);
+                                        }}
+                                        onDelete={async (id) => {
+                                            await profilesHook.deleteProfile(id);
+                                        }}
+                                        onDuplicate={async (id) => {
+                                            const result = await profilesHook.duplicateProfile(id);
+                                            if (result) profilesHook.setSelectedProfileId(result.id);
+                                        }}
+                                        models={allModels}
+                                        availableSkills={[
+                                            'coder', 'browser', 'goal_planner',
+                                            ...(features.desktop ? ['desktop'] : []),
+                                            ...(features.image_generation ? ['image_gen'] : []),
+                                            ...(features.music_generation ? ['music_gen'] : []),
+                                        ]}
+                                    />
+                                </div>
+                            )}
+                            {settingsTab === 'system' && (
+                                <SystemSettings onRunWizard={() => setSetupComplete(false)} />
+                            )}
+                        </SettingsPage>
+                    )}
+
                     {/* Goals split-screen view — shown when goals icon clicked */}
                     {flyoutPanel === 'goals' && (
                         <GoalsView
@@ -347,19 +439,19 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     )}
 
                     {/* Agent detail — full-screen activity view (from network drill-down) */}
-                    {!goalsActive && networkViewOpen && selectedAgent && (
+                    {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && selectedAgent && (
                         <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
                     )}
 
                     {/* Network graph — full-screen view, opened via indicator or sidebar */}
-                    {!goalsActive && networkViewOpen && !selectedAgent && (
+                    {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && !selectedAgent && (
                         <div className={styles.networkArea}>
                             <AgentNetwork onClose={handleCloseNetwork} agentCount={networkAgentCount} />
                         </div>
                     )}
 
                     {/* Preview panels — shown alongside chat (simple chat view) */}
-                    {!goalsActive && !networkViewOpen && hasAnyPanel && (
+                    {!goalsActive && flyoutPanel !== 'settings' && !networkViewOpen && hasAnyPanel && (
                         <div className={styles.previewColumn}>
                             {showGeneration && <GenerationPreview preview={generationPreview} onClose={() => setClosedPanels(_closePanel('generation'))} />}
                             {showBrowser && <BrowserPreview snapshot={browserSnapshot} onAttachScreenshot={handleAttachScreenshot} onClose={() => setClosedPanels(_closePanel('browser'))} />}
@@ -368,8 +460,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         </div>
                     )}
 
-                    {/* Chat panel — always mounted, hidden when network view or goals are active */}
-                    <div className={`${styles.chatColumn} ${networkViewOpen || goalsActive ? styles.hidden : ''}`}>
+                    {/* Chat panel — always mounted, hidden when network view, goals, or settings are active */}
+                    <div className={`${styles.chatColumn} ${networkViewOpen || goalsActive || flyoutPanel === 'settings' ? styles.hidden : ''}`}>
                         <ChatPanel
                             messages={messages}
                             onSend={handleSend}
@@ -381,6 +473,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             networkAgentCount={networkAgentCount}
                             networkRunningCount={networkRunningCount}
                             onOpenNetwork={handleOpenNetwork}
+                            selectedProfileId={selectedProfileId}
+                            onProfileChange={handleProfileChange}
+                            profileRefreshSignal={profilesHook.revision}
                             onPreview={(item) => {
                                 setFilePreview(item);
                                 setClosedPanels((prev) => {
