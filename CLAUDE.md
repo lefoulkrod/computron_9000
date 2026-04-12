@@ -19,27 +19,31 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 
 ## Commands
 
-### Running
-- `just run` — Start the app
-- `just dev` — Start with auto-reload
-- `just dev-full` — Start backend + UI dev server together
+### Image (rebuild only when container/Dockerfile changes)
+- `just build` — Build the container image `computron_9000:latest`
+- `just publish` — Tag and push to GHCR
+
+### Dev loop (the container owns the runtime; source is synced in at each step)
+- `just dev` — Start dev container (if needed), sync source, build UI, launch app on :8080
+- `just restart-app` — Sync latest Python source, bounce the app
+- `just rebuild-ui` — Sync latest UI source, rebuild dist/
+- `just stop` — Stop the dev container (state at `~/.computron_9000/` persists)
+- `just reset` — Stop and wipe `~/.computron_9000/`
+- `just shell` — Bash inside the dev container
+- `just logs` — Tail app + inference logs
 
 ### Testing
 - `just test` — Run all unit tests (`PYTHONPATH=. uv run pytest`)
 - `just test-unit` — Run unit tests only (`PYTHONPATH=. uv run pytest -m unit`)
 - `just test-file <path>` — Run tests for a specific file
-- `just e2e` — Run Playwright e2e tests (container must be running on :8080)
+- `just test-ui` — Run Vitest UI tests
+- `just e2e` — Run Playwright e2e in a throwaway container with fresh state (does NOT rebuild the image)
 
 ### Quality (only run when asked)
 - `just lint` — Lint with ruff (`uv run ruff check .`)
 - `just typecheck` — Type check with mypy (`uv run mypy .`)
 - `just format` — Auto-format with ruff (`uv run ruff check --fix . && uv run ruff format .`)
 - `just check` — Run all quality checks (lint + typecheck + format-check)
-
-### UI
-- `just ui-dev` — Start Vite dev server
-- `just ui-build` — Production build
-- `just ui-test` — Run UI tests (Vitest)
 
 ## Python Conventions
 
