@@ -1,0 +1,35 @@
+.splitHandle {
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Visual dot indicator */
+.splitHandle::after {
+    content: '';
+    width: 3px;
+    height: 32px;
+    border-radius: 2px;
+    background: var(--muted);
+    opacity: 0.5;
+    transition: all 0.2s ease;
+}
+
+/* Hover state - indicator turns accent color and grows */
+.splitHandle:hover::after {
+    background: var(--accent);
+    height: 48px;
+    opacity: 1;
+}
+
+/* Active dragging state */
+.splitHandle.dragging::after {
+    background: var(--accent);
+    height: 48px;
+    opacity: 1;
+}

@@ -1,7 +1,18 @@
 import PreviewShell from './PreviewShell.jsx';
 import styles from './GenerationPreview.module.css';
+import SparkleIcon from './icons/SparkleIcon.jsx';
+import DownloadIcon from './icons/DownloadIcon.jsx';
 
-export default function GenerationPreview({ preview, onClose }) {
+/**
+ * Generation preview component for image/video/audio generation.
+ *
+ * @param {Object} props
+ * @param {Object} props.preview - Generation preview data
+ * @param {function(): void} [props.onClose] - Callback when close button clicked
+ * @param {boolean} [props.hideShell] - If true, render without PreviewShell wrapper
+ * @returns {JSX.Element|null}
+ */
+export default function GenerationPreview({ preview, onClose, hideShell }) {
     if (!preview) return null;
 
     const { media_type, status, step, total_steps, message } = preview;
@@ -37,8 +48,6 @@ export default function GenerationPreview({ preview, onClose }) {
         link.click();
     };
 
-    const ICONS = { image: '\u{1F5BC}', video: '\u{1F3AC}', audio: '\u{1F3B5}' };
-    const icon = ICONS[media_type] || '\u{1F3AC}';
     const displayTitle = isComplete ? `${label} Generated` : `Generating ${label}`;
 
     const expandContent = isComplete && hasOutput && outputSrc ? (
@@ -51,76 +60,87 @@ export default function GenerationPreview({ preview, onClose }) {
         )
     ) : undefined;
 
+    const content = (
+        <div className={styles.content}>
+            {!isComplete && !isFailed && (
+                <div className={styles.progressSection}>
+                    <div className={styles.progressBar}>
+                        <div
+                            className={styles.progressFill}
+                            style={{ width: `${progressPct}%` }}
+                        />
+                    </div>
+                    <div className={styles.statusText}>
+                        {message || (status === 'loading' ? 'Loading model...' : `Step ${step || 0}/${total_steps || '?'}`)}
+                    </div>
+                </div>
+            )}
+
+            {isFailed && (
+                <div className={styles.errorMessage}>
+                    {message || 'Generation failed'}
+                </div>
+            )}
+
+            {!isComplete && previewImage && (
+                <div className={styles.previewContainer}>
+                    <img
+                        src={`data:image/jpeg;base64,${previewImage}`}
+                        alt="Generation preview"
+                        className={styles.previewImage}
+                    />
+                </div>
+            )}
+
+            {isComplete && hasOutput && isImage && (
+                <div className={styles.previewContainer}>
+                    <img src={outputSrc} alt="Generated image" className={styles.previewImage} />
+                    <button className={styles.downloadBtn} onClick={handleDownload}>
+                        <DownloadIcon size={14} />
+                        Download
+                    </button>
+                </div>
+            )}
+
+            {isComplete && hasOutput && isVideoContent && (
+                <div className={styles.previewContainer}>
+                    <video src={outputSrc} controls autoPlay loop className={styles.previewVideo} />
+                    <button className={styles.downloadBtn} onClick={handleDownload}>
+                        <DownloadIcon size={14} />
+                        Download
+                    </button>
+                </div>
+            )}
+
+            {isComplete && hasOutput && isAudioContent && (
+                <div className={styles.previewContainer}>
+                    <button className={styles.downloadBtn} onClick={handleDownload}>
+                        <DownloadIcon size={14} />
+                        Download
+                    </button>
+                </div>
+            )}
+
+            {isComplete && !hasOutput && (
+                <div className={styles.statusText}>
+                    {message || 'Generation complete'}
+                </div>
+            )}
+        </div>
+    );
+
+    if (hideShell) {
+        return content;
+    }
+
     return (
         <PreviewShell
-            icon={icon}
+            icon={<SparkleIcon size={16} />}
             title={displayTitle}
             onClose={onClose}
             expandContent={expandContent}
         >
-            <div className={styles.content}>
-                {!isComplete && !isFailed && (
-                    <div className={styles.progressSection}>
-                        <div className={styles.progressBar}>
-                            <div
-                                className={styles.progressFill}
-                                style={{ width: `${progressPct}%` }}
-                            />
-                        </div>
-                        <div className={styles.statusText}>
-                            {message || (status === 'loading' ? 'Loading model...' : `Step ${step || 0}/${total_steps || '?'}`)}
-                        </div>
-                    </div>
-                )}
-
-                {isFailed && (
-                    <div className={styles.errorMessage}>
-                        {message || 'Generation failed'}
-                    </div>
-                )}
-
-                {!isComplete && previewImage && (
-                    <div className={styles.previewContainer}>
-                        <img
-                            src={`data:image/jpeg;base64,${previewImage}`}
-                            alt="Generation preview"
-                            className={styles.previewImage}
-                        />
-                    </div>
-                )}
-
-                {isComplete && hasOutput && isImage && (
-                    <div className={styles.previewContainer}>
-                        <img src={outputSrc} alt="Generated image" className={styles.previewImage} />
-                        <button className={styles.downloadBtn} onClick={handleDownload}>
-                            Download
-                        </button>
-                    </div>
-                )}
-
-                {isComplete && hasOutput && isVideoContent && (
-                    <div className={styles.previewContainer}>
-                        <video src={outputSrc} controls autoPlay loop className={styles.previewVideo} />
-                        <button className={styles.downloadBtn} onClick={handleDownload}>
-                            Download
-                        </button>
-                    </div>
-                )}
-
-                {isComplete && hasOutput && isAudioContent && (
-                    <div className={styles.previewContainer}>
-                        <button className={styles.downloadBtn} onClick={handleDownload}>
-                            Download
-                        </button>
-                    </div>
-                )}
-
-                {isComplete && !hasOutput && (
-                    <div className={styles.statusText}>
-                        {message || 'Generation complete'}
-                    </div>
-                )}
-            </div>
+            {content}
         </PreviewShell>
     );
 }
