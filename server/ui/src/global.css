@@ -5,6 +5,7 @@
   --secondary: #f3f3f3;       /* surfaces/cards */
   --muted: #ababab;          /* borders, muted text, chrome */
   --text: #222;               /* foreground text */
+  --text-secondary: #666;     /* subdued text (tabs, labels, status) */
   --radius: 0.5rem;
   --header-height: 4.75rem;
   --shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
@@ -21,6 +22,7 @@
   --secondary: #1b1b1d;       /* darker card for contrast */
   --muted: #3a3a3c;
   --text: #f3f3f3;
+  --text-secondary: #999;     /* subdued text (tabs, labels, status) */
   --radius: 0.5rem;
   --header-height: 4.75rem;
   --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.2);

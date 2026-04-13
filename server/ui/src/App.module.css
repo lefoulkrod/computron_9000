@@ -114,25 +114,26 @@
     flex: 1;
     overflow: hidden;
 }
+
+/* Preview column — right side, fills remaining space */
 .previewColumn {
-    flex: 0 0 60%;
-    max-width: 60%;
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    overflow-y: auto;
-    padding: 0.5rem;
-    border-right: 1px solid var(--muted);
+    overflow: hidden;
+    min-width: 320px;
+    border-left: 1px solid var(--muted);
 }
 
-/* Right side: chat — always present, fills remaining space */
+/* Chat column — left side */
 .chatColumn {
-    flex: 1;
     min-width: 320px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* width is set inline via splitPosition state, defaults to 100% when no preview */
 }
+
 .hidden {
     display: none;
 }
@@ -162,4 +163,3 @@
   from { opacity: 1; }
   to   { opacity: 0; }
 }
-

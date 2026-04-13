@@ -1,0 +1,317 @@
+.fullscreenPreview {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--primary);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header bar */
+.header {
+    height: 40px;
+    background: var(--secondary);
+    border-bottom: 1px solid var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    flex-shrink: 0;
+}
+
+.headerLeft {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+.headerCenter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
+.headerRight {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 1;
+}
+
+/* Back button */
+.backBtn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--muted);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.backBtn:hover {
+    background: var(--muted);
+}
+
+/* Filename in center */
+.filename {
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Source/Preview toggle */
+.toggle {
+    display: flex;
+    align-items: center;
+    background: var(--primary);
+    border-radius: 4px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.toggleBtn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.toggleBtn:hover {
+    color: var(--text);
+}
+
+.toggleBtnActive {
+    background: var(--secondary);
+    color: var(--text);
+}
+
+/* Header buttons */
+.headerBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.headerBtn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+/* Content area */
+.content {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--primary);
+}
+
+/* Source code view - more generous padding in fullscreen */
+.sourceCode {
+    margin: 0;
+    padding: 20px 24px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--primary);
+}
+
+/* Markdown content - more generous padding in fullscreen */
+.markdownContent {
+    padding: 24px 32px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text);
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.markdownContent h1,
+.markdownContent h2,
+.markdownContent h3,
+.markdownContent h4 {
+    margin: 1.2em 0 0.6em;
+    color: var(--text);
+}
+
+.markdownContent p {
+    margin: 0.6em 0;
+}
+
+.markdownContent code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    padding: 2px 5px;
+}
+
+.markdownContent pre {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+}
+
+.markdownContent pre code {
+    background: none;
+    padding: 0;
+}
+
+.markdownContent a {
+    color: var(--accent);
+}
+
+.markdownContent ul,
+.markdownContent ol {
+    padding-left: 1.5em;
+}
+
+.markdownContent table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+}
+
+.markdownContent th,
+.markdownContent td {
+    border: 1px solid var(--muted);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdownContent th {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* HTML iframe */
+.htmlFrame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+}
+
+/* PDF iframe */
+.pdfFrame {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* Image container */
+.imageContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    min-height: 400px;
+}
+
+.image {
+    max-width: 100%;
+    max-height: calc(100vh - 80px);
+    object-fit: contain;
+}
+
+/* Status text */
+.statusText {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* Light theme overrides */
+:global(body:not(.dark-theme)) .fullscreenPreview {
+    background: #fff;
+}
+
+:global(body:not(.dark-theme)) .header {
+    background: #f5f5f5;
+    border-bottom-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .backBtn {
+    border-color: #ddd;
+    color: #222;
+}
+
+:global(body:not(.dark-theme)) .backBtn:hover {
+    background: #e5e5e5;
+}
+
+:global(body:not(.dark-theme)) .toggle {
+    background: #fff;
+}
+
+:global(body:not(.dark-theme)) .toggleBtnActive {
+    background: #f5f5f5;
+}
+
+:global(body:not(.dark-theme)) .headerBtn:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+:global(body:not(.dark-theme)) .content {
+    background: #fff;
+}
+
+:global(body:not(.dark-theme)) .sourceCode {
+    background: #fff;
+    color: #222;
+}
+
+:global(body:not(.dark-theme)) .markdownContent {
+    color: #222;
+}
+
+:global(body:not(.dark-theme)) .markdownContent h1,
+:global(body:not(.dark-theme)) .markdownContent h2,
+:global(body:not(.dark-theme)) .markdownContent h3,
+:global(body:not(.dark-theme)) .markdownContent h4 {
+    color: #111;
+}
+
+:global(body:not(.dark-theme)) .markdownContent code {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+:global(body:not(.dark-theme)) .markdownContent pre {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+:global(body:not(.dark-theme)) .markdownContent th,
+:global(body:not(.dark-theme)) .markdownContent td {
+    border-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .markdownContent th {
+    background: rgba(0, 0, 0, 0.04);
+}

@@ -1,0 +1,167 @@
+.previewPanel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--primary);
+}
+
+/* Tab bar */
+.tabBar {
+    height: 36px;
+    background: var(--secondary);
+    border-bottom: 1px solid var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.tabList {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    flex: 1;
+    min-width: 0;
+}
+
+.tabList::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+/* Individual tab */
+.tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 12px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.tabActive {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+}
+
+.tabIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.tabLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+}
+
+/* Close button on tab - only visible on hover/active */
+.tabClose {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 11px;
+    color: var(--muted);
+    border-radius: 3px;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tab:hover .tabClose,
+.tabActive .tabClose {
+    opacity: 1;
+}
+
+.tabClose:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+/* Tab actions (right side) */
+.tabActions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    flex-shrink: 0;
+}
+
+.actionBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.actionBtn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+/* Content area */
+.contentArea {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--primary);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Light theme overrides */
+:global(body:not(.dark-theme)) .tabBar {
+    background: #f5f5f5;
+    border-bottom-color: #ddd;
+}
+
+:global(body:not(.dark-theme)) .tab:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+:global(body:not(.dark-theme)) .tabActive {
+    color: #222;
+}
+
+:global(body:not(.dark-theme)) .tabClose {
+    color: #999;
+}
+
+:global(body:not(.dark-theme)) .tabClose:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #222;
+}
+
+:global(body:not(.dark-theme)) .actionBtn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #222;
+}
+
+:global(body:not(.dark-theme)) .contentArea {
+    background: #fff;
+}

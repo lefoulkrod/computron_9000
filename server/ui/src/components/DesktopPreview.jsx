@@ -2,14 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import PreviewShell from './PreviewShell.jsx';
 import styles from './DesktopPreview.module.css';
-
-const DesktopIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-        <line x1="8" y1="21" x2="16" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-    </svg>
-);
+import DesktopIcon from './icons/DesktopIcon.jsx';
 
 const MouseIcon = ({ size = 14 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -62,7 +55,7 @@ function DesktopLightbox({ interactive, onToggle, onClose }) {
                         onClick={onClose}
                         aria-label="Close"
                     >
-                        &#10005;
+                        ×
                     </button>
                 </div>
                 <iframe
@@ -78,7 +71,17 @@ function DesktopLightbox({ interactive, onToggle, onClose }) {
     );
 }
 
-export default function DesktopPreview({ visible, onClose, overlay }) {
+/**
+ * Desktop preview component showing VNC view.
+ *
+ * @param {Object} props
+ * @param {boolean} props.visible - Whether the desktop is visible
+ * @param {function(): void} [props.onClose] - Callback when close button clicked
+ * @param {boolean} [props.overlay] - If true, render as overlay lightbox
+ * @param {boolean} [props.hideShell] - If true, render without PreviewShell wrapper
+ * @returns {JSX.Element|null}
+ */
+export default function DesktopPreview({ visible, onClose, overlay, hideShell }) {
     const [interactive, setInteractive] = useState(false);
     const [expanded, setExpanded] = useState(false);
 
@@ -99,10 +102,48 @@ export default function DesktopPreview({ visible, onClose, overlay }) {
 
     const vncUrl = _buildVncUrl(interactive);
 
+    const content = (
+        <iframe
+            key={interactive ? 'active' : 'passive'}
+            className={styles.vncFrame}
+            src={vncUrl}
+            title="Desktop View"
+            allow="clipboard-read; clipboard-write"
+        />
+    );
+
+    if (hideShell) {
+        return (
+            <>
+                <div className={styles.inlineControls}>
+                    <ControlButton interactive={interactive} onToggle={toggle} />
+                    <button
+                        className={styles.expandBtn}
+                        onClick={() => setExpanded(true)}
+                        aria-label="Open fullscreen"
+                        title="Open fullscreen"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 6V3h3M13 10v3h-3M3 10v3h3M13 6V3h-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                {content}
+                {expanded && (
+                    <DesktopLightbox
+                        interactive={interactive}
+                        onToggle={toggle}
+                        onClose={() => setExpanded(false)}
+                    />
+                )}
+            </>
+        );
+    }
+
     return (
         <>
             <PreviewShell
-                icon={<DesktopIcon />}
+                icon={<DesktopIcon size={16} />}
                 title={interactive ? 'Desktop (controlling)' : 'Desktop'}
                 onClose={onClose}
                 headerExtra={
@@ -114,18 +155,14 @@ export default function DesktopPreview({ visible, onClose, overlay }) {
                             aria-label="Open fullscreen"
                             title="Open fullscreen"
                         >
-                            &#9974;
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 6V3h3M13 10v3h-3M3 10v3h3M13 6V3h-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
                         </button>
                     </>
                 }
             >
-                <iframe
-                    key={interactive ? 'active' : 'passive'}
-                    className={styles.vncFrame}
-                    src={vncUrl}
-                    title="Desktop View"
-                    allow="clipboard-read; clipboard-write"
-                />
+                {content}
             </PreviewShell>
 
             {expanded && (
