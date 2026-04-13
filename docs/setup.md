@@ -11,20 +11,27 @@ The gate is an `asyncio.Event` stored on the aiohttp app as `app["ready"]`.
 
 ### Startup flow
 
+During `app.on_startup` (before the server begins accepting requests):
+
 ```
 1. Migrations run (synchronous, no user interaction needed)
-2. Server starts accepting HTTP requests
-3. _init_ready_signal checks setup.is_ready()
+2. _init_ready_signal creates app["ready"] and checks setup.is_ready()
    - If True:  app["ready"] is set immediately
    - If False: app["ready"] stays unset
-4. Subsystems start background tasks that await app["ready"]
-5. User completes the setup wizard in the browser
-6. Settings handler calls setup.mark_ready(app)
-7. app["ready"] fires, subsystems start
+3. Subsystems spawn background tasks that await app["ready"]
+```
+
+Then the server begins accepting requests. Subsystems whose `ready` event
+was not set block inside their background task:
+
+```
+4. User completes the setup wizard in the browser
+5. Settings handler calls setup.mark_ready(app)
+6. app["ready"] fires, waiting subsystems proceed
 ```
 
 If the setup wizard was already completed in a previous session,
-step 3 sets the event immediately and subsystems start without waiting.
+step 2 sets the event immediately and subsystems start without waiting.
 
 ### Subsystem pattern
 

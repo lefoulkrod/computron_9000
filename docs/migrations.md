@@ -16,8 +16,8 @@ change only affects code (not stored state), you don't need a migration.
    before the HTTP server begins listening.
 2. The runner loads `.migrations.json` from the state directory to see which
    migrations have already been applied.
-3. It walks the registered migration list in order and runs any that haven't
-   been applied yet.
+3. It walks the `_MIGRATIONS` list in order and runs any whose name isn't in
+   the applied set.
 4. After each migration succeeds, its name is appended to `.migrations.json`
    so it won't run again.
 
@@ -70,7 +70,7 @@ finish.  Keep them fast.
 ```
 migrations/
   __init__.py                         # re-exports run_migrations
-  _runner.py                          # discovers and applies migrations
+  _runner.py                          # explicit _MIGRATIONS list + applier
   _001_task_agent_to_profile.py       # example: field rename
   _002_install_default_profiles.py    # example: seed default data
 ```
