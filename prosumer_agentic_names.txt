@@ -1,0 +1,46 @@
+TOP 10: Prosumer Agentic Workforce Names
+==========================================
+
+1. SHOAL
+   Concept: Decentralized coordination, biological emergence
+   Why: Fish moving as one fluid intelligence—you guide the current
+
+2. CHORUS
+   Concept: Many voices, one song
+   Why: Agents harmonizing under your direction
+
+3. TASKLY
+   Concept: Friendly, adjective-ready workflow
+   Why: "I built this taskly"—effortless, modern
+
+4. ENSEMBLE
+   Concept: Theater, music, cast of players
+   Why: Professional, collaborative, greater than sum
+
+5. DISPATCH
+   Concept: Sending orders, crisp command
+   Why: You command, they execute
+
+6. HELM
+   Concept: Steering, nautical mastery
+   Why: You're captain, agents are your crew
+
+7. LOOM
+   Concept: Weaving threads into fabric
+   Why: Interlaced agents, craft, textile elegance
+
+8. COLONY
+   Concept: Ant-like builders, emergent structure
+   Why: Self-organizing, scaled, alive
+
+9. CONDUIT
+   Concept: Channel, flow, connection
+   Why: You flow work through, clean pipeline
+
+10. SHIFT
+    Concept: Work periods, movement, change
+    Why: Your agents clock in, clear metaphor
+
+Seeds: SHOAL, CHORUS, TASKLY, ENSEMBLE
+Added: DISPATCH, HELM, LOOM, COLONY, CONDUIT, SHIFT
+
