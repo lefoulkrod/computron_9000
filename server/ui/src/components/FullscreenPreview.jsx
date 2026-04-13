@@ -7,14 +7,6 @@ import EyeIcon from './icons/EyeIcon.jsx';
 import FileContentRenderer from './FileContentRenderer.jsx';
 import useFileContent from '../hooks/useFileContent.js';
 
-/**
- * Full viewport takeover for file previews (NOT a lightbox overlay).
- *
- * @param {Object} props
- * @param {Object} props.item - File item with filename, content_type, content, path
- * @param {function(): void} props.onClose - Callback to close fullscreen view
- * @returns {JSX.Element}
- */
 export default function FullscreenPreview({ item, onClose }) {
     const {
         text,
@@ -24,13 +16,14 @@ export default function FullscreenPreview({ item, onClose }) {
         isMarkdown,
         showToggle,
         isImageFile,
+        isPdf,
+        pdfSrc,
         iframeSrc,
         handleDownload,
     } = useFileContent(item);
 
     const { filename } = item;
 
-    // Escape key closes the fullscreen view
     const handleKeyDown = useCallback((e) => {
         if (e.key === 'Escape') {
             onClose();
@@ -65,7 +58,7 @@ export default function FullscreenPreview({ item, onClose }) {
                 </div>
 
                 <div className={styles.headerRight}>
-                    {showToggle && (
+                    {showToggle && !isPdf && (
                         <div className={styles.toggle}>
                             <button
                                 className={`${styles.toggleBtn} ${viewMode === 'source' ? styles.toggleBtnActive : ''}`}
@@ -103,7 +96,9 @@ export default function FullscreenPreview({ item, onClose }) {
                     isMarkdown={isMarkdown}
                     isHtml={isHtml}
                     isImageFile={isImageFile}
+                    isPdf={isPdf}
                     iframeSrc={iframeSrc}
+                    pdfSrc={pdfSrc}
                     styles={styles}
                 />
             </div>

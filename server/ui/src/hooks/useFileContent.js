@@ -1,77 +1,50 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { hasPreviewToggle, isImageFile, isPdfFile } from '../utils/fileTypes.js';
 
-/**
- * Decodes base64 content to text.
- */
 function _decodeText(b64) {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     return new TextDecoder().decode(bytes);
 }
 
-/**
- * Checks if the file can be previewed (markdown or HTML).
- */
-function _canPreview(contentType, filename) {
-    if (contentType === 'text/markdown' || contentType === 'text/x-markdown') return true;
-    if (contentType === 'text/html') return true;
-    if (filename?.endsWith('.md') || filename?.endsWith('.mdx')) return true;
-    if (filename?.endsWith('.html') || filename?.endsWith('.htm')) return true;
-    return false;
-}
-
-/**
- * Checks if the file is an image.
- */
-export function isImage(contentType, filename) {
-    if (contentType?.startsWith('image/')) return true;
-    if (filename?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) return true;
-    return false;
-}
-
-/**
- * Manages file content fetching, decoding, view mode, iframe blob URLs,
- * and download for both inline and fullscreen file previews.
- *
- * @param {Object} item - File item with filename, content_type, content, path
- * @returns {Object} Computed file content state and handlers
- */
 export default function useFileContent(item) {
     const { filename, content_type, content, path } = item || {};
 
     const [fetchedText, setFetchedText] = useState(null);
     const [viewMode, setViewMode] = useState(() =>
-        _canPreview(content_type, filename) ? 'preview' : 'source'
+        hasPreviewToggle(content_type, filename) ? 'preview' : 'source'
     );
 
-    // Reset when item changes
     const itemKey = path || content;
     useEffect(() => {
         setFetchedText(null);
-        setViewMode(_canPreview(content_type, filename) ? 'preview' : 'source');
+        setViewMode(hasPreviewToggle(content_type, filename) ? 'preview' : 'source');
     }, [itemKey, content_type, filename]);
 
-    const text = useMemo(() => {
-        if (content) return _decodeText(content);
-        return fetchedText;
-    }, [content, fetchedText]);
-
-    // Fetch remote text content
-    useEffect(() => {
-        if (content || !path) return;
-        let cancelled = false;
-        fetch(path).then(r => r.text()).then(t => {
-            if (!cancelled) setFetchedText(t);
-        });
-        return () => { cancelled = true; };
-    }, [content, path]);
-
+    const isImage = isImageFile(content_type, filename);
+    const isPdf = isPdfFile(content_type, filename);
     const isHtml = content_type === 'text/html';
     const isMarkdown =
         content_type === 'text/markdown' ||
         content_type === 'text/x-markdown' ||
         (!isHtml && filename && (filename.endsWith('.md') || filename.endsWith('.mdx')));
     const showToggle = isHtml || isMarkdown;
-    const isImageFile = isImage(content_type, filename);
+
+    const text = useMemo(() => {
+        // Don't decode binary content (images, PDFs) as text
+        if (isImage || isPdf) return null;
+        if (content) return _decodeText(content);
+        return fetchedText;
+    }, [content, fetchedText, isImage, isPdf]);
+
+    // Fetch remote text content (not for images or PDFs)
+    useEffect(() => {
+        if (isImage || isPdf || content || !path) return;
+        let cancelled = false;
+        fetch(path).then(r => r.text()).then(t => {
+            if (!cancelled) setFetchedText(t);
+        });
+        return () => { cancelled = true; };
+    }, [content, path, isImage, isPdf]);
 
     // Blob URL for HTML iframe preview
     const iframeSrc = useMemo(() => {
@@ -83,11 +56,26 @@ export default function useFileContent(item) {
         return null;
     }, [isHtml, path, text]);
 
+    // Blob/path URL for PDF preview
+    const pdfSrc = useMemo(() => {
+        if (!isPdf) return null;
+        if (path) return path;
+        if (content) {
+            const byteChars = atob(content);
+            const bytes = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            return URL.createObjectURL(blob);
+        }
+        return null;
+    }, [isPdf, path, content]);
+
     useEffect(() => {
         return () => {
             if (iframeSrc && iframeSrc.startsWith('blob:')) URL.revokeObjectURL(iframeSrc);
+            if (pdfSrc && pdfSrc.startsWith('blob:')) URL.revokeObjectURL(pdfSrc);
         };
-    }, [iframeSrc]);
+    }, [iframeSrc, pdfSrc]);
 
     const handleDownload = useCallback(() => {
         const link = document.createElement('a');
@@ -96,11 +84,17 @@ export default function useFileContent(item) {
             link.href = URL.createObjectURL(blob);
         } else if (path) {
             link.href = path;
+        } else if (content) {
+            const byteChars = atob(content);
+            const bytes = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+            const blob = new Blob([bytes], { type: content_type || 'application/octet-stream' });
+            link.href = URL.createObjectURL(blob);
         }
         link.download = filename || 'file';
         link.click();
         setTimeout(() => URL.revokeObjectURL(link.href), 100);
-    }, [text, content_type, path, filename]);
+    }, [text, content, content_type, path, filename]);
 
     return {
         text,
@@ -109,7 +103,9 @@ export default function useFileContent(item) {
         isHtml,
         isMarkdown,
         showToggle,
-        isImageFile,
+        isImageFile: isImage,
+        isPdf,
+        pdfSrc,
         iframeSrc,
         handleDownload,
     };

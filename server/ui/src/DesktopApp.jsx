@@ -45,7 +45,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const agentState = useAgentState();
 
     // ── UI-only state (not duplicated in the reducer) ───────────────
-    const [filePreview, setFilePreview] = useState(null);
+    const [openFiles, setOpenFiles] = useState([]);
     const [attachment, setAttachment] = useState(null);
     const [flyoutPanel, setFlyoutPanel] = useState(null);
     const [toolsPanelKey, setToolsPanelKey] = useState(0);
@@ -191,9 +191,22 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         }
     }, [userDesktopOpen, addToast]);
 
+    const openFile = useCallback((item) => {
+        setOpenFiles(prev => {
+            const idx = prev.findIndex(f => f.filename === item.filename);
+            if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = item;
+                return next;
+            }
+            return [...prev, item];
+        });
+        setActivePreviewTab(`file:${item.filename}`);
+    }, []);
+
     const newConversation = useCallback(async () => {
         await chatNewConversation();
-        setFilePreview(null);
+        setOpenFiles([]);
         setActivePreviewTab(null);
         setFullscreenItem(null);
         setNetworkViewOpen(false);
@@ -256,12 +269,14 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const previewTabs = useMemo(() => {
         const tabs = [];
         if (browserSnapshot) tabs.push({ id: 'browser', label: 'Browser', icon: <BrowserIcon size={14} /> });
-        if (filePreview) tabs.push({ id: 'file', label: filePreview.filename || 'File', icon: <FileIcon size={14} /> });
+        for (const f of openFiles) {
+            tabs.push({ id: `file:${f.filename}`, label: f.filename || 'File', icon: <FileIcon size={14} /> });
+        }
         if (terminalLines.length > 0) tabs.push({ id: 'terminal', label: 'Terminal', icon: <TerminalIcon size={14} /> });
         if (desktopActive) tabs.push({ id: 'desktop', label: 'Desktop', icon: <DesktopIcon size={14} /> });
         if (generationPreview) tabs.push({ id: 'generation', label: 'Generation', icon: <SparkleIcon size={14} /> });
         return tabs;
-    }, [browserSnapshot, filePreview, terminalLines, desktopActive, generationPreview]);
+    }, [browserSnapshot, openFiles, terminalLines, desktopActive, generationPreview]);
 
     // Auto-switch active tab when tabs change
     useEffect(() => {
@@ -276,24 +291,25 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     }, [previewTabs, activePreviewTab]);
 
     const hasPreview = previewTabs.length > 0 && !goalsActive && (!networkViewOpen || !!selectedAgent);
-    const canFullscreen = activePreviewTab === 'file' && !!filePreview;
+    const activeFile = activePreviewTab?.startsWith('file:')
+        ? openFiles.find(f => f.filename === activePreviewTab.slice(5))
+        : null;
+    const canFullscreen = !!activeFile;
 
     // Close tab handler
     const handleCloseTab = useCallback((id) => {
         if (id === 'browser') {
             agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId: rootAgent?.id, snapshot: null });
-        }
-        if (id === 'file') setFilePreview(null);
-        if (id === 'terminal') {
+        } else if (id.startsWith('file:')) {
+            const filename = id.slice(5);
+            setOpenFiles(prev => prev.filter(f => f.filename !== filename));
+        } else if (id === 'terminal') {
             agentDispatch({ type: 'CLEAR_TERMINAL', agentId: rootAgent?.id });
-        }
-        if (id === 'desktop') {
+        } else if (id === 'desktop') {
             agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: null });
-        }
-        if (id === 'generation') {
+        } else if (id === 'generation') {
             agentDispatch({ type: 'UPDATE_GENERATION_PREVIEW', agentId: rootAgent?.id, preview: null });
         }
-        // Switch to next available tab
         const remaining = previewTabs.filter(t => t.id !== id);
         setActivePreviewTab(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
     }, [previewTabs, rootAgent, agentDispatch]);
@@ -387,10 +403,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     {!goalsActive && networkViewOpen && selectedAgent && (
                         <div className={styles.chatColumn}
                              style={{ width: hasPreview ? `${splitPosition}%` : '100%' }}>
-                            <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => {
-                                setFilePreview(item);
-                                setActivePreviewTab('file');
-                            }} />
+                            <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={openFile} />
                         </div>
                     )}
 
@@ -408,10 +421,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             networkAgentCount={networkAgentCount}
                             networkRunningCount={networkRunningCount}
                             onOpenNetwork={handleOpenNetwork}
-                            onPreview={(item) => {
-                                setFilePreview(item);
-                                setActivePreviewTab('file');
-                            }}
+                            onPreview={openFile}
                         />
                     </div>
 
@@ -425,7 +435,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     activeTab={activePreviewTab}
                                     onTabChange={setActivePreviewTab}
                                     onCloseTab={handleCloseTab}
-                                    onFullscreen={canFullscreen ? () => setFullscreenItem(filePreview) : null}
+                                    onFullscreen={canFullscreen ? () => setFullscreenItem(activeFile) : null}
                                 >
                                     {activePreviewTab === 'browser' && browserSnapshot && (
                                         <BrowserPreview
@@ -434,12 +444,16 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                             hideShell
                                         />
                                     )}
-                                    {activePreviewTab === 'file' && filePreview && (
-                                        <FilePreviewInline
-                                            item={filePreview}
-                                            onFullscreen={() => setFullscreenItem(filePreview)}
-                                        />
-                                    )}
+                                    {activePreviewTab?.startsWith('file:') && (() => {
+                                        const filename = activePreviewTab.slice(5);
+                                        const file = openFiles.find(f => f.filename === filename);
+                                        return file ? (
+                                            <FilePreviewInline
+                                                item={file}
+                                                onFullscreen={() => setFullscreenItem(file)}
+                                            />
+                                        ) : null;
+                                    })()}
                                     {activePreviewTab === 'terminal' && terminalLines.length > 0 && (
                                         <TerminalPanel lines={terminalLines} hideShell />
                                     )}

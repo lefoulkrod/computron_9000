@@ -5,15 +5,8 @@ import ExpandIcon from './icons/ExpandIcon.jsx';
 import SourceIcon from './icons/SourceIcon.jsx';
 import EyeIcon from './icons/EyeIcon.jsx';
 import FileContentRenderer from './FileContentRenderer.jsx';
-import useFileContent, { isImage } from '../hooks/useFileContent.js';
+import useFileContent from '../hooks/useFileContent.js';
 
-/**
- * Gets the appropriate file icon based on content type.
- *
- * @param {string} contentType - MIME type
- * @param {string} filename - File name
- * @returns {JSX.Element}
- */
 function getFileIcon(contentType, filename) {
     if (contentType?.startsWith('image/') || filename?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
         return (
@@ -30,15 +23,6 @@ function getFileIcon(contentType, filename) {
     return <FileIcon size={14} />;
 }
 
-/**
- * Inline file preview that renders inside PreviewPanel.
- * Replaces the old FilePreview lightbox.
- *
- * @param {Object} props
- * @param {Object} props.item - File item with filename, content_type, content, path
- * @param {function(): void} props.onFullscreen - Callback to open fullscreen view
- * @returns {JSX.Element}
- */
 export default function FilePreviewInline({ item, onFullscreen }) {
     const {
         text,
@@ -48,6 +32,8 @@ export default function FilePreviewInline({ item, onFullscreen }) {
         isMarkdown,
         showToggle,
         isImageFile,
+        isPdf,
+        pdfSrc,
         iframeSrc,
         handleDownload,
     } = useFileContent(item);
@@ -69,7 +55,7 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                 </div>
 
                 <div className={styles.toolbarCenter}>
-                    {showToggle && (
+                    {showToggle && !isPdf && (
                         <div className={styles.toggle}>
                             <button
                                 className={`${styles.toggleBtn} ${viewMode === 'source' ? styles.toggleBtnActive : ''}`}
@@ -87,11 +73,10 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                             </button>
                         </div>
                     )}
-                    {!showToggle && (
+                    {!showToggle && !isPdf && (
                         <div className={styles.toggle}>
                             <button className={`${styles.toggleBtn} ${styles.toggleBtnActive}`}>
-                                <SourceIcon size={12} />
-                                Source
+                                <SourceIcon size={12} /> Source
                             </button>
                         </div>
                     )}
@@ -126,7 +111,9 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                     isMarkdown={isMarkdown}
                     isHtml={isHtml}
                     isImageFile={isImageFile}
+                    isPdf={isPdf}
                     iframeSrc={iframeSrc}
+                    pdfSrc={pdfSrc}
                     styles={styles}
                 />
             </div>

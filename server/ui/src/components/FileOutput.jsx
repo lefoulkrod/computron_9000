@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import styles from './Message.module.css';
-import Lightbox from './Lightbox.jsx';
+import { canPreviewFile } from '../utils/fileTypes.js';
 
 function fileIcon(contentType) {
     if (!contentType) return '📄';
@@ -17,18 +16,10 @@ function fileIcon(contentType) {
 
 export default function FileOutput({ item, onPreview }) {
     const { filename, content_type, content, path } = item;
-    const isImage = content_type && content_type.startsWith('image/');
-    const isAudio = content_type && content_type.startsWith('audio/');
-    const isVideo = content_type && content_type.startsWith('video/');
-    const isPreviewable =
-        content_type === 'text/html' ||
-        content_type === 'text/markdown' ||
-        content_type === 'text/x-markdown' ||
-        (content_type === 'text/plain' && filename && (filename.endsWith('.md') || filename.endsWith('.mdx')));
-    const [previewOpen, setPreviewOpen] = useState(false);
-    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const previewable = canPreviewFile(content_type, filename);
 
-    const handleDownload = () => {
+    const handleDownload = (e) => {
+        e.stopPropagation();
         if (path) {
             const a = document.createElement('a');
             a.href = path;
@@ -45,13 +36,19 @@ export default function FileOutput({ item, onPreview }) {
         a.href = url;
         a.download = filename;
         a.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
     };
 
-    const src = path || `data:${content_type};base64,${content}`;
+    const handleClick = () => {
+        if (previewable && onPreview) {
+            onPreview(item);
+        } else {
+            handleDownload(new Event('click'));
+        }
+    };
 
     return (
-        <div className={styles.fileOutput}>
+        <div className={styles.fileOutput} onClick={handleClick} style={{ cursor: 'pointer' }}>
             <div className={styles.fileOutputHeader}>
                 <span className={styles.fileOutputIcon}>{fileIcon(content_type)}</span>
                 <div className={styles.fileOutputInfo}>
@@ -59,48 +56,19 @@ export default function FileOutput({ item, onPreview }) {
                     <span className={styles.fileOutputMime}>{content_type}</span>
                 </div>
                 <div className={styles.fileOutputBtns}>
-                    {isImage && (
-                        <button
-                            className={`${styles.fileOutputBtn} ${previewOpen ? styles.fileOutputBtnActive : ''}`}
-                            onClick={() => setPreviewOpen(o => !o)}
-                        >
-                            {previewOpen ? 'Hide' : 'Preview'}
-                        </button>
-                    )}
-                    {isPreviewable && onPreview && (
+                    {previewable && onPreview && (
                         <button
                             className={styles.fileOutputBtn}
-                            onClick={() => onPreview(item)}
+                            onClick={(e) => { e.stopPropagation(); onPreview(item); }}
                         >
                             Preview
                         </button>
                     )}
-                    <button className={styles.fileOutputBtn} onClick={handleDownload}>Download</button>
+                    <button className={styles.fileOutputBtn} onClick={handleDownload}>
+                        Download
+                    </button>
                 </div>
             </div>
-            {isAudio && (
-                <>
-                    <div className={styles.fileOutputDivider} />
-                    <audio className={styles.audioPlayer} controls src={src} />
-                </>
-            )}
-            {isVideo && (
-                <>
-                    <div className={styles.fileOutputDivider} />
-                    <video className={styles.videoPlayer} controls src={src} />
-                </>
-            )}
-            {previewOpen && isImage && (
-                <div className={styles.fileOutputImages}>
-                    <img
-                        src={src}
-                        alt={filename}
-                        className={styles.fileOutputThumb}
-                        onClick={() => setLightboxOpen(true)}
-                    />
-                </div>
-            )}
-            {lightboxOpen && <Lightbox src={src} alt={filename} onClose={() => setLightboxOpen(false)} />}
         </div>
     );
 }
