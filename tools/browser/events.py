@@ -50,10 +50,40 @@ async def _emit_screenshot(page: Page) -> None:
         publish_event,
     )
 
-    screenshot_bytes = await page.screenshot(type="jpeg", quality=55)
+    url = getattr(page, "url", "")
+    closed = page.is_closed() if hasattr(page, "is_closed") else "unknown"
+
+    # Context state for diagnostics.
+    try:
+        n_pages = len(page.context.pages)
+    except Exception:  # noqa: BLE001
+        n_pages = -1
+
+    t0 = time.monotonic()
+    try:
+        screenshot_bytes = await page.screenshot(
+            type="jpeg", quality=55, timeout=5000,
+        )
+    except Exception as exc:  # noqa: BLE001
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        logger.warning(
+            "Screenshot capture failed after %.0fms "
+            "(page=%s, closed=%s, pages_in_ctx=%d): %s",
+            elapsed_ms, url, closed, n_pages, exc,
+        )
+        return
+
+    elapsed_ms = (time.monotonic() - t0) * 1000
+    if elapsed_ms > 2000:
+        logger.warning(
+            "Screenshot capture slow: %.0fms (page=%s, pages_in_ctx=%d)",
+            elapsed_ms, url, n_pages,
+        )
+    else:
+        logger.debug("Screenshot captured in %.0fms (page=%s)", elapsed_ms, url)
+
     screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
 
-    url = getattr(page, "url", "")
     try:
         title = await page.title()
     except Exception:  # noqa: BLE001
@@ -160,6 +190,10 @@ class _ScreenshotEmitter:
                 # tell afterwards whether new requests came in.
                 gen_before = self._generation
 
+                logger.debug(
+                    "Progressive screenshot gen=%d (page=%s)",
+                    gen_before, getattr(page, "url", "?"),
+                )
                 await _emit_screenshot(page)
                 self._last_emit = time.monotonic()
 
@@ -234,17 +268,21 @@ def emit_screenshot_after[F: Callable[..., Any]](func: F) -> F:
 
         # All decorated browser tools want a post-tool screenshot.
         # With string returns, just always emit.
-        page: Any = None
+        page = None
         try:
             browser = await get_browser()
             page = await browser.current_page()
+            logger.debug(
+                "Post-tool screenshot for %s (page=%s)",
+                func.__name__, getattr(page, "url", "?"),
+            )
             await _emit_screenshot(page)
         except Exception:  # noqa: BLE001 - never fail the tool call
             page_url = getattr(page, "url", "unknown") if page else "no page"
             closed = page.is_closed() if page and hasattr(page, "is_closed") else "?"
             logger.warning(
-                "Post-tool screenshot failed (page=%s, closed=%s)",
-                page_url, closed, exc_info=True,
+                "Post-tool screenshot failed for %s (page=%s, closed=%s)",
+                func.__name__, page_url, closed, exc_info=True,
             )
 
         return result
