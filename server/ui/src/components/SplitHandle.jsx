@@ -19,6 +19,9 @@ export default function SplitHandle({ onDrag }) {
 
         let dragging = false;
 
+        // Transparent overlay prevents iframes from stealing mouse events during drag
+        let overlay = null;
+
         const onMouseMove = (e) => {
             if (!dragging) return;
             const parent = el.parentElement;
@@ -32,6 +35,7 @@ export default function SplitHandle({ onDrag }) {
             dragging = false;
             document.body.style.userSelect = '';
             el.classList.remove(styles.dragging);
+            if (overlay) { overlay.remove(); overlay = null; }
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
         };
@@ -41,6 +45,9 @@ export default function SplitHandle({ onDrag }) {
             dragging = true;
             document.body.style.userSelect = 'none';
             el.classList.add(styles.dragging);
+            overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
+            document.body.appendChild(overlay);
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('mouseup', onMouseUp);
         };
@@ -51,6 +58,7 @@ export default function SplitHandle({ onDrag }) {
             el.removeEventListener('mousedown', onMouseDown);
             if (dragging) {
                 document.body.style.userSelect = '';
+                if (overlay) { overlay.remove(); overlay = null; }
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
             }
