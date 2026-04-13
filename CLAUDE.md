@@ -53,14 +53,22 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Use custom exceptions where appropriate
 - Use Pydantic for data validation; ensure JSON-serializable API responses
 - Private and internal fields, methods, functions, constants, types and modules should all be named with a single leading underscore
-- Always include `__init__.py` for public re-exports, avoid exporting private members, do not export internal functions/classes
 - Include new deps in pyproject.toml (managed with `uv`)
 - No backward compatible refactors unless prompted
 - Write python code compatible with Python 3.12.10
 - Never put implementation details in docstrings
 - Add comments to explain non-obvious code
-- Import from the submodule, not the package — `from tools.virtual_computer.describe_image import describe_image`, not `from tools.virtual_computer import describe_image`. Package `__init__.py` re-exports are for external consumers; internal code should import from the defining module to avoid shadowing issues with lazy imports.
 - You may ignore Ruff(I001)
+
+## Module Structure
+
+1. **`__init__.py` is a facade — pure re-exports, no code lives there.** If you're writing a function body or defining a singleton in `__init__.py`, move it to a submodule and re-export from `__init__.py`. Avoid exporting private members.
+2. **Imports go at the top of the file, eagerly.** Do not reach for lazy imports by default. Eager-import cost is almost always negligible; the cost of cycles, shadowed attributes, and hard-to-trace bugs is not.
+3. **Do not use `__getattr__` at package level.** It bypasses normal imports, collapses type info to `Any`, and has a shadowing foot-gun: once any submodule is imported directly, the submodule wins over `__getattr__` and callers silently get a module instead of the function they asked for.
+4. **Internal code imports from the defining submodule, not from the package root.** `from tasks import get_store` is for *external consumers*. Inside the `tasks/` package, import from `tasks._singleton`. This is what prevents cycles — the package root re-exports outward, internal modules depend inward.
+5. **Types live in modules with no internal dependencies.** A file like `agents/types.py` that only imports stdlib + pydantic can be imported from anywhere without cycle risk. Mixing types with behavior (that imports other things) creates transitive dependencies that cycle easily.
+6. **Circular imports are a design bug, not a fact of life. Fix the graph, don't patch around it.** The fix is structural: move the shared thing down a layer (a dedicated leaf module that both sides depend on). Function-local imports and `# noqa: E402` ordering tricks are last-resort escape hatches, not design choices.
+7. **Exception to rule 2:** genuinely heavy / optional third-party deps (playwright, torch, transformers) belong in function-local imports inside the feature that needs them — so the rest of the app starts up fast. "Heavy" means hundreds of milliseconds or gigabytes of RAM, not 20ms convenience.
 
 ## Testing Conventions
 

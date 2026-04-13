@@ -24,6 +24,7 @@ class RunBashCmdError(Exception):
     """Error raised when a bash command execution fails."""
 
     def __init__(self, message: str) -> None:
+        """Initialize with a human-readable failure message."""
         super().__init__(message)
 
 
@@ -88,7 +89,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         config = load_config()
         workdir = config.virtual_computer.home_dir
 
-        strict_cmd = "set -euo pipefail; %s" % cmd
+        strict_cmd = f"set -euo pipefail; {cmd}"
 
         # Publish a "running" event so the UI shows the command immediately.
         cmd_id = uuid.uuid4().hex
@@ -149,7 +150,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                 )
             except TimeoutError:
                 logger.error("Timeout after %s seconds running bash command: %s", timeout, cmd)
-                msg = "Timeout after %s seconds running bash command: %s" % (timeout, cmd)
+                msg = f"Timeout after {timeout} seconds running bash command: {cmd}"
                 raise RunBashCmdError(msg) from None
         finally:
             # Always clean up the process tree if it's still running, whether
@@ -187,5 +188,5 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         raise
     except Exception as exc:
         logger.exception("Failed to execute bash command: %s", cmd)
-        msg = "Execution failed: %s" % exc
+        msg = f"Execution failed: {exc}"
         raise RunBashCmdError(msg) from exc

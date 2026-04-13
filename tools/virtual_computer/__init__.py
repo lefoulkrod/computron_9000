@@ -53,7 +53,6 @@ from .run_bash_cmd import BashCmdResult, run_bash_cmd
 from .search_ops import grep
 from .stat_ops import exists, is_dir, is_file
 
-
 __all__ = [
     "ApplyPatchResult",
     "BashCmdResult",
@@ -81,14 +80,13 @@ __all__ = [
     "exists",
     "grep",
     "head",
-    "install_packages",
     "insert_text",
+    "install_packages",
     "is_dir",
     "is_file",
     "list_dir",
     "make_dirs",
     "move_path",
-    "send_file",
     "path_exists",
     "play_audio",
     "prepend_to_file",
@@ -96,6 +94,7 @@ __all__ = [
     "remove_path",
     "replace_in_file",
     "run_bash_cmd",
+    "send_file",
     "tail",
     "write_file",
     "write_files",

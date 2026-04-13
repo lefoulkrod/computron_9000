@@ -69,7 +69,6 @@ def _ensure_builtins() -> None:
         return
 
     from config import load_config
-
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
     from skills.goal_planner import _SKILL as goal_planner_skill

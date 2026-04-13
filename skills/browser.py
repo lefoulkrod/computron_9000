@@ -5,6 +5,7 @@ from textwrap import dedent
 from sdk.skills import Skill
 from tools.browser import (
     browse_page,
+    browser_visual_action,
     click,
     drag,
     execute_javascript,
@@ -12,7 +13,6 @@ from tools.browser import (
     go_back,
     inspect_page,
     open_url,
-    browser_visual_action,
     press_and_hold,
     press_keys,
     read_page,

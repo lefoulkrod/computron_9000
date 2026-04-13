@@ -3,7 +3,7 @@
 from typing import Any
 
 from agents._agent_profiles import get_agent_profile, list_agent_profiles
-from tasks import get_store
+from tasks._singleton import get_store
 
 
 def _default_agent() -> str:

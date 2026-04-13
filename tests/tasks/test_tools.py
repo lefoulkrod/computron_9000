@@ -5,6 +5,7 @@ import re
 import pytest
 
 import tasks
+from tasks import _singleton
 from tasks._tools import create_goal, list_goals, list_tasks
 
 _TASK = {"key": "t1", "description": "task 1", "instruction": "do the thing"}
@@ -15,9 +16,9 @@ def _init_store(tmp_path):
     """Initialize the global store for each test."""
     from tasks._file_store import FileTaskStore
 
-    tasks._store = FileTaskStore(tmp_path / "goals")
+    _singleton._store = FileTaskStore(tmp_path / "goals")
     yield
-    tasks._store = None
+    _singleton._store = None
 
 
 @pytest.fixture(autouse=True)

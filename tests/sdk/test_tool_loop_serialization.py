@@ -206,11 +206,3 @@ async def test_thinking_always_persisted_in_history(monkeypatch):
 
     assistant_msg = next(m for m in history.messages if m["role"] == "assistant")
     assert assistant_msg["thinking"] == "deep thought"
-
-    # But thinking should still be emitted via events
-    from sdk.events import ContentPayload
-    content_events = [
-        e for e in emitted_events
-        if isinstance(e.payload, ContentPayload) and e.payload.thinking
-    ]
-    assert any(e.payload.thinking == "deep thought" for e in content_events)

@@ -234,11 +234,12 @@ def emit_screenshot_after[F: Callable[..., Any]](func: F) -> F:
 
         # All decorated browser tools want a post-tool screenshot.
         # With string returns, just always emit.
+        page: Any = None
         try:
             browser = await get_browser()
             page = await browser.current_page()
             await _emit_screenshot(page)
-        except Exception as exc:  # noqa: BLE001 - never fail the tool call
+        except Exception:  # noqa: BLE001 - never fail the tool call
             page_url = getattr(page, "url", "unknown") if page else "no page"
             closed = page.is_closed() if page and hasattr(page, "is_closed") else "?"
             logger.warning(
