@@ -28,16 +28,10 @@ import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
 // useModelSettings removed — replaced by profile-based configuration
 import useStreamingChat from './hooks/useStreamingChat.js';
+import usePreviewState from './hooks/usePreviewState.jsx';
 import { AgentStateProvider, useAgentState, useAgentDispatch } from './hooks/useAgentState.jsx';
 import { useToast } from './components/ToastProvider.jsx';
 import styles from './App.module.css';
-
-// Icons
-import BrowserIcon from './components/icons/BrowserIcon.jsx';
-import FileIcon from './components/icons/FileIcon.jsx';
-import TerminalIcon from './components/icons/TerminalIcon.jsx';
-import DesktopIcon from './components/icons/DesktopIcon.jsx';
-import SparkleIcon from './components/icons/SparkleIcon.jsx';
 
 /**
  * Main app shell. Preview data (browser screenshots, terminal output, etc.)
@@ -50,7 +44,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const agentState = useAgentState();
 
     // ── UI-only state (not duplicated in the reducer) ───────────────
-    const [openFiles, setOpenFiles] = useState([]);
     const [attachment, setAttachment] = useState(null);
     const [flyoutPanel, setFlyoutPanel] = useState(null);
     const [toolsPanelKey, setToolsPanelKey] = useState(0);
@@ -61,11 +54,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [userDesktopOpen, setUserDesktopOpen] = useState(false);
     const [networkViewOpen, setNetworkViewOpen] = useState(false);
     const [nudgeToast, setNudgeToast] = useState(null);
-
-    // New tabbed preview panel state
-    const [activePreviewTab, setActivePreviewTab] = useState(null);
-    const [splitPosition, setSplitPosition] = useState(40);
-    const [fullscreenItem, setFullscreenItem] = useState(null);
 
     const features = useFeatures();
     const [selectedProfileId, setSelectedProfileId] = useState(() => {
@@ -99,12 +87,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const goalsActive = flyoutPanel === 'goals';
     const { addToast } = useToast();
 
-    // ── Read preview data from root agent in the reducer ────────────
-    const rootAgent = agentState.rootId ? agentState.agents[agentState.rootId] : null;
-    const browserSnapshot = rootAgent?.browserSnapshot || null;
-    const terminalLines = rootAgent?.terminalLines || [];
-    const desktopActive = rootAgent?.desktopActive || false;
-    const generationPreview = rootAgent?.generationPreview || null;
+    const preview = usePreviewState(agentState, agentDispatch);
 
     // ── Stream callbacks ──────────────────────────────────────────────
     // Called by useStreamingChat when events arrive from the backend.
@@ -222,28 +205,13 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         }
     }, [userDesktopOpen, addToast]);
 
-    const openFile = useCallback((item) => {
-        setOpenFiles(prev => {
-            const idx = prev.findIndex(f => f.filename === item.filename);
-            if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = item;
-                return next;
-            }
-            return [...prev, item];
-        });
-        setActivePreviewTab(`file:${item.filename}`);
-    }, []);
-
     const newConversation = useCallback(async () => {
         await chatNewConversation();
-        setOpenFiles([]);
-        setActivePreviewTab(null);
-        setFullscreenItem(null);
+        preview.reset();
         setNetworkViewOpen(false);
         setToolsPanelKey((k) => k + 1);
         agentDispatch({ type: 'RESET' });
-    }, [chatNewConversation, agentDispatch]);
+    }, [chatNewConversation, preview.reset, agentDispatch]);
 
     // ── Which layout to show ───────────────────────────────────────────
     // Two top-level views:
@@ -257,7 +225,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     //
     // Flow: simple chat ⇄ network view (via indicator/sidebar)
     //       network → agent detail (click card) → back to network ("← Agents")
-    const selectedAgent = agentState.selectedAgentId;
 
     // Compute network-visible agent stats for the indicator badge.
     // Counts all agents in trees that have sub-agents (same as the
@@ -292,58 +259,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         agentDispatch({ type: 'SELECT_AGENT', agentId: null });
     }, [agentDispatch]);
 
-    // ── Should the shared preview panel be visible? ────────────────────
-    // Available alongside chat OR agent-activity, but not in goals or
-    // full-screen network graph.
-
-    // ── Computed preview tabs ─────────────────────────────────────────
-    const previewTabs = useMemo(() => {
-        const tabs = [];
-        if (browserSnapshot) tabs.push({ id: 'browser', label: 'Browser', icon: <BrowserIcon size={14} /> });
-        for (const f of openFiles) {
-            tabs.push({ id: `file:${f.filename}`, label: f.filename || 'File', icon: <FileIcon size={14} /> });
-        }
-        if (terminalLines.length > 0) tabs.push({ id: 'terminal', label: 'Terminal', icon: <TerminalIcon size={14} /> });
-        if (desktopActive) tabs.push({ id: 'desktop', label: 'Desktop', icon: <DesktopIcon size={14} /> });
-        if (generationPreview) tabs.push({ id: 'generation', label: 'Generation', icon: <SparkleIcon size={14} /> });
-        return tabs;
-    }, [browserSnapshot, openFiles, terminalLines, desktopActive, generationPreview]);
-
-    // Auto-switch active tab when tabs change
-    useEffect(() => {
-        if (previewTabs.length > 0) {
-            const tabIds = previewTabs.map(t => t.id);
-            if (!tabIds.includes(activePreviewTab)) {
-                setActivePreviewTab(previewTabs[previewTabs.length - 1].id);
-            }
-        } else {
-            setActivePreviewTab(null);
-        }
-    }, [previewTabs, activePreviewTab]);
-
-    const hasPreview = previewTabs.length > 0 && !goalsActive && flyoutPanel !== 'settings' && (!networkViewOpen || !!selectedAgent);
-    const activeFile = activePreviewTab?.startsWith('file:')
-        ? openFiles.find(f => f.filename === activePreviewTab.slice(5))
-        : null;
-    const canFullscreen = !!activeFile;
-
-    // Close tab handler
-    const handleCloseTab = useCallback((id) => {
-        if (id === 'browser') {
-            agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId: rootAgent?.id, snapshot: null });
-        } else if (id.startsWith('file:')) {
-            const filename = id.slice(5);
-            setOpenFiles(prev => prev.filter(f => f.filename !== filename));
-        } else if (id === 'terminal') {
-            agentDispatch({ type: 'CLEAR_TERMINAL', agentId: rootAgent?.id });
-        } else if (id === 'desktop') {
-            agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: null });
-        } else if (id === 'generation') {
-            agentDispatch({ type: 'UPDATE_GENERATION_PREVIEW', agentId: rootAgent?.id, preview: null });
-        }
-        const remaining = previewTabs.filter(t => t.id !== id);
-        setActivePreviewTab(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
-    }, [previewTabs, rootAgent, agentDispatch]);
+    const hasPreview = preview.tabs.length > 0 && !goalsActive && flyoutPanel !== 'settings' && (!networkViewOpen || !!agentState.selectedAgentId);
 
     // Show setup wizard if setup is not complete
     if (setupComplete === false) {
@@ -486,30 +402,30 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             fetchDetail={goalsState.fetchGoalDetail}
                         />
                     )}
-                    {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && !selectedAgent && (
+                    {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && !agentState.selectedAgentId && (
                         <div className={styles.networkArea}>
                             <AgentNetwork onClose={handleCloseNetwork} agentCount={networkAgentCount} />
                         </div>
                     )}
 
                     {/* Agent activity — left column when drilling into an agent */}
-                    {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && selectedAgent && (
+                    {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && agentState.selectedAgentId && (
                         <div className={styles.chatColumn}
-                             style={{ width: hasPreview ? `${splitPosition}%` : '100%' }}>
-                            <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={openFile} />
+                             style={{ width: hasPreview ? `${preview.splitPosition}%` : '100%' }}>
+                            <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={preview.openFile} />
                         </div>
                     )}
 
                     {/* Chat — always mounted, hidden when goals/network/settings active */}
                     <div className={`${styles.chatColumn} ${networkViewOpen || goalsActive || flyoutPanel === 'settings' ? styles.hidden : ''}`}
-                         style={{ width: hasPreview && !networkViewOpen && !goalsActive && flyoutPanel !== 'settings' ? `${splitPosition}%` : '100%' }}>
+                         style={{ width: hasPreview && !networkViewOpen && !goalsActive && flyoutPanel !== 'settings' ? `${preview.splitPosition}%` : '100%' }}>
                         <ChatPanel
                             messages={messages}
                             onSend={handleSend}
                             onStop={stopGeneration}
                             isStreaming={isStreaming}
                             attachment={attachment}
-                            rootAgent={rootAgent}
+                            rootAgent={preview.rootAgent}
                             networkActivated={agentState.networkActivated}
                             networkAgentCount={networkAgentCount}
                             networkRunningCount={networkRunningCount}
@@ -517,47 +433,46 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             selectedProfileId={selectedProfileId}
                             onProfileChange={handleProfileChange}
                             profileRefreshSignal={profilesHook.revision}
-                            onPreview={openFile}
+                            onPreview={preview.openFile}
                         />
                     </div>
 
                     {/* Shared split handle + preview panel — visible alongside chat OR agent activity */}
                     {hasPreview && (
                         <>
-                            <SplitHandle onDrag={setSplitPosition} />
+                            <SplitHandle onDrag={preview.setSplitPosition} />
                             <div className={styles.previewColumn}>
                                 <PreviewPanel
-                                    tabs={previewTabs}
-                                    activeTab={activePreviewTab}
-                                    onTabChange={setActivePreviewTab}
-                                    onCloseTab={handleCloseTab}
-                                    onFullscreen={canFullscreen ? () => setFullscreenItem(activeFile) : null}
+                                    tabs={preview.tabs}
+                                    activeTab={preview.activeTab}
+                                    onTabChange={preview.setActiveTab}
+                                    onCloseTab={preview.closeTab}
                                 >
-                                    {activePreviewTab === 'browser' && browserSnapshot && (
+                                    {preview.activeTab === 'browser' && preview.browserSnapshot && (
                                         <BrowserPreview
-                                            snapshot={browserSnapshot}
+                                            snapshot={preview.browserSnapshot}
                                             onAttachScreenshot={handleAttachScreenshot}
                                             hideShell
                                         />
                                     )}
-                                    {activePreviewTab?.startsWith('file:') && (() => {
-                                        const filename = activePreviewTab.slice(5);
-                                        const file = openFiles.find(f => f.filename === filename);
+                                    {preview.activeTab?.startsWith('file:') && (() => {
+                                        const filename = preview.activeTab.slice(5);
+                                        const file = preview.openFiles.find(f => f.filename === filename);
                                         return file ? (
                                             <FilePreviewInline
                                                 item={file}
-                                                onFullscreen={() => setFullscreenItem(file)}
+                                                onFullscreen={() => preview.setFullscreenItem(file)}
                                             />
                                         ) : null;
                                     })()}
-                                    {activePreviewTab === 'terminal' && terminalLines.length > 0 && (
-                                        <TerminalPanel lines={terminalLines} hideShell />
+                                    {preview.activeTab === 'terminal' && preview.terminalLines.length > 0 && (
+                                        <TerminalPanel lines={preview.terminalLines} hideShell />
                                     )}
-                                    {activePreviewTab === 'desktop' && desktopActive && (
+                                    {preview.activeTab === 'desktop' && preview.desktopActive && (
                                         <DesktopPreview visible hideShell />
                                     )}
-                                    {activePreviewTab === 'generation' && generationPreview && (
-                                        <GenerationPreview preview={generationPreview} hideShell />
+                                    {preview.activeTab === 'generation' && preview.generationPreview && (
+                                        <GenerationPreview preview={preview.generationPreview} hideShell />
                                     )}
                                 </PreviewPanel>
                             </div>
@@ -573,10 +488,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
             )}
 
             {/* Fullscreen file preview — fills entire viewport */}
-            {fullscreenItem && (
+            {preview.fullscreenItem && (
                 <FullscreenPreview
-                    item={fullscreenItem}
-                    onClose={() => setFullscreenItem(null)}
+                    item={preview.fullscreenItem}
+                    onClose={() => preview.setFullscreenItem(null)}
                 />
             )}
 

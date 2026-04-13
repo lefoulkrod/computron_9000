@@ -280,4 +280,54 @@ describe('useAgentState reducer', () => {
             expect(agent.activeTool).toBeNull();
         });
     });
+
+    // ── Open/close file tabs ───────────────────────────────────────
+
+    describe('OPEN_FILE', () => {
+        it('adds a file to the agent openFiles', () => {
+            const { getState, dispatch } = renderWithProvider();
+
+            dispatch(agentStarted('root-1'));
+            dispatch({ type: 'OPEN_FILE', agentId: 'root-1', item: { filename: 'readme.md', content: '# Hello' } });
+
+            expect(getState().agents['root-1'].openFiles).toHaveLength(1);
+            expect(getState().agents['root-1'].openFiles[0].filename).toBe('readme.md');
+        });
+
+        it('replaces file with same filename', () => {
+            const { getState, dispatch } = renderWithProvider();
+
+            dispatch(agentStarted('root-1'));
+            dispatch({ type: 'OPEN_FILE', agentId: 'root-1', item: { filename: 'readme.md', content: 'v1' } });
+            dispatch({ type: 'OPEN_FILE', agentId: 'root-1', item: { filename: 'readme.md', content: 'v2' } });
+
+            expect(getState().agents['root-1'].openFiles).toHaveLength(1);
+            expect(getState().agents['root-1'].openFiles[0].content).toBe('v2');
+        });
+    });
+
+    describe('CLOSE_FILE', () => {
+        it('removes a file by filename', () => {
+            const { getState, dispatch } = renderWithProvider();
+
+            dispatch(agentStarted('root-1'));
+            dispatch({ type: 'OPEN_FILE', agentId: 'root-1', item: { filename: 'readme.md', content: '# Hello' } });
+            dispatch({ type: 'CLOSE_FILE', agentId: 'root-1', filename: 'readme.md' });
+
+            expect(getState().agents['root-1'].openFiles).toHaveLength(0);
+        });
+    });
+
+    describe('openFiles carryover', () => {
+        it('does not carry openFiles from previous root to new root', () => {
+            const { getState, dispatch } = renderWithProvider();
+
+            dispatch(agentStarted('root-1'));
+            dispatch({ type: 'OPEN_FILE', agentId: 'root-1', item: { filename: 'readme.md', content: '# Hello' } });
+
+            dispatch(agentStarted('root-2'));
+
+            expect(getState().agents['root-2'].openFiles).toHaveLength(0);
+        });
+    });
 });
