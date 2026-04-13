@@ -28,6 +28,7 @@ class AgentProfile(BaseModel):
     id: str
     name: str
     description: str = ""
+    enabled: bool = True
     system_prompt: str = ""
     model: str = ""
     skills: list[str] = Field(default_factory=list)
@@ -64,13 +65,24 @@ def _load_all() -> dict[str, AgentProfile]:
     return profiles
 
 
-def list_agent_profiles() -> list[AgentProfile]:
-    """Return all agent profiles, Computron first."""
+def list_agent_profiles(include_disabled: bool = False) -> list[AgentProfile]:
+    """Return agent profiles.
+
+    Ordering: Computron first (if present and not filtered out), then the
+    remaining profiles sorted by name.
+
+    Args:
+        include_disabled: If False (default), profiles with ``enabled=False``
+            are filtered out. Callers that need every profile (e.g. the
+            profile-management UI) should pass True.
+    """
     profiles = _load_all()
     result: list[AgentProfile] = []
     if COMPUTRON_ID in profiles:
         result.append(profiles.pop(COMPUTRON_ID))
     result.extend(sorted(profiles.values(), key=lambda p: p.name))
+    if not include_disabled:
+        result = [p for p in result if p.enabled]
     return result
 
 

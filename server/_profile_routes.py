@@ -20,9 +20,15 @@ from agents._agent_profiles import (
 logger = logging.getLogger(__name__)
 
 
-async def handle_list_profiles(_request: web.Request) -> web.Response:
-    """Return all agent profiles."""
-    profiles = list_agent_profiles()
+async def handle_list_profiles(request: web.Request) -> web.Response:
+    """Return agent profiles.
+
+    By default only enabled profiles are returned. Pass
+    ``?include_disabled=true`` to include disabled profiles (used by the
+    profile management UI).
+    """
+    include_disabled = request.query.get("include_disabled", "").lower() == "true"
+    profiles = list_agent_profiles(include_disabled=include_disabled)
     return web.json_response([p.model_dump() for p in profiles])
 
 
@@ -51,7 +57,12 @@ async def handle_create_profile(request: web.Request) -> web.Response:
 
 
 async def handle_update_profile(request: web.Request) -> web.Response:
-    """Update an existing agent profile."""
+    """Update an existing agent profile.
+
+    Refuses to set ``enabled: false`` on the profile currently configured
+    as the system-wide default agent — that would leave the system with
+    no fallback. The caller must change the default first.
+    """
     profile_id = request.match_info["id"]
     existing = get_agent_profile(profile_id)
     if existing is None:
@@ -60,6 +71,23 @@ async def handle_update_profile(request: web.Request) -> web.Response:
         body = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
         return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    # Block disabling the currently-set default agent.
+    if body.get("enabled") is False:
+        from settings import load_settings
+        default_id = load_settings().get("default_agent")
+        if default_id == profile_id:
+            return web.json_response(
+                {
+                    "error": "default_agent_cannot_be_disabled",
+                    "message": (
+                        "This profile is currently set as the default agent. "
+                        "Change the default in Settings → System before disabling it."
+                    ),
+                },
+                status=400,
+            )
+
     try:
         body["id"] = profile_id
         profile = AgentProfile.model_validate(body)

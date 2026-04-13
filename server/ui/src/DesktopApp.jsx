@@ -397,7 +397,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     <ProfileBuilder
                                         profile={profilesHook.profiles.find(p => p.id === profilesHook.selectedProfileId) || null}
                                         onSave={async (updated) => {
-                                            await profilesHook.updateProfile(updated.id, updated);
+                                            const result = await profilesHook.updateProfile(updated.id, updated);
+                                            return result;
                                         }}
                                         onDelete={async (id) => {
                                             await profilesHook.deleteProfile(id);

@@ -123,6 +123,51 @@ class TestProfileCRUD:
 
 
 @pytest.mark.unit
+class TestEnabledFilter:
+    """enabled field and list_agent_profiles filtering behavior."""
+
+    def test_enabled_defaults_true(self):
+        """New profiles are enabled by default."""
+        p = AgentProfile(id="x", name="X", model="m")
+        assert p.enabled is True
+
+    def test_list_filters_disabled_by_default(self):
+        """list_agent_profiles() hides disabled profiles."""
+        save_agent_profile(_make_profile(id="on", name="On", enabled=True))
+        save_agent_profile(_make_profile(id="off", name="Off", enabled=False))
+        result = list_agent_profiles()
+        ids = {p.id for p in result}
+        assert "on" in ids
+        assert "off" not in ids
+
+    def test_list_include_disabled_returns_all(self):
+        """list_agent_profiles(include_disabled=True) returns everything."""
+        save_agent_profile(_make_profile(id="on", name="On", enabled=True))
+        save_agent_profile(_make_profile(id="off", name="Off", enabled=False))
+        result = list_agent_profiles(include_disabled=True)
+        ids = {p.id for p in result}
+        assert ids == {"on", "off"}
+
+    def test_get_agent_profile_returns_disabled(self):
+        """Direct lookup by ID works for disabled profiles (needed for tasks)."""
+        save_agent_profile(_make_profile(id="off", name="Off", enabled=False))
+        assert get_agent_profile("off") is not None
+
+    def test_legacy_json_without_enabled_loads_as_enabled(self, tmp_path):
+        """Profiles saved before the enabled field default to enabled."""
+        import json as _json
+        d = tmp_path / "agent_profiles"
+        d.mkdir(parents=True, exist_ok=True)
+        # Write raw JSON without the enabled field
+        (d / "legacy.json").write_text(_json.dumps({
+            "id": "legacy", "name": "Legacy", "model": "m",
+        }))
+        p = get_agent_profile("legacy")
+        assert p is not None
+        assert p.enabled is True
+
+
+@pytest.mark.unit
 class TestDuplicate:
     """Profile duplication."""
 

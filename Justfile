@@ -221,16 +221,28 @@ e2e *args:
     state=$(mktemp -d)
     mkdir -p "$state/home" "$state/state"
     cleanup() {
+        # Chown state files to host uid so we can rm -rf them.
+        # Container writes them as computron (uid 1000) or root.
+        docker exec -u 0 "$name" chown -R "$(id -u):$(id -g)" \
+            /home/computron /var/lib/computron 2>/dev/null || true
         docker stop "$name" 2>/dev/null || true
-        rm -rf "$state"
+        rm -rf "$state" 2>/dev/null || true
     }
     trap cleanup EXIT
 
     docker rm -f "$name" 2>/dev/null || true
     env_args=""; [ -f .env ] && env_args="--env-file .env"
+
+    # --network=host so the container reaches host-local ollama (as :11434).
+    # DISPLAY=:100 avoids the abstract X socket clash with a dev container on :99.
+    # ENABLE_DESKTOP=false (explicit) skips xfce + VNC + noVNC so ports 5900/6080
+    # stay free for a concurrently-running dev container.
+    # PORT=$port picks a non-8080 app port so the two aiohttp servers coexist.
     docker run -d --rm --name "$name" \
         --gpus all --shm-size=256m --network=host \
         -e PORT=$port \
+        -e DISPLAY=:100 \
+        -e ENABLE_DESKTOP=false \
         $env_args \
         -v "$state/home:/home/computron:rw" \
         -v "$state/state:/var/lib/computron:rw" \
@@ -238,6 +250,7 @@ e2e *args:
 
     just _sync-src "$name"
     docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    # Bounce main.py so it picks up the synced code + fresh dist
     docker exec "$name" pkill -f "python3.12 main.py" 2>/dev/null || true
 
     # Wait for the synced app to come up on the e2e port

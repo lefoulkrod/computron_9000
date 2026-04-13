@@ -223,6 +223,58 @@
     cursor: not-allowed;
 }
 
+.enabledToggle {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.5rem;
+    row-gap: 0.15rem;
+    align-items: center;
+    margin-top: 0.6rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.enabledToggle input[type="checkbox"] {
+    grid-row: 1;
+    grid-column: 1;
+    margin: 0;
+}
+
+.enabledToggleLabel {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.enabledHelp {
+    grid-row: 2;
+    grid-column: 2;
+    font-size: 0.72rem;
+    color: var(--text);
+    opacity: 0.6;
+    line-height: 1.4;
+}
+
+.errorPanel {
+    margin-top: 0.6rem;
+    padding: 0.75rem 0.9rem;
+    background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.errorTitle {
+    font-weight: 600;
+    color: var(--color-danger);
+}
+
 /* ---- Model select ---- */
 .selectInput {
     width: 100%;

@@ -5,11 +5,12 @@ function Badge({ className, children }) {
 }
 
 function ProfileItem({ profile, selected, onSelect }) {
-    const { id, name, description, skills, temperature, think } = profile;
+    const { id, name, description, skills, temperature, think, enabled } = profile;
+    const isDisabled = enabled === false;
 
     return (
         <li
-            className={`${styles.item} ${selected ? styles.itemActive : ''}`}
+            className={`${styles.item} ${selected ? styles.itemActive : ''} ${isDisabled ? styles.itemDisabled : ''}`}
             onClick={() => onSelect(id)}
             role="button"
             tabIndex={0}
@@ -22,6 +23,9 @@ function ProfileItem({ profile, selected, onSelect }) {
                     <span className={styles.desc}>{description}</span>
                 )}
                 <div className={styles.badges}>
+                    {isDisabled && (
+                        <Badge className={styles.badgeDisabled}>disabled</Badge>
+                    )}
                     {(skills || []).map(skill => (
                         <Badge key={skill} className={styles.badgeSkill}>{skill}</Badge>
                     ))}

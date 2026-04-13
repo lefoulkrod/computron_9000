@@ -11,6 +11,7 @@ Tests may still import internal modules directly if they need to patch
 internals, but production code should rely on these exports.
 """
 
+from .describe_image import describe_image
 from .edit_ops import insert_text, replace_in_file
 from .file_ops import (
     append_to_file,
@@ -24,6 +25,8 @@ from .file_ops import (
     write_file,
     write_files,
 )
+from .file_output import send_file
+from .install_packages import install_packages
 from .models import (
     ApplyPatchResult,
     DirectoryReadResult,
@@ -44,35 +47,11 @@ from .models import (
     WriteFileResult,
 )
 from .patching import apply_text_patch, apply_unified_diff
+from .play_audio import play_audio
 from .read_ops import head, read_file, tail
+from .run_bash_cmd import BashCmdResult, run_bash_cmd
 from .search_ops import grep
 from .stat_ops import exists, is_dir, is_file
-
-# Deferred imports for modules that import from sdk.events,
-# which would otherwise create a circular dependency:
-#   tools.virtual_computer.__init__ -> file_output -> agents.sdk.events
-#   -> agents.__init__ -> agents.media -> tools.virtual_computer
-_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
-    "describe_image": (".describe_image", "describe_image"),
-    "install_packages": (".install_packages", "install_packages"),
-    "send_file": (".file_output", "send_file"),
-    "play_audio": (".play_audio", "play_audio"),
-    "run_bash_cmd": (".run_bash_cmd", "run_bash_cmd"),
-    "BashCmdResult": (".run_bash_cmd", "BashCmdResult"),
-}
-
-
-def __getattr__(name: str):
-    if name in _LAZY_IMPORTS:
-        module_path, attr = _LAZY_IMPORTS[name]
-        import importlib
-
-        mod = importlib.import_module(module_path, __package__)
-        value = getattr(mod, attr)
-        # Cache on the module so __getattr__ is only called once per name
-        globals()[name] = value
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [

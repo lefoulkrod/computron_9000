@@ -71,10 +71,12 @@ const ADVANCED_HELP = {
 export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate, models, availableSkills }) {
     const [draft, setDraft] = useState(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [saveError, setSaveError] = useState(null);
 
     // Clone profile into local draft whenever the prop changes
     useEffect(() => {
         setShowAdvanced(false);
+        setSaveError(null);
         if (profile) {
             setDraft(_cloneProfile(profile));
         } else {
@@ -131,9 +133,17 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
         }
     }, [profile]);
 
-    const handleSave = useCallback(() => {
-        if (draft && onSave) {
-            onSave(draft);
+    const handleSave = useCallback(async () => {
+        if (!draft || !onSave) return;
+        setSaveError(null);
+        const result = await onSave(draft);
+        // onSave may return { ok, error } from useAgentProfiles
+        if (result && result.ok === false && result.error) {
+            setSaveError(result.error);
+            // Revert enabled toggle locally so the UI matches server state
+            if (result.error.error === 'default_agent_cannot_be_disabled') {
+                setDraft((prev) => (prev ? { ...prev, enabled: true } : prev));
+            }
         }
     }, [draft, onSave]);
 
@@ -203,6 +213,26 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                             placeholder="Short description"
                             disabled={false}
                         />
+                        <label className={styles.enabledToggle} data-testid="profile-enabled-toggle">
+                            <input
+                                type="checkbox"
+                                checked={draft.enabled !== false}
+                                onChange={(e) => update('enabled', e.target.checked)}
+                            />
+                            <span className={styles.enabledToggleLabel}>
+                                Enabled
+                            </span>
+                            <span className={styles.enabledHelp}>
+                                Disabled profiles are hidden from the chat panel and can't be used
+                                by spawn_agent. Scheduled tasks already using this profile still run.
+                            </span>
+                        </label>
+                        {saveError && saveError.error === 'default_agent_cannot_be_disabled' && (
+                            <div className={styles.errorPanel} data-testid="profile-save-error">
+                                <span className={styles.errorTitle}>Can't disable the default agent</span>
+                                <span>{saveError.message}</span>
+                            </div>
+                        )}
                     </section>
 
                     {/* 2. Model */}
@@ -335,7 +365,7 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                                     <div className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Thinking</span>
                                         <label className={styles.toggleLabel}>
-                                            <input type="checkbox" className={styles.toggleInput} checked={draft.think || false} onChange={(e) => updateInference('think', e.target.checked || null)} />
+                                            <input type="checkbox" className={styles.toggleInput} data-testid="profile-think-toggle" checked={draft.think || false} onChange={(e) => updateInference('think', e.target.checked || null)} />
                                             <span className={styles.toggle} />
                                         </label>
                                     </div>

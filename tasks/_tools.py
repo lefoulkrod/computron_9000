@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from agents._agent_profiles import get_agent_profile, list_agent_profiles
 from tasks import get_store
 
 
@@ -89,13 +90,18 @@ async def add_task(
     if not instruction or not instruction.strip():
         return f"Error: instruction is required for task '{key}'."
 
-    # Validate agent_profile exists
+    # Validate agent_profile exists and is enabled
     if agent_profile:
-        from agents._agent_profiles import get_agent_profile
-        if get_agent_profile(agent_profile) is None:
-            from agents._agent_profiles import list_agent_profiles
+        resolved = get_agent_profile(agent_profile)
+        if resolved is None:
             available = [p.id for p in list_agent_profiles()]
             return f"Error: unknown agent profile '{agent_profile}' for task '{key}'. Available: {available}."
+        if not resolved.enabled:
+            available = [p.id for p in list_agent_profiles()]
+            return (
+                f"Error: agent profile '{agent_profile}' is disabled and cannot be used "
+                f"for task '{key}'. Available: {available}."
+            )
 
     # Default to previous task if depends_on is omitted and one exists
     resolved_deps = [existing_keys[-1]] if depends_on is None and existing_keys else (depends_on or [])
@@ -214,6 +220,22 @@ async def create_goal(
                     f"Error: tasks[{i}] (key='{key}') depends_on '{dep}' which is not"
                     f" defined before it. List tasks in execution order and only"
                     f" reference keys of earlier tasks."
+                )
+        # Validate agent_profile is enabled (if specified)
+        requested = t.get("agent_profile")
+        if requested:
+            resolved = get_agent_profile(requested)
+            if resolved is None:
+                available = [p.id for p in list_agent_profiles()]
+                return (
+                    f"Error: tasks[{i}] (key='{key}') references unknown agent profile "
+                    f"'{requested}'. Available: {available}."
+                )
+            if not resolved.enabled:
+                available = [p.id for p in list_agent_profiles()]
+                return (
+                    f"Error: tasks[{i}] (key='{key}') references disabled agent profile "
+                    f"'{requested}'. Available: {available}."
                 )
 
     store = get_store()

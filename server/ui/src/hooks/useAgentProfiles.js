@@ -13,7 +13,8 @@ export default function useAgentProfiles() {
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/profiles');
+            // Profile manager needs to see disabled profiles too.
+            const res = await fetch('/api/profiles?include_disabled=true');
             const data = await res.json();
             setProfiles(data);
             // Auto-select first profile if nothing selected
@@ -49,10 +50,14 @@ export default function useAgentProfiles() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(profile),
         });
-        const updated = await res.json();
-        setProfiles(prev => prev.map(p => p.id === id ? updated : p));
+        const body = await res.json();
+        if (!res.ok) {
+            // Structured error response (e.g. default_agent_cannot_be_disabled)
+            return { ok: false, error: body };
+        }
+        setProfiles(prev => prev.map(p => p.id === id ? body : p));
         setRevision(r => r + 1);
-        return updated;
+        return { ok: true, data: body };
     }, []);
 
     const deleteProfile = useCallback(async (id) => {

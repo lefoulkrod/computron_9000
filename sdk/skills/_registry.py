@@ -6,7 +6,6 @@ centralized.
 """
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -21,13 +20,19 @@ class Skill(BaseModel):
         name: Short identifier used in load_skill() calls.
         description: One-line description shown in the skill catalog.
         prompt: Prompt fragment injected when the skill is loaded.
-        tools: Tool callables provided by this skill.
+        tools: Tool callables provided by this skill. Typed as ``list[Any]``
+            to avoid pydantic introspecting each callable's signature at
+            construction time — ``Callable[..., Any]`` triggers
+            ``typing.get_type_hints`` which can deadlock on the import lock
+            when skills are registered from inside an already-loading
+            module (the coder/browser/goal_planner imports run during
+            ``_ensure_builtins`` on the first tool-using turn).
     """
 
     name: str
     description: str
     prompt: str
-    tools: list[Callable[..., Any]]
+    tools: list[Any]
 
     model_config = {"arbitrary_types_allowed": True}
 

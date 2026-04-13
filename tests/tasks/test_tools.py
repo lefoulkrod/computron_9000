@@ -20,6 +20,19 @@ def _init_store(tmp_path):
     tasks._store = None
 
 
+@pytest.fixture(autouse=True)
+def _seed_profiles(tmp_path, monkeypatch):
+    """Isolate profiles to tmp and seed the ones tests reference."""
+    from agents._agent_profiles import AgentProfile, save_agent_profile
+
+    monkeypatch.setattr(
+        "agents._agent_profiles._profiles_dir",
+        lambda: tmp_path / "agent_profiles",
+    )
+    save_agent_profile(AgentProfile(id="computron", name="Computron", model="m"))
+    save_agent_profile(AgentProfile(id="code_expert", name="Code Expert", model="m"))
+
+
 def _extract_id(result_str):
     """Extract id=... from a tool result string."""
     match = re.search(r"id=(\w+)", result_str)
@@ -95,13 +108,14 @@ class TestCreateGoal:
         assert by_desc["second task"].depends_on == [first_id]
 
     async def test_task_agent_profile_default(self):
-        """Task agent_profile defaults to None when not specified."""
+        """Task agent_profile defaults to the settings default_agent when unspecified."""
         result = await create_goal("goal", tasks=[_TASK])
         goal_id = _extract_id(result)
 
         store = tasks.get_store()
         stored = store.list_tasks(goal_id)
-        assert stored[0].agent_profile is None
+        # _default_agent() returns settings.default_agent, defaulting to "computron"
+        assert stored[0].agent_profile == "computron"
 
     async def test_task_agent_profile_override(self):
         """Task agent_profile is set when provided."""
@@ -112,6 +126,41 @@ class TestCreateGoal:
         store = tasks.get_store()
         stored = store.list_tasks(goal_id)
         assert stored[0].agent_profile == "code_expert"
+
+    async def test_disabled_agent_profile_rejected(self, tmp_path, monkeypatch):
+        """Referencing a disabled profile returns an error with available list."""
+        # Wire up an isolated profiles directory with one enabled + one disabled
+        from agents._agent_profiles import AgentProfile, save_agent_profile
+        monkeypatch.setattr(
+            "agents._agent_profiles._profiles_dir",
+            lambda: tmp_path / "agent_profiles",
+        )
+        save_agent_profile(AgentProfile(id="on", name="On", model="m", enabled=True))
+        save_agent_profile(AgentProfile(id="off", name="Off", model="m", enabled=False))
+
+        task = {**_TASK, "agent_profile": "off"}
+        result = await create_goal("goal", tasks=[task])
+        assert "Error" in result
+        assert "disabled" in result
+        assert "'off'" in result
+        # Error should list enabled-only available profiles
+        assert "'on'" in result
+        assert "'off'" not in result.split("Available:")[-1]
+
+    async def test_unknown_agent_profile_rejected(self, tmp_path, monkeypatch):
+        """Referencing an unknown profile returns an error."""
+        from agents._agent_profiles import AgentProfile, save_agent_profile
+        monkeypatch.setattr(
+            "agents._agent_profiles._profiles_dir",
+            lambda: tmp_path / "agent_profiles",
+        )
+        save_agent_profile(AgentProfile(id="on", name="On", model="m", enabled=True))
+
+        task = {**_TASK, "agent_profile": "nope"}
+        result = await create_goal("goal", tasks=[task])
+        assert "Error" in result
+        assert "unknown" in result
+        assert "'nope'" in result
 
     async def test_duplicate_key_returns_error(self):
         """Duplicate task keys return an error without writing anything."""

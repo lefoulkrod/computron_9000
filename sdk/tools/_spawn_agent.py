@@ -139,12 +139,26 @@ async def spawn_agent(
 
     from sdk.tools._core import get_core_tools
 
-    # Resolve profile or fall back to parent's options
+    # Resolve profile. Unknown or disabled IDs return a clear error string
+    # so the caller can pick a valid one instead of silently getting the
+    # parent's options.
     agent_profile: AgentProfile | None = None
     if profile:
         agent_profile = get_agent_profile(profile)
         if agent_profile is None:
-            logger.warning("Agent profile '%s' not found, using parent options", profile)
+            msg = (
+                f"Agent profile '{profile}' not found. "
+                "Call list_agent_profiles() to see available profiles."
+            )
+            _log_spawn_error(agent_name, msg)
+            return msg
+        if not agent_profile.enabled:
+            msg = (
+                f"Agent profile '{profile}' is disabled and cannot be used "
+                "by spawn_agent. Call list_agent_profiles() to see available profiles."
+            )
+            _log_spawn_error(agent_name, msg)
+            return msg
 
     if agent_profile:
         model_options = build_llm_options(agent_profile)

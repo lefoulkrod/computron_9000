@@ -93,7 +93,7 @@ def test_profile_ui_reflects_saved_state(page: Page):
         # Iterations (max_iterations)
         expect(page.locator("input[placeholder='unlimited']").nth(1)).to_have_value("10")
         # Thinking toggle
-        expect(page.locator("input[type='checkbox']")).to_be_checked()
+        expect(page.locator("[data-testid='profile-think-toggle']")).to_be_checked()
 
     finally:
         page.request.delete(f"/api/profiles/{profile_id}")
