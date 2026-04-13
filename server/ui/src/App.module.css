@@ -122,7 +122,6 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 320px;
-    border-left: 1px solid var(--muted);
 }
 
 /* Chat column — left side */

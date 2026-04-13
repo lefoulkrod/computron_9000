@@ -181,9 +181,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         return () => clearTimeout(timer);
     }, [nudgeToast]);
 
-    const handleAttachScreenshot = (base64Screenshot) => {
-        setAttachment({ base64: base64Screenshot, contentType: 'image/png' });
-    };
+
 
     const handleSend = useCallback((message, fileData) => {
         setAttachment(null);
@@ -451,7 +449,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     {preview.activeTab === 'browser' && preview.browserSnapshot && (
                                         <BrowserPreview
                                             snapshot={preview.browserSnapshot}
-                                            onAttachScreenshot={handleAttachScreenshot}
                                             hideShell
                                         />
                                     )}

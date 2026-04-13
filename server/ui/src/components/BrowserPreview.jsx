@@ -1,22 +1,11 @@
 import { useState } from 'react';
 import PreviewShell from './PreviewShell.jsx';
 import styles from './BrowserPreview.module.css';
-import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import BrowserIcon from './icons/BrowserIcon.jsx';
 import LockIcon from './icons/LockIcon.jsx';
 import Lightbox from './Lightbox.jsx';
 
-/**
- * Browser preview component showing screenshot and URL.
- *
- * @param {Object} props
- * @param {Object} props.snapshot - Browser snapshot data
- * @param {function(string): void} [props.onAttachScreenshot] - Callback when attach button clicked
- * @param {function(): void} [props.onClose] - Callback when close button clicked
- * @param {boolean} [props.hideShell] - If true, render without PreviewShell wrapper
- * @returns {JSX.Element|null}
- */
-export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose, hideShell }) {
+export default function BrowserPreview({ snapshot, onClose, hideShell }) {
     const [lightboxOpen, setLightboxOpen] = useState(false);
 
     if (!snapshot) return null;
@@ -25,17 +14,6 @@ export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose, 
         ? `data:image/png;base64,${snapshot.screenshot}`
         : null;
 
-    const attachBtn = onAttachScreenshot && snapshot.screenshot ? (
-        <button
-            className={styles.attachButton}
-            onClick={(e) => { e.stopPropagation(); onAttachScreenshot(snapshot.screenshot); }}
-            title="Attach screenshot to chat"
-            aria-label="Attach screenshot to chat"
-        >
-            <PaperclipIcon size={14} />
-        </button>
-    ) : null;
-
     const content = (
         <div className={styles.content}>
             <div className={styles.urlBar}>
@@ -43,7 +21,6 @@ export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose, 
                 <span className={styles.url} title={snapshot.url}>
                     {snapshot.url}
                 </span>
-                {attachBtn}
             </div>
 
             {snapshot.title && (
@@ -87,7 +64,6 @@ export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose, 
             expandContent={screenshotSrc ? (
                 <img src={screenshotSrc} alt="Browser screenshot" className={styles.expandedImg} />
             ) : undefined}
-            headerExtra={null}
         >
             {content}
         </PreviewShell>

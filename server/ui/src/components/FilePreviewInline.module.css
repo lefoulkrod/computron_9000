@@ -81,6 +81,7 @@
     font-size: 12px;
     border: none;
     background: transparent;
+    box-shadow: none;
     color: var(--text-secondary);
     cursor: pointer;
     border-radius: 3px;
@@ -103,9 +104,11 @@
     justify-content: center;
     width: 28px;
     height: 28px;
+    padding: 0;
     background: transparent;
     border: none;
     border-radius: 4px;
+    box-shadow: none;
     color: var(--text-secondary);
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
@@ -177,7 +180,7 @@
 }
 
 .markdownContent a {
-    color: var(--accent);
+    color: var(--color-accent);
 }
 
 .markdownContent ul,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import styles from './SplitHandle.module.css';
 
 /**
@@ -10,73 +10,57 @@ import styles from './SplitHandle.module.css';
  */
 export default function SplitHandle({ onDrag }) {
     const handleRef = useRef(null);
-    const isDraggingRef = useRef(false);
+    const onDragRef = useRef(onDrag);
+    onDragRef.current = onDrag;
 
-    /**
-     * Handles mouse movement during drag.
-     * Calculates percentage based on parent element width.
-     */
-    const handleMouseMove = useCallback((moveEvent) => {
-        if (!handleRef.current) return;
-        const parent = handleRef.current.parentElement;
-        if (!parent) return;
-
-        const rect = parent.getBoundingClientRect();
-        const x = moveEvent.clientX - rect.left;
-        const percentage = (x / rect.width) * 100;
-        // Clamp between 20% and 80%
-        const clamped = Math.max(20, Math.min(80, percentage));
-        onDrag(clamped);
-    }, [onDrag]);
-
-    /**
-     * Handles end of drag operation.
-     * Removes listeners and dragging class.
-     */
-    const handleMouseUp = useCallback(() => {
-        isDraggingRef.current = false;
-        document.body.style.userSelect = '';
-        if (handleRef.current) {
-            handleRef.current.classList.remove(styles.dragging);
-        }
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-    }, [handleMouseMove]);
-
-    /**
-     * Handles the start of a drag operation.
-     * Attaches mousemove and mouseup listeners to document.
-     *
-     * @param {MouseEvent} e
-     */
-    const handleMouseDown = useCallback((e) => {
-        e.preventDefault();
-        if (!handleRef.current) return;
-
-        isDraggingRef.current = true;
-        document.body.style.userSelect = 'none';
-        handleRef.current.classList.add(styles.dragging);
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }, [handleMouseMove, handleMouseUp]);
-
-    // Clean up listeners on unmount
     useEffect(() => {
+        const el = handleRef.current;
+        if (!el) return;
+
+        let dragging = false;
+
+        const onMouseMove = (e) => {
+            if (!dragging) return;
+            const parent = el.parentElement;
+            if (!parent) return;
+            const rect = parent.getBoundingClientRect();
+            const pct = ((e.clientX - rect.left) / rect.width) * 100;
+            onDragRef.current(Math.max(20, Math.min(80, pct)));
+        };
+
+        const onMouseUp = () => {
+            dragging = false;
+            document.body.style.userSelect = '';
+            el.classList.remove(styles.dragging);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        const onMouseDown = (e) => {
+            e.preventDefault();
+            dragging = true;
+            document.body.style.userSelect = 'none';
+            el.classList.add(styles.dragging);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+
+        el.addEventListener('mousedown', onMouseDown);
+
         return () => {
-            if (isDraggingRef.current) {
+            el.removeEventListener('mousedown', onMouseDown);
+            if (dragging) {
                 document.body.style.userSelect = '';
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
             }
         };
-    }, [handleMouseMove, handleMouseUp]);
+    }, []);
 
     return (
         <div
             ref={handleRef}
             className={styles.splitHandle}
-            onMouseDown={handleMouseDown}
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize panels"

@@ -41,6 +41,7 @@
     background: transparent;
     border: none;
     border-radius: 0;
+    box-shadow: none;
     border-bottom: 2px solid transparent;
     color: var(--text-secondary);
     font-size: 13px;
@@ -54,7 +55,7 @@
 }
 
 .tabActive {
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--color-accent);
     color: var(--text);
 }
 
@@ -97,34 +98,6 @@
     color: var(--text);
 }
 
-/* Tab actions (right side) */
-.tabActions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0 8px;
-    flex-shrink: 0;
-}
-
-.actionBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-.actionBtn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text);
-}
-
 /* Content area */
 .contentArea {
     flex: 1;
@@ -153,11 +126,6 @@
 }
 
 :global(body:not(.dark-theme)) .tabClose:hover {
-    background: rgba(0, 0, 0, 0.06);
-    color: #222;
-}
-
-:global(body:not(.dark-theme)) .actionBtn:hover {
     background: rgba(0, 0, 0, 0.06);
     color: #222;
 }

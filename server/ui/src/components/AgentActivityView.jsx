@@ -7,11 +7,6 @@ import { formatElapsed } from '../utils/agentUtils.js';
 import ContextUsageBadge from './ContextUsageBadge.jsx';
 import AgentOutput from './AgentOutput.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
-import FileOutput from './FileOutput.jsx';
-import BrowserPreview from './BrowserPreview.jsx';
-import TerminalPanel from './TerminalOutput.jsx';
-import DesktopPreview from './DesktopPreview.jsx';
-import GenerationPreview from './GenerationPreview.jsx';
 import styles from './AgentActivityView.module.css';
 
 /**
@@ -55,15 +50,6 @@ export default function AgentActivityView({ onNudge, onPreview }) {
     const breadcrumb = _buildBreadcrumb(agents, selectedAgentId);
     const statusClass = styles[agent.status] || '';
 
-    const fileOutputs = agent.activityLog.filter((e) => e.type === 'file_output');
-    const hasPreviews = !!(
-        agent.browserSnapshot ||
-        agent.terminalLines.length > 0 ||
-        agent.desktopActive ||
-        agent.generationPreview ||
-        fileOutputs.length > 0
-    );
-
     return (
         <div className={styles.container}>
             {/* Agent header with back button */}
@@ -99,10 +85,9 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                 </div>
             </div>
 
-            {/* Two-pane body */}
+            {/* Activity stream — previews are in the shared panel */}
             <div className={styles.body}>
-                {/* Activity stream */}
-                <div className={`${styles.activity} ${!hasPreviews ? styles.activityFull : ''}`} ref={scrollRef} onScroll={handleScroll}>
+                <div className={`${styles.activity} ${styles.activityFull}`} ref={scrollRef} onScroll={handleScroll}>
                     {agent.instruction && (
                         <div className={styles.instruction}>
                             <span className={styles.instructionLabel}>Instruction</span>
@@ -111,39 +96,13 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                     )}
                     <AgentOutput
                         entries={agent.activityLog}
-                        showFileOutputs={false}
+                        showFileOutputs={true}
+                        onPreview={onPreview}
                     />
                     {agent.status === 'running' && (
                         <span className={styles.cursor} />
                     )}
                 </div>
-
-                {/* Preview panels — only rendered when there's content */}
-                {hasPreviews && (
-                    <div className={styles.previews}>
-                        {agent.browserSnapshot && (
-                            <BrowserPreview
-                                snapshot={agent.browserSnapshot}
-                            />
-                        )}
-                        {agent.terminalLines.length > 0 && (
-                            <TerminalPanel
-                                lines={agent.terminalLines}
-                            />
-                        )}
-                        {agent.desktopActive && (
-                            <DesktopPreview visible={true} />
-                        )}
-                        {agent.generationPreview && (
-                            <GenerationPreview
-                                preview={agent.generationPreview}
-                            />
-                        )}
-                        {fileOutputs.map((entry, i) => (
-                            <FileOutput key={`file-${i}`} item={entry} onPreview={onPreview} />
-                        ))}
-                    </div>
-                )}
             </div>
 
             {/* Nudge bar */}
