@@ -1,26 +1,26 @@
-"""Migration runner — discovers and applies pending migrations."""
+"""Migration runner — applies pending migrations in a fixed order."""
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
+
+from migrations._001_task_agent_to_profile import migrate as _001_task_agent_to_profile
+from migrations._002_install_default_profiles import migrate as _002_install_default_profiles
 
 logger = logging.getLogger(__name__)
 
 _APPLIED_FILE = ".migrations.json"
 
-# Registry of migrations in the order they were added.
-# Each entry is (name, callable). The callable receives the state directory.
-_MIGRATIONS: list[tuple[str, "typing.Callable[[Path], None]"]] = []
-
-
-def _register(name: str) -> "typing.Callable":
-    """Decorator to register a migration function."""
-    def decorator(fn: "typing.Callable[[Path], None]") -> "typing.Callable[[Path], None]":
-        _MIGRATIONS.append((name, fn))
-        return fn
-    return decorator
+# Migrations run top-to-bottom on first startup; already-applied entries are
+# skipped on subsequent runs. Insert new migrations at the bottom — order is
+# load-bearing and must stay stable across releases.
+_MIGRATIONS: list[tuple[str, Callable[[Path], None]]] = [
+    ("001_task_agent_to_profile", _001_task_agent_to_profile),
+    ("002_install_default_profiles", _002_install_default_profiles),
+]
 
 
 def _load_applied(state_dir: Path) -> set[str]:
@@ -41,10 +41,6 @@ def _save_applied(state_dir: Path, applied: set[str]) -> None:
 
 def run_migrations(state_dir: Path) -> None:
     """Run all pending migrations against the state directory."""
-    # Import migration modules to trigger registration
-    import migrations._001_task_agent_to_profile  # noqa: F401
-    import migrations._002_install_default_profiles  # noqa: F401
-
     state_dir = Path(state_dir)
     if not state_dir.is_dir():
         logger.debug("State directory %s does not exist, skipping migrations", state_dir)
@@ -63,7 +59,3 @@ def run_migrations(state_dir: Path) -> None:
         applied.add(name)
         _save_applied(state_dir, applied)
         logger.info("Migration complete: %s", name)
-
-
-# Re-export for type checking
-import typing  # noqa: E402

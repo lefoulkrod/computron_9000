@@ -11,14 +11,11 @@ import json
 import logging
 from pathlib import Path
 
-from migrations._runner import _register
-
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PROFILES_DIR = Path(__file__).resolve().parent.parent / "agents" / "default_profiles"
 
 
-@_register("002_install_default_profiles")
 def migrate(state_dir: Path) -> None:
     """Copy shipped default profiles to the state directory."""
     if not _DEFAULT_PROFILES_DIR.is_dir():

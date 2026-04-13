@@ -23,7 +23,6 @@ import logging
 from pathlib import Path
 
 from migrations._backup import backup_file
-from migrations._runner import _register
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,6 @@ def _migrate_task(task: dict) -> bool:
     return changed
 
 
-@_register("001_task_agent_to_profile")
 def migrate(state_dir: Path) -> None:
     """Migrate all goal files in the state directory."""
     goals_dir = state_dir / "goals"

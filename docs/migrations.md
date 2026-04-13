@@ -28,28 +28,31 @@ finish.  Keep them fast.
 
 1. Create a new file in `migrations/`, following the naming convention
    `_NNN_short_description.py` (e.g. `_003_add_profile_version.py`).
-
-2. Import the `_register` decorator from `migrations._runner` and decorate
-   your migration function:
+   Define a ``migrate`` function that takes the state directory:
 
    ```python
-   from migrations._runner import _register
+   from pathlib import Path
 
-   @_register("003_add_profile_version")
    def migrate(state_dir: Path) -> None:
-       # state_dir is the root state directory (~/.computron_9000/)
        ...
    ```
 
-3. Import your migration module in `migrations/_runner.py` inside
-   `run_migrations()`:
+2. Register it in ``migrations/_runner.py`` by appending to the
+   ``_MIGRATIONS`` list. Import the module's ``migrate`` with an alias to
+   avoid name collisions, and add a tuple with the migration name:
 
    ```python
-   import migrations._003_add_profile_version  # noqa: F401
+   from migrations._003_add_profile_version import migrate as _003_add_profile_version
+
+   _MIGRATIONS = [
+       ("001_task_agent_to_profile", _001_task_agent_to_profile),
+       ("002_install_default_profiles", _002_install_default_profiles),
+       ("003_add_profile_version", _003_add_profile_version),  # ← new
+   ]
    ```
 
-   The import triggers the `@_register` decorator, which adds the migration
-   to the runner's list.
+   Order is load-bearing: always append at the bottom so existing
+   installations keep the same sequence.
 
 ## Guidelines
 
