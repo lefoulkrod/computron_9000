@@ -64,12 +64,13 @@ export default function FileOutput({ item, onPreview }) {
                         <button
                             className={styles.fileOutputBtn}
                             onClick={(e) => { e.stopPropagation(); onPreview(item); }}
+                            data-testid="file-preview-btn"
                         >
                             <EyeIcon size={12} />
                             Preview
                         </button>
                     )}
-                    <button className={styles.fileOutputBtn} onClick={handleDownload}>
+                    <button className={styles.fileOutputBtn} onClick={handleDownload} data-testid="file-download-btn">
                         <DownloadIcon size={12} />
                         Download
                     </button>

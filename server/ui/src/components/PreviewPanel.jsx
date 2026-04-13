@@ -11,8 +11,8 @@ export default function PreviewPanel({
     children,
 }) {
     return (
-        <div className={styles.previewPanel}>
-            <div className={styles.tabBar}>
+        <div className={styles.previewPanel} data-testid="preview-panel">
+            <div className={styles.tabBar} data-testid="preview-tab-bar">
                 <div className={styles.tabList}>
                     {tabs.map((tab) => {
                         const isActive = tab.id === activeTab;
@@ -22,6 +22,7 @@ export default function PreviewPanel({
                                 className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
                                 onClick={() => onTabChange(tab.id)}
                                 title={tab.label}
+                                data-testid={`preview-tab-${tab.id}`}
                             >
                                 <span className={styles.tabIcon}>{tab.icon}</span>
                                 <span className={styles.tabLabel}>{tab.label}</span>
@@ -33,6 +34,7 @@ export default function PreviewPanel({
                                     }}
                                     title="Close tab"
                                     aria-label={`Close ${tab.label} tab`}
+                                    data-testid={`close-tab-${tab.id}`}
                                 >
                                     ×
                                 </span>
@@ -41,7 +43,7 @@ export default function PreviewPanel({
                     })}
                 </div>
             </div>
-            <div className={styles.contentArea}>
+            <div className={styles.contentArea} data-testid="preview-content">
                 {children}
             </div>
         </div>

@@ -267,7 +267,7 @@ e2e *args:
         exit 1
     fi
 
-    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest e2e/ "$@"
+    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest e2e/ {{args}}
 
 
 # =============================================================================
