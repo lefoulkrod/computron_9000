@@ -43,6 +43,7 @@ export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose, 
                 <span className={styles.url} title={snapshot.url}>
                     {snapshot.url}
                 </span>
+                {attachBtn}
             </div>
 
             {snapshot.title && (
@@ -86,7 +87,7 @@ export default function BrowserPreview({ snapshot, onAttachScreenshot, onClose, 
             expandContent={screenshotSrc ? (
                 <img src={screenshotSrc} alt="Browser screenshot" className={styles.expandedImg} />
             ) : undefined}
-            headerExtra={attachBtn}
+            headerExtra={null}
         >
             {content}
         </PreviewShell>

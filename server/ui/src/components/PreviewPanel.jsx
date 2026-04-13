@@ -55,14 +55,16 @@ function TabBar({ tabs, activeTab, onTabChange, onCloseTab, onFullscreen, onRefr
                         <RefreshIcon size={14} />
                     </button>
                 )}
-                <button
-                    className={styles.actionBtn}
-                    onClick={onFullscreen}
-                    title="Fullscreen"
-                    aria-label="Fullscreen"
-                >
-                    <ExpandIcon size={14} />
-                </button>
+                {onFullscreen && (
+                    <button
+                        className={styles.actionBtn}
+                        onClick={onFullscreen}
+                        title="Fullscreen"
+                        aria-label="Fullscreen"
+                    >
+                        <ExpandIcon size={14} />
+                    </button>
+                )}
             </div>
         </div>
     );

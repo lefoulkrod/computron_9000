@@ -113,7 +113,31 @@ export default function DesktopPreview({ visible, onClose, overlay, hideShell })
     );
 
     if (hideShell) {
-        return content;
+        return (
+            <>
+                <div className={styles.inlineControls}>
+                    <ControlButton interactive={interactive} onToggle={toggle} />
+                    <button
+                        className={styles.expandBtn}
+                        onClick={() => setExpanded(true)}
+                        aria-label="Open fullscreen"
+                        title="Open fullscreen"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 6V3h3M13 10v3h-3M3 10v3h3M13 6V3h-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                {content}
+                {expanded && (
+                    <DesktopLightbox
+                        interactive={interactive}
+                        onToggle={toggle}
+                        onClose={() => setExpanded(false)}
+                    />
+                )}
+            </>
+        );
     }
 
     return (

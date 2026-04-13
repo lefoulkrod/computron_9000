@@ -134,6 +134,10 @@
     /* width is set inline via splitPosition state, defaults to 100% when no preview */
 }
 
+.hidden {
+    display: none;
+}
+
 /* Nudge toast */
 .nudgeToast {
   position: fixed;

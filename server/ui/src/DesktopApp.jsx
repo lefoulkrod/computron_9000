@@ -248,6 +248,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         agentDispatch({ type: 'SELECT_AGENT', agentId: null });
     }, [agentDispatch]);
 
+    // ── Should the shared preview panel be visible? ────────────────────
+    // Available alongside chat OR agent-activity, but not in goals or
+    // full-screen network graph.
+
     // ── Computed preview tabs ─────────────────────────────────────────
     const previewTabs = useMemo(() => {
         const tabs = [];
@@ -270,6 +274,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
             setActivePreviewTab(null);
         }
     }, [previewTabs, activePreviewTab]);
+
+    const hasPreview = previewTabs.length > 0 && !goalsActive && (!networkViewOpen || !!selectedAgent);
+    const canFullscreen = activePreviewTab === 'file' && !!filePreview;
 
     // Close tab handler
     const handleCloseTab = useCallback((id) => {
@@ -355,8 +362,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
                 {/* Main content area */}
                 <div className={styles.mainContent}>
-                    {/* Goals split-screen view — shown when goals icon clicked */}
-                    {flyoutPanel === 'goals' && (
+                    {/* Full-width views (no preview panel) */}
+                    {goalsActive && (
                         <GoalsView
                             goals={goalsState.goals}
                             runnerStatus={goalsState.runnerStatus}
@@ -370,89 +377,80 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             fetchDetail={goalsState.fetchGoalDetail}
                         />
                     )}
-
-                    {/* Agent detail — full-screen activity view (from network drill-down) */}
-                    {!goalsActive && networkViewOpen && selectedAgent && (
-                        <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => setFilePreview(item)} />
-                    )}
-
-                    {/* Network graph — full-screen view, opened via indicator or sidebar */}
                     {!goalsActive && networkViewOpen && !selectedAgent && (
                         <div className={styles.networkArea}>
                             <AgentNetwork onClose={handleCloseNetwork} agentCount={networkAgentCount} />
                         </div>
                     )}
 
-                    {/* Simple chat view with tabbed preview panel */}
-                    {!goalsActive && !networkViewOpen && (
+                    {/* Agent activity — left column when drilling into an agent */}
+                    {!goalsActive && networkViewOpen && selectedAgent && (
+                        <div className={styles.chatColumn}
+                             style={{ width: hasPreview ? `${splitPosition}%` : '100%' }}>
+                            <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={(item) => {
+                                setFilePreview(item);
+                                setActivePreviewTab('file');
+                            }} />
+                        </div>
+                    )}
+
+                    {/* Chat — always mounted, hidden when goals/network active */}
+                    <div className={`${styles.chatColumn} ${networkViewOpen || goalsActive ? styles.hidden : ''}`}
+                         style={{ width: hasPreview && !networkViewOpen && !goalsActive ? `${splitPosition}%` : '100%' }}>
+                        <ChatPanel
+                            messages={messages}
+                            onSend={handleSend}
+                            onStop={stopGeneration}
+                            isStreaming={isStreaming}
+                            attachment={attachment}
+                            rootAgent={rootAgent}
+                            networkActivated={agentState.networkActivated}
+                            networkAgentCount={networkAgentCount}
+                            networkRunningCount={networkRunningCount}
+                            onOpenNetwork={handleOpenNetwork}
+                            onPreview={(item) => {
+                                setFilePreview(item);
+                                setActivePreviewTab('file');
+                            }}
+                        />
+                    </div>
+
+                    {/* Shared split handle + preview panel — visible alongside chat OR agent activity */}
+                    {hasPreview && (
                         <>
-                            {/* Chat column — left side */}
-                            <div
-                                className={styles.chatColumn}
-                                style={{ width: previewTabs.length > 0 ? `${splitPosition}%` : '100%' }}
-                            >
-                                <ChatPanel
-                                    messages={messages}
-                                    onSend={handleSend}
-                                    onStop={stopGeneration}
-                                    isStreaming={isStreaming}
-                                    attachment={attachment}
-                                    rootAgent={rootAgent}
-                                    networkActivated={agentState.networkActivated}
-                                    networkAgentCount={networkAgentCount}
-                                    networkRunningCount={networkRunningCount}
-                                    onOpenNetwork={handleOpenNetwork}
-                                    onPreview={(item) => {
-                                        setFilePreview(item);
-                                        setActivePreviewTab('file');
-                                    }}
-                                />
+                            <SplitHandle onDrag={setSplitPosition} />
+                            <div className={styles.previewColumn}>
+                                <PreviewPanel
+                                    tabs={previewTabs}
+                                    activeTab={activePreviewTab}
+                                    onTabChange={setActivePreviewTab}
+                                    onCloseTab={handleCloseTab}
+                                    onFullscreen={canFullscreen ? () => setFullscreenItem(filePreview) : null}
+                                >
+                                    {activePreviewTab === 'browser' && browserSnapshot && (
+                                        <BrowserPreview
+                                            snapshot={browserSnapshot}
+                                            onAttachScreenshot={handleAttachScreenshot}
+                                            hideShell
+                                        />
+                                    )}
+                                    {activePreviewTab === 'file' && filePreview && (
+                                        <FilePreviewInline
+                                            item={filePreview}
+                                            onFullscreen={() => setFullscreenItem(filePreview)}
+                                        />
+                                    )}
+                                    {activePreviewTab === 'terminal' && terminalLines.length > 0 && (
+                                        <TerminalPanel lines={terminalLines} hideShell />
+                                    )}
+                                    {activePreviewTab === 'desktop' && desktopActive && (
+                                        <DesktopPreview visible hideShell />
+                                    )}
+                                    {activePreviewTab === 'generation' && generationPreview && (
+                                        <GenerationPreview preview={generationPreview} hideShell />
+                                    )}
+                                </PreviewPanel>
                             </div>
-
-                            {/* Split handle — only when preview is visible */}
-                            {previewTabs.length > 0 && (
-                                <SplitHandle onDrag={setSplitPosition} />
-                            )}
-
-                            {/* Preview column — right side */}
-                            {previewTabs.length > 0 && (
-                                <div className={styles.previewColumn}>
-                                    <PreviewPanel
-                                        tabs={previewTabs}
-                                        activeTab={activePreviewTab}
-                                        onTabChange={setActivePreviewTab}
-                                        onCloseTab={handleCloseTab}
-                                        onFullscreen={() => {
-                                            if (activePreviewTab === 'file' && filePreview) {
-                                                setFullscreenItem(filePreview);
-                                            }
-                                        }}
-                                    >
-                                        {activePreviewTab === 'browser' && browserSnapshot && (
-                                            <BrowserPreview
-                                                snapshot={browserSnapshot}
-                                                onAttachScreenshot={handleAttachScreenshot}
-                                                hideShell
-                                            />
-                                        )}
-                                        {activePreviewTab === 'file' && filePreview && (
-                                            <FilePreviewInline
-                                                item={filePreview}
-                                                onFullscreen={() => setFullscreenItem(filePreview)}
-                                            />
-                                        )}
-                                        {activePreviewTab === 'terminal' && terminalLines.length > 0 && (
-                                            <TerminalPanel lines={terminalLines} hideShell />
-                                        )}
-                                        {activePreviewTab === 'desktop' && desktopActive && (
-                                            <DesktopPreview visible hideShell />
-                                        )}
-                                        {activePreviewTab === 'generation' && generationPreview && (
-                                            <GenerationPreview preview={generationPreview} hideShell />
-                                        )}
-                                    </PreviewPanel>
-                                </div>
-                            )}
                         </>
                     )}
                 </div>

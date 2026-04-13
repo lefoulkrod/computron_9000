@@ -6,6 +6,16 @@
   display: block;
 }
 
+.inlineControls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--secondary);
+    border-bottom: 1px solid var(--muted);
+    flex-shrink: 0;
+}
+
 .expandedFrame {
   width: 80vw;
   aspect-ratio: 16 / 9;

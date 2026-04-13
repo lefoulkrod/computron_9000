@@ -65,6 +65,7 @@ export default function SplitHandle({ onDrag }) {
     useEffect(() => {
         return () => {
             if (isDraggingRef.current) {
+                document.body.style.userSelect = '';
                 document.removeEventListener('mousemove', handleMouseMove);
                 document.removeEventListener('mouseup', handleMouseUp);
             }
