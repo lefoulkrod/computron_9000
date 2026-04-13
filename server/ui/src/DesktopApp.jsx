@@ -4,7 +4,6 @@ import Header from './components/Header.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
 import BrowserPreview from './components/BrowserPreview.jsx';
 import DesktopPreview from './components/DesktopPreview.jsx';
-import FilePreview from './components/FilePreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
@@ -279,8 +278,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         }
         if (id === 'file') setFilePreview(null);
         if (id === 'terminal') {
-            // Clear terminal by dispatching an empty update
-            agentDispatch({ type: 'UPDATE_TERMINAL', agentId: rootAgent?.id, event: { type: 'clear', agentId: rootAgent?.id } });
+            agentDispatch({ type: 'CLEAR_TERMINAL', agentId: rootAgent?.id });
         }
         if (id === 'desktop') {
             agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: null });
@@ -471,16 +469,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 <FullscreenPreview
                     item={fullscreenItem}
                     onClose={() => setFullscreenItem(null)}
-                />
-            )}
-
-            {/* Legacy FilePreview overlay — kept for compatibility with other views */}
-            {filePreview && (
-                <FilePreview
-                    item={filePreview}
-                    onClose={() => {
-                        setFilePreview(null);
-                    }}
                 />
             )}
 

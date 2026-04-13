@@ -35,6 +35,7 @@ export default function SplitHandle({ onDrag }) {
      */
     const handleMouseUp = useCallback(() => {
         isDraggingRef.current = false;
+        document.body.style.userSelect = '';
         if (handleRef.current) {
             handleRef.current.classList.remove(styles.dragging);
         }
@@ -53,6 +54,7 @@ export default function SplitHandle({ onDrag }) {
         if (!handleRef.current) return;
 
         isDraggingRef.current = true;
+        document.body.style.userSelect = 'none';
         handleRef.current.classList.add(styles.dragging);
 
         document.addEventListener('mousemove', handleMouseMove);

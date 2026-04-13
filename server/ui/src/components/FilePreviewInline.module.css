@@ -53,7 +53,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-secondary, #999);
+    color: var(--text-secondary);
 }
 
 .fileName {
@@ -81,7 +81,7 @@
     font-size: 12px;
     border: none;
     background: transparent;
-    color: #999;
+    color: var(--text-secondary);
     cursor: pointer;
     border-radius: 3px;
     transition: background 0.15s ease, color 0.15s ease;
@@ -106,7 +106,7 @@
     background: transparent;
     border: none;
     border-radius: 4px;
-    color: #999;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
 }
@@ -229,7 +229,7 @@
 .statusText {
     padding: 20px;
     text-align: center;
-    color: #999;
+    color: var(--text-secondary);
     font-size: 13px;
 }
 

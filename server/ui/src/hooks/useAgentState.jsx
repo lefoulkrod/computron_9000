@@ -205,6 +205,19 @@ function _agentReducer(state, action) {
             };
         }
 
+        case 'CLEAR_TERMINAL': {
+            const { agentId } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: { ...agent, terminalLines: [] },
+                },
+            };
+        }
+
         case 'UPDATE_DESKTOP_ACTIVE': {
             const { agentId } = action;
             const agent = state.agents[agentId];
