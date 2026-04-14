@@ -193,7 +193,7 @@ The UI follows the **SIGNAL** design language (see `design/DESIGN_LANGUAGE.md`).
 
 ## Known Technical Debt
 
-1. **Global button CSS bleeds** — The `button` rule in `global.css` applies opinionated styles to all buttons. Every utility button must override. Should scope to a `.btn` class. See `docs/plans/global-button-refactor.md`.
+1. **Global button CSS bleeds** — The `button` rule in `global.css` applies opinionated styles to all buttons. Every utility button must override. Should scope to a `.btn` class.
 
 2. **JSONL event schema is ad-hoc** — The SSE stream lacks a uniform envelope. Fields live at different nesting levels, forcing ~350 lines of conditional routing in `useStreamingChat.js`. Should normalize to a consistent envelope with `type`, `agent_id`, `depth` at the top level.
 

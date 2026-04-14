@@ -38,8 +38,10 @@ finish.  Keep them fast.
    ```
 
 2. Register it in ``migrations/_runner.py`` by appending to the
-   ``_MIGRATIONS`` list. Import the module's ``migrate`` with an alias to
-   avoid name collisions, and add a tuple with the migration name:
+   ``_MIGRATIONS`` list. Every migration module exports a function named
+   ``migrate`` — if you imported them plainly, each new one would shadow
+   the last. So import each under an alias that matches its module name,
+   then append a ``(name, migrate_fn)`` tuple to the list:
 
    ```python
    from migrations._003_add_profile_version import migrate as _003_add_profile_version
@@ -51,7 +53,7 @@ finish.  Keep them fast.
    ]
    ```
 
-   Order is load-bearing: always append at the bottom so existing
+   Order matters: always append at the bottom so existing
    installations keep the same sequence.
 
 ## Guidelines

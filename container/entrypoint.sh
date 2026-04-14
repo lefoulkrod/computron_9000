@@ -58,6 +58,8 @@ export ACCESSIBILITY_ENABLED=1
 if [ "${_DESKTOP}" = "true" ]; then
     # Xfce desktop (as computron). Pass D-Bus address so child inherits it.
     gosu computron bash -c "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS' GTK_MODULES=gail:atk-bridge ACCESSIBILITY_ENABLED=1; startxfce4" &
+    # Give startxfce4 a moment to spawn xfwm4 before the pgrep check below; without this
+    # the check races and we launch a duplicate window manager.
     sleep 2
 
     # Disable screen blanking, set default cursor

@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 _APPLIED_FILE = ".migrations.json"
 
 # Migrations run top-to-bottom on first startup; already-applied entries are
-# skipped on subsequent runs. Insert new migrations at the bottom — order is
-# load-bearing and must stay stable across releases.
+# skipped on subsequent runs. Insert new migrations at the bottom — the order
+# must stay stable across releases.
 _MIGRATIONS: list[tuple[str, Callable[[Path], None]]] = [
     ("001_task_agent_to_profile", _001_task_agent_to_profile),
     ("002_install_default_profiles", _002_install_default_profiles),
