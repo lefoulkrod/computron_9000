@@ -349,10 +349,10 @@ async def handle_user_message(
         profile_id = load_settings().get("default_agent", "computron")
     profile = get_agent_profile(profile_id)
     if profile is None:
-        logger.warning("Profile '%s' not found, falling back to computron", profile_id)
+        logger.warning("Profile '%s' not found, falling back to default", profile_id)
         profile = get_default_profile()
 
-    # build_llm_options handles model inheritance from Computron
+    # build_llm_options handles model inheritance from the default profile
     if not profile.model and not build_llm_options(profile).model:
         msg = "No model configured. Complete the setup wizard to select a model."
         raise ValueError(msg)

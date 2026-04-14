@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from agents.types import LLMOptions
 from config import load_config
+from settings import load_settings
 
 logger = logging.getLogger(__name__)
 
@@ -93,10 +94,11 @@ def get_agent_profile(profile_id: str) -> AgentProfile | None:
 
 
 def get_default_profile() -> AgentProfile:
-    """Return the Computron profile."""
-    profile = get_agent_profile(COMPUTRON_ID)
+    """Return the profile configured as the app-wide default agent."""
+    default_id = load_settings().get("default_agent") or COMPUTRON_ID
+    profile = get_agent_profile(default_id)
     if profile is None:
-        msg = "Computron profile not found — run setup wizard"
+        msg = f"Default agent profile '{default_id}' not found — run setup wizard"
         raise RuntimeError(msg)
     return profile
 
@@ -149,13 +151,16 @@ def duplicate_agent_profile(profile_id: str, new_name: str | None = None) -> Age
 def build_llm_options(profile: AgentProfile) -> LLMOptions:
     """Convert an AgentProfile to LLMOptions for the turn machinery.
 
-    If the profile has no model set, inherits from the Computron profile.
+    If the profile has no model set, inherits from the app-configured
+    default agent profile.
     """
     model = profile.model
-    if not model and profile.id != COMPUTRON_ID:
-        default = get_agent_profile(COMPUTRON_ID)
-        if default:
-            model = default.model
+    if not model:
+        default_id = load_settings().get("default_agent") or COMPUTRON_ID
+        if profile.id != default_id:
+            default = get_agent_profile(default_id)
+            if default:
+                model = default.model
     return LLMOptions(
         model=model,
         think=profile.think,
