@@ -51,10 +51,11 @@ export default function FilePreviewInline({ item, onFullscreen }) {
 
                 <div className={styles.toolbarCenter}>
                     {showToggle && !isPdf && (
-                        <div className={styles.toggle}>
+                        <div className={styles.toggle} data-testid="file-view-toggle">
                             <button
                                 className={`${styles.toggleBtn} ${viewMode === 'source' ? styles.toggleBtnActive : ''}`}
                                 onClick={() => setViewMode('source')}
+                                data-testid="file-view-source"
                             >
                                 <SourceIcon size={12} />
                                 Source
@@ -62,6 +63,7 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                             <button
                                 className={`${styles.toggleBtn} ${viewMode === 'preview' ? styles.toggleBtnActive : ''}`}
                                 onClick={() => setViewMode('preview')}
+                                data-testid="file-view-preview"
                             >
                                 <EyeIcon size={12} />
                                 Preview
@@ -69,7 +71,7 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                         </div>
                     )}
                     {!showToggle && !isPdf && (
-                        <div className={styles.toggle}>
+                        <div className={styles.toggle} data-testid="file-view-source-only">
                             <button className={`${styles.toggleBtn} ${styles.toggleBtnActive}`}>
                                 <SourceIcon size={12} /> Source
                             </button>
@@ -83,6 +85,7 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                         onClick={handleDownload}
                         title="Download"
                         aria-label="Download file"
+                        data-testid="file-download"
                     >
                         <DownloadIcon size={14} />
                     </button>
@@ -92,6 +95,7 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                             onClick={onFullscreen}
                             title="Fullscreen"
                             aria-label="Open fullscreen"
+                            data-testid="file-fullscreen"
                         >
                             <ExpandIcon size={14} />
                         </button>

@@ -6,6 +6,7 @@ import logging
 import mimetypes
 from pathlib import Path
 
+from config import load_config
 from sdk.events import AgentEvent, FileOutputPayload, publish_event
 
 logger = logging.getLogger(__name__)
@@ -14,8 +15,13 @@ logger = logging.getLogger(__name__)
 async def send_file(path: str) -> dict[str, str]:
     """Send a file to the user. Use this whenever the user should receive a file.
 
+    The file MUST live under the virtual computer's home directory
+    (``/home/computron`` by default) — only paths under that directory are
+    served to the UI. Files in ``/tmp`` or other locations cannot be sent;
+    write or copy them into the home directory first.
+
     Args:
-        path: Absolute path to the file.
+        path: Absolute path to the file, under the home directory.
 
     Returns:
         Dict with ``status`` and ``message``.
@@ -28,6 +34,19 @@ async def send_file(path: str) -> dict[str, str]:
 
         if not file_path.is_file():
             return {"status": "error", "message": "Path is not a file: %s" % path}
+
+        cfg = load_config()
+        home_dir = Path(cfg.virtual_computer.home_dir).resolve()
+        resolved = file_path.resolve()
+        if not resolved.is_relative_to(home_dir):
+            return {
+                "status": "error",
+                "message": (
+                    "File must live under %s to be sent to the UI; got %s. "
+                    "Write or copy the file into the home directory first."
+                    % (home_dir, path)
+                ),
+            }
 
         content_type, _ = mimetypes.guess_type(file_path.name)
         if content_type is None:

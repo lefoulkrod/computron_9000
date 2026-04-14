@@ -27,7 +27,7 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                 )}
                 <ContextUsageBadge contextUsage={rootAgent?.contextUsage} />
                 {networkActivated && (
-                    <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view">
+                    <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view" data-testid="network-indicator">
                         <span className={`${styles.networkDot} ${networkRunningCount > 0 ? styles.networkDotActive : ''}`} />
                         <span>{networkAgentCount} agent{networkAgentCount !== 1 ? 's' : ''}</span>
                     </button>

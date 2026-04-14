@@ -51,7 +51,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
     const statusClass = styles[agent.status] || '';
 
     return (
-        <div className={styles.container}>
+        <div className={styles.container} data-testid="agent-activity-view">
             {/* Agent header with back button */}
             <div className={styles.agentBar}>
                 <div className={styles.backRow}>
@@ -69,7 +69,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                 </div>
                 <div className={styles.titleRow}>
                     <span className={`${styles.dot} ${statusClass}`} />
-                    <span className={styles.title}>{formatAgentName(agent.name)}</span>
+                    <span className={styles.title} data-testid="agent-activity-title">{formatAgentName(agent.name)}</span>
                     <div className={styles.meta}>
                         {agent.startedAt && <span>{formatElapsed(agent.startedAt, agent.completedAt)}</span>}
                         {agent.iteration !== null && (

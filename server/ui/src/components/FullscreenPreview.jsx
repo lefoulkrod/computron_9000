@@ -36,7 +36,7 @@ export default function FullscreenPreview({ item, onClose }) {
     }, [handleKeyDown]);
 
     return (
-        <div className={styles.fullscreenPreview}>
+        <div className={styles.fullscreenPreview} data-testid="fullscreen-preview">
             {/* Header bar */}
             <div className={styles.header}>
                 <div className={styles.headerLeft}>
@@ -45,6 +45,7 @@ export default function FullscreenPreview({ item, onClose }) {
                         onClick={onClose}
                         title="Back"
                         aria-label="Back to preview panel"
+                        data-testid="fullscreen-back"
                     >
                         <ArrowLeftIcon size={14} />
                         Back

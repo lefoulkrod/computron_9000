@@ -40,8 +40,13 @@ export default function useFileContent(item) {
     useEffect(() => {
         if (isImage || isPdf || content || !path) return;
         let cancelled = false;
-        fetch(path).then(r => r.text()).then(t => {
+        fetch(path).then(r => {
+            if (!r.ok) throw new Error(`Failed to load ${path}: ${r.status}`);
+            return r.text();
+        }).then(t => {
             if (!cancelled) setFetchedText(t);
+        }).catch(err => {
+            if (!cancelled) setFetchedText(`Error loading file: ${err.message}`);
         });
         return () => { cancelled = true; };
     }, [content, path, isImage, isPdf]);
