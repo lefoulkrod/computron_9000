@@ -1,14 +1,30 @@
 """Tests for tasks._tools planning tools."""
 
 import re
+from typing import Any
 
 import pytest
 
 import tasks
 from tasks import _singleton
-from tasks._tools import create_goal, list_goals, list_tasks
+from tasks._tools import commit_goal, list_goals, list_tasks
 
-_TASK = {"key": "t1", "description": "task 1", "instruction": "do the thing"}
+_TASK = {"key": "t1", "description": "task 1", "instruction": "do the thing", "agent_profile": "computron"}
+
+
+async def create_goal(
+    description: str,
+    tasks: list[dict[str, Any]],
+    cron: str | None = None,
+    timezone: str | None = None,
+) -> str:
+    """Build a draft dict and commit it, matching the old create_goal signature."""
+    draft: dict[str, Any] = {"description": description, "tasks": tasks}
+    if cron is not None:
+        draft["cron"] = cron
+    if timezone is not None:
+        draft["timezone"] = timezone
+    return await commit_goal(draft)
 
 
 @pytest.fixture(autouse=True)
@@ -82,8 +98,8 @@ class TestCreateGoal:
     async def test_creates_all_tasks(self):
         """All submitted tasks are persisted."""
         tasks_input = [
-            {"key": "a", "description": "A", "instruction": "do A"},
-            {"key": "b", "description": "B", "instruction": "do B"},
+            {"key": "a", "description": "A", "instruction": "do A", "agent_profile": "computron"},
+            {"key": "b", "description": "B", "instruction": "do B", "agent_profile": "computron"},
         ]
         result = await create_goal("multi", tasks=tasks_input)
         goal_id = _extract_id(result)
@@ -96,8 +112,11 @@ class TestCreateGoal:
     async def test_task_dependencies_resolved(self):
         """depends_on keys are resolved to real task IDs."""
         tasks_input = [
-            {"key": "first", "description": "first task", "instruction": "do first"},
-            {"key": "second", "description": "second task", "instruction": "do second", "depends_on": ["first"]},
+            {"key": "first", "description": "first task", "instruction": "do first", "agent_profile": "computron"},
+            {
+                "key": "second", "description": "second task", "instruction": "do second",
+                "depends_on": ["first"], "agent_profile": "computron",
+            },
         ]
         result = await create_goal("dep goal", tasks=tasks_input)
         goal_id = _extract_id(result)
@@ -108,18 +127,15 @@ class TestCreateGoal:
         first_id = by_desc["first task"].id
         assert by_desc["second task"].depends_on == [first_id]
 
-    async def test_task_agent_profile_default(self):
-        """Task agent_profile defaults to the settings default_agent when unspecified."""
-        result = await create_goal("goal", tasks=[_TASK])
-        goal_id = _extract_id(result)
+    async def test_missing_agent_profile_returns_error(self):
+        """A task without agent_profile returns an error."""
+        task = {"key": "t1", "description": "task", "instruction": "do it"}
+        result = await create_goal("goal", tasks=[task])
+        assert "Error" in result
+        assert "agent_profile" in result
 
-        store = tasks.get_store()
-        stored = store.list_tasks(goal_id)
-        # _default_agent() returns settings.default_agent, defaulting to "computron"
-        assert stored[0].agent_profile == "computron"
-
-    async def test_task_agent_profile_override(self):
-        """Task agent_profile is set when provided."""
+    async def test_task_agent_profile_persists(self):
+        """Task agent_profile is saved on the stored task."""
         task = {**_TASK, "agent_profile": "code_expert"}
         result = await create_goal("goal", tasks=[task])
         goal_id = _extract_id(result)
@@ -202,8 +218,8 @@ class TestCreateGoal:
     async def test_one_shot_run_includes_task_results(self):
         """The auto-spawned run has task results for all tasks, not zero."""
         tasks_input = [
-            {"key": "a", "description": "A", "instruction": "do A"},
-            {"key": "b", "description": "B", "instruction": "do B"},
+            {"key": "a", "description": "A", "instruction": "do A", "agent_profile": "computron"},
+            {"key": "b", "description": "B", "instruction": "do B", "agent_profile": "computron"},
         ]
         result = await create_goal("goal", tasks=tasks_input)
         goal_id = _extract_id(result)

@@ -226,29 +226,11 @@ class TestBuildLLMOptions:
         assert opts.top_k is None
         assert opts.max_iterations is None
 
-    def test_model_inheritance(self):
-        """Profile with no model inherits from the configured default agent."""
-        save_agent_profile(_make_profile(id="computron", name="Computron", model="big-model:70b"))
+    def test_missing_model_raises(self):
+        """Profile with no model raises RuntimeError."""
         p = _make_profile(id="child", model="")
-        opts = build_llm_options(p)
-        assert opts.model == "big-model:70b"
-
-    def test_default_profile_no_inheritance(self):
-        """The configured default profile itself doesn't try to inherit."""
-        p = _make_profile(id="computron", model="my-model:32b")
-        opts = build_llm_options(p)
-        assert opts.model == "my-model:32b"
-
-    def test_inheritance_follows_non_computron_default(self, monkeypatch):
-        """Inheritance follows whichever profile is set as default_agent."""
-        monkeypatch.setattr(
-            "agents._agent_profiles.load_settings",
-            lambda: {"default_agent": "code_expert"},
-        )
-        save_agent_profile(_make_profile(id="code_expert", name="Code Expert", model="big-model:70b"))
-        p = _make_profile(id="child", model="")
-        opts = build_llm_options(p)
-        assert opts.model == "big-model:70b"
+        with pytest.raises(RuntimeError, match="no model configured"):
+            build_llm_options(p)
 
 
 @pytest.mark.unit

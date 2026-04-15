@@ -1,18 +1,16 @@
 """Planning tools for goal and task creation."""
 
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from agents._agent_profiles import get_agent_profile, list_agent_profiles
+from croniter import croniter
+
+from agents import (
+    get_agent_profile,
+    list_agent_profiles,
+)
+from tasks._models import _new_id
 from tasks._singleton import get_store
-
-
-def _default_agent() -> str:
-    """Return the default agent profile ID from settings."""
-    try:
-        from settings import load_settings
-        return load_settings().get("default_agent") or "computron"
-    except Exception:
-        return "computron"
 
 
 async def begin_goal(
@@ -33,15 +31,11 @@ async def begin_goal(
         return "Error: description is required."
     if cron:
         try:
-            from croniter import croniter
-
             croniter(cron)
         except (ValueError, KeyError):
             return f"Error: Invalid cron expression '{cron}'."
     if timezone:
         try:
-            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
             ZoneInfo(timezone)
         except (ZoneInfoNotFoundError, KeyError):
             return f"Error: Unknown timezone '{timezone}'. Use an IANA timezone name (e.g. 'America/Chicago', 'UTC')."
@@ -58,8 +52,8 @@ async def add_task(
     key: str,
     description: str,
     instruction: str,
+    agent_profile: str,
     depends_on: list[str] | None = None,
-    agent_profile: str | None = None,
 ) -> dict[str, Any] | str:
     """Add a task to a goal draft and return the updated draft.
 
@@ -71,11 +65,10 @@ async def add_task(
         key: Unique short identifier for this task (e.g. 'fetch_data').
         description: Short human-readable description.
         instruction: Full self-contained agent prompt.
+        agent_profile: Agent profile ID (e.g. 'code_expert', 'research_agent').
+            Call list_agent_profiles() to see available profiles.
         depends_on: Keys of tasks this task depends on. Omit to depend on the
             previous task. Pass [] for no dependencies (parallel execution).
-        agent_profile: Agent profile ID (e.g. 'code_expert',
-            'research_agent'). Uses the default agent from settings if omitted.
-            Call list_agent_profiles() to see available profiles.
     """
     if not isinstance(draft, dict) or "tasks" not in draft:
         return "Error: invalid draft. Start with begin_goal."
@@ -89,19 +82,20 @@ async def add_task(
         return f"Error: description is required for task '{key}'."
     if not instruction or not instruction.strip():
         return f"Error: instruction is required for task '{key}'."
+    if not agent_profile or not agent_profile.strip():
+        available = [p.id for p in list_agent_profiles()]
+        return f"Error: agent_profile is required for task '{key}'. Available: {available}."
 
-    # Validate agent_profile exists and is enabled
-    if agent_profile:
-        resolved = get_agent_profile(agent_profile)
-        if resolved is None:
-            available = [p.id for p in list_agent_profiles()]
-            return f"Error: unknown agent profile '{agent_profile}' for task '{key}'. Available: {available}."
-        if not resolved.enabled:
-            available = [p.id for p in list_agent_profiles()]
-            return (
-                f"Error: agent profile '{agent_profile}' is disabled and cannot be used "
-                f"for task '{key}'. Available: {available}."
-            )
+    resolved = get_agent_profile(agent_profile)
+    if resolved is None:
+        available = [p.id for p in list_agent_profiles()]
+        return f"Error: unknown agent profile '{agent_profile}' for task '{key}'. Available: {available}."
+    if not resolved.enabled:
+        available = [p.id for p in list_agent_profiles()]
+        return (
+            f"Error: agent profile '{agent_profile}' is disabled and cannot be used "
+            f"for task '{key}'. Available: {available}."
+        )
 
     # Default to previous task if depends_on is omitted and one exists
     resolved_deps = [existing_keys[-1]] if depends_on is None and existing_keys else (depends_on or [])
@@ -115,8 +109,8 @@ async def add_task(
         "description": description.strip(),
         "instruction": instruction.strip(),
         "depends_on": resolved_deps,
+        "agent_profile": agent_profile,
     }
-    task["agent_profile"] = agent_profile or _default_agent()
     return {**draft, "tasks": [*draft["tasks"], task]}
 
 
@@ -128,75 +122,17 @@ async def commit_goal(draft: dict[str, Any]) -> str:
     """
     if not isinstance(draft, dict):
         return "Error: invalid draft."
-    return await create_goal(
-        description=draft.get("description", ""),
-        tasks=draft.get("tasks", []),
-        cron=draft.get("cron"),
-        timezone=draft.get("timezone"),
-    )
+    description = draft.get("description", "")
+    tasks = draft.get("tasks", [])
+    cron = draft.get("cron")
+    timezone = draft.get("timezone")
 
-
-async def create_goal(
-    description: str,
-    tasks: list[dict[str, Any]],
-    cron: str | None = None,
-    timezone: str | None = None,
-) -> str:
-    """Create a goal with all its tasks in a single call.
-
-    Each task must have a unique ``key`` used to express dependencies within
-    this submission. ``depends_on`` lists keys of tasks that must complete
-    before this one starts. Tasks without ``depends_on`` run in parallel
-    immediately.
-
-    Example::
-
-        create_goal(
-            description="Research and summarize today's AI news",
-            tasks=[
-                {
-                    "key": "research",
-                    "description": "Find today's top AI news stories",
-                    "instruction": "Browse news sites and find the top 5 AI stories published today.",
-                    "agent_profile": "research_agent",
-                },
-                {
-                    "key": "summarize",
-                    "description": "Write a summary of the research",
-                    "instruction": "Summarize the AI news stories into a concise briefing.",
-                    "agent_profile": "creative_writer",
-                    "depends_on": ["research"],
-                },
-            ],
-        )
-
-    Args:
-        description: What this goal accomplishes.
-        tasks: List of task definitions. Each item must have:
-            - key (str): Local reference key, used in other tasks' depends_on.
-            - description (str): Short human-readable description.
-            - instruction (str): Full, self-contained agent prompt. The
-              executing agent has no conversation history — include all URLs,
-              file paths, criteria, and output expectations.
-            - agent_profile (str): Agent profile ID (e.g.
-              'code_expert', 'research_agent'). Determines model, skills,
-              system prompt, and inference parameters. Defaults to
-              'computron' if omitted.
-            - depends_on (list[str], optional): Keys of tasks this task
-              depends on.
-        cron: Cron expression for recurring goals (e.g. '0 */2 * * *').
-            Omit for one-shot goals, which spawn a run immediately.
-        timezone: IANA timezone name (e.g. 'America/Chicago', 'UTC').
-            Uses the config default if not specified.
-    """
     if not description or not description.strip():
         return "Error: description is required and cannot be empty."
     if not tasks:
         return "Error: tasks is required and cannot be empty. Define at least one task."
     if cron:
         try:
-            from croniter import croniter
-
             croniter(cron)
         except (ValueError, KeyError):
             return f"Error: Invalid cron expression '{cron}'. Use standard 5-field cron syntax (e.g. '0 */2 * * *')."
@@ -221,22 +157,22 @@ async def create_goal(
                     f" defined before it. List tasks in execution order and only"
                     f" reference keys of earlier tasks."
                 )
-        # Validate agent_profile is enabled (if specified)
         requested = t.get("agent_profile")
-        if requested:
-            resolved = get_agent_profile(requested)
-            if resolved is None:
-                available = [p.id for p in list_agent_profiles()]
-                return (
-                    f"Error: tasks[{i}] (key='{key}') references unknown agent profile "
-                    f"'{requested}'. Available: {available}."
-                )
-            if not resolved.enabled:
-                available = [p.id for p in list_agent_profiles()]
-                return (
-                    f"Error: tasks[{i}] (key='{key}') references disabled agent profile "
-                    f"'{requested}'. Available: {available}."
-                )
+        if not requested:
+            return f"Error: tasks[{i}] (key='{key}') is missing 'agent_profile'."
+        resolved = get_agent_profile(requested)
+        if resolved is None:
+            available = [p.id for p in list_agent_profiles()]
+            return (
+                f"Error: tasks[{i}] (key='{key}') references unknown agent profile "
+                f"'{requested}'. Available: {available}."
+            )
+        if not resolved.enabled:
+            available = [p.id for p in list_agent_profiles()]
+            return (
+                f"Error: tasks[{i}] (key='{key}') references disabled agent profile "
+                f"'{requested}'. Available: {available}."
+            )
 
     store = get_store()
     goal = store.create_goal(
@@ -247,8 +183,6 @@ async def create_goal(
     )
 
     key_to_id: dict[str, str] = {}
-    from tasks._models import _new_id
-
     task_defs: list[dict] = []
     for t in tasks:
         key = str(t["key"]).strip()
@@ -260,8 +194,8 @@ async def create_goal(
             "description": str(t["description"]).strip(),
             "instruction": str(t["instruction"]).strip(),
             "depends_on": [key_to_id[k] for k in dep_keys],
+            "agent_profile": t["agent_profile"],
         }
-        task_def["agent_profile"] = t.get("agent_profile") or _default_agent()
         task_defs.append(task_def)
 
     created_tasks = store.create_tasks(goal_id=goal.id, task_defs=task_defs)
@@ -271,7 +205,7 @@ async def create_goal(
 
     lines = []
     keys = [str(t["key"]).strip() for t in tasks]
-    for key, task in zip(keys, created_tasks):
+    for key, task in zip(keys, created_tasks, strict=True):
         dep_keys = tasks[keys.index(key)].get("depends_on") or []
         deps_note = f", depends_on={dep_keys}" if dep_keys else ""
         profile_note = f", profile={task.agent_profile}" if task.agent_profile else ""
@@ -328,4 +262,4 @@ async def trigger_goal(goal_id: str) -> str:
     return f"Triggered run #{run.run_number} (id={run.id}) for goal '{goal.description}'."
 
 
-__all__ = ["add_task", "begin_goal", "commit_goal", "create_goal", "list_goals", "list_tasks", "trigger_goal"]
+__all__ = ["add_task", "begin_goal", "commit_goal", "list_goals", "list_tasks", "trigger_goal"]

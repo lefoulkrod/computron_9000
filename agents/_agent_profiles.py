@@ -95,7 +95,7 @@ def get_agent_profile(profile_id: str) -> AgentProfile | None:
 
 def get_default_profile() -> AgentProfile:
     """Return the profile configured as the app-wide default agent."""
-    default_id = load_settings().get("default_agent") or COMPUTRON_ID
+    default_id = load_settings()["default_agent"]
     profile = get_agent_profile(default_id)
     if profile is None:
         msg = f"Default agent profile '{default_id}' not found — run setup wizard"
@@ -151,18 +151,14 @@ def duplicate_agent_profile(profile_id: str, new_name: str | None = None) -> Age
 def build_llm_options(profile: AgentProfile) -> LLMOptions:
     """Convert an AgentProfile to LLMOptions for the turn machinery.
 
-    If the profile has no model set, inherits from the app-configured
-    default agent profile.
+    Raises:
+        RuntimeError: If the profile has no model configured.
     """
-    model = profile.model
-    if not model:
-        default_id = load_settings().get("default_agent") or COMPUTRON_ID
-        if profile.id != default_id:
-            default = get_agent_profile(default_id)
-            if default:
-                model = default.model
+    if not profile.model:
+        msg = f"Profile '{profile.id}' has no model configured — run setup wizard"
+        raise RuntimeError(msg)
     return LLMOptions(
-        model=model,
+        model=profile.model,
         think=profile.think,
         num_ctx=profile.num_ctx,
         num_predict=profile.num_predict,

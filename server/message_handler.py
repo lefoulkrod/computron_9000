@@ -20,11 +20,10 @@ from agents.types import Agent, Data
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
-from agents._agent_profiles import (
+from agents import (
     AgentProfile,
     build_llm_options,
     get_agent_profile,
-    get_default_profile,
 )
 from conversations import (
     generate_conversation_title,
@@ -343,17 +342,15 @@ async def handle_user_message(
     if data:
         user_content = _augment_message_with_attachments(message, data)
 
-    # Resolve the agent profile
     if not profile_id:
-        from settings import load_settings
-        profile_id = load_settings().get("default_agent", "computron")
+        msg = "profile_id is required"
+        raise RuntimeError(msg)
     profile = get_agent_profile(profile_id)
     if profile is None:
-        logger.warning("Profile '%s' not found, falling back to default", profile_id)
-        profile = get_default_profile()
+        msg = f"Agent profile '{profile_id}' not found"
+        raise RuntimeError(msg)
 
-    # build_llm_options handles model inheritance from the default profile
-    if not profile.model and not build_llm_options(profile).model:
+    if not profile.model:
         msg = "No model configured. Complete the setup wizard to select a model."
         raise ValueError(msg)
 
