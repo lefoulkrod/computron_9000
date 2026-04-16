@@ -120,6 +120,19 @@ _ANTI_BOT_SCRIPT = (
 // re-injecting it, so it is safe to leave it absent.
 delete Navigator.prototype.webdriver;
 delete navigator.webdriver;
+
+// WebGL — ensure getContext returns valid contexts so WebGL-dependent
+// sites (maps, 3D) work and bot detectors don't flag missing WebGL.
+const _origGetContext = HTMLCanvasElement.prototype.getContext;
+HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+  if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+    const ctx = _origGetContext.call(this, type, ...args);
+    if (ctx) return ctx;
+    // Fallback: try creating with basic attributes
+    return _origGetContext.call(this, type, { ...args[0], failIfMajorPerformanceCaveat: false });
+  }
+  return _origGetContext.call(this, type, ...args);
+};
 """
 )
 
@@ -327,6 +340,8 @@ class Browser:
             "--hide-crash-restore-bubble",
             "--webrtc-ip-handling-policy=disable_non_proxied_udp",
             "--disable-pdf-viewer",
+            "--enable-webgl",
+            "--enable-webgl2-compute-context",
         ]
         if args:
             chrome_args.extend(args)

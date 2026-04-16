@@ -57,3 +57,33 @@ class TestChromeArgs:
     def test_always_uses_system_chrome(self):
         source = inspect.getsource(Browser.start)
         assert 'channel="chrome"' in source
+
+    def test_webgl_flags_present(self):
+        """WebGL-enabling flags are included in chrome_args (BTI-005, BTI-008)."""
+        source = inspect.getsource(Browser.start)
+        assert "--enable-webgl" in source
+        assert "--enable-webgl2-compute-context" in source
+
+
+# ---------------------------------------------------------------------------
+# WebGL anti-bot script patch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWebGLPatch:
+    """WebGL getContext override in the anti-bot script (BTI-005, BTI-008)."""
+
+    def test_getcontext_override_present(self):
+        """Anti-bot script patches HTMLCanvasElement.prototype.getContext."""
+        assert "HTMLCanvasElement.prototype.getContext" in _ANTI_BOT_SCRIPT
+
+    def test_webgl_context_types_handled(self):
+        """Script handles webgl, webgl2, and experimental-webgl context types."""
+        assert "'webgl'" in _ANTI_BOT_SCRIPT
+        assert "'webgl2'" in _ANTI_BOT_SCRIPT
+        assert "'experimental-webgl'" in _ANTI_BOT_SCRIPT
+
+    def test_fallback_with_fail_if_major_performance_caveat(self):
+        """Script retries with failIfMajorPerformanceCaveat=false on failure."""
+        assert "failIfMajorPerformanceCaveat" in _ANTI_BOT_SCRIPT
