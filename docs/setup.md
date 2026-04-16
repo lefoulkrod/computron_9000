@@ -7,66 +7,48 @@ involves.
 
 ## How it works
 
-The gate is an `asyncio.Event` stored on the aiohttp app as `app["ready"]`.
+The aiohttp app (`server/aiohttp_app.py`) owns all the wiring. The gate is
+an `asyncio.Event` stored as `app["ready"]`, and the app itself registers
+the startup hooks that create it and the per-subsystem background tasks
+that wait on it. Subsystem packages (`tasks/`, etc.) stay ignorant of the
+ready signal.
 
 ### Startup flow
 
 During `app.on_startup` (before the server begins accepting requests):
 
 ```
-1. Migrations run (synchronous, no user interaction needed)
+1. _run_data_migrations runs migrations synchronously
 2. _init_ready_signal creates app["ready"] and checks setup.is_ready()
    - If True:  app["ready"] is set immediately
    - If False: app["ready"] stays unset
-3. Subsystems spawn background tasks that await app["ready"]
+3. Per-subsystem startup hooks (e.g. _start_task_runner) spawn a
+   background task that awaits app["ready"] before initializing
 ```
 
-Then the server begins accepting requests. Subsystems whose `ready` event
-was not set block inside their background task:
+Then the server begins accepting requests. If `ready` wasn't set, the
+background tasks block:
 
 ```
 4. User completes the setup wizard in the browser
 5. Settings handler calls setup.mark_ready(app)
-6. app["ready"] fires, waiting subsystems proceed
+6. app["ready"] fires, waiting tasks proceed
 ```
 
 If the setup wizard was already completed in a previous session,
 step 2 sets the event immediately and subsystems start without waiting.
 
-### Subsystem pattern
+### Adding a new deferred subsystem
 
-Subsystems that need to wait for setup use a background task:
-
-```python
-async def _start_my_subsystem(app):
-    async def _deferred():
-        try:
-            await app["ready"].wait()
-            # now safe to initialize and run
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Failed to start my_subsystem")
-
-    app["_my_subsystem_init"] = asyncio.create_task(_deferred())
-```
-
-And a cleanup handler that cancels the waiting task if the app shuts
-down before setup completes:
-
-```python
-async def _stop_my_subsystem(app):
-    init_task = app.get("_my_subsystem_init")
-    if init_task and not init_task.done():
-        init_task.cancel()
-    subsystem = app.get("my_subsystem")
-    if subsystem:
-        await subsystem.stop()
-```
+Add a startup hook in `server/aiohttp_app.py` that spawns a background
+task and waits on `app["ready"]` before initializing the subsystem, plus
+a cleanup hook that cancels the init task. See `_start_task_runner` /
+`_stop_task_runner` in `server/aiohttp_app.py` for the reference
+implementation.
 
 ## The setup module
 
-`setup/__init__.py` has two functions:
+The `setup` package re-exports two functions:
 
 - **`is_ready() -> bool`** — Returns True if all prerequisites are met.
   Today this checks `setup_complete` in settings.  To add a new
@@ -77,9 +59,12 @@ async def _stop_my_subsystem(app):
   Re-checks `is_ready()` before firing the event, so the signal only
   fires when *all* prerequisites are satisfied.
 
+Both are defined in `setup/_gate.py` and re-exported from
+`setup/__init__.py`.
+
 ## Adding a new prerequisite
 
-1. Add a check in `setup.is_ready()`:
+1. Add a check in `is_ready()` (in `setup/_gate.py`):
 
    ```python
    def is_ready() -> bool:
