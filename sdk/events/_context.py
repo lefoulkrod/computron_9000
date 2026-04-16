@@ -144,13 +144,12 @@ async def agent_span(
         status = "stopped" if isinstance(exc, StopRequestedError) else "error"
         raise
     finally:
-        # Release ephemeral browser context for sub-agents (depth > 0).
-        if depth > 0:
-            try:
-                from tools.browser.core import release_agent_browser
-                await release_agent_browser(context_id)
-            except Exception:  # noqa: BLE001
-                logger.debug("No browser context to release for '%s'", context_id)
+        # Release ephemeral browser context for this agent.
+        try:
+            from tools.browser.core import release_agent_browser
+            await release_agent_browser(context_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("No browser context to release for '%s'", context_id)
 
         logger.info(
             "Agent completed: %s (id=%s, status=%s, depth=%d)",

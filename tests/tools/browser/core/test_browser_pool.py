@@ -63,7 +63,7 @@ class _FakeContext:
 def _make_browser(**kwargs: Any) -> Browser:
     """Create a Browser with a fake context and a mock pw_browser for sub-agent contexts."""
     ctx = _FakeContext([_FakePage()])
-    # Mock pw_browser so sub-agents can call root._pw_browser.new_context()
+    # Mock pw_browser so agents can call root._pw_browser.new_context()
     mock_pw_browser = MagicMock()
     mock_pw_browser.new_context = AsyncMock(return_value=_FakeContext([]))
     b = Browser(context=ctx, extra_headers={"Accept-Language": "en"}, pw_browser=mock_pw_browser, **kwargs)  # type: ignore[arg-type]
@@ -81,47 +81,29 @@ def _clean_pool():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_root_agent_gets_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Depth 0 returns the persistent root browser."""
-    root = _make_browser()
-    monkeypatch.setattr("sdk.events.get_current_depth", lambda: 0)
-    monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root")
-
-    with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
-        result = await get_browser()
-
-    assert result is root
-    assert len(_agent_browsers) == 0
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_sub_agent_gets_ephemeral_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Sub-agents (depth > 0) get an ephemeral context on the root's Chrome process."""
+async def test_agent_gets_ephemeral_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every agent gets an ephemeral context, never the root browser directly."""
     root = _make_browser()
     ephemeral_ctx = _FakeContext([])
     root._pw_browser.new_context = AsyncMock(return_value=ephemeral_ctx)
 
-    monkeypatch.setattr("sdk.events.get_current_depth", lambda: 1)
-    monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.browser_agent.1")
+    monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.1")
 
     with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
         result = await get_browser()
 
     assert result is not root
     assert result._context is ephemeral_ctx
-    assert "root.browser_agent.1" in _agent_browsers
-    # Inherits download dir from root
+    assert "root.1" in _agent_browsers
     assert result._downloads_dir == root._downloads_dir
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_sub_agent_reuses_existing_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Repeated get_browser calls from the same sub-agent return the same instance."""
+async def test_agent_reuses_existing_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Repeated get_browser calls from the same agent return the same instance."""
     root = _make_browser()
 
-    monkeypatch.setattr("sdk.events.get_current_depth", lambda: 1)
     monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.web.1")
 
     with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
@@ -129,8 +111,28 @@ async def test_sub_agent_reuses_existing_context(monkeypatch: pytest.MonkeyPatch
         second = await get_browser()
 
     assert first is second
-    # new_context called only once
     root._pw_browser.new_context.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_concurrent_agents_get_separate_contexts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two agents with different IDs get separate ephemeral contexts."""
+    root = _make_browser()
+    # Return a fresh context each time
+    root._pw_browser.new_context = AsyncMock(side_effect=[_FakeContext([]), _FakeContext([])])
+
+    with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
+        monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "task_a.1")
+        first = await get_browser()
+
+        monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "task_b.2")
+        second = await get_browser()
+
+    assert first is not second
+    assert first._context is not second._context
+    assert "task_a.1" in _agent_browsers
+    assert "task_b.2" in _agent_browsers
 
 
 @pytest.mark.unit
@@ -163,12 +165,10 @@ async def test_ephemeral_inherits_storage_state(monkeypatch: pytest.MonkeyPatch)
     ephemeral_ctx = _FakeContext([])
     root._pw_browser.new_context = AsyncMock(return_value=ephemeral_ctx)
 
-    monkeypatch.setattr("sdk.events.get_current_depth", lambda: 2)
     monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.deep.1")
 
     with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
         await get_browser()
 
-    # Verify storage_state was passed to new_context
     call_kwargs = root._pw_browser.new_context.call_args[1]
     assert call_kwargs["storage_state"]["cookies"] == [{"name": "session", "value": "abc"}]

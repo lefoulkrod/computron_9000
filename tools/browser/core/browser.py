@@ -1116,19 +1116,15 @@ async def _get_root_browser() -> Browser:
 async def get_browser() -> Browser:
     """Get the browser instance for the current agent.
 
-    Root agents (depth 0) get the persistent singleton browser.  Sub-agents
-    get an ephemeral context on the same Chrome process, seeded with the
-    root's cookies and localStorage for session inheritance.
+    Every agent gets its own ephemeral context on the shared Chrome process,
+    seeded with the root browser's cookies and localStorage for session
+    inheritance.  The root browser is never navigated directly — it serves
+    as the persistent profile template (manageable via VNC).
     """
-    from sdk.events import get_current_agent_id, get_current_depth
+    from sdk.events import get_current_agent_id
 
     root = await _get_root_browser()
-    depth = get_current_depth()
-
-    if depth == 0:
-        return root
-
-    agent_id = get_current_agent_id() or "sub_default"
+    agent_id = get_current_agent_id() or "default"
     async with _agent_browser_lock:
         if agent_id in _agent_browsers:
             return _agent_browsers[agent_id]
