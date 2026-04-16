@@ -13,7 +13,7 @@ import styles from './ChatPanel.module.css';
  * When sub-agents have been spawned, a network indicator appears in the
  * header so the user can navigate to the full agent network view.
  */
-export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork }) {
+export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork, selectedProfileId, onProfileChange, profileRefreshSignal }) {
     const [draft, setDraft] = useState('');
     const clearDraft = useCallback(() => setDraft(''), []);
 
@@ -27,13 +27,13 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                 )}
                 <ContextUsageBadge contextUsage={rootAgent?.contextUsage} />
                 {networkActivated && (
-                    <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view">
+                    <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view" data-testid="network-indicator">
                         <span className={`${styles.networkDot} ${networkRunningCount > 0 ? styles.networkDotActive : ''}`} />
                         <span>{networkAgentCount} agent{networkAgentCount !== 1 ? 's' : ''}</span>
                     </button>
                 )}
             </div>
-            <ChatMessages messages={messages} onPreview={onPreview} onStarterSelect={(text) => onSend(text)} />
+            <ChatMessages messages={messages} onPreview={onPreview} onStarterSelect={setDraft} />
             <ChatInput
                 onSend={onSend}
                 onStop={onStop}
@@ -41,6 +41,9 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                 attachment={attachment}
                 draft={draft}
                 onDraftConsumed={clearDraft}
+                selectedProfileId={selectedProfileId}
+                onProfileChange={onProfileChange}
+                profileRefreshSignal={profileRefreshSignal}
             />
         </div>
     );

@@ -32,7 +32,11 @@ def mock_env(tmp_path):
     cfg = MagicMock()
     cfg.llm.host = None
     cfg.vision = _FakeVision()
-    with patch.object(_mod, "load_config", return_value=cfg):
+    fake_settings = {"vision_model": "vision-model"}
+    with (
+        patch.object(_mod, "load_config", return_value=cfg),
+        patch("settings.load_settings", return_value=fake_settings),
+    ):
         yield cfg, tmp_path
 
 

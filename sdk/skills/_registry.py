@@ -6,7 +6,6 @@ centralized.
 """
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -21,13 +20,19 @@ class Skill(BaseModel):
         name: Short identifier used in load_skill() calls.
         description: One-line description shown in the skill catalog.
         prompt: Prompt fragment injected when the skill is loaded.
-        tools: Tool callables provided by this skill.
+        tools: Tool callables provided by this skill. Typed as ``list[Any]``
+            to avoid pydantic introspecting each callable's signature at
+            construction time — ``Callable[..., Any]`` triggers
+            ``typing.get_type_hints`` which can deadlock on the import lock
+            when skills are registered from inside an already-loading
+            module (the coder/browser/goal_planner imports run during
+            ``_ensure_builtins`` on the first tool-using turn).
     """
 
     name: str
     description: str
     prompt: str
-    tools: list[Callable[..., Any]]
+    tools: list[Any]
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -42,7 +47,6 @@ def register_skill(skill: Skill) -> None:
         skill: The skill to register. Overwrites any existing skill with
             the same name.
     """
-    _ensure_builtins()
     if skill.name in _SKILL_REGISTRY:
         logger.warning("Overwriting existing skill '%s'", skill.name)
     _SKILL_REGISTRY[skill.name] = skill
@@ -53,18 +57,23 @@ _builtins_registered = False
 
 
 def _ensure_builtins() -> None:
-    """Register all built-in skills on first call."""
+    """Register all built-in skills on first call.
+
+    The flag is flipped only after every built-in is registered. If the
+    call is interrupted (exception, cancellation) the flag stays False
+    so the next caller retries cleanly — otherwise the registry would
+    be permanently empty for the life of the process.
+    """
     global _builtins_registered
     if _builtins_registered:
         return
-    _builtins_registered = True
 
     from config import load_config
-
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
+    from skills.goal_planner import _SKILL as goal_planner_skill
 
-    for skill in (browser_skill, coder_skill):
+    for skill in (browser_skill, coder_skill, goal_planner_skill):
         register_skill(skill)
 
     features = load_config().features
@@ -77,6 +86,8 @@ def _ensure_builtins() -> None:
     if features.music_generation:
         from skills.music_generation import _SKILL as music_skill
         register_skill(music_skill)
+
+    _builtins_registered = True
 
 
 def get_skill(name: str) -> Skill | None:

@@ -13,6 +13,8 @@ from tasks._scheduler import cron_has_fired_since
 
 logger = logging.getLogger(__name__)
 
+GOALS_SUBDIR = "goals"
+
 
 class FileTaskStore:
     """File-based TaskStore implementation.
@@ -121,18 +123,18 @@ class FileTaskStore:
         goal_id: str,
         description: str,
         instruction: str,
-        agent: str,
-        agent_config: dict | None,
-        depends_on: list[str],
+        agent_profile: str | None = None,
+        depends_on: list[str] | None = None,
     ) -> Task:
         """Create a task definition belonging to a goal."""
-        return self.create_tasks(goal_id, [{
+        td: dict = {
             "description": description,
             "instruction": instruction,
-            "agent": agent,
-            "agent_config": agent_config,
-            "depends_on": depends_on,
-        }])[0]
+            "depends_on": depends_on or [],
+        }
+        if agent_profile:
+            td["agent_profile"] = agent_profile
+        return self.create_tasks(goal_id, [td])[0]
 
     def create_tasks(
         self,

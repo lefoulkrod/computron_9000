@@ -4,8 +4,10 @@ Adds deny patterns, per-command timeouts, and strict bash flags.
 """
 
 import asyncio
+import contextlib
 import logging
-import shlex
+import os
+import signal
 import uuid
 
 from pydantic import BaseModel
@@ -22,6 +24,7 @@ class RunBashCmdError(Exception):
     """Error raised when a bash command execution fails."""
 
     def __init__(self, message: str) -> None:
+        """Initialize with a human-readable failure message."""
         super().__init__(message)
 
 
@@ -33,7 +36,24 @@ class BashCmdResult(BaseModel):
     exit_code: int | None
 
 
-BASH_CMD_TIMEOUT: float = 600.0
+BASH_CMD_TIMEOUT: float = 120.0
+
+
+def _kill_process_group(pid: int) -> None:
+    """Send SIGKILL to the entire process group led by ``pid``.
+
+    ``proc.kill()`` only signals the direct child; descendants spawned by the
+    shell survive. Because we launch bash with ``start_new_session=True`` the
+    whole tree shares ``pid`` as its process-group id, so ``killpg`` reaches
+    every descendant.
+    """
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        # Process already exited between our check and the signal.
+        pass
+    except PermissionError:
+        logger.warning("Permission denied killing process group %d", pid)
 
 
 @truncate_args(cmd=500)
@@ -53,7 +73,8 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
 
     Args:
         cmd: The bash command to execute.
-        timeout: Max seconds to wait. Default 600.
+        timeout: Max seconds to wait. Default 120. Raise it explicitly for
+            known-slow commands (e.g. ``npm install``, full test suites).
 
     Returns:
         BashCmdResult: ``stdout``, ``stderr``, and ``exit_code``.
@@ -68,7 +89,7 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         config = load_config()
         workdir = config.virtual_computer.home_dir
 
-        strict_cmd = "set -euo pipefail; %s" % cmd
+        strict_cmd = f"set -euo pipefail; {cmd}"
 
         # Publish a "running" event so the UI shows the command immediately.
         cmd_id = uuid.uuid4().hex
@@ -79,11 +100,14 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
             status="running",
         )))
 
+        # start_new_session places bash in its own process group so we can
+        # signal the entire tree (grandchildren too) on timeout/cancellation.
         proc = await asyncio.create_subprocess_exec(
             "bash", "-c", strict_cmd,
             cwd=workdir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
 
         stdout_parts: list[str] = []
@@ -112,20 +136,33 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
                 )))
 
         try:
-            await asyncio.wait_for(
-                asyncio.gather(
-                    _read_stream(proc.stdout, stdout_parts, is_stderr=False),
-                    _read_stream(proc.stderr, stderr_parts, is_stderr=True),
-                ),
-                timeout=timeout,
-            )
-            await proc.wait()
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            logger.error("Timeout after %s seconds running bash command: %s", timeout, cmd)
-            msg = "Timeout after %s seconds running bash command: %s" % (timeout, cmd)
-            raise RunBashCmdError(msg) from None
+            try:
+                # proc.wait() is inside the timeout so a command that closes
+                # its pipes but keeps running (daemonizing, double-fork) still
+                # hits the timeout instead of hanging.
+                await asyncio.wait_for(
+                    asyncio.gather(
+                        _read_stream(proc.stdout, stdout_parts, is_stderr=False),
+                        _read_stream(proc.stderr, stderr_parts, is_stderr=True),
+                        proc.wait(),
+                    ),
+                    timeout=timeout,
+                )
+            except TimeoutError:
+                logger.error("Timeout after %s seconds running bash command: %s", timeout, cmd)
+                msg = f"Timeout after {timeout} seconds running bash command: {cmd}"
+                raise RunBashCmdError(msg) from None
+        finally:
+            # Always clean up the process tree if it's still running, whether
+            # we hit the timeout, got cancelled, or any other exception path.
+            # SIGKILL the whole group; the OS reaps the descendants even if
+            # the subsequent ``wait()`` doesn't get to finish.
+            if proc.returncode is None:
+                _kill_process_group(proc.pid)
+                # Best-effort reap; don't mask the original exception if this
+                # await is interrupted. SIGKILL already sent.
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await proc.wait()
 
         exit_code = proc.returncode
         stdout = "".join(stdout_parts).strip() or None
@@ -151,5 +188,5 @@ async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdRe
         raise
     except Exception as exc:
         logger.exception("Failed to execute bash command: %s", cmd)
-        msg = "Execution failed: %s" % exc
+        msg = f"Execution failed: {exc}"
         raise RunBashCmdError(msg) from exc

@@ -1,7 +1,17 @@
 #!/bin/bash
 # Container entrypoint: start desktop environment, then app server.
 # Runs as root; drops privileges via gosu for each component.
-export DISPLAY=:99
+#
+# Env knobs (default in parens):
+#   DISPLAY         — X11 display number (":99"). Parallel containers
+#                     sharing a network namespace need distinct values.
+#   ENABLE_DESKTOP  — "true" to run xfce + x11vnc + noVNC so a user can view
+#                     the container's desktop. Default "false" — Xvfb still
+#                     runs (Playwright needs it) but xfce and VNC are skipped.
+export DISPLAY="${DISPLAY:-:99}"
+# Strip the leading colon to get just the number for Xvfb
+_DISPLAY_NUM="${DISPLAY#:}"
+_DESKTOP="${ENABLE_DESKTOP:-false}"
 
 # Re-export container env vars so gosu children inherit them.
 # Podman/Docker -e vars are in the process env but not always exported
@@ -26,7 +36,7 @@ if [ ! -d /home/computron/.config/xfce4/panel ]; then
 fi
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
-Xvfb :99 -screen 0 1280x720x24 -ac &
+Xvfb ":${_DISPLAY_NUM}" -screen 0 1280x720x24 -ac &
 XVFB_PID=$!
 sleep 1
 if ! kill -0 $XVFB_PID 2>/dev/null; then
@@ -42,27 +52,32 @@ export DBUS_SESSION_BUS_ADDRESS
 export GTK_MODULES=gail:atk-bridge
 export ACCESSIBILITY_ENABLED=1
 
-# ── Xfce desktop (as computron) ─────────────────────────────────────────────
-# Pass D-Bus address explicitly so the child process inherits it.
-gosu computron bash -c "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS' GTK_MODULES=gail:atk-bridge ACCESSIBILITY_ENABLED=1; startxfce4" &
-sleep 2
+# ── Desktop (optional, gated by ENABLE_DESKTOP) ─────────────────────────────
+# Xfce + x11vnc + noVNC only run when the desktop feature is enabled. Xvfb
+# above always runs because Playwright browsers need an X display regardless.
+if [ "${_DESKTOP}" = "true" ]; then
+    # Xfce desktop (as computron). Pass D-Bus address so child inherits it.
+    gosu computron bash -c "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS' GTK_MODULES=gail:atk-bridge ACCESSIBILITY_ENABLED=1; startxfce4" &
+    # Give startxfce4 a moment to spawn xfwm4 before the pgrep check below; without this
+    # the check races and we launch a duplicate window manager.
+    sleep 2
 
-# Disable screen blanking, set default cursor
-xset s off -dpms 2>/dev/null || true
-xsetroot -cursor_name left_ptr 2>/dev/null || true
+    # Disable screen blanking, set default cursor
+    xset s off -dpms 2>/dev/null || true
+    xsetroot -cursor_name left_ptr 2>/dev/null || true
 
-# Ensure window manager is running (startxfce4 sometimes fails to launch it)
-if ! pgrep -x xfwm4 > /dev/null; then
-    gosu computron bash -c 'DISPLAY=:99 xfwm4 &'
+    # Ensure window manager is running (startxfce4 sometimes fails to launch it)
+    if ! pgrep -x xfwm4 > /dev/null; then
+        gosu computron bash -c "DISPLAY=${DISPLAY} xfwm4 &"
+    fi
+
+    # VNC + noVNC bridge so the user can view the desktop in a browser
+    gosu computron x11vnc -display "${DISPLAY}" -forever -nopw -noshm -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg
+    websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &
+    echo "Desktop ready on ${DISPLAY}, VNC on 5900, noVNC on 6080"
+else
+    echo "Desktop disabled (ENABLE_DESKTOP=${_DESKTOP}); Xvfb only on ${DISPLAY}"
 fi
-
-# ── VNC server ───────────────────────────────────────────────────────────────
-gosu computron x11vnc -display :99 -forever -nopw -noshm -listen 0.0.0.0 -rfbport 5900 -shared -cursor arrow -bg
-
-# ── noVNC websocket bridge ───────────────────────────────────────────────────
-websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 &
-
-echo "Desktop ready on :99, VNC on 5900, noVNC on 6080"
 
 # ── App server with auto-restart ─────────────────────────────────────────────
 # The loop restarts the app on crash or when killed by container-restart-app.

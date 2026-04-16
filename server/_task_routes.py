@@ -18,7 +18,24 @@ def _cleanup_conversations(conv_ids: list[str]) -> None:
         delete_conversation(cid)
 
 
-def _serialize_run(store, run) -> dict:
+def _profile_names() -> dict[str, str]:
+    """Build a mapping of profile ID → display name."""
+    try:
+        from agents._agent_profiles import list_agent_profiles
+        return {p.id: p.name for p in list_agent_profiles()}
+    except Exception:
+        return {}
+
+
+def _enrich_task(task_data: dict, names: dict[str, str]) -> dict:
+    """Add agent_profile_name to a serialized task dict."""
+    pid = task_data.get("agent_profile")
+    if pid:
+        task_data["agent_profile_name"] = names.get(pid, pid)
+    return task_data
+
+
+def _serialize_run(store, run, profile_name_map: dict[str, str] | None = None) -> dict:
     """Serialize a run with its task_results for JSON responses."""
     results = store.get_task_results(run.id)
     return {**run.model_dump(), "task_results": [tr.model_dump() for tr in results]}
@@ -49,9 +66,10 @@ async def handle_get_goal(request: web.Request) -> web.Response:
         return web.json_response({"error": "Not found"}, status=404)
     tasks = store.list_tasks(goal_id)
     runs = store.get_goal_runs(goal_id)
+    names = _profile_names()
     return web.json_response({
         "goal": goal.model_dump(),
-        "tasks": [t.model_dump() for t in tasks],
+        "tasks": [_enrich_task(t.model_dump(), names) for t in tasks],
         "runs": [_serialize_run(store, r) for r in runs],
     })
 

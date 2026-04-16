@@ -5,11 +5,15 @@
   --secondary: #f3f3f3;       /* surfaces/cards */
   --muted: #ababab;          /* borders, muted text, chrome */
   --text: #222;               /* foreground text */
+  --text-secondary: #666;     /* subdued text (tabs, labels, status) */
   --radius: 0.5rem;
   --header-height: 4.75rem;
   --shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
   --font-mono: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  --color-accent: #5b8ad9;
   --color-danger: #c0392b;
+  --color-success: #2a9d52;
+  --color-warning: #b8860b;
 }
 
 /* Dark theme variables */
@@ -18,9 +22,13 @@
   --secondary: #1b1b1d;       /* darker card for contrast */
   --muted: #3a3a3c;
   --text: #f3f3f3;
+  --text-secondary: #999;     /* subdued text (tabs, labels, status) */
   --radius: 0.5rem;
   --header-height: 4.75rem;
   --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.2);
+  --color-accent: #7aa2ff;
+  --color-success: #6bcf8e;
+  --color-warning: #e8c547;
 }
 
 html,
@@ -71,7 +79,7 @@ button:active:not(:disabled) {
 }
 
 button:focus-visible {
-  outline: 2px solid #7aa2ff;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 

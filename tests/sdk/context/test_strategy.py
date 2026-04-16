@@ -236,11 +236,12 @@ class TestSummaryRecordMetadata:
         with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
              patch("sdk.context._strategy.save_summary_record", side_effect=saved_records.append), \
              patch("sdk.context._strategy.load_config") as mock_cfg, \
+             patch("sdk.context._strategy.load_settings", return_value={"compaction_model": "test-model"}), \
              patch("sdk.context._strategy.get_conversation_id", return_value="conv-123"), \
              patch("sdk.context._strategy.get_current_agent_name", return_value="BROWSER"):
             mock_summarize.return_value = ("Summary.", "test-model")
             mock_cfg.return_value = MagicMock(
-                summary=MagicMock(model="test-model", options={"temperature": 0.3}),
+                summary=MagicMock(options={"temperature": 0.3}),
             )
 
             await strategy.apply(history, _make_stats(0.8))

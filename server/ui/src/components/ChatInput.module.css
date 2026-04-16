@@ -71,16 +71,6 @@
   align-items: center;
 }
 
-.agentSelect {
-  padding: 0.2rem 0.4rem;
-  font-size: 0.75rem;
-  border-radius: 5px;
-  border: 1px solid var(--muted);
-  background: var(--primary);
-  color: var(--text);
-  cursor: pointer;
-}
-
 .iconButton {
   width: 28px;
   height: 28px;

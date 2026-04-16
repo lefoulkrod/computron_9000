@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from agents.types import Agent, LLMOptions
-from config import load_config
+from agents import build_agent, get_agent_profile
+from agents.types import Agent
 from sdk import PersistenceHook, default_hooks, run_turn
 from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
-from sdk.events._context import agent_span, get_current_dispatcher, set_model_options
-from sdk.skills.agent_state import AgentState
-from sdk.tools._core import get_core_tools
+from sdk.events._context import agent_span, get_current_dispatcher
 from sdk.events._models import FileOutputPayload
+from sdk.skills import AgentState, get_skill
+from sdk.tools._core import get_core_tools
 from sdk.turn import turn_scope
 
 if TYPE_CHECKING:
@@ -28,24 +28,6 @@ class TaskExecutor:
 
     def __init__(self, store: TaskStore) -> None:
         self._store = store
-        self._llm_options = self._build_llm_options()
-
-    @staticmethod
-    def _build_llm_options() -> LLMOptions:
-        """Build LLMOptions from GoalsConfig (called once at init)."""
-        cfg = load_config().goals
-        if not cfg.model:
-            msg = (
-                "goals.model is not set in config.yaml. "
-                "The task runner needs a model to execute tasks."
-            )
-            raise RuntimeError(msg)
-        return LLMOptions(
-            model=cfg.model,
-            num_ctx=cfg.num_ctx or None,
-            think=cfg.think or None,
-            max_iterations=cfg.max_iterations or None,
-        )
 
     async def run(self, task_result: TaskResult, task: Task) -> tuple[str, list[str]]:
         """Execute a task and return (result_text, file_output_paths)."""
@@ -62,9 +44,7 @@ class TaskExecutor:
         conversation_id = f"goals/{run.goal_id}/{run.id}/{task_result.id}"
         self._store.set_conversation_id(task_result.id, conversation_id)
 
-        options = self._llm_options
-        agent = self._build_agent(task, options)
-        set_model_options(options)
+        agent = self._build_agent(task)
 
         history = ConversationHistory(
             [
@@ -95,35 +75,31 @@ class TaskExecutor:
             dispatcher = get_current_dispatcher()
             if dispatcher:
                 dispatcher.subscribe(_capture_file_output)
-            async with agent_span(agent.name, instruction=instruction, agent_state=AgentState(get_core_tools() + (agent.tools or []))):
+            state = AgentState(get_core_tools() + (agent.tools or []))
+            async with agent_span(agent.name, instruction=instruction, agent_state=state):
                 result = await run_turn(history, agent, hooks=hooks)
 
         return result or "", file_paths
 
-    def _build_agent(self, task: Task, options: LLMOptions) -> Agent:
-        """Construct an Agent from registry or inline config."""
-        from agents import resolve_agent as _resolve_agent
+    def _build_agent(self, task: Task) -> Agent:
+        """Construct an Agent from the task's agent profile."""
+        if not task.agent_profile:
+            msg = f"Task {task.id} has no agent_profile set"
+            raise RuntimeError(msg)
+        profile = get_agent_profile(task.agent_profile)
+        if profile is None:
+            msg = f"Agent profile '{task.agent_profile}' not found for task {task.id}"
+            raise RuntimeError(msg)
 
-        if task.agent_config:
-            config = task.agent_config
-            return Agent(
-                name=task.agent,
-                description=task.description,
-                instruction=config.get("system_prompt", ""),
-                tools=[],
-                model=options.model or "",
-                options=options.to_options(),
-            )
+        agent_state = AgentState(get_core_tools())
+        for skill_name in profile.skills:
+            skill = get_skill(skill_name)
+            if skill is None:
+                msg = f"Profile '{profile.id}' references unregistered skill '{skill_name}'"
+                raise RuntimeError(msg)
+            agent_state.add(skill)
 
-        name, desc, prompt, tools = _resolve_agent(task.agent)
-        return Agent(
-            name=name,
-            description=desc,
-            instruction=prompt,
-            tools=tools,
-            model=options.model or "",
-            options=options.to_options(),
-        )
+        return build_agent(profile, tools=agent_state.tools, name="TASK_AGENT")
 
     def _build_instruction(
         self, task_result: TaskResult, task: Task, goal: Goal

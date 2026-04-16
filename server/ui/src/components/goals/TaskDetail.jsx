@@ -9,13 +9,13 @@ export default function TaskDetail({ task, taskMap }) {
         <div className={styles.container}>
             <div className={styles.title}>
                 {task.description}
-                <span className={styles.agentBadge}>{task.agent}</span>
+                <span className={styles.agentBadge}>{task.agent_profile_name || '—'}</span>
             </div>
 
             <div className={styles.kvRow}>
                 <div className={styles.kvItem}>
-                    <div className={styles.label}>Agent</div>
-                    <div className={styles.value}>{task.agent}</div>
+                    <div className={styles.label}>Profile</div>
+                    <div className={styles.value}>{task.agent_profile_name || '—'}</div>
                 </div>
                 <div className={styles.kvItem}>
                     <div className={styles.label}>Max Retries</div>

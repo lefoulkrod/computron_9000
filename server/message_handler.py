@@ -6,21 +6,16 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
-from sdk.events import (
-    AgentEvent,
-    ContentPayload,
-    TurnEndPayload,
-    agent_span,
-    get_current_dispatcher,
-    set_model_options,
-)
-from sdk.turn import turn_scope
-from agents.types import Agent, Data, LLMOptions
-from tools.memory import load_memory
-from tools.virtual_computer.receive_file import receive_attachment
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
-from agents import AVAILABLE_AGENTS, resolve_agent as _resolve_agent
+from agents import (
+    AgentProfile,
+    build_agent,
+    get_agent_profile,
+)
+from agents.types import Agent, Data
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
@@ -34,14 +29,64 @@ from sdk import (
     default_hooks,
     run_turn,
 )
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
+from sdk.events import (
+    AgentEvent,
+    ContentPayload,
+    TurnEndPayload,
+    agent_span,
+    get_current_dispatcher,
+)
 from sdk.hooks._agent_event_buffer import AgentEventBufferHook
-from sdk.skills.agent_state import AgentState
+from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
+from sdk.turn import turn_scope
 from sdk.turn._turn import StopRequestedError
+from tools.memory import load_memory
+from tools.virtual_computer.receive_file import receive_attachment
 
 logger = logging.getLogger(__name__)
+_console = Console(stderr=True)
 
 _DEFAULT_CONVERSATION_ID = "default"
+
+
+def _log_turn_start(profile: AgentProfile) -> None:
+    """Print a Rich panel showing the active profile and its settings."""
+    body = Text()
+    body.append("profile: ", style="bold")
+    body.append(profile.name, style="bright_magenta")
+    body.append(f" ({profile.id})", style="dim")
+    body.append("\nmodel:   ", style="bold")
+    body.append(profile.model or "—", style="bright_yellow")
+    if profile.skills:
+        body.append("\nskills:  ", style="bold")
+        body.append(", ".join(profile.skills), style="bright_cyan")
+    params = []
+    if profile.temperature is not None:
+        params.append(f"temp={profile.temperature}")
+    if profile.top_k is not None:
+        params.append(f"top_k={profile.top_k}")
+    if profile.top_p is not None:
+        params.append(f"top_p={profile.top_p}")
+    if profile.think:
+        params.append("think")
+    if profile.num_ctx is not None:
+        params.append(f"ctx={profile.num_ctx}")
+    if profile.max_iterations is not None:
+        params.append(f"max_iter={profile.max_iterations}")
+    if params:
+        body.append("\nparams:  ", style="bold")
+        body.append(", ".join(params), style="dim")
+
+    _console.print(
+        Panel(
+            body,
+            title="[bold bright_magenta]🤖 Agent Turn[/bold bright_magenta]",
+            border_style="bright_magenta",
+            expand=False,
+        )
+    )
 
 
 @dataclass
@@ -121,27 +166,15 @@ def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str
         file_lines.append(f"  - {name} ({d.content_type}) -> {container_path}")
 
     files_block = "\n".join(file_lines)
-    return (
-        f"{message}\n\n"
-        f"[Attached files written to virtual computer]\n"
-        f"{files_block}"
-    )
+    return f"{message}\n\n[Attached files written to virtual computer]\n{files_block}"
 
 
-def _build_agent(agent_id: str | None, options: LLMOptions) -> Agent:
-    """Construct an Agent from a registry ID and LLM options."""
-    agent_name, agent_desc, agent_prompt, agent_tools = _resolve_agent(agent_id)
-    return Agent(
-        name=agent_name,
-        description=agent_desc,
-        instruction=agent_prompt,
-        tools=agent_tools,
-        model=options.model,  # type: ignore[arg-type]  # validated by caller
-        think=options.think or False,
-        persist_thinking=options.persist_thinking if options.persist_thinking is not None else True,
-        options=options.to_options(),
-        max_iterations=options.max_iterations or 0,
-    )
+def _build_agent_from_profile(profile: AgentProfile) -> Agent:
+    """Construct an Agent from an AgentProfile."""
+    from tools.memory import forget, remember
+    from tools.virtual_computer.run_bash_cmd import run_bash_cmd
+
+    return build_agent(profile, tools=[run_bash_cmd, remember, forget])
 
 
 def _ensure_context_manager(
@@ -164,8 +197,8 @@ async def _run_turn(
     *,
     conversation: _Conversation,
     active_agent: Agent,
+    profile: AgentProfile,
     user_content: str,
-    options: LLMOptions,
     conversation_id: str | None,
     handler: Callable[[AgentEvent], object],
     is_new_conversation: bool = False,
@@ -177,16 +210,34 @@ async def _run_turn(
         active_agent.name,
         user_content,
     )
-    set_model_options(options)
+    _log_turn_start(profile)
 
     ctx_manager = _ensure_context_manager(conversation, active_agent)
     conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
 
     # Fresh AgentState each turn, restored from persisted skill names.
+    # Pre-load skills from the profile.
     agent_state = AgentState(get_core_tools() + active_agent.tools)
+    for skill_name in profile.skills:
+        skill = get_skill(skill_name)
+        if skill is None:
+            logger.warning("Profile skill '%s' not registered; skipping", skill_name)
+            continue
+        agent_state.add(skill)
+        logger.info("Pre-loaded profile skill '%s' for conv=%s", skill_name, conv_id)
     for skill_name in load_loaded_skills(conv_id):
-        if agent_state.load(skill_name) is not None:
-            logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
+        if skill_name in agent_state.loaded_skill_names:
+            continue
+        skill = get_skill(skill_name)
+        if skill is None:
+            logger.warning(
+                "Persisted skill '%s' for conv=%s was not found in the skills registry; skipping",
+                skill_name,
+                conv_id,
+            )
+            continue
+        agent_state.add(skill)
+        logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
 
     async with turn_scope(handler=handler, conversation_id=conversation_id):
         # Subscribe event buffer to capture agent lifecycle/preview events
@@ -195,9 +246,16 @@ async def _run_turn(
         if dispatcher:
             dispatcher.subscribe(event_buffer.handle_event)
 
-        async with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state):
+        async with agent_span(
+            active_agent.name, instruction=user_content, agent_state=agent_state, profile_name=profile.name
+        ):
             conversation.history.append({"role": "user", "content": user_content})
-            _refresh_system_message(conversation.history, active_agent.instruction)
+            # Build full system prompt: profile prompt + loaded skill prompts
+            full_prompt = active_agent.instruction
+            skill_prompt = agent_state.build_skill_prompt()
+            if skill_prompt:
+                full_prompt = full_prompt + "\n" + skill_prompt
+            _refresh_system_message(conversation.history, full_prompt)
 
             hooks = default_hooks(
                 active_agent,
@@ -205,10 +263,12 @@ async def _run_turn(
                 ctx_manager=ctx_manager,
             )
 
-            hooks.append(PersistenceHook(
-                conversation_id=conv_id,
-                history=conversation.history,
-            ))
+            hooks.append(
+                PersistenceHook(
+                    conversation_id=conv_id,
+                    history=conversation.history,
+                )
+            )
 
             with suppress(StopRequestedError):
                 await run_turn(
@@ -258,18 +318,16 @@ async def handle_user_message(
     message: str,
     data: Sequence[Data] | None = None,
     *,
-    options: LLMOptions,
+    profile_id: str | None = None,
     conversation_id: str | None = None,
-    agent: str | None = None,
 ) -> AsyncGenerator[AgentEvent, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
     Args:
         message: The user's message.
         data: Optional sequence of file attachment data.
-        options: LLM inference options for this turn.
+        profile_id: Agent profile to use. Required.
         conversation_id: Optional conversation identifier for isolation.
-        agent: Optional agent identifier to use for this turn.
 
     Yields:
         AgentEvent: Events from the LLM.
@@ -282,8 +340,16 @@ async def handle_user_message(
     if data:
         user_content = _augment_message_with_attachments(message, data)
 
-    if not options.model:
-        msg = "No model specified. The UI must send a model in the request options."
+    if not profile_id:
+        msg = "profile_id is required"
+        raise RuntimeError(msg)
+    profile = get_agent_profile(profile_id)
+    if profile is None:
+        msg = f"Agent profile '{profile_id}' not found"
+        raise RuntimeError(msg)
+
+    if not profile.model:
+        msg = "No model configured. Complete the setup wizard to select a model."
         raise ValueError(msg)
 
     try:
@@ -296,15 +362,15 @@ async def handle_user_message(
             except Exception:  # pragma: no cover - defensive logging
                 logger.exception("Failed to enqueue AgentEvent in message handler")
 
-        active_agent = _build_agent(agent, options)
+        active_agent = _build_agent_from_profile(profile)
 
         async def _producer() -> None:
             try:
                 await _run_turn(
                     conversation=conversation,
                     active_agent=active_agent,
+                    profile=profile,
                     user_content=user_content,
-                    options=options,
                     conversation_id=conversation_id,
                     handler=_queue_handler,
                     is_new_conversation=is_new_conversation,
@@ -327,8 +393,10 @@ async def handle_user_message(
 
     except Exception:
         logger.exception("Error handling user message")
-        yield AgentEvent(payload=ContentPayload(
-            type="content",
-            content="An error occurred while processing your message.",
-        ))
+        yield AgentEvent(
+            payload=ContentPayload(
+                type="content",
+                content="An error occurred while processing your message.",
+            )
+        )
         yield AgentEvent(payload=TurnEndPayload(type="turn_end"))

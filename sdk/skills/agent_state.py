@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
 
-from ._registry import Skill, get_skill
+from ._registry import Skill
 
 logger = logging.getLogger(__name__)
 
@@ -26,27 +26,15 @@ class AgentState:
         self._base_tools: list[Callable[..., Any]] = list(base_tools)
         self._skills: dict[str, Skill] = {}
 
-    def load(self, name: str) -> str | None:
-        """Load a skill by name from the registry.
-
-        Args:
-            name: Skill name to load.
-
-        Returns:
-            The skill prompt on success, or None if already loaded or
-            not found.
-        """
-        if name in self._skills:
-            return None
-        skill = get_skill(name)
-        if skill is None:
-            return None
-        self._skills[name] = skill
+    def add(self, skill: Skill) -> None:
+        """Attach a skill to this state. No-op if already attached."""
+        if skill.name in self._skills:
+            return
+        self._skills[skill.name] = skill
         logger.info(
             "Loaded skill '%s' (%d tools)",
-            name, len(skill.tools),
+            skill.name, len(skill.tools),
         )
-        return skill.prompt
 
     @property
     def tools(self) -> list[Callable[..., Any]]:

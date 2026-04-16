@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from agents.types import LLMOptions
+from agents._agent_profiles import AgentProfile
 from server.message_handler import handle_user_message
 from sdk.events import (
     AgentCompletedPayload,
@@ -51,9 +51,17 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
 
     import server.message_handler as mh
 
+    mock_profile = AgentProfile(
+        id="computron",
+        name="Test",
+        model="test-model",
+        system_prompt="test",
+        skills=[],
+    )
+    monkeypatch.setattr(mh, "get_agent_profile", lambda _pid: mock_profile)
     monkeypatch.setattr(mh, "run_turn", _fake_tool_loop)
     seen: list[AgentEvent] = []
-    async for ev in handle_user_message("hi", data=None, options=LLMOptions(model="test-model")):
+    async for ev in handle_user_message("hi", data=None, profile_id="computron"):
         seen.append(ev)
         if ev.payload.type == "turn_end":
             break

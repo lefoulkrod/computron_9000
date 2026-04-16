@@ -267,7 +267,7 @@ function RunItem({ run, taskMap, isExpanded, onToggle, onViewOutput, onDelete })
                                 return (
                                     <tr key={taskResult.id}>
                                         <td>{task?.description || taskResult.task_id}</td>
-                                        <td><span className={styles.agentBadge}>{task?.agent}</span></td>
+                                        <td><span className={styles.agentBadge}>{task?.agent_profile_name || '—'}</span></td>
                                         <td><StatusIcon status={taskResult.status} size={12} /></td>
                                         <td>{taskDuration || '-'}</td>
                                         <td>
@@ -320,7 +320,7 @@ function TaskDefinitionsTab({ tasks }) {
                     <div className={styles.taskDefHeader}>
                         <div className={styles.taskNum}>{index + 1}</div>
                         <div className={styles.taskDefName}>{task.description}</div>
-                        <span className={styles.agentBadge}>{task.agent}</span>
+                        <span className={styles.agentBadge}>{task.agent_profile_name || task.agent_profile || '—'}</span>
                         <div className={styles.taskToggle}>
                             {task.id === expandedTaskId ? '▼' : '▶'}
                         </div>

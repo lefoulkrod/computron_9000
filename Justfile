@@ -1,180 +1,332 @@
-# Justfile for computron_9000 project
+# Justfile for computron_9000
+#
+# Dev model:
+#   - `just build` builds the container image from the current source.
+#     Rebuild only when container/Dockerfile or baked-in deps change.
+#   - `just dev` starts a long-running dev container, syncs source into it,
+#     builds the UI, and launches the app. State lives at ~/.computron_9000/.
+#   - `just restart-app` / `just rebuild-ui` sync the latest source and
+#     bounce the relevant bit. No bind mount on /opt/computron — the
+#     container can't write into your repo.
+#   - `just e2e` spawns a throwaway container on :9090 with ephemeral state,
+#     syncs source, builds UI, runs playwright, tears down.
 
 set dotenv-load
 
-# =============================================
-# Meta & Help
-# =============================================
-# Default recipe - show available commands
+UI_DIR  := "server/ui"
+_ctr    := "computron_virtual_computer"
+_image  := "computron_9000:latest"
+
+# Default — show available commands
 default:
     @just --list
 
 
-# =============================================
-# 📦 Variables
-# =============================================
-# Centralize UI directory path to avoid repetition
-UI_DIR := "server/ui"
+# =============================================================================
+# Setup & deps
+# =============================================================================
 
-
-# =============================================
-# Setup & Run
-# =============================================
-# One-command setup for new developers
+# One-command setup for new developers (host-side deps only).
 setup home_dir=`echo "$HOME/.computron_9000"`:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "🤖 Setting up COMPUTRON_9000 development environment..."
-    
-    # Check if uv is installed
-    if ! command -v uv &> /dev/null; then
-        echo "❌ uv is not installed. Please install it first:"
-        echo "   curl -LsSf https://astral.sh/uv/install.sh | sh"
-        exit 1
-    fi
-    
-    # Check if Node.js is installed
-    if ! command -v node &> /dev/null; then
-        echo "⚠️  Node.js is not installed. UI development will not work."
-        echo "   Install from: https://nodejs.org/ or use nvm/fnm"
-    fi
-    
-    # Create virtual environment (idempotent)
-    if [ -d ".venv" ]; then
-        echo "📦 Python virtual environment already exists at .venv — skipping creation"
-    else
-        echo "📦 Creating Python virtual environment..."
-        uv venv .venv
-    fi
-    
-    # Install Python dependencies
-    echo "📚 Installing Python dependencies..."
+    echo "🤖 Setting up COMPUTRON_9000..."
+
+    command -v uv >/dev/null || { echo "❌ Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"; exit 1; }
+    command -v node >/dev/null || echo "⚠️  Node.js not installed — UI work will not work locally"
+
+    [ -d .venv ] && echo "📦 .venv exists — skipping" || uv venv .venv
+    echo "📚 Installing Python deps..."
     uv sync --all-extras
-
-    # Install the project in editable mode so imports work without PYTHONPATH
-    echo "🧩 Installing project in editable mode..."
     uv pip install -e .
-    
-    # Install UI dependencies if Node.js is available
-    if command -v node &> /dev/null && command -v npm &> /dev/null; then
-        echo "🎨 Installing UI dependencies..."
-        cd {{UI_DIR}}
-        if [ -f "package-lock.json" ]; then
-            npm ci
-        else
-            npm install
-        fi
-        cd ../..
-    fi
-    
-    # Check if Ollama is running
-    echo "🧠 Checking Ollama status..."
-    if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "⚠️  Ollama doesn't appear to be running at http://localhost:11434"
-        echo "   Please install and start Ollama: https://ollama.com/"
-    else
-        echo "✅ Ollama is running!"
-    fi
-    
-    # Create app home directory structure
-    echo "🔧 Creating home directories..."
-    mkdir -p "{{home_dir}}/custom_tools/scripts"
-    echo "✅ Directories ready at {{home_dir}}"
 
-    # Run a quick test
-    echo "🧪 Running quick health check..."
-    uv run python -c "import agents, tools, utils; print('✅ All imports successful!')"
-    
+    if command -v node >/dev/null && command -v npm >/dev/null; then
+        echo "🎨 Installing UI deps..."
+        (cd {{UI_DIR}} && ([ -f package-lock.json ] && npm ci || npm install))
+    fi
+
+    echo "🎭 Installing Playwright browsers..."
+    uv run playwright install chromium
+
+    mkdir -p "{{home_dir}}/home" "{{home_dir}}/state"
+
+    uv run python -c "import agents, tools, utils; print('✅ Imports OK')"
     echo ""
-    echo "🎉 Setup complete! You can now:"
-    echo "   • Build container: just container-build"
-    echo "   • Start dev container: just container-dev"
-    echo "   • Run tests: just test"
-    echo "   • See all commands: just"
+    echo "🎉 Ready. Build the image:  just build"
+    echo "   Then start developing:   just dev"
 
-
-
-# =============================================
-# 📦 Dependency Management
-# =============================================
-# Add a new dependency to the project
-add package:
-    uv add {{package}}
-
-# Add a development dependency
-add-dev package:
-    uv add --dev {{package}}
-
-# Remove a dependency from the project
-remove package:
-    uv remove {{package}}
-    
-# Sync dependencies (useful after pulling changes)
+# Re-sync Python deps after pulling or editing pyproject.toml
 sync:
     uv sync --all-extras
 
-# List outdated dependencies (top-level only)
-outdated:
-    uv tree --outdated --depth=1
+# Add a runtime dependency
+add package:
+    uv add {{package}}
 
-# Show dependency tree
-tree:
-    uv tree
+# Add a dev dependency
+add-dev package:
+    uv add --dev {{package}}
 
-# Upgrade all packages to latest compatible versions
-upgrade:
-    uv sync --upgrade
-
-# Security audit of dependencies
-audit:
-    uv tool run safety check
+# Remove a dependency
+remove package:
+    uv remove {{package}}
 
 
-# =============================================
-# 🧪 Testing
-# =============================================
-# Run all tests with coverage
+# =============================================================================
+# Container image
+# =============================================================================
+
+# Build the container image. Only needed when container/Dockerfile changes.
+build:
+    @echo "🏗️  Building {{_image}}..."
+    docker build -f container/Dockerfile -t {{_image}} .
+
+# Publish image to GitHub Container Registry
+publish registry="ghcr.io/lefoulkrod/computron_9000":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-image
+    sha=$(git rev-parse --short HEAD)
+    branch=$(git branch --show-current | tr '/' '-')
+    tag="${branch}-${sha}"
+    echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
+    docker tag {{_image}} "{{registry}}:${tag}"
+    docker tag {{_image}} "{{registry}}:${branch}-latest"
+    [ -n "${GITHUB_PACKAGES_TOKEN:-}" ] && echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin
+    docker push "{{registry}}:${tag}"
+    docker push "{{registry}}:${branch}-latest"
+    echo "✅ Published: {{registry}}:${tag}"
+
+
+# =============================================================================
+# Dev loop
+# =============================================================================
+
+# Start dev container, sync source, build UI, launch app on :8080 (idempotent)
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-image
+    state="$HOME/.computron_9000"
+    mkdir -p "$state/home" "$state/state"
+    if ! docker ps -q -f name=^{{_ctr}}$ 2>/dev/null | grep -q .; then
+        docker rm -f {{_ctr}} 2>/dev/null || true
+        env_args=""; [ -f .env ] && env_args="--env-file .env"
+        docker run -d --rm --name {{_ctr}} \
+            --gpus all --shm-size=256m --network=host \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            $env_args \
+            -v "$state/home:/home/computron:rw" \
+            -v "$state/state:/var/lib/computron:rw" \
+            {{_image}}
+        echo "🚀 Container started"
+    else
+        echo "ℹ️  Container already running"
+    fi
+    just _sync-src {{_ctr}}
+    docker exec {{_ctr}} bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    docker exec {{_ctr}} pkill -f "python3.12 main.py" 2>/dev/null || true
+    just _wait-ready 8080
+    echo "✅ Ready on http://localhost:8080"
+
+# Sync latest Python source, bounce the app (entrypoint loop respawns it)
+restart-app:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-running
+    just _sync-src {{_ctr}}
+    docker exec {{_ctr}} pkill -9 -f "inference_server.py" 2>/dev/null || true
+    docker exec {{_ctr}} rm -f /tmp/inference_server.pid 2>/dev/null || true
+    docker exec {{_ctr}} pkill -f "python3.12 main.py" 2>/dev/null || true
+    just _wait-ready 8080
+    echo "✅ App restarted"
+
+# Sync latest UI source and rebuild dist/ inside the container
+rebuild-ui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-running
+    just _sync-src {{_ctr}}
+    docker exec {{_ctr}} bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    echo "✅ UI rebuilt — refresh browser"
+
+# Stop the dev container (keeps state in ~/.computron_9000/)
+stop:
+    docker stop {{_ctr}} 2>/dev/null || echo "ℹ️  Not running"
+
+# Stop container and wipe state — nukes conversations, goals, settings
+reset:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    read -rp "⚠️  Wipe ~/.computron_9000/ ? [y/N] " ans
+    [[ "$ans" == "y" || "$ans" == "Y" ]] || { echo "cancelled"; exit 0; }
+    docker stop {{_ctr}} 2>/dev/null || true
+    rm -rf "$HOME/.computron_9000/home" "$HOME/.computron_9000/state"
+    mkdir -p "$HOME/.computron_9000/home" "$HOME/.computron_9000/state"
+    echo "✅ State wiped"
+
+# Open a bash shell in the running dev container
+shell:
+    docker exec -it {{_ctr}} bash
+
+# Follow app + inference logs side by side
+logs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-running
+    docker logs -f {{_ctr}} 2>&1 | sed 's/^/[app] /' &
+    docker exec {{_ctr}} tail -f /tmp/inference_server.log 2>/dev/null | sed 's/^/[inference] /' &
+    wait
+
+
+# =============================================================================
+# Testing
+# =============================================================================
+
+# Run all unit tests on host
 test:
     PYTHONPATH=. uv run pytest
 
-# Run tests with coverage report
-test-cov:
-    PYTHONPATH=. uv run pytest --cov-report=html --cov-report=term
-
-# Run only unit tests
-test-unit:
-    PYTHONPATH=. uv run pytest -m unit
-
-# Run tests for a specific file or pattern
+# Run tests matching a specific file or path
 test-file file:
     PYTHONPATH=. uv run pytest {{file}}
 
-# Run tests in watch mode (requires pytest-watch)
+# Run only tests marked @pytest.mark.unit
+test-unit:
+    PYTHONPATH=. uv run pytest -m unit
+
+# Coverage report
+test-cov:
+    PYTHONPATH=. uv run pytest --cov-report=html --cov-report=term
+
+# Watch mode (pytest-watch)
 test-watch:
     PYTHONPATH=. uv run ptw
 
-# Run tests with verbose output
-test-verbose:
-    PYTHONPATH=. uv run pytest -v
+# Run UI tests (Vitest)
+test-ui *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{UI_DIR}}
+    [ -d node_modules ] || ([ -f package-lock.json ] && npm ci || npm install)
+    if [ "$#" -eq 0 ]; then npm run test; else npm run test -- "$@"; fi
 
-# Run quick tests (exclude slow ones)
-test-quick:
-    PYTHONPATH=. uv run pytest -m "not slow"
+# Spin up a throwaway container with fresh state for manual testing on :9090.
+# Ctrl-C tears it down. State is ephemeral — nothing persists after exit.
+manual-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-image
+    name="computron_manual_test"
+    port=9090
+    state=$(mktemp -d)
+    mkdir -p "$state/home" "$state/state"
+    cleanup() {
+        docker exec -u 0 "$name" chown -R "$(id -u):$(id -g)" \
+            /home/computron /var/lib/computron 2>/dev/null || true
+        docker stop "$name" 2>/dev/null || true
+        rm -rf "$state" 2>/dev/null || true
+    }
+    trap cleanup EXIT
+
+    docker rm -f "$name" 2>/dev/null || true
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
+
+    docker run -d --rm --name "$name" \
+        --gpus all --shm-size=256m --network=host \
+        -e PORT=$port \
+        -e DISPLAY=:100 \
+        -e ENABLE_DESKTOP=false \
+        $env_args \
+        -v "$state/home:/home/computron:rw" \
+        -v "$state/state:/var/lib/computron:rw" \
+        {{_image}}
+
+    just _sync-src "$name"
+    docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    docker exec "$name" pkill -f "python3.12 main.py" 2>/dev/null || true
+
+    ready=false
+    for i in $(seq 1 30); do
+        if curl -s "http://localhost:$port/api/settings" >/dev/null 2>&1; then
+            ready=true; break
+        fi
+        sleep 2
+    done
+    if [ "$ready" = false ]; then
+        echo "❌ App didn't start on :$port"
+        docker logs "$name" 2>&1 | tail -30
+        exit 1
+    fi
+
+    echo "✅ Ready on http://localhost:$port  (Ctrl-C to tear down)"
+    docker logs -f "$name"
 
 
-# =============================================
-# 🔧 Quality, Linting & CI
-# =============================================
-# Format code with ruff (formatter) and fix imports
-format:
-    uv run ruff check --fix .
-    uv run ruff format .
+# Run Playwright e2e in a throwaway container with fresh state + latest source
+e2e *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-image
+    name="computron_e2e"
+    port=9090
+    state=$(mktemp -d)
+    mkdir -p "$state/home" "$state/state"
+    cleanup() {
+        # Chown state files to host uid so we can rm -rf them.
+        # Container writes them as computron (uid 1000) or root.
+        docker exec -u 0 "$name" chown -R "$(id -u):$(id -g)" \
+            /home/computron /var/lib/computron 2>/dev/null || true
+        docker stop "$name" 2>/dev/null || true
+        rm -rf "$state" 2>/dev/null || true
+    }
+    trap cleanup EXIT
 
-# Verify formatting without making changes (non-mutating)
-format-check:
-    uv run ruff format --check .
+    docker rm -f "$name" 2>/dev/null || true
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
 
-# Lint code with ruff
+    # --network=host so the container reaches host-local ollama (as :11434).
+    # DISPLAY=:100 avoids the abstract X socket clash with a dev container on :99.
+    # ENABLE_DESKTOP=false (explicit) skips xfce + VNC + noVNC so ports 5900/6080
+    # stay free for a concurrently-running dev container.
+    # PORT=$port picks a non-8080 app port so the two aiohttp servers coexist.
+    docker run -d --rm --name "$name" \
+        --gpus all --shm-size=256m --network=host \
+        -e PORT=$port \
+        -e DISPLAY=:100 \
+        -e ENABLE_DESKTOP=false \
+        $env_args \
+        -v "$state/home:/home/computron:rw" \
+        -v "$state/state:/var/lib/computron:rw" \
+        {{_image}}
+
+    just _sync-src "$name"
+    docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    # Bounce main.py so it picks up the synced code + fresh dist
+    docker exec "$name" pkill -f "python3.12 main.py" 2>/dev/null || true
+
+    # Wait for the synced app to come up on the e2e port
+    ready=false
+    for i in $(seq 1 30); do
+        if curl -s "http://localhost:$port/api/settings" >/dev/null 2>&1; then
+            ready=true; break
+        fi
+        sleep 2
+    done
+    if [ "$ready" = false ]; then
+        echo "❌ App didn't start on :$port"
+        docker logs "$name" 2>&1 | tail -30
+        exit 1
+    fi
+
+    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest e2e/ {{args}}
+
+
+# =============================================================================
+# Quality (run on demand)
+# =============================================================================
+
+# Lint with ruff
 lint:
     uv run ruff check .
 
@@ -182,519 +334,84 @@ lint:
 typecheck:
     uv run mypy .
 
-# Run all quality checks (non-mutating)
-# Run the linter before the formatter-check so diagnostics are visible even
-# when the formatter would otherwise report files that *would* be reformatted.
+# Format (fix imports + format)
+format:
+    uv run ruff check --fix .
+    uv run ruff format .
+
+# Verify formatting without changing files
+format-check:
+    uv run ruff format --check .
+
+# All non-mutating checks
 check: lint typecheck format-check
 
-# Run all checks including tests (pre-commit/CI style)
+# CI-style: check + tests
 ci: check test
 
-# Install pre-commit hooks (requires pre-commit package)
-pre-commit-install:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if [ -f ".pre-commit-config.yaml" ]; then
-        echo "🪝 Installing pre-commit hooks..."
-        uv run pre-commit install
-        echo "✅ Pre-commit hooks installed!"
-    else
-        echo "ℹ️  No .pre-commit-config.yaml found"
-        echo "   Consider adding pre-commit configuration for automated checks"
-    fi
 
-# Run pre-commit on all files
-pre-commit-all:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if [ -f ".pre-commit-config.yaml" ]; then
-        echo "🔍 Running pre-commit on all files..."
-        uv run pre-commit run --all-files
-    else
-        echo "ℹ️  No .pre-commit-config.yaml found, running manual checks..."
-        just ci
-    fi
+# =============================================================================
+# Evaluation tools
+# =============================================================================
 
-
-# =============================================
-# 🎨 UI Development
-# =============================================
-# Install UI dependencies
-ui-install:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    # Check if Node.js and npm are installed
-    if ! command -v node &> /dev/null; then
-        echo "❌ Node.js is not installed. Please install Node.js first:"
-        echo "   https://nodejs.org/ or use nvm/fnm"
-        exit 1
-    fi
-    
-    if ! command -v npm &> /dev/null; then
-        echo "❌ npm is not installed. Please install npm first"
-        exit 1
-    fi
-    
-    echo "📦 Installing UI dependencies..."
-    cd {{UI_DIR}}
-    npm install
-    echo "✅ UI dependencies are up to date!"
-
-# Start UI development server
-ui-dev:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    # Check if Node.js and npm are installed
-    if ! command -v node &> /dev/null; then
-        echo "❌ Node.js is not installed. Please install Node.js first:"
-        echo "   https://nodejs.org/ or use nvm/fnm"
-        exit 1
-    fi
-    
-    if ! command -v npm &> /dev/null; then
-        echo "❌ npm is not installed. Please install npm first"
-        exit 1
-    fi
-    
-    echo "🚀 Starting UI development server..."
-    cd {{UI_DIR}}
-    if [ ! -d "node_modules" ]; then
-        echo "📦 Installing Node.js dependencies first..."
-        if [ -f "package-lock.json" ]; then
-            npm ci
-        else
-            npm install
-        fi
-    fi
-    npm run dev
-
-# Build the React UI for production
-ui-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    # Check if Node.js and npm are installed
-    if ! command -v node &> /dev/null; then
-        echo "❌ Node.js is not installed. Please install Node.js first:"
-        echo "   https://nodejs.org/ or use nvm/fnm"
-        exit 1
-    fi
-    
-    if ! command -v npm &> /dev/null; then
-        echo "❌ npm is not installed. Please install npm first"
-        exit 1
-    fi
-    
-    echo "🏗️  Building React UI..."
-    cd {{UI_DIR}}
-    if [ ! -d "node_modules" ]; then
-        echo "📦 Installing Node.js dependencies..."
-        if [ -f "package-lock.json" ]; then
-            npm ci
-        else
-            npm install
-        fi
-    fi
-    npm run build
-    echo "✅ UI build complete!"
-
-# Run UI tests (Vitest)
-ui-test *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v node &> /dev/null; then
-        echo "❌ Node.js is not installed. Please install Node.js first:"
-        echo "   https://nodejs.org/ or use nvm/fnm"
-        exit 1
-    fi
-
-    if ! command -v npm &> /dev/null; then
-        echo "❌ npm is not installed. Please install npm first"
-        exit 1
-    fi
-
-    echo "🧪 Running UI tests..."
-    cd {{UI_DIR}}
-    if [ ! -d "node_modules" ]; then
-        echo "📦 Installing Node.js dependencies first..."
-        if [ -f "package-lock.json" ]; then
-            npm ci
-        else
-            npm install
-        fi
-    fi
-
-    if [ "$#" -eq 0 ]; then
-        npm run test
-    else
-        npm run test -- "$@"
-    fi
-
-# Clean UI artifacts
-# Remove only built assets (preserve node_modules by default)
-ui-clean-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "🧹 Cleaning UI build artifacts (dist)..."
-    cd {{UI_DIR}}
-    rm -rf dist
-    echo "✅ UI build artifacts cleaned!"
-
-# Remove UI dependencies (node_modules)
-ui-clean-deps:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "🧹 Cleaning UI dependencies (node_modules)..."
-    cd {{UI_DIR}}
-    rm -rf node_modules
-    echo "✅ UI dependencies cleaned!"
-
-# Default UI clean preserves node_modules for faster reinstalls
-ui-clean: ui-clean-build
-
-
-# =============================================
-# 📊 Evaluation Tools
-# =============================================
 # Start the compaction evaluation web app
 eval port='8081':
     PYTHONPATH=. PORT={{port}} uv run python -m tools.compaction_eval.app
 
 
-# =============================================
-# 🧹 Cleanup
-# =============================================
-# Clean Python cache files
-clean-cache:
-    find . -type d -name "__pycache__" -exec rm -rf {} +
-    find . -type f -name "*.pyc" -delete
-    find . -type f -name "*.pyo" -delete
+# =============================================================================
+# Cleanup
+# =============================================================================
 
-# Clean virtual environment
-clean-venv:
-    rm -rf .venv
-
-# Full clean (cache + venv)
-clean: clean-cache clean-venv
+# Clean Python caches, .venv, and UI dist (leaves node_modules + state alone)
+clean:
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>/dev/null || true
+    rm -rf .venv {{UI_DIR}}/dist
+    @echo "✅ Cleaned Python caches, .venv, UI dist"
 
 
-# =============================================
-# 📊 Project Info
-# =============================================
-# Show project information (Python version, deps, tree)
-info:
+# =============================================================================
+# Internal helpers (hidden from --list)
+# =============================================================================
+
+# Fail if the image isn't built
+_require-image:
+    @docker image inspect {{_image}} >/dev/null 2>&1 || { echo "❌ {{_image}} not found. Run: just build"; exit 1; }
+
+# Fail if the dev container isn't running
+_require-running:
+    @docker ps -q -f name=^{{_ctr}}$ 2>/dev/null | grep -q . || { echo "❌ Container not running. Run: just dev"; exit 1; }
+
+# Tar-pipe working tree into container at /opt/computron.
+# Excludes heavy/generated dirs so the stream stays small.
+_sync-src ctr:
+    @tar \
+        --exclude='.git' \
+        --exclude='.venv' \
+        --exclude='.pytest_cache' \
+        --exclude='.ruff_cache' \
+        --exclude='.mypy_cache' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        --exclude='*.pyo' \
+        --exclude='{{UI_DIR}}/node_modules' \
+        --exclude='{{UI_DIR}}/dist' \
+        --exclude='htmlcov' \
+        --exclude='.coverage*' \
+        --exclude='playwright-report' \
+        --exclude='test-results' \
+        -cf - . | docker exec -i {{ctr}} tar -xf - -C /opt/computron
+    @echo "📦 Source synced into {{ctr}}"
+
+# Poll until the app responds on the given port (up to ~60s)
+_wait-ready port:
     #!/usr/bin/env bash
-    set -euo pipefail
-    echo "📊 COMPUTRON_9000 Project Info"
-    if command -v uv >/dev/null 2>&1; then
-        echo "Python version: $(uv run python -V)"
-    elif command -v python >/dev/null 2>&1; then
-        echo "Python version: $(python -V)"
-    else
-        echo "Python version: (python not found)"
-    fi
-    echo "Dependencies:"
-    if command -v uv >/dev/null 2>&1; then
-        uv tree --depth=1
-    else
-        echo "(uv not found) Skipping dependency tree"
-    fi
-    echo ""
-    echo "📁 Project structure:"
-    if command -v tree >/dev/null 2>&1; then
-        tree -I '__pycache__|*.pyc|.venv' -L 2
-    else
-        echo "(tree not installed) Skipping directory tree. Install 'tree' for a nicer view."
-    fi
-
-
-# =============================================
-# 🐳 Containers (Docker)
-# =============================================
-# Build Docker image 'computron_9000:latest'
-container-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install it first:"
-        echo "   https://docs.docker.com/engine/install/"
-        exit 1
-    fi
-
-    echo "🏗️  Building container image..."
-    docker build -f container/Dockerfile -t computron_9000:latest .
-    echo "✅ Container image built successfully!"
-
-# Start 'computron_virtual_computer' container (create volumes)
-container-start:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install it first:"
-        echo "   https://docs.docker.com/engine/install/"
-        exit 1
-    fi
-
-    if ! docker image inspect computron_9000:latest &> /dev/null; then
-        echo "❌ Container image not found. Building first..."
-        just container-build
-    fi
-
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
-            echo "ℹ️  Container 'computron_virtual_computer' is already running"
+    for i in $(seq 1 30); do
+        if curl -s "http://localhost:{{port}}/api/settings" >/dev/null 2>&1; then
             exit 0
-        else
-            echo "🗑️  Removing stopped container..."
-            docker rm computron_virtual_computer
         fi
-    fi
-
-    echo "🚀 Starting container..."
-
-    # Pass HF_TOKEN if set (for gated models like Flux.1-schnell)
-    hf_token_args=""
-    if [ -n "${HF_TOKEN:-}" ]; then
-        hf_token_args="-e HF_TOKEN=$HF_TOKEN"
-        echo "🔑 HF_TOKEN detected, passing to container"
-    fi
-
-    # Pass GITHUB_TOKEN and GITHUB_USER if set (for publishing repos / GitHub Pages)
-    github_args=""
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        github_args="-e GITHUB_TOKEN=$GITHUB_TOKEN"
-        if [ -n "${GITHUB_USER:-}" ]; then
-            github_args="$github_args -e GITHUB_USER=$GITHUB_USER"
-        fi
-        echo "🔑 GITHUB_TOKEN detected, passing to container"
-    fi
-
-    docker run -d --rm \
-      --name computron_virtual_computer \
-      --gpus all \
-      --shm-size=256m \
-      --network=host \
-      $hf_token_args \
-      $github_args \
-      -v computron_home:/home/computron:rw \
-      -v computron_state:/var/lib/computron:rw \
-      computron_9000:latest
-
-    echo "✅ Container 'computron_virtual_computer' started successfully!"
-
-# Start container with source code mounted for development
-container-dev:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed. Please install it first:"
-        echo "   https://docs.docker.com/engine/install/"
-        exit 1
-    fi
-
-    if ! docker image inspect computron_9000:latest &> /dev/null; then
-        echo "❌ Container image not found. Building first..."
-        just container-build
-    fi
-
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        if [ "$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}')" = "running" ]; then
-            echo "ℹ️  Container 'computron_virtual_computer' is already running"
-            exit 0
-        else
-            echo "🗑️  Removing stopped container..."
-            docker rm computron_virtual_computer
-        fi
-    fi
-
-    echo "🚀 Starting dev container (source mounted)..."
-
-    # Pass .env file if it exists
-    env_file_args=""
-    if [ -f .env ]; then
-        env_file_args="--env-file .env"
-    fi
-
-    # Bind mount state to ~/.computron_9000/ for easy host access during dev
-    state_dir="$HOME/.computron_9000"
-    mkdir -p "$state_dir/state" "$state_dir/home"
-
-    docker run -d --rm \
-      --name computron_virtual_computer \
-      --gpus all \
-      --shm-size=256m \
-      --network=host \
-      -e PYTHONDONTWRITEBYTECODE=1 \
-      $env_file_args \
-      -v "$state_dir/home:/home/computron:rw" \
-      -v "$state_dir/state:/var/lib/computron:rw" \
-      -v "$(pwd):/opt/computron:rw" \
-      computron_9000:latest
-
-    echo "✅ Dev container started (source at /opt/computron)"
-    echo "   State at: $state_dir/"
-    echo "   Edit files locally, then: just container-restart-app"
-
-# Restart app server + inference server (desktop/VNC stay up)
-# Rebuild React UI inside the dev container
-container-rebuild-ui:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if docker container inspect computron_virtual_computer &> /dev/null && \
-       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-        echo "🔧 Rebuilding UI..."
-        docker exec computron_virtual_computer \
-          bash -c "cd /opt/computron/server/ui && npm run build"
-        echo "✅ UI rebuilt"
-    else
-        echo "❌ Container is not running. Start it with: just container-dev"
-        exit 1
-    fi
-
-# Restart app server + inference server (desktop/VNC stay up)
-container-restart-app:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if docker container inspect computron_virtual_computer &> /dev/null && \
-       [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-        echo "🔄 Restarting app + inference servers..."
-        # Kill inference server by process name (PID file can be stale).
-        # pkill exits 1 if no match — ignore that.
-        docker exec computron_virtual_computer \
-          pkill -9 -f "inference_server.py" 2>/dev/null || true
-        docker exec computron_virtual_computer \
-          rm -f /tmp/inference_server.pid 2>/dev/null || true
-        # Kill app server (entrypoint auto-restarts in 2s)
-        docker exec computron_virtual_computer \
-          pkill -f "python3.12 main.py" 2>/dev/null || true
-        echo "✅ Servers restarting (app in 2s, inference on next request)"
-    else
-        echo "❌ Container is not running. Start it with: just container-dev"
-        exit 1
-    fi
-
-# Stop 'computron_virtual_computer' container
-container-stop:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed"
-        exit 1
-    fi
-
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        echo "🛑 Stopping container..."
-        docker stop computron_virtual_computer
-        echo "✅ Container stopped"
-    else
-        echo "ℹ️  Container 'computron_virtual_computer' is not running"
-    fi
-
-# Open interactive shell in container
-container-shell:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed"
-        exit 1
-    fi
-
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-            echo "🐚 Opening shell in container..."
-            docker exec -it computron_virtual_computer bash
-        else
-            echo "❌ Container 'computron_virtual_computer' exists but is not running"
-            echo "   Start it with: just container-start"
-            exit 1
-        fi
-    else
-        echo "❌ Container 'computron_virtual_computer' does not exist"
-        echo "   Start it with: just container-start"
-        exit 1
-    fi
-
-# Get container status and info
-container-status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v docker &> /dev/null; then
-        echo "❌ Docker is not installed"
-        exit 1
-    fi
-
-    echo "📊 Container Status:"
-    if docker container inspect computron_virtual_computer &> /dev/null; then
-        echo "   Name: computron_virtual_computer"
-        if [ -n "$(docker ps -q --filter name=^computron_virtual_computer$ --filter status=running)" ]; then
-            echo "   Status: running"
-            echo "   ✅ Container is running and ready"
-            echo "   🐚 Access with: just container-shell"
-        else
-            status=$(docker container inspect computron_virtual_computer --format '{{{{.State.Status}}}}' 2>/dev/null || echo "unknown")
-            echo "   Status: $status"
-            echo "   ⚠️  Container exists but is not running"
-            echo "   🚀 Start with: just container-start"
-        fi
-    else
-        echo "   ❌ Container does not exist"
-        echo "   🚀 Create and start with: just container-start"
-    fi
-
-# Publish image to GitHub Container Registry
-publish registry="ghcr.io/lefoulkrod/computron_9000":
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if ! docker image inspect computron_9000:latest &> /dev/null; then
-        echo "❌ No local image. Run: just container-build"
-        exit 1
-    fi
-
-    sha=$(git rev-parse --short HEAD)
-    branch=$(git branch --show-current | tr '/' '-')
-    tag="${branch}-${sha}"
-
-    echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
-    docker tag computron_9000:latest "{{registry}}:${tag}"
-    docker tag computron_9000:latest "{{registry}}:${branch}-latest"
-
-    # Auto-login if GITHUB_PACKAGES_TOKEN is set
-    if [ -n "${GITHUB_PACKAGES_TOKEN:-}" ]; then
-        echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin 2>/dev/null
-    fi
-
-    echo "🚀 Pushing ($(docker images computron_9000:latest --format '{{{{.Size}}}}'))..."
-    docker push "{{registry}}:${tag}"
-    docker push "{{registry}}:${branch}-latest"
-
-    echo "✅ Published:"
-    echo "   {{registry}}:${tag}"
-    echo "   {{registry}}:${branch}-latest"
-
-# View app server logs (follow mode)
-container-logs:
-    docker logs -f computron_virtual_computer
-
-# View inference server logs (follow mode)
-inference-logs:
-    docker exec computron_virtual_computer tail -f /tmp/inference_server.log
-
-# View both app + inference logs side by side
-logs:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    docker logs -f computron_virtual_computer 2>&1 | sed 's/^/[app] /' &
-    docker exec computron_virtual_computer tail -f /tmp/inference_server.log 2>/dev/null | sed 's/^/[inference] /' &
-    wait
-
+        sleep 2
+    done
+    echo "⚠️  App didn't respond on :{{port}} within 60s (check 'just logs')"
+    exit 1

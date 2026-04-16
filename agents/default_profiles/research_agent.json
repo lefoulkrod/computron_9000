@@ -1,0 +1,11 @@
+{
+  "id": "research_agent",
+  "name": "Research Agent",
+  "description": "Deep research with browsing and analysis",
+  "system_prompt": "You are a thorough research agent. Browse the web, gather information from multiple sources, cross-reference findings, and produce well-organized summaries with citations. Always verify claims from multiple sources when possible.",
+  "model": "",
+  "skills": ["browser", "coder"],
+  "temperature": 0.5,
+  "think": true,
+  "num_ctx": 60000
+}

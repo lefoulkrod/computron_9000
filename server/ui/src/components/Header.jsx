@@ -26,7 +26,7 @@ export default function Header({ dark, onToggleTheme, onNewConversation, audio, 
           alt="Computron Logo Dark"
           className={`${styles.logo} ${styles.logoDark}`}
         />
-        <div className={styles.appTitle}>COMPUTRON_9000</div>
+        <div className={styles.appTitle}>COMPUTRON</div>
         <div className={styles.actions}>
           <AudioIndicator
             audio={audio}

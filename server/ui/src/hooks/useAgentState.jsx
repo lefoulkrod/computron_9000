@@ -37,6 +37,7 @@ function _makeAgent(id, name, parentId, instruction, startedAt) {
         terminalLines: [],       // bash output
         desktopActive: false,
         generationPreview: null,
+        openFiles: [],           // file preview tabs (not carried across turns)
         activeTool: null,        // what tool is running right now
         completedAt: null,       // when the agent finished (for frozen elapsed time)
         iteration: null,         // current loop iteration
@@ -205,6 +206,19 @@ function _agentReducer(state, action) {
             };
         }
 
+        case 'CLEAR_TERMINAL': {
+            const { agentId } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: { ...agent, terminalLines: [] },
+                },
+            };
+        }
+
         case 'UPDATE_DESKTOP_ACTIVE': {
             const { agentId } = action;
             const agent = state.agents[agentId];
@@ -258,6 +272,33 @@ function _agentReducer(state, action) {
                 agents: {
                     ...state.agents,
                     [agentId]: { ...agent, iteration, maxIterations, contextUsage },
+                },
+            };
+        }
+
+        case 'OPEN_FILE': {
+            const { agentId, item } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            const idx = agent.openFiles.findIndex(f => f.filename === item.filename);
+            const openFiles = idx >= 0
+                ? agent.openFiles.map((f, i) => i === idx ? item : f)
+                : [...agent.openFiles, item];
+            return {
+                ...state,
+                agents: { ...state.agents, [agentId]: { ...agent, openFiles } },
+            };
+        }
+
+        case 'CLOSE_FILE': {
+            const { agentId, filename } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: { ...agent, openFiles: agent.openFiles.filter(f => f.filename !== filename) },
                 },
             };
         }

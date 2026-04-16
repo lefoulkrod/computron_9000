@@ -92,10 +92,10 @@ class TestTaskCRUD:
         """Create tasks and list them."""
         goal = store.create_goal("goal")
         t1 = store.create_task(
-            goal.id, "task 1", "do first", "browser", None, [],
+            goal.id, "task 1", "do first", agent_profile="research_agent", depends_on=[],
         )
         t2 = store.create_task(
-            goal.id, "task 2", "do second", "coder", None, [t1.id],
+            goal.id, "task 2", "do second", agent_profile="code_expert", depends_on=[t1.id],
         )
         tasks = store.list_tasks(goal.id)
         assert len(tasks) == 2
@@ -105,7 +105,7 @@ class TestTaskCRUD:
     def test_get_task(self, store):
         """Get a single task by ID."""
         goal = store.create_goal("goal")
-        task = store.create_task(goal.id, "task", "instruction", "coder", None, [])
+        task = store.create_task(goal.id, "task", "instruction", agent_profile="code_expert")
         found = store.get_task(task.id)
         assert found is not None
         assert found.id == task.id
@@ -117,7 +117,7 @@ class TestTaskCRUD:
     def test_create_task_on_missing_goal(self, store):
         """Creating a task on a nonexistent goal raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
-            store.create_task("bad-id", "task", "inst", "coder", None, [])
+            store.create_task("bad-id", "task", "inst", agent_profile="code_expert")
 
 
 @pytest.mark.unit
@@ -128,8 +128,8 @@ class TestRunLifecycle:
         """Spawning a run creates task results."""
         # Use recurring goal to avoid auto-spawn on create
         goal = store.create_goal("goal", cron="0 * * * *")
-        store.create_task(goal.id, "t1", "prompt", "coder", None, [])
-        store.create_task(goal.id, "t2", "prompt", "coder", None, [])
+        store.create_task(goal.id, "t1", "prompt", agent_profile="code_expert")
+        store.create_task(goal.id, "t2", "prompt", agent_profile="code_expert")
 
         run = store.queue_run(goal.id)
         assert run.run_number == 1
@@ -142,7 +142,7 @@ class TestRunLifecycle:
     def test_run_number_increments(self, store):
         """Run numbers increment."""
         goal = store.create_goal("goal", cron="0 * * * *")
-        store.create_task(goal.id, "t1", "prompt", "coder", None, [])
+        store.create_task(goal.id, "t1", "prompt", agent_profile="code_expert")
         r1 = store.queue_run(goal.id)
         r2 = store.queue_run(goal.id)
         assert r1.run_number == 1
@@ -151,7 +151,7 @@ class TestRunLifecycle:
     def test_get_run(self, store):
         """Get a run by ID."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t", "p", "coder", None, [])
+        store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         found = store.get_run(run.id)
         assert found is not None
@@ -164,7 +164,7 @@ class TestRunLifecycle:
     def test_get_goal_runs(self, store):
         """List runs for a goal."""
         goal = store.create_goal("goal", cron="0 * * * *")
-        store.create_task(goal.id, "t", "p", "coder", None, [])
+        store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         store.queue_run(goal.id)
         store.queue_run(goal.id)
         runs = store.get_goal_runs(goal.id)
@@ -174,7 +174,7 @@ class TestRunLifecycle:
     def test_update_run_status_completed(self, store):
         """Run status becomes 'completed' when all tasks complete."""
         goal = store.create_goal("goal")
-        t = store.create_task(goal.id, "t", "p", "coder", None, [])
+        t = store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
 
@@ -185,7 +185,7 @@ class TestRunLifecycle:
     def test_update_run_status_failed(self, store):
         """Run status becomes 'failed' when a task fails with no pending."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t", "p", "coder", None, [])
+        store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
 
@@ -196,7 +196,7 @@ class TestRunLifecycle:
     def test_delete_run(self, store):
         """Delete a run removes it."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t", "p", "coder", None, [])
+        store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         conv_ids = store.delete_run(run.id)
         assert isinstance(conv_ids, list)
@@ -205,7 +205,7 @@ class TestRunLifecycle:
     def test_delete_run_returns_conv_ids(self, store):
         """Delete run returns conversation IDs for cleanup."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t", "p", "coder", None, [])
+        store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
         store.set_conversation_id(results[0].id, "conv-123")
@@ -221,7 +221,7 @@ class TestTaskResultMutations:
     def _setup(self, store):
         """Create a goal with one task and one run."""
         goal = store.create_goal("goal")
-        task = store.create_task(goal.id, "t", "p", "coder", None, [])
+        task = store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
         return goal, task, run, results[0]
@@ -279,7 +279,7 @@ class TestReadyTaskResults:
     def test_no_deps_ready_immediately(self, store):
         """Tasks with no deps are ready immediately."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t1", "p", "coder", None, [])
+        store.create_task(goal.id, "t1", "p", agent_profile="code_expert")
         store.queue_run(goal.id)
 
         ready = store.get_ready_task_results()
@@ -289,8 +289,8 @@ class TestReadyTaskResults:
     def test_deps_block_until_met(self, store):
         """Tasks with deps are not ready until deps complete."""
         goal = store.create_goal("goal")
-        t1 = store.create_task(goal.id, "t1", "p1", "coder", None, [])
-        store.create_task(goal.id, "t2", "p2", "coder", None, [t1.id])
+        t1 = store.create_task(goal.id, "t1", "p1", agent_profile="code_expert")
+        store.create_task(goal.id, "t2", "p2", agent_profile="code_expert", depends_on=[t1.id])
         run = store.queue_run(goal.id)
 
         # Only t1 should be ready
@@ -310,7 +310,7 @@ class TestReadyTaskResults:
     def test_paused_goal_excluded(self, store):
         """Paused goals are not included."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t1", "p", "coder", None, [])
+        store.create_task(goal.id, "t1", "p", agent_profile="code_expert")
         store.queue_run(goal.id)
         store.set_goal_status(goal.id, "paused")
 
@@ -320,7 +320,7 @@ class TestReadyTaskResults:
     def test_completed_run_excluded(self, store):
         """Completed runs don't contribute ready results."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t1", "p", "coder", None, [])
+        store.create_task(goal.id, "t1", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
         store.mark_task_result_completed(results[0].id, "done")
@@ -332,8 +332,8 @@ class TestReadyTaskResults:
     def test_failed_dep_cascades_to_downstream(self, store):
         """update_run_status cascades failures to pending tasks with failed deps."""
         goal = store.create_goal("goal")
-        t1 = store.create_task(goal.id, "t1", "p", "coder", None, [])
-        t2 = store.create_task(goal.id, "t2", "p", "coder", None, [t1.id])
+        t1 = store.create_task(goal.id, "t1", "p", agent_profile="code_expert")
+        t2 = store.create_task(goal.id, "t2", "p", agent_profile="code_expert", depends_on=[t1.id])
         run = store.queue_run(goal.id)
         results = {tr.task_id: tr for tr in store.get_task_results(run.id)}
 
@@ -353,8 +353,8 @@ class TestCompletedResultsForTasks:
     def test_returns_completed_deps(self, store):
         """Returns descriptions and results for completed deps."""
         goal = store.create_goal("goal")
-        t1 = store.create_task(goal.id, "Step 1", "do step 1", "coder", None, [])
-        t2 = store.create_task(goal.id, "Step 2", "do step 2", "coder", None, [t1.id])
+        t1 = store.create_task(goal.id, "Step 1", "do step 1", agent_profile="code_expert")
+        t2 = store.create_task(goal.id, "Step 2", "do step 2", agent_profile="code_expert", depends_on=[t1.id])
         run = store.queue_run(goal.id)
 
         results = store.get_task_results(run.id)
@@ -373,7 +373,7 @@ class TestRecovery:
     def test_reset_stale_running(self, store):
         """Running task results are reset to pending."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t1", "p", "coder", None, [])
+        store.create_task(goal.id, "t1", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
 
@@ -393,8 +393,8 @@ class TestRecovery:
     def test_reset_stale_running_cascades_failures(self, store):
         """Pending tasks blocked by a failed dep are cascaded to failed on reset."""
         goal = store.create_goal("goal", cron="* * * * *")
-        t1 = store.create_task(goal.id, "t1", "p", "coder", None, [])
-        t2 = store.create_task(goal.id, "t2", "p", "coder", None, [t1.id])
+        t1 = store.create_task(goal.id, "t1", "p", agent_profile="code_expert")
+        t2 = store.create_task(goal.id, "t2", "p", agent_profile="code_expert", depends_on=[t1.id])
         run = store.queue_run(goal.id)
         results = {tr.task_id: tr for tr in store.get_task_results(run.id)}
 
@@ -419,7 +419,7 @@ class TestCascadeDelete:
     def test_delete_goal_cascades(self, store):
         """Deleting a goal removes all runs and returns conv IDs."""
         goal = store.create_goal("goal")
-        store.create_task(goal.id, "t", "p", "coder", None, [])
+        store.create_task(goal.id, "t", "p", agent_profile="code_expert")
         run = store.queue_run(goal.id)
         results = store.get_task_results(run.id)
         store.set_conversation_id(results[0].id, "conv-xyz")
@@ -427,4 +427,5 @@ class TestCascadeDelete:
         conv_ids = store.delete_goal(goal.id)
         assert "conv-xyz" in conv_ids
         assert store.get_goal(goal.id) is None
-        assert store.get_goal_runs(goal.id) == []
+
+

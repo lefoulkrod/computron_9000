@@ -1,12 +1,27 @@
 """The agents package contains AI agent definitions."""
 
-__all__ = ["AVAILABLE_AGENTS", "resolve_agent"]
+from agents._agent_builder import build_agent
+from agents._agent_profiles import (
+    AgentProfile,
+    PROFILES_SUBDIR,
+    delete_agent_profile,
+    duplicate_agent_profile,
+    get_agent_profile,
+    get_default_profile,
+    list_agent_profiles,
+    save_agent_profile,
+    set_model_on_profiles,
+)
 
-
-def __getattr__(name: str) -> object:
-    """Lazy imports to avoid circular dependency with sdk."""
-    if name in ("AVAILABLE_AGENTS", "resolve_agent"):
-        from agents._registry import AVAILABLE_AGENTS, resolve_agent
-        return {"AVAILABLE_AGENTS": AVAILABLE_AGENTS, "resolve_agent": resolve_agent}[name]
-    msg = f"module {__name__!r} has no attribute {name!r}"
-    raise AttributeError(msg)
+__all__ = [
+    "AgentProfile",
+    "PROFILES_SUBDIR",
+    "build_agent",
+    "delete_agent_profile",
+    "duplicate_agent_profile",
+    "get_agent_profile",
+    "get_default_profile",
+    "list_agent_profiles",
+    "save_agent_profile",
+    "set_model_on_profiles",
+]

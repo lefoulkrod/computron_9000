@@ -70,6 +70,55 @@ vi.mock('../components/FlyoutPanel.jsx', () => ({
     default: () => null,
 }));
 
+vi.mock('../components/PreviewPanel.jsx', () => ({
+    default: ({ children }) => <div data-testid="preview-panel">{children}</div>,
+}));
+
+vi.mock('../components/SplitHandle.jsx', () => ({
+    default: () => <div data-testid="split-handle" />,
+}));
+
+vi.mock('../components/FilePreviewInline.jsx', () => ({
+    default: ({ item }) => <div data-testid="file-preview-inline">{item?.filename}</div>,
+}));
+
+vi.mock('../components/FullscreenPreview.jsx', () => ({
+    default: () => <div data-testid="fullscreen-preview" />,
+}));
+
+vi.mock('../components/SettingsPage.jsx', () => ({
+    default: () => <div data-testid="settings-page">Settings</div>,
+}));
+
+vi.mock('../components/SystemSettings.jsx', () => ({
+    default: () => <div>SystemSettings</div>,
+}));
+
+vi.mock('../components/ProfileList.jsx', () => ({
+    default: () => <div>ProfileList</div>,
+}));
+
+vi.mock('../components/ProfileBuilder.jsx', () => ({
+    default: () => <div>ProfileBuilder</div>,
+}));
+
+vi.mock('../components/SetupWizard.jsx', () => ({
+    default: () => <div data-testid="setup-wizard">Setup Wizard</div>,
+}));
+
+vi.mock('../hooks/useAgentProfiles.js', () => ({
+    default: () => ({
+        profiles: [],
+        selectedProfileId: null,
+        setSelectedProfileId: vi.fn(),
+        createProfile: vi.fn(),
+        updateProfile: vi.fn(),
+        deleteProfile: vi.fn(),
+        duplicateProfile: vi.fn(),
+        revision: 0,
+    }),
+}));
+
 vi.mock('../hooks/useStreamingChat.js', () => ({
     default: () => ({
         messages: [],
@@ -145,9 +194,12 @@ vi.mock('../hooks/useAgentState.jsx', async (importOriginal) => {
     };
 });
 
-function renderApp() {
+async function renderApp() {
     capturedDispatch = null;
-    const result = render(<DesktopApp dark={false} onToggleTheme={vi.fn()} />);
+    let result;
+    await act(async () => {
+        result = render(<DesktopApp dark={false} onToggleTheme={vi.fn()} />);
+    });
 
     const dispatch = (action) => {
         act(() => capturedDispatch(action));
@@ -183,23 +235,33 @@ function startSubAgent(dispatch, id, parentId, { name = 'browser_agent' } = {}) 
 describe('DesktopApp view transitions', () => {
     beforeEach(() => {
         capturedDispatch = null;
+        // Mock fetch for /api/settings and /api/models so the setup wizard resolves
+        globalThis.fetch = vi.fn((url) => {
+            if (url === '/api/settings') {
+                return Promise.resolve({ json: () => Promise.resolve({ setup_complete: true }) });
+            }
+            if (url === '/api/models') {
+                return Promise.resolve({ json: () => Promise.resolve({ models: [] }) });
+            }
+            return Promise.resolve({ json: () => Promise.resolve({}) });
+        });
     });
 
     // ── Simple chat view (no sub-agents, no previews) ───────────────
 
     describe('simple chat view', () => {
-        it('shows chat panel on initial render', () => {
-            renderApp();
+        it('shows chat panel on initial render', async () => {
+            await renderApp();
             expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
         });
 
-        it('does not show network graph initially', () => {
-            renderApp();
+        it('does not show network graph initially', async () => {
+            await renderApp();
             expect(screen.queryByTestId('agent-network')).not.toBeInTheDocument();
         });
 
-        it('does not show activity view initially', () => {
-            renderApp();
+        it('does not show activity view initially', async () => {
+            await renderApp();
             expect(screen.queryByTestId('agent-activity-view')).not.toBeInTheDocument();
         });
     });
@@ -207,8 +269,8 @@ describe('DesktopApp view transitions', () => {
     // ── Simple chat + preview panels ────────────────────────────────
 
     describe('simple chat with preview panels', () => {
-        it('shows browser preview alongside chat when snapshot arrives', () => {
-            const { dispatch } = renderApp();
+        it('shows browser preview alongside chat when snapshot arrives', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
@@ -220,8 +282,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
         });
 
-        it('shows terminal panel alongside chat', () => {
-            const { dispatch } = renderApp();
+        it('shows terminal panel alongside chat', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_TERMINAL',
@@ -233,8 +295,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
         });
 
-        it('shows generation preview alongside chat', () => {
-            const { dispatch } = renderApp();
+        it('shows generation preview alongside chat', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_GENERATION_PREVIEW',
@@ -246,8 +308,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('generation-preview')).toBeInTheDocument();
         });
 
-        it('previews persist into second turn', () => {
-            const { dispatch } = renderApp();
+        it('previews persist into second turn', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
@@ -264,8 +326,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
         });
 
-        it('terminal lines persist into second turn', () => {
-            const { dispatch } = renderApp();
+        it('terminal lines persist into second turn', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_TERMINAL',
@@ -279,8 +341,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
         });
 
-        it('generation preview persists into second turn', () => {
-            const { dispatch } = renderApp();
+        it('generation preview persists into second turn', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_GENERATION_PREVIEW',
@@ -294,8 +356,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('generation-preview')).toBeInTheDocument();
         });
 
-        it('new browser snapshot replaces old one in second turn', () => {
-            const { dispatch } = renderApp();
+        it('new browser snapshot replaces old one in second turn', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
@@ -317,8 +379,8 @@ describe('DesktopApp view transitions', () => {
     // ── Network view (sub-agents) ───────────────────────────────────
 
     describe('network view', () => {
-        it('does not auto-show network when sub-agent spawns; shows indicator instead', () => {
-            const { dispatch } = renderApp();
+        it('does not auto-show network when sub-agent spawns; shows indicator instead', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
@@ -329,8 +391,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('network-indicator')).toBeInTheDocument();
         });
 
-        it('shows network when indicator is clicked', () => {
-            const { dispatch } = renderApp();
+        it('shows network when indicator is clicked', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
@@ -339,8 +401,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('agent-network')).toBeInTheDocument();
         });
 
-        it('closes network and returns to chat', () => {
-            const { dispatch } = renderApp();
+        it('closes network and returns to chat', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
@@ -352,8 +414,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
         });
 
-        it('does not show preview column when network view is open', () => {
-            const { dispatch } = renderApp();
+        it('does not show preview column when network view is open', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
@@ -370,8 +432,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.queryByTestId('browser-preview')).not.toBeInTheDocument();
         });
 
-        it('previews return when network view is closed', () => {
-            const { dispatch } = renderApp();
+        it('previews return when network view is closed', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
@@ -391,8 +453,8 @@ describe('DesktopApp view transitions', () => {
     // ── Detail view (agent selected) ────────────────────────────────
 
     describe('detail view', () => {
-        it('shows activity view when agent is selected from network view', () => {
-            const { dispatch } = renderApp();
+        it('shows activity view when agent is selected from network view', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
@@ -403,8 +465,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.getByTestId('agent-activity-view')).toBeInTheDocument();
         });
 
-        it('does not show activity view when agent is selected but network is closed', () => {
-            const { dispatch } = renderApp();
+        it('does not show activity view when agent is selected but network is closed', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
@@ -413,8 +475,8 @@ describe('DesktopApp view transitions', () => {
             expect(screen.queryByTestId('agent-activity-view')).not.toBeInTheDocument();
         });
 
-        it('returns to network view when selection is cleared', () => {
-            const { dispatch } = renderApp();
+        it('returns to network view when selection is cleared', async () => {
+            const { dispatch } = await renderApp();
             startRoot(dispatch, 'r1');
             startSubAgent(dispatch, 's1', 'r1');
 
@@ -431,8 +493,8 @@ describe('DesktopApp view transitions', () => {
     // ── Full lifecycle ──────────────────────────────────────────────
 
     describe('full lifecycle transitions', () => {
-        it('simple chat → preview → open network → detail → back to network → close → chat with previews', () => {
-            const { dispatch } = renderApp();
+        it('simple chat → preview → open network → detail → back to network → close → chat with previews', async () => {
+            const { dispatch } = await renderApp();
 
             // 1. Start in simple chat
             expect(screen.getByTestId('chat-panel')).toBeInTheDocument();

@@ -30,7 +30,7 @@ export default function RunDetail({ run, tasks }) {
                         <div className={styles.taskHeader}>
                             <StatusIcon status={tr.status} />
                             <span className={styles.taskName}>{task?.description || tr.task_id}</span>
-                            <span className={styles.agentBadge}>{task?.agent}</span>
+                            <span className={styles.agentBadge}>{task?.agent_profile_name || '—'}</span>
                             {tr.completed_at && (
                                 <span className={styles.duration}>
                                     {formatDuration(tr.started_at, tr.completed_at)}

@@ -1,34 +1,27 @@
-import { useState } from 'react';
 import styles from './Message.module.css';
-import Lightbox from './Lightbox.jsx';
+import { canPreviewFile } from '../utils/fileTypes.js';
+import FileIcon from './icons/FileIcon.jsx';
+import ImageIcon from './icons/ImageIcon.jsx';
+import SourceIcon from './icons/SourceIcon.jsx';
+import DownloadIcon from './icons/DownloadIcon.jsx';
+import EyeIcon from './icons/EyeIcon.jsx';
 
-function fileIcon(contentType) {
-    if (!contentType) return '📄';
-    if (contentType.startsWith('image/')) return '🖼️';
-    if (contentType.startsWith('audio/')) return '🎵';
-    if (contentType.startsWith('video/')) return '🎬';
-    if (contentType === 'application/pdf') return '📕';
-    if (contentType.startsWith('text/csv') || contentType === 'text/tab-separated-values') return '📊';
-    if (contentType.startsWith('text/')) return '📄';
-    if (contentType.includes('json')) return '📋';
-    if (contentType.includes('zip') || contentType.includes('tar') || contentType.includes('gzip')) return '📦';
-    return '📎';
+function FileOutputIcon({ contentType, filename }) {
+    if (contentType?.startsWith('image/') || filename?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+        return <ImageIcon size={16} />;
+    }
+    if (contentType?.startsWith('text/') || filename?.match(/\.(js|jsx|ts|tsx|py|java|cpp|c|h|go|rs|rb|php|html|css|json|xml|yaml|yml|md|txt)$/i)) {
+        return <SourceIcon size={16} />;
+    }
+    return <FileIcon size={16} />;
 }
 
 export default function FileOutput({ item, onPreview }) {
     const { filename, content_type, content, path } = item;
-    const isImage = content_type && content_type.startsWith('image/');
-    const isAudio = content_type && content_type.startsWith('audio/');
-    const isVideo = content_type && content_type.startsWith('video/');
-    const isPreviewable =
-        content_type === 'text/html' ||
-        content_type === 'text/markdown' ||
-        content_type === 'text/x-markdown' ||
-        (content_type === 'text/plain' && filename && (filename.endsWith('.md') || filename.endsWith('.mdx')));
-    const [previewOpen, setPreviewOpen] = useState(false);
-    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const previewable = canPreviewFile(content_type, filename);
 
-    const handleDownload = () => {
+    const handleDownload = (e) => {
+        e.stopPropagation();
         if (path) {
             const a = document.createElement('a');
             a.href = path;
@@ -45,62 +38,44 @@ export default function FileOutput({ item, onPreview }) {
         a.href = url;
         a.download = filename;
         a.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
     };
 
-    const src = path || `data:${content_type};base64,${content}`;
+    const handleClick = () => {
+        if (previewable && onPreview) {
+            onPreview(item);
+        } else {
+            handleDownload(new Event('click'));
+        }
+    };
 
     return (
-        <div className={styles.fileOutput}>
+        <div className={styles.fileOutput} onClick={handleClick} style={{ cursor: 'pointer' }}>
             <div className={styles.fileOutputHeader}>
-                <span className={styles.fileOutputIcon}>{fileIcon(content_type)}</span>
+                <span className={styles.fileOutputIcon}>
+                    <FileOutputIcon contentType={content_type} filename={filename} />
+                </span>
                 <div className={styles.fileOutputInfo}>
                     <span className={styles.fileOutputName}>{filename}</span>
                     <span className={styles.fileOutputMime}>{content_type}</span>
                 </div>
                 <div className={styles.fileOutputBtns}>
-                    {isImage && (
-                        <button
-                            className={`${styles.fileOutputBtn} ${previewOpen ? styles.fileOutputBtnActive : ''}`}
-                            onClick={() => setPreviewOpen(o => !o)}
-                        >
-                            {previewOpen ? 'Hide' : 'Preview'}
-                        </button>
-                    )}
-                    {isPreviewable && onPreview && (
+                    {previewable && onPreview && (
                         <button
                             className={styles.fileOutputBtn}
-                            onClick={() => onPreview(item)}
+                            onClick={(e) => { e.stopPropagation(); onPreview(item); }}
+                            data-testid="file-preview-btn"
                         >
+                            <EyeIcon size={12} />
                             Preview
                         </button>
                     )}
-                    <button className={styles.fileOutputBtn} onClick={handleDownload}>Download</button>
+                    <button className={styles.fileOutputBtn} onClick={handleDownload} data-testid="file-download-btn">
+                        <DownloadIcon size={12} />
+                        Download
+                    </button>
                 </div>
             </div>
-            {isAudio && (
-                <>
-                    <div className={styles.fileOutputDivider} />
-                    <audio className={styles.audioPlayer} controls src={src} />
-                </>
-            )}
-            {isVideo && (
-                <>
-                    <div className={styles.fileOutputDivider} />
-                    <video className={styles.videoPlayer} controls src={src} />
-                </>
-            )}
-            {previewOpen && isImage && (
-                <div className={styles.fileOutputImages}>
-                    <img
-                        src={src}
-                        alt={filename}
-                        className={styles.fileOutputThumb}
-                        onClick={() => setLightboxOpen(true)}
-                    />
-                </div>
-            )}
-            {lightboxOpen && <Lightbox src={src} alt={filename} onClose={() => setLightboxOpen(false)} />}
         </div>
     );
 }

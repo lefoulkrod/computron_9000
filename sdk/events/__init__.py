@@ -16,9 +16,7 @@ from ._context import (
     get_current_agent_name,
     get_current_depth,
     get_current_dispatcher,
-    get_model_options,
     publish_event,
-    set_model_options,
 )
 from ._dispatcher import EventDispatcher, EventHandler
 from ._models import (
@@ -62,7 +60,5 @@ __all__ = [
     "get_current_agent_name",
     "get_current_depth",
     "get_current_dispatcher",
-    "get_model_options",
     "publish_event",
-    "set_model_options",
 ]

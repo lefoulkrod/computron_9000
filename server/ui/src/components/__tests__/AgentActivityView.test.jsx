@@ -4,9 +4,6 @@ import { AgentStateProvider, useAgentDispatch } from '../../hooks/useAgentState.
 import AgentActivityView from '../AgentActivityView.jsx';
 import { act } from 'react';
 
-// Minimal 1x1 transparent PNG so BrowserPreview renders an <img>
-const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAADElEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
-
 // ── Mock child components that are hard to render in jsdom ───────────
 
 vi.mock('../DesktopPreview.jsx', () => ({
@@ -15,10 +12,6 @@ vi.mock('../DesktopPreview.jsx', () => ({
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/**
- * Wraps AgentActivityView in the state provider and returns a dispatch
- * function so tests can drive state changes.
- */
 function renderView() {
     let dispatch;
 
@@ -71,10 +64,8 @@ describe('AgentActivityView', () => {
         expect(screen.getByText('Go to example.com')).toBeInTheDocument();
     });
 
-    // ── Activity pane expands when no previews ──────────────────────
-
-    describe('activity pane width', () => {
-        it('has activityFull class when no previews exist', () => {
+    describe('activity pane', () => {
+        it('always has activityFull class (previews are in shared panel)', () => {
             const { dispatch, container } = renderView();
             startAgent(dispatch, 'a1');
 
@@ -82,152 +73,50 @@ describe('AgentActivityView', () => {
             expect(activity.className).toMatch(/activityFull/);
         });
 
-        it('does NOT have activityFull class when browser preview exists', () => {
+        it('stays full width even when preview data exists on agent', () => {
             const { dispatch, container } = renderView();
             startAgent(dispatch, 'a1');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'a1',
-                snapshot: { url: 'https://example.com', title: 'Example', screenshot: TINY_PNG },
+                snapshot: { url: 'https://example.com', title: 'Example', screenshot: 'abc' },
             });
 
             const activity = container.querySelector('[class*="activity"]');
-            expect(activity.className).not.toMatch(/activityFull/);
-        });
-
-        it('does NOT have activityFull class when terminal output exists', () => {
-            const { dispatch, container } = renderView();
-            startAgent(dispatch, 'a1');
-            dispatch({
-                type: 'UPDATE_TERMINAL',
-                agentId: 'a1',
-                event: { cmd_id: 'c1', cmd: 'ls', stdout: 'file.txt\n', status: 'complete' },
-            });
-
-            const activity = container.querySelector('[class*="activity"]');
-            expect(activity.className).not.toMatch(/activityFull/);
-        });
-
-        it('does NOT have activityFull class when desktop is active', () => {
-            const { dispatch, container } = renderView();
-            startAgent(dispatch, 'a1');
-            dispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: 'a1' });
-
-            const activity = container.querySelector('[class*="activity"]');
-            expect(activity.className).not.toMatch(/activityFull/);
-        });
-
-        it('does NOT have activityFull class when generation preview exists', () => {
-            const { dispatch, container } = renderView();
-            startAgent(dispatch, 'a1');
-            dispatch({
-                type: 'UPDATE_GENERATION_PREVIEW',
-                agentId: 'a1',
-                preview: { gen_id: 'g1', media_type: 'image', status: 'generating', step: 1, total_steps: 10 },
-            });
-
-            const activity = container.querySelector('[class*="activity"]');
-            expect(activity.className).not.toMatch(/activityFull/);
+            expect(activity.className).toMatch(/activityFull/);
         });
     });
 
-    // ── Preview panels render ───────────────────────────────────────
-
-    describe('preview panels', () => {
-        it('does not render previews div when no preview data', () => {
+    describe('does not render inline previews', () => {
+        it('no previews div exists', () => {
             const { dispatch, container } = renderView();
             startAgent(dispatch, 'a1');
+            dispatch({
+                type: 'UPDATE_BROWSER_SNAPSHOT',
+                agentId: 'a1',
+                snapshot: { url: 'https://example.com', title: 'Example', screenshot: 'abc' },
+            });
 
-            // The previews div has a border-left — should not be present
             const previews = container.querySelector('[class*="previews"]');
             expect(previews).toBeNull();
         });
+    });
 
-        it('renders browser preview when snapshot exists', () => {
+    describe('file outputs in activity stream', () => {
+        it('renders file outputs via AgentOutput when showFileOutputs is true', () => {
             const { dispatch } = renderView();
             startAgent(dispatch, 'a1');
             dispatch({
-                type: 'UPDATE_BROWSER_SNAPSHOT',
+                type: 'APPEND_ACTIVITY',
                 agentId: 'a1',
-                snapshot: { url: 'https://example.com', title: 'Example Page', screenshot: TINY_PNG },
+                entry: { type: 'file_output', filename: 'report.html', content_type: 'text/html', content: 'abc' },
             });
 
-            expect(screen.getByText('Browser')).toBeInTheDocument();
-            expect(screen.getByText('https://example.com')).toBeInTheDocument();
-        });
-
-        it('renders terminal panel when lines exist', () => {
-            const { dispatch } = renderView();
-            startAgent(dispatch, 'a1');
-            dispatch({
-                type: 'UPDATE_TERMINAL',
-                agentId: 'a1',
-                event: { cmd_id: 'c1', cmd: 'echo hello', stdout: 'hello\n', status: 'complete', exit_code: 0 },
-            });
-
-            expect(screen.getByText('Terminal')).toBeInTheDocument();
-            expect(screen.getByText('echo hello')).toBeInTheDocument();
-        });
-
-        it('renders desktop preview when active', () => {
-            const { dispatch } = renderView();
-            startAgent(dispatch, 'a1');
-            dispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId: 'a1' });
-
-            expect(screen.getByTestId('desktop-preview')).toBeInTheDocument();
-        });
-
-        it('renders generation preview when present', () => {
-            const { dispatch } = renderView();
-            startAgent(dispatch, 'a1');
-            dispatch({
-                type: 'UPDATE_GENERATION_PREVIEW',
-                agentId: 'a1',
-                preview: { gen_id: 'g1', media_type: 'image', status: 'generating', step: 5, total_steps: 20 },
-            });
-
-            expect(screen.getByText('Generating Image')).toBeInTheDocument();
-        });
-
-        it('renders multiple preview panels simultaneously', () => {
-            const { dispatch } = renderView();
-            startAgent(dispatch, 'a1');
-
-            dispatch({
-                type: 'UPDATE_BROWSER_SNAPSHOT',
-                agentId: 'a1',
-                snapshot: { url: 'https://example.com', title: 'Example', screenshot: TINY_PNG },
-            });
-            dispatch({
-                type: 'UPDATE_TERMINAL',
-                agentId: 'a1',
-                event: { cmd_id: 'c1', cmd: 'ls', stdout: 'out\n', status: 'complete', exit_code: 0 },
-            });
-
-            expect(screen.getByText('Browser')).toBeInTheDocument();
-            expect(screen.getByText('Terminal')).toBeInTheDocument();
+            expect(screen.getByText('report.html')).toBeInTheDocument();
         });
     });
 
-    // ── Transitions ─────────────────────────────────────────────────
-
     describe('transitions', () => {
-        it('activity pane transitions from full to split when preview appears', () => {
-            const { dispatch, container } = renderView();
-            startAgent(dispatch, 'a1');
-
-            const activity = container.querySelector('[class*="activity"]');
-            expect(activity.className).toMatch(/activityFull/);
-
-            dispatch({
-                type: 'UPDATE_BROWSER_SNAPSHOT',
-                agentId: 'a1',
-                snapshot: { url: 'https://example.com', title: 'Example', screenshot: TINY_PNG },
-            });
-
-            expect(activity.className).not.toMatch(/activityFull/);
-        });
-
         it('shows running cursor while agent is running', () => {
             const { dispatch, container } = renderView();
             startAgent(dispatch, 'a1');

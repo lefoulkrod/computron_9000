@@ -13,32 +13,37 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - `sdk/` — Internal SDK (events, tool definitions)
 - `utils/` — Shared utilities (cache, shutdown)
 - `config/` — Configuration loading
-- `tests/` — Test suite, mirrors source structure
+- `tests/` — Unit test suite, mirrors source structure
+- `e2e/` — Playwright end-to-end browser tests
 - `main.py` — Application entry point
 
 ## Commands
 
-### Running
-- `just run` — Start the app
-- `just dev` — Start with auto-reload
-- `just dev-full` — Start backend + UI dev server together
+### Image (rebuild only when container/Dockerfile changes)
+- `just build` — Build the container image `computron_9000:latest`
+- `just publish` — Tag and push to GHCR
+
+### Dev loop (the container owns the runtime; source is synced in at each step)
+- `just dev` — Start dev container (if needed), sync source, build UI, launch app on :8080
+- `just restart-app` — Sync latest Python source, bounce the app
+- `just rebuild-ui` — Sync latest UI source, rebuild dist/
+- `just stop` — Stop the dev container (state at `~/.computron_9000/` persists)
+- `just reset` — Stop and wipe `~/.computron_9000/`
+- `just shell` — Bash inside the dev container
+- `just logs` — Tail app + inference logs
 
 ### Testing
-- `just test` — Run all tests (`PYTHONPATH=. uv run pytest`)
+- `just test` — Run all unit tests (`PYTHONPATH=. uv run pytest`)
 - `just test-unit` — Run unit tests only (`PYTHONPATH=. uv run pytest -m unit`)
-- `just test-integration` — Run integration tests only
 - `just test-file <path>` — Run tests for a specific file
+- `just test-ui` — Run Vitest UI tests
+- `just e2e` — Run Playwright e2e in a throwaway container with fresh state (does NOT rebuild the image)
 
 ### Quality (only run when asked)
 - `just lint` — Lint with ruff (`uv run ruff check .`)
 - `just typecheck` — Type check with mypy (`uv run mypy .`)
 - `just format` — Auto-format with ruff (`uv run ruff check --fix . && uv run ruff format .`)
 - `just check` — Run all quality checks (lint + typecheck + format-check)
-
-### UI
-- `just ui-dev` — Start Vite dev server
-- `just ui-build` — Production build
-- `just ui-test` — Run UI tests (Vitest)
 
 ## Python Conventions
 
@@ -48,7 +53,6 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Use custom exceptions where appropriate
 - Use Pydantic for data validation; ensure JSON-serializable API responses
 - Private and internal fields, methods, functions, constants, types and modules should all be named with a single leading underscore
-- Always include `__init__.py` for public re-exports, avoid exporting private members, do not export internal functions/classes
 - Include new deps in pyproject.toml (managed with `uv`)
 - No backward compatible refactors unless prompted
 - Write python code compatible with Python 3.12.10
@@ -56,11 +60,21 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Add comments to explain non-obvious code
 - You may ignore Ruff(I001)
 
+## Module Structure
+
+1. **`__init__.py` is a facade — pure re-exports, no code lives there.** If you're writing a function body or defining a singleton in `__init__.py`, move it to a submodule and re-export from `__init__.py`. Avoid exporting private members.
+2. **Imports go at the top of the file, eagerly.** Do not reach for lazy imports by default. Eager-import cost is almost always negligible; the cost of cycles, shadowed attributes, and hard-to-trace bugs is not.
+3. **Do not use `__getattr__` at package level.** It bypasses normal imports, collapses type info to `Any`, and has a shadowing foot-gun: once any submodule is imported directly, the submodule wins over `__getattr__` and callers silently get a module instead of the function they asked for.
+4. **Internal code imports from the defining submodule, not from the package root.** `from tasks import get_store` is for *external consumers*. Inside the `tasks/` package, import from `tasks._singleton`. This is what prevents cycles — the package root re-exports outward, internal modules depend inward.
+5. **Types live in modules with no internal dependencies.** A file like `agents/types.py` that only imports stdlib + pydantic can be imported from anywhere without cycle risk. Mixing types with behavior (that imports other things) creates transitive dependencies that cycle easily.
+6. **Circular imports are a design bug, not a fact of life. Fix the graph, don't patch around it.** The fix is structural: move the shared thing down a layer (a dedicated leaf module that both sides depend on). Function-local imports and `# noqa: E402` ordering tricks are last-resort escape hatches, not design choices.
+7. **Exception to rule 2:** genuinely heavy / optional third-party deps (playwright, torch, transformers) belong in function-local imports inside the feature that needs them — so the rest of the app starts up fast. "Heavy" means hundreds of milliseconds or gigabytes of RAM, not 20ms convenience.
+
 ## Testing Conventions
 
 - Write tests for new features/bugs; descriptive names, Google-style docstrings
 - Place tests in `tests/` mirroring source structure
-- Add `@pytest.mark.unit` for unit tests, `@pytest.mark.integration` for integration tests
+- Add `@pytest.mark.unit` for unit tests
 - Only run tests when instructed or before committing.
 - Only run quality checks when asked
 - NEVER PATCH AROUND TEST FAILURES

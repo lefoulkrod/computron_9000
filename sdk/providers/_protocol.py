@@ -43,3 +43,12 @@ class Provider(Protocol):
     async def list_models(self) -> list[str]:
         """Return a list of available model identifiers."""
         ...
+
+    async def list_models_detailed(self) -> list[dict[str, Any]]:
+        """Return models with metadata (capabilities, parameter_size, etc.)."""
+        # Default: fall back to basic list
+        return [{"name": n} for n in await self.list_models()]
+
+    def invalidate_model_cache(self) -> None:
+        """Clear cached model metadata."""
+        ...

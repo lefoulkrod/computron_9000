@@ -2,151 +2,116 @@
 
 ## Conceptual Framework
 
-The UI has two fundamental display paradigms:
+The UI is built around three core views:
 
-- **Chat View** — A multi-turn conversation between the user and the root agent. Messages accumulate as a scrollable thread. Used for direct interaction.
-- **Activity View** — A real-time log of a single agent's work: thinking, content, tool calls, file outputs. Used for observing sub-agents (or the root agent when drilled in from the network).
+- **Chat View** — A multi-turn conversation between the user and the root agent. Messages accumulate as a scrollable thread. Always mounted (hidden via CSS when other views are active to preserve scroll and input state).
+- **Network View** — A graph of the running agent tree: root agent plus any sub-agents it has spawned. Click an agent to drill into its Activity View.
+- **Activity View** — A real-time log of a single agent's work: thinking, content, tool calls, file outputs. Shown when drilling into an agent from the Network View.
 
-Both views consume the same SSE event stream but route data through different state systems. The long-term goal is to share rendering components between them and eliminate duplication.
+Chat and Activity share a **tabbed preview panel** on the right side for browser screenshots, terminal output, file previews, desktop VNC, and media generation. Network View is full-width — no preview panel.
 
 ---
 
-## View Modes
+## Layout
 
-The UI has three layout modes, determined by agent state:
+The UI uses a fixed app shell with a split main area:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    View Mode Selection                │
-│                                                      │
-│  selectedAgentId?  ──yes──▶  MODE 1: Activity View   │
-│        │                                             │
-│        no                                            │
-│        │                                             │
-│  hasSubAgents?  ──yes──▶  MODE 2: Network + Chat     │
-│        │                                             │
-│        no                                            │
-│        │                                             │
-│        ▼                                             │
-│  MODE 3: Simple Chat                                 │
-└──────────────────────────────────────────────────────┘
+┌──────┬─────────────────────────────┬───┬──────────────────┐
+│      │                             │   │  [tabs]          │
+│ Side │  Main View                  │ ┃ │  Browser         │
+│ bar  │  (Chat / Activity /         │ ┃ │  file.py    x    │
+│      │   Network / Goals /         │ ┃ │  Terminal        │
+│      │   Settings)                 │ ┃ │                  │
+│      │                             │ ┃ │  Preview content │
+│      │                             │   │                  │
+└──────┴─────────────────────────────┴───┴──────────────────┘
+         left side                    ^     right side
+                                  drag handle
 ```
 
-**Mode 1 — Agent Activity View** (`selectedAgentId !== null`)
-```
-┌──────┬──────────────────────────────────────────────────┐
-│      │ ← Agents  COMPUTRON 9000 › BROWSER AGENT         │
-│ Side │ ● BROWSER AGENT  32s  iter 5  ◐ 8%              │
-│ bar  │──────────────────────────────────────────────────│
-│      │  Activity (40%)     │  Previews (60%)            │
-│      │                     │                            │
-│      │  [Instruction]      │  ┌─────────────────────┐  │
-│      │  ▸ Show thoughts    │  │ Browser              │  │
-│      │  Content text...    │  │ https://example.com  │  │
-│      │  🔧 open_url        │  │ ┌─────────────────┐ │  │
-│      │  ▸ Show thoughts    │  │ │  screenshot     │ │  │
-│      │  Content text...    │  │ └─────────────────┘ │  │
-│      │                     │  └─────────────────────┘  │
-│      │──────────────────────────────────────────────────│
-│      │  Nudge  [Send a nudge to root agent...]          │
-└──────┴──────────────────────────────────────────────────┘
-```
+### App Shell
 
-**Mode 2 — Network + Chat** (`hasSubAgents && !selectedAgent`)
-```
-┌──────┬────────────────────────────┬─────────────────────┐
-│      │     Agent Network          │  Chat               │
-│ Side │                            │                     │
-│ bar  │   ┌──────────────┐         │  [user] yo          │
-│      │   │ COMPUTRON 9000│         │                     │
-│      │   └──────┬───────┘         │  COMPUTRON ◐ 4%     │
-│      │          │                 │  ▸ Show thoughts     │
-│      │   ┌──────┴───────┐         │  Hey Larry! 👋       │
-│      │   │BROWSER AGENT │         │                     │
-│      │   └──────────────┘         │  [user] search...   │
-│      │                            │                     │
-│      │   (60%)                    │  (40%)              │
-│      │                            │                     │
-│      │                            │  [Type message...]  │
-└──────┴────────────────────────────┴─────────────────────┘
-```
+- **Header** (36px) — Logo, app title ("COMPUTRON_9000" in monospace), audio indicator, desktop button, theme toggle, new conversation. Fixed top.
+- **Sidebar** (44px) — Vertical icon buttons: Chat, Agents, Goals, Memory | Conversations, Tools | Settings. Active item has a 2px accent bar on the left edge (Signal Line). Fixed left.
+- **Flyout panels** (270px) — Slide out from the sidebar for Memory, Conversations, and Custom Tools. Overlay with scrim.
 
-**Mode 3 — Simple Chat** (default, no sub-agents)
-```
-┌──────┬───────────────────────────┬──────────────────────┐
-│      │  Previews (60%)           │  Chat (40%)          │
-│ Side │  ┌─────────────────────┐  │                      │
-│ bar  │  │ Generating Image    │  │  [user] draw a cat   │
-│      │  │ ████░░░░  33%       │  │                      │
-│      │  └─────────────────────┘  │  COMPUTRON ◐ 3%      │
-│      │  ┌─────────────────────┐  │  ▸ Show thoughts     │
-│      │  │ 🟢 Terminal          │  │  Here's your cat!    │
-│      │  │ $ python draw.py    │  │                      │
-│      │  │ Done.               │  │                      │
-│      │  └─────────────────────┘  │  [Type message...]   │
-└──────┴───────────────────────────┴──────────────────────┘
-```
+### Main Area Views
+
+The left side shows one of these (mutually exclusive):
+
+| View | Trigger | Width | Preview panel visible? |
+|------|---------|-------|----------------------|
+| **Chat** | Default / Chat sidebar button | Shares with preview | Yes |
+| **Agent Activity** | Click agent in network graph | Shares with preview | Yes |
+| **Network Graph** | Agents sidebar button | Full width | No |
+| **Goals** | Goals sidebar button | Full width | No |
+| **Settings** | Settings sidebar button | Full width | No |
+
+The preview panel is a shared tabbed panel on the right. It's visible alongside Chat and Activity views, hidden for full-width views (Network, Goals, Settings). A draggable divider between the main view and preview panel allows resizing (20-80% range).
+
+### Mobile
+
+On viewports <= 768px, the app switches to a single-column layout: header, scrollable message area, bottom input bar. No sidebar, no preview panels, no agent views. A drawer provides access to settings and conversations.
 
 ---
 
 ## State Architecture
 
-Two independent state systems manage different concerns:
+### Agent Reducer (source of truth for agent & preview data)
+
+All agent and preview data lives in a single reducer (`useAgentState`). Each agent node holds its own state:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    SSE Event Stream                          │
-│                   (JSONL from /api/chat)                     │
-└─────────────┬───────────────────────────────────┬───────────┘
-              │                                   │
-              ▼                                   ▼
-┌─────────────────────────┐       ┌───────────────────────────┐
-│   useStreamingChat      │       │   useAgentState           │
-│   (React hooks)         │       │   (Context + Reducer)     │
-│                         │       │                           │
-│  messages[]             │       │  agents: {                │
-│    - user messages      │       │    [id]: {                │
-│    - root agent replies │       │      activityLog[],       │
-│    - tool call data     │       │      browserSnapshot,     │
-│    - context usage      │       │      terminalLines,       │
-│    - streaming state    │       │      contextUsage,        │
-│                         │       │      status, iteration    │
-│  Consumers:             │       │    }                      │
-│    ChatMessages         │       │  }                        │
-│    Message              │       │  selectedAgentId          │
-│                         │       │                           │
-│                         │       │  Consumers:               │
-│                         │       │    AgentNetwork            │
-│                         │       │    AgentCard               │
-│                         │       │    AgentActivityView       │
-└─────────────────────────┘       └───────────────────────────┘
+agents: {
+  [agentId]: {
+    activityLog[]        // thinking, content, tool calls, file outputs
+    browserSnapshot      // latest screenshot + URL + title
+    terminalLines[]      // command history (append-only)
+    desktopActive        // VNC session flag
+    generationPreview    // image/video/audio generation state
+    openFiles[]          // files opened in preview tabs
+    status               // running | success | error | stopped
+    iteration            // current loop iteration
+    contextUsage         // { context_used, context_limit, fill_ratio }
+  }
+}
+selectedAgentId          // which agent is drilled into (or null)
 ```
 
-### Event Routing
+### Preview State Hook (`usePreviewState`)
 
-Depth determines where streaming tokens go:
+Derives all preview panel state from the agent reducer:
 
-```
-SSE delta event arrives
-        │
-        ├── depth == 0 (root agent)
-        │   ├── Buffer in pendingContent / pendingThinking
-        │   ├── Flush per requestAnimationFrame
-        │   └── setMessages() → Chat View renders it
-        │
-        └── depth > 0 (sub-agent)
-            ├── Buffer in agentPending[agentId]
-            ├── Flush per requestAnimationFrame
-            └── agentDispatch(APPEND_STREAM_CHUNK) → Activity View renders it
-```
+- Computes tab list from the active agent's data (browser, terminal, files, etc.)
+- Manages which tab is selected, split position, fullscreen state
+- Determines which agent's previews to show: selected sub-agent if one is drilled in, otherwise the root agent
 
-Non-streaming events (tool calls, screenshots, lifecycle) route through `_handleStreamEvent` callbacks that update **both** state systems for backward compatibility:
+### Chat State (`useStreamingChat`)
+
+Manages the conversation thread separately:
+
+- `messages[]` — User and assistant messages for the root agent
+- `isStreaming` — Whether a response is in flight
+- `sendMessage()`, `stopGeneration()`, `loadConversation()`, `newConversation()`
+
+### Event Flow
 
 ```
-onBrowserSnapshot(snapshot)
-    ├── setBrowserSnapshot(snapshot)          // Global (Mode 3 preview panel)
-    └── agentDispatch(UPDATE_BROWSER_SNAPSHOT) // Per-agent (Mode 1 preview)
+Backend SSE stream (/api/chat)
+    │
+    ├── depth == 0 (root agent tokens)
+    │   └── Buffer → requestAnimationFrame → setMessages()
+    │       → Chat View renders
+    │
+    └── depth > 0 (sub-agent tokens)
+        └── Buffer → requestAnimationFrame → agentDispatch(APPEND_STREAM_CHUNK)
+            → Activity View renders
 ```
+
+Preview events (screenshots, terminal output, desktop, generation) dispatch directly to the agent reducer via stable `useRef` callbacks. The preview hook reads from the reducer and computes tabs automatically.
+
+Agent lifecycle events (`agent_started`, `agent_completed`) update the agent tree. New root agents carry over preview state (browser, terminal, desktop, generation) from the previous root.
 
 ---
 
@@ -155,101 +120,83 @@ onBrowserSnapshot(snapshot)
 ```
 AgentStateProvider
 └── DesktopAppInner
-    ├── Header ─── [desktop button, theme, new conversation]
+    ├── Header
+    ├── Sidebar
+    ├── FlyoutPanel?  (Memory | Conversations | CustomTools)
     │
-    ├── Sidebar ─── [agents, settings, memory, conversations, tools]
-    │
-    ├── FlyoutPanel? ─── [ModelSettingsPanel | MemoryPanel | ConversationsPanel | CustomToolsPanel]
-    │
-    ├── mainContent (one of three modes)
+    ├── mainContent
+    │   ├── SettingsPage                         (full-width)
+    │   ├── GoalsView                            (full-width, split-panel)
+    │   ├── AgentNetwork                         (full-width)
+    │   ├── AgentActivityView                    (left column)
+    │   │   └── AgentOutput → FileOutput
+    │   ├── ChatPanel                            (left column, always mounted)
+    │   │   ├── ChatMessages → Message → AgentOutput → FileOutput
+    │   │   ├── StarterPrompts                   (shown when empty)
+    │   │   └── ChatInput
     │   │
-    │   ├── AgentActivityView ──── Mode 1
-    │   │   ├── ActivityEntry[] ── [CollapsibleThinking | ContentBlock | ToolBlock | FileOutput]
-    │   │   ├── BrowserPreview
-    │   │   ├── TerminalPanel
-    │   │   ├── DesktopPreview
-    │   │   └── GenerationPreview
-    │   │
-    │   ├── networkWithChat ────── Mode 2
-    │   │   ├── AgentNetwork
-    │   │   │   └── AgentCard[]
-    │   │   └── ChatPanel
-    │   │       ├── ChatMessages
-    │   │       │   └── Message[] ── [MarkdownContent, ToolCallsSummary, ContextUsageBadge, FileOutput]
-    │   │       └── ChatInput
-    │   │
-    │   └── simpleChat ────────── Mode 3
-    │       ├── previewColumn?
-    │       │   ├── GenerationPreview
-    │       │   ├── BrowserPreview
-    │       │   ├── DesktopPreview
-    │       │   └── TerminalPanel
-    │       └── ChatPanel (same as Mode 2)
+    │   ├── SplitHandle                          (draggable divider)
+    │   └── PreviewPanel                         (right column, shared)
+    │       ├── [tab bar]
+    │       ├── BrowserPreview
+    │       ├── FilePreviewInline → FileContentRenderer
+    │       ├── TerminalPanel
+    │       ├── DesktopPreview
+    │       └── GenerationPreview
     │
-    ├── DesktopPreview (overlay, Modes 1-2 only)
-    ├── FilePreview (overlay, all modes)
-    └── nudgeToast
+    ├── FullscreenPreview                        (viewport overlay for files)
+    └── SetupWizard                              (shown if setup incomplete)
 ```
 
----
+### Key Shared Components
 
-## Shared vs. Duplicated Components
-
-Components used in **both** Chat View and Activity View:
-
-| Component | Chat View (Message.jsx) | Activity View (AgentActivityView.jsx) | Shared? |
-|---|---|---|---|
-| **MarkdownContent** | Content rendering | Content + instruction rendering | Yes |
-| **ContextUsageBadge** | Message header | Agent header | Yes |
-| **FileOutput** | In message.data[] | In activityLog | Yes |
-| **CollapsibleThinking** | Thinking toggle in messages | Thinking toggle in activity entries | Yes (compact prop for activity view) |
-| **BrowserPreview** | Mode 3 preview column | Mode 1 right pane | Yes |
-| **TerminalPanel** | Mode 3 preview column | Mode 1 right pane | Yes |
-| **DesktopPreview** | Mode 3 preview column | Mode 1 overlay | Yes |
-| **GenerationPreview** | Mode 3 preview column | Mode 1 right pane | Yes |
-
-Shared hooks:
-
-| Hook | Used by | Purpose |
+| Component | Where used | Notes |
 |---|---|---|
-| **useAutoScroll** | ChatMessages, AgentActivityView | Scroll to bottom on updates unless user scrolled up |
-| **useAgentState** | AgentNetwork, AgentActivityView, AgentCard | Read agent tree state |
-| **useAgentDispatch** | DesktopApp, AgentNetwork, AgentActivityView | Dispatch agent state actions |
+| **AgentOutput** | Chat messages + Activity view | Ordered list of entries (thinking, content, tool calls, files) |
+| **CollapsibleThinking** | Both views | `compact` prop for smaller text in activity view |
+| **FileOutput** | Both views | Click "Preview" opens file in the shared preview panel |
+| **ContextUsageBadge** | Chat header + Agent header | SVG donut showing context fill percentage |
+| **PreviewShell** | All preview panels | Wraps content with title bar, collapse/expand/close buttons |
 
-Components with **different implementations** for each view (by design):
+### File Preview Flow
 
-| Concept | Chat View | Activity View | Notes |
-|---|---|---|---|
-| **Tool call display** | ToolCallsSummary (compact badge) | ActivityEntry tool_call (inline with icon) | Different density needs |
+```
+FileOutput (in chat/activity stream)
+    │ click "Preview"
+    ▼
+usePreviewState.openFile(item)
+    │ dispatches OPEN_FILE to reducer
+    ▼
+PreviewPanel tab appears
+    │
+    ▼
+FilePreviewInline → FileContentRenderer
+    ├── source code (<pre>)
+    ├── markdown (ReactMarkdown)
+    ├── HTML (iframe)
+    ├── PDF (iframe)
+    └── images (<img>) → click → FullscreenPreview
+```
 
 ---
 
-## Preview Panel Lifecycle
+## Design System
 
-Preview panels appear in different contexts depending on view mode:
+The UI follows the **SIGNAL** design language (see `design/DESIGN_LANGUAGE.md`). Key architectural choices:
 
-```
-                    Mode 3              Mode 1              Mode 2
-                  (simple chat)      (activity view)     (network + chat)
-                  ─────────────      ───────────────     ────────────────
-BrowserPreview    Inline panel       Right pane          Not shown
-TerminalPanel     Inline panel       Right pane          Not shown
-DesktopPreview    Inline panel       Overlay lightbox    Overlay lightbox
-GenerationPreview Inline panel       Right pane          Not shown
-FilePreview       Overlay            Overlay             Overlay
-```
+- **CSS Modules** — Per-component styles (`*.module.css`), no global class collisions
+- **Semantic tokens** — All colors reference `--canvas`, `--surface`, `--accent`, etc., never raw values
+- **Theme switching** — `data-theme="light|dark"` attribute on `<html>` swaps all token values
+- **Terminal tokens** — Code blocks and terminal output use a separate set of theme-aware tokens (`--terminal-bg`, `--terminal-text`, etc.) that adapt per theme
+- **Share Tech Mono** — Structural UI elements (headers, agent names, status labels) use monospace to reinforce the COMPUTRON identity
 
 ---
 
 ## Known Technical Debt
 
-1. **Dual state updates** — Every event updates both global state (for Mode 3) and per-agent state (for Modes 1-2). Should consolidate to per-agent only and derive Mode 3 state from `agents[rootId]`.
+1. **Global button CSS bleeds** — The `button` rule in `global.css` applies opinionated styles to all buttons. Every utility button must override. Should scope to a `.btn` class.
 
-2. **JSONL event schema is ad-hoc** — The stream uses JSONL-over-POST (which is fine as a transport), but the event format lacks a uniform envelope. Fields live at different nesting levels (`data.delta`, `data.event.type`, `data.final`, `data.depth`, `data.agent_id`), forcing the frontend into ~350 lines of conditional routing in `useStreamingChat.js`. Should normalize to a consistent envelope where every line has `type`, `agent_id`, `depth` at the top level, turning the routing into a simple `switch(data.type)`. This touches both backend emission (`_execution.py`, `message_handler.py`) and frontend consumption (`useStreamingChat.js`). Prioritize after dual-state consolidation since both touch the same pipeline.
+2. **JSONL event schema is ad-hoc** — The SSE stream lacks a uniform envelope. Fields live at different nesting levels, forcing ~350 lines of conditional routing in `useStreamingChat.js`. Should normalize to a consistent envelope with `type`, `agent_id`, `depth` at the top level.
 
-### Resolved
+3. **Terminal lines are unbounded** — Terminal output is append-only with no max-line limit. Long-running agents could accumulate large arrays.
 
-- ~~Missing callbacks in AgentActivityView~~ — `FileOutput.onPreview` now wired through `onPreview` prop.
-- ~~showSubAgents prop unused~~ — Removed prop and dead filtering logic.
-- ~~Thinking toggle duplicated~~ — Extracted shared `CollapsibleThinking` component with `compact` prop for activity view sizing.
-- ~~Auto-scroll duplicated~~ — Extracted `useAutoScroll` hook used by both `ChatMessages` and `AgentActivityView`.

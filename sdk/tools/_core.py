@@ -11,15 +11,19 @@ def get_core_tools() -> list[Callable[..., Any]]:
     """
     from config import load_config
     from sdk.skills._tools import list_available_skills, load_skill
+    from agents._list_profiles_tool import list_agent_profiles
     from sdk.tools._spawn_agent import spawn_agent
     from tools.scratchpad import recall_from_scratchpad, save_to_scratchpad
-    from tools.virtual_computer import describe_image, play_audio, send_file
+    from tools.virtual_computer.describe_image import describe_image
+    from tools.virtual_computer.file_output import send_file
+    from tools.virtual_computer.play_audio import play_audio
 
     tools = [
         save_to_scratchpad,
         recall_from_scratchpad,
         load_skill,
         list_available_skills,
+        list_agent_profiles,
         spawn_agent,
         send_file,
         play_audio,
