@@ -11,6 +11,8 @@ import json
 import logging
 from pathlib import Path
 
+from agents import PROFILES_SUBDIR
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PROFILES_DIR = Path(__file__).resolve().parent.parent / "agents" / "default_profiles"
@@ -22,7 +24,7 @@ def migrate(state_dir: Path) -> None:
         logger.warning("Default profiles directory not found: %s", _DEFAULT_PROFILES_DIR)
         return
 
-    dest = state_dir / "agent_profiles"
+    dest = state_dir / PROFILES_SUBDIR
     dest.mkdir(parents=True, exist_ok=True)
 
     installed = 0

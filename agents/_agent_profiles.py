@@ -17,7 +17,7 @@ from settings import load_settings
 
 logger = logging.getLogger(__name__)
 
-_PROFILES_SUBDIR = "agent_profiles"
+PROFILES_SUBDIR = "agent_profiles"
 
 COMPUTRON_ID = "computron"
 
@@ -44,7 +44,7 @@ class AgentProfile(BaseModel):
 
 def _profiles_dir() -> Path:
     cfg = load_config()
-    return Path(cfg.settings.home_dir) / _PROFILES_SUBDIR
+    return Path(cfg.settings.home_dir) / PROFILES_SUBDIR
 
 
 def _load_all() -> dict[str, AgentProfile]:
@@ -149,6 +149,7 @@ def duplicate_agent_profile(profile_id: str, new_name: str | None = None) -> Age
 
 __all__ = [
     "COMPUTRON_ID",
+    "PROFILES_SUBDIR",
     "AgentProfile",
     "delete_agent_profile",
     "duplicate_agent_profile",
