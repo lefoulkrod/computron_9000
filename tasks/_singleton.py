@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from config import load_config
-from tasks._file_store import FileTaskStore
+from tasks._file_store import GOALS_SUBDIR, FileTaskStore
 from tasks._store import TaskStore
 
 _store: TaskStore | None = None
@@ -21,6 +21,6 @@ def get_store() -> TaskStore:
     global _store
     if _store is None:
         cfg = load_config()
-        goals_dir = Path(cfg.goals.goals_dir or Path(cfg.settings.home_dir) / "goals")
+        goals_dir = Path(cfg.goals.goals_dir or Path(cfg.settings.home_dir) / GOALS_SUBDIR)
         _store = FileTaskStore(goals_dir, default_timezone=cfg.goals.timezone)
     return _store

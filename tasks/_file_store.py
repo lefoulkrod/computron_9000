@@ -13,6 +13,8 @@ from tasks._scheduler import cron_has_fired_since
 
 logger = logging.getLogger(__name__)
 
+GOALS_SUBDIR = "goals"
+
 
 class FileTaskStore:
     """File-based TaskStore implementation.

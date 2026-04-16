@@ -23,6 +23,7 @@ import logging
 from pathlib import Path
 
 from migrations._backup import backup_file
+from tasks import GOALS_SUBDIR
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def _migrate_task(task: dict) -> bool:
 
 def migrate(state_dir: Path) -> None:
     """Migrate all goal files in the state directory."""
-    goals_dir = state_dir / "goals"
+    goals_dir = state_dir / GOALS_SUBDIR
     if not goals_dir.is_dir():
         logger.debug("No goals directory at %s, nothing to migrate", goals_dir)
         return
