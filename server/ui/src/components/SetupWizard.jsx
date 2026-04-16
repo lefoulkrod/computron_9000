@@ -145,11 +145,9 @@ export default function SetupWizard({ onComplete }) {
         fetchModels('/api/models?capability=vision', setVisionModels);
     }, [step, visionModels.length, fetchModels]);
 
-    // Retry re-runs the fetch for the current step by clearing its list.
     const retryFetch = () => {
-        setModelsError(null);
-        if (step === 1) setAllModels([]);
-        else if (step === 2) setVisionModels([]);
+        if (step === 1) fetchModels('/api/models', setAllModels);
+        else if (step === 2) fetchModels('/api/models?capability=vision', setVisionModels);
     };
 
     const [error, setError] = useState(null);

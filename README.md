@@ -25,7 +25,7 @@ Any Ollama model works. The setup wizard shows what you have pulled and filters 
 | Main | `kimi-k2.5` | Also used for compaction (context summarization) |
 | Vision | `qwen3.5` | Must have vision capability — or use your main model if it supports vision |
 
-## Quick Start
+## Try It Out
 
 ```bash
 docker run -d --name computron --shm-size=256m --network=host \
@@ -33,6 +33,8 @@ docker run -d --name computron --shm-size=256m --network=host \
 ```
 
 Open **[http://localhost:8080](http://localhost:8080)**. The setup wizard walks you through picking your main model and vision model on first launch.
+
+> **macOS / Windows / WSL2:** Ollama runs on the host, not inside the container. Pass `-e LLM_HOST=http://host.docker.internal:11434` so the container can reach it. On Linux with `--network=host` this isn't needed.
 
 Data won't persist when the container is removed. When you're ready to keep it, add volumes:
 

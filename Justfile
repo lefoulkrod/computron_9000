@@ -211,6 +211,58 @@ test-ui *args:
     [ -d node_modules ] || ([ -f package-lock.json ] && npm ci || npm install)
     if [ "$#" -eq 0 ]; then npm run test; else npm run test -- "$@"; fi
 
+# Spin up a throwaway container with fresh state for manual testing on :9090.
+# Ctrl-C tears it down. State is ephemeral — nothing persists after exit.
+manual-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-image
+    name="computron_manual_test"
+    port=9090
+    state=$(mktemp -d)
+    mkdir -p "$state/home" "$state/state"
+    cleanup() {
+        docker exec -u 0 "$name" chown -R "$(id -u):$(id -g)" \
+            /home/computron /var/lib/computron 2>/dev/null || true
+        docker stop "$name" 2>/dev/null || true
+        rm -rf "$state" 2>/dev/null || true
+    }
+    trap cleanup EXIT
+
+    docker rm -f "$name" 2>/dev/null || true
+    env_args=""; [ -f .env ] && env_args="--env-file .env"
+
+    docker run -d --rm --name "$name" \
+        --gpus all --shm-size=256m --network=host \
+        -e PORT=$port \
+        -e DISPLAY=:100 \
+        -e ENABLE_DESKTOP=false \
+        $env_args \
+        -v "$state/home:/home/computron:rw" \
+        -v "$state/state:/var/lib/computron:rw" \
+        {{_image}}
+
+    just _sync-src "$name"
+    docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    docker exec "$name" pkill -f "python3.12 main.py" 2>/dev/null || true
+
+    ready=false
+    for i in $(seq 1 30); do
+        if curl -s "http://localhost:$port/api/settings" >/dev/null 2>&1; then
+            ready=true; break
+        fi
+        sleep 2
+    done
+    if [ "$ready" = false ]; then
+        echo "❌ App didn't start on :$port"
+        docker logs "$name" 2>&1 | tail -30
+        exit 1
+    fi
+
+    echo "✅ Ready on http://localhost:$port  (Ctrl-C to tear down)"
+    docker logs -f "$name"
+
+
 # Run Playwright e2e in a throwaway container with fresh state + latest source
 e2e *args:
     #!/usr/bin/env bash
