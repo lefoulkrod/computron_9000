@@ -326,7 +326,7 @@ async def handle_user_message(
     Args:
         message: The user's message.
         data: Optional sequence of file attachment data.
-        profile_id: Agent profile to use. Falls back to Computron default.
+        profile_id: Agent profile to use. Required.
         conversation_id: Optional conversation identifier for isolation.
 
     Yields:
