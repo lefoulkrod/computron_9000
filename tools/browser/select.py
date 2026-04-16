@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Keeps the interaction time reasonable for long option lists.
 _MAX_KEYBOARD_NAV_STEPS = 30
 
+# Maximum time (ms) to wait for dynamically-populated options to appear
+# after clicking an empty dropdown.
+_POPULATION_WAIT_MS = 2000
+
 
 async def _keyboard_select(
     page: Page,
@@ -91,8 +95,83 @@ async def _js_select(select_handle: ElementHandle, target_index: int) -> None:
     )
 
 
+async def _populate_dropdown_options(
+    select_locator,
+    page: Page,
+    view,
+) -> list[str]:
+    """Click a dropdown to trigger JS population, then re-read options.
+
+    Some dropdowns (e.g. X/Twitter signup date-of-birth) are empty until
+    the user clicks them, which triggers JavaScript to populate the
+    ``<option>`` elements.  This function clicks the dropdown, waits
+    for options to appear, and returns the populated option list.
+
+    Args:
+        select_locator: Playwright locator for the ``<select>`` element.
+        page: The Playwright Page for wait_for_timeout calls.
+        view: The ActiveView for human_click calls.
+
+    Returns:
+        List of option text strings after population attempt.
+    """
+    logger.debug("Dropdown appears empty; clicking to trigger JS population")
+    await human_click(view.frame, select_locator)
+    await page.wait_for_timeout(random.randint(300, 600))
+
+    # Wait for options to appear
+    try:
+        await select_locator.locator("option").first.wait_for(
+            state="attached", timeout=_POPULATION_WAIT_MS,
+        )
+    except PlaywrightError:
+        logger.debug("No options appeared after clicking dropdown")
+
+    # Re-read options after population
+    options = [o.strip() for o in await select_locator.locator("option").all_text_contents()]
+    logger.debug("After click, dropdown has %d options", len(options))
+    return options
+
+
+def _find_option_index(options: list[str], value: str) -> int:
+    """Find the index of an option value, with fuzzy matching fallback.
+
+    Tries exact match first, then falls back to case-insensitive and
+    whitespace-normalized matching.  Some sites add extra whitespace
+    or formatting to option text that doesn't match the displayed value.
+
+    Args:
+        options: List of option text strings.
+        value: The desired option text to find.
+
+    Returns:
+        The index of the matching option.
+
+    Raises:
+        ValueError: If no matching option is found.
+    """
+    # Exact match
+    try:
+        return options.index(value)
+    except ValueError:
+        pass
+
+    # Case-insensitive and whitespace-normalized match
+    normalized = value.strip().lower()
+    for i, opt in enumerate(options):
+        if opt.strip().lower() == normalized:
+            return i
+
+    raise ValueError(f"Option '{value}' not found in dropdown")
+
+
 async def select_option(selector: str, value: str, wait_after_select_ms: int | None = None) -> str:
     """Select an option from a ``<select>`` dropdown by visible text.
+
+    Handles both native ``<select>`` elements and dynamically-populated
+    dropdowns where options are loaded via JavaScript after the dropdown
+    is opened (e.g. X/Twitter signup date-of-birth dropdowns, AJAX
+    search selects).
 
     Args:
         selector: Ref number from ``browse_page()`` output.
@@ -119,8 +198,17 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
 
         # Get all options to find the index of the desired value
         options = [o.strip() for o in await select_locator.locator("option").all_text_contents()]
+
+        # BTI-012: If the dropdown appears empty, click it to trigger
+        # JavaScript population (common on signup forms like X/Twitter),
+        # then re-read options after a short wait.
+        if not options:
+            page = await browser.current_page()
+            options = await _populate_dropdown_options(select_locator, page, view)
+
+        # Find the target option index with fuzzy matching fallback
         try:
-            target_index = options.index(value)
+            target_index = _find_option_index(options, value)
         except ValueError as exc:
             msg = f"Option '{value}' not found in dropdown. Available options: {options}"
             raise BrowserToolError(msg, tool="select_option") from exc

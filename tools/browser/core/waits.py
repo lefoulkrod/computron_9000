@@ -34,11 +34,16 @@ class SettleTimings:
     dom_quiet_timed_out: bool = False
     animation_ms: float = 0
     animation_timed_out: bool = False
+    content_appearance_ms: float = 0
+    content_appearance_timed_out: bool = False
     error: str | None = None
 
     @property
     def total_ms(self) -> float:
-        return self.network_idle_ms + self.font_ms + self.dom_quiet_ms + self.animation_ms
+        return (
+            self.network_idle_ms + self.font_ms + self.dom_quiet_ms
+            + self.animation_ms + self.content_appearance_ms
+        )
 
     @property
     def phases(self) -> list[tuple[str, float, bool]]:
@@ -48,6 +53,7 @@ class SettleTimings:
             ("fonts", self.font_ms, self.font_timed_out),
             ("DOM quiet", self.dom_quiet_ms, self.dom_quiet_timed_out),
             ("animations", self.animation_ms, self.animation_timed_out),
+            ("content appearance", self.content_appearance_ms, self.content_appearance_timed_out),
         ]
 
 
@@ -56,9 +62,9 @@ async def wait_for_page_settle(
     *,
     waits: BrowserWaitConfig,
 ) -> SettleTimings:
-    """Wait for network, fonts, DOM, and CSS animation activity to quiet.
+    """Wait for network, fonts, DOM, CSS animation, and content appearance to quiet.
 
-    Four phases run in sequence:
+    Five phases run in sequence:
 
     1. **Network idle** — waits for zero in-flight HTTP connections.
        Resolves instantly if the network is already idle.  Pages with
@@ -74,6 +80,11 @@ async def wait_for_page_settle(
     4. **CSS animations** — waits for short animations (≤ 1 s) to
        finish so modal slide-ins, fades, and skeleton transitions are
        fully rendered.  Capped to avoid blocking on infinite loops.
+    5. **Content appearance** — watches for new interactive overlays
+       (dialogs, menus, listboxes, tooltips) that appear after an
+       interaction.  This catches late-rendering UI like share dialogs,
+       settings menus, and footer expandos that appear asynchronously
+       after a click.  Short best-effort wait (default 500 ms).
 
     Returns:
         SettleTimings with per-phase durations.
@@ -215,6 +226,81 @@ async def wait_for_page_settle(
         except PlaywrightTimeoutError:
             timings.animation_timed_out = True
         timings.animation_ms = (time.monotonic() - t0) * 1000
+
+        # Phase 5: content appearance (BTI-018/019/024)
+        # After interactions (clicks, form submissions), dynamically-loaded
+        # content (modals, dropdowns, AJAX panels) may appear with a delay.
+        # This phase watches for new visible elements appearing in the DOM
+        # that weren't there at the start of this phase.  It's a short,
+        # best-effort wait that catches late-rendering UI like share dialogs,
+        # settings menus, and footer expandos.
+        content_appear_ms = getattr(waits, "content_appearance_timeout_ms", 500)
+        if content_appear_ms > 0 and hasattr(page, "wait_for_function"):
+            content_js = f"""() => {{
+                return new Promise((resolve) => {{
+                    const timeout = {content_appear_ms};
+                    const observeOpts = {{ childList: true, subtree: true }};
+
+                    // Snapshot current visible interactive element count
+                    const baselineCount = document.querySelectorAll(
+                        '[data-ct-ref], [role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"]'
+                    ).length;
+
+                    let resolved = false;
+                    const finish = () => {{
+                        if (!resolved) {{
+                            resolved = true;
+                            obs.disconnect();
+                            resolve(true);
+                        }}
+                    }};
+
+                    // If no new content appears within the timeout, move on
+                    const timer = setTimeout(finish, timeout);
+
+                    const callback = (mutations) => {{
+                        for (const m of mutations) {{
+                            if (m.type !== 'childList') continue;
+                            for (const node of m.addedNodes) {{
+                                if (node.nodeType !== 1) continue;
+                                // Check if the new element is a dialog, menu,
+                                // listbox, or has visible content
+                                const tag = node.tagName;
+                                const role = node.getAttribute('role');
+                                if (
+                                    role === 'dialog' || role === 'menu' ||
+                                    role === 'listbox' || role === 'tooltip' ||
+                                    role === 'alertdialog' ||
+                                    tag === 'DIALOG' || tag === 'MENU' ||
+                                    (node.querySelector && node.querySelector(
+                                        '[role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"]'
+                                    ))
+                                ) {{
+                                    // New interactive overlay appeared — give it
+                                    // a brief moment to render, then finish
+                                    clearTimeout(timer);
+                                    setTimeout(finish, 100);
+                                    return;
+                                }}
+                            }}
+                        }}
+                    }};
+
+                    const obs = new MutationObserver(callback);
+                    try {{
+                        obs.observe(document, observeOpts);
+                    }} catch (e) {{
+                        clearTimeout(timer);
+                        resolve(true);
+                    }}
+                }});
+            }}"""
+            t0 = time.monotonic()
+            try:
+                await page.wait_for_function(content_js, timeout=content_appear_ms + 500)
+            except PlaywrightTimeoutError:
+                timings.content_appearance_timed_out = True
+            timings.content_appearance_ms = (time.monotonic() - t0) * 1000
     except PlaywrightError as exc:
         timings.error = str(exc)
 

@@ -176,6 +176,13 @@ def _render_node(node: DomNode, *, name_limit: int) -> str | None:
             return None
         return f"[img] {_truncate(name, name_limit)}"
 
+    if t == NodeType.CHALLENGE:
+        name = (node.name or "").strip()
+        ctype = node.challenge_type or "unknown"
+        if not name:
+            name = f"{ctype} challenge"
+        return f"[⚠ CHALLENGE: {ctype}] {_truncate(name, name_limit)}"
+
     if t == NodeType.INTERACTIVE:
         role = node.role or "button"
         ref = node.ref

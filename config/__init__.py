@@ -108,6 +108,7 @@ class BrowserWaitConfig(BaseModel):
     dom_mutation_timeout_ms: int = 1500
     dom_quiet_window_ms: int = 150
     animation_timeout_ms: int = 1000
+    content_appearance_timeout_ms: int = 500
 
 
 # Note: BrowserWaitConfig is referenced as a forward-ref above to avoid

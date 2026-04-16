@@ -112,3 +112,28 @@ class TestParseNodes:
             NodeType.TEXT,
             NodeType.INTERACTIVE,
         ]
+
+    def test_challenge_node(self):
+        """Challenge nodes are parsed with challenge_type field."""
+        raw = [
+            {
+                "type": "challenge",
+                "depth": 0,
+                "challenge_type": "recaptcha",
+                "name": "reCAPTCHA challenge detected",
+                "viewport": "in",
+            }
+        ]
+        nodes = parse_nodes(raw)
+        assert len(nodes) == 1
+        n = nodes[0]
+        assert n.type == NodeType.CHALLENGE
+        assert n.challenge_type == "recaptcha"
+        assert n.name == "reCAPTCHA challenge detected"
+
+    def test_challenge_node_defaults(self):
+        """Challenge node without challenge_type defaults to None."""
+        raw = [{"type": "challenge", "depth": 0, "name": "Unknown challenge"}]
+        nodes = parse_nodes(raw)
+        assert nodes[0].type == NodeType.CHALLENGE
+        assert nodes[0].challenge_type is None

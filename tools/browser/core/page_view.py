@@ -485,7 +485,73 @@ _STRUCTURED_SNAPSHOT_JS = """
     }
   }
 
+  // ---- CAPTCHA / challenge detection (BTI-021) ----
+  // Detect common challenge frameworks: reCAPTCHA, hCaptcha, Cloudflare Turnstile,
+  // slider puzzles, and generic iframes that indicate a challenge overlay.
+  function detectChallenges() {
+    const challenges = [];
+
+    // reCAPTCHA v2/v3
+    const recaptcha = document.querySelector('.g-recaptcha, [data-sitekey], iframe[src*="recaptcha"]');
+    if (recaptcha) {
+      challenges.push({ type: 'challenge', depth: 0, challenge_type: 'recaptcha', name: 'reCAPTCHA challenge detected', viewport: 'in' });
+    }
+
+    // hCaptcha
+    const hcaptcha = document.querySelector('.h-captcha, [data-hcaptcha-widget-id], iframe[src*="hcaptcha"]');
+    if (hcaptcha) {
+      challenges.push({ type: 'challenge', depth: 0, challenge_type: 'hcaptcha', name: 'hCaptcha challenge detected', viewport: 'in' });
+    }
+
+    // Cloudflare Turnstile / challenge page
+    const turnstile = document.querySelector('[data-turnstile-widget-id], iframe[src*="challenges.cloudflare.com"]');
+    if (turnstile) {
+      challenges.push({ type: 'challenge', depth: 0, challenge_type: 'cloudflare', name: 'Cloudflare challenge detected', viewport: 'in' });
+    }
+    // Cloudflare interstitial (checking browser page)
+    if (document.title && document.title.toLowerCase().includes('just a moment')) {
+      challenges.push({ type: 'challenge', depth: 0, challenge_type: 'cloudflare_interstitial', name: 'Cloudflare interstitial page', viewport: 'in' });
+    }
+
+    // Slider / puzzle CAPTCHA (TikTok, GeeTest, etc.)
+    const sliderSelectors = [
+      '[class*="captcha_slider"]', '[class*="slider-captcha"]',
+      '[class*="slide-verify"]', '[class*="geetest"]',
+      'iframe[src*="captcha"]', 'iframe[src*="verify"]',
+    ];
+    for (const sel of sliderSelectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        challenges.push({ type: 'challenge', depth: 0, challenge_type: 'slider', name: 'Slider/puzzle CAPTCHA detected', viewport: 'in' });
+        break;
+      }
+    }
+
+    // Generic: any visible overlay iframe from a known challenge domain
+    const challengeIframes = document.querySelectorAll('iframe[src]');
+    const challengeDomains = ['recaptcha', 'hcaptcha', 'challenges.cloudflare', 'captcha', 'arkoselabs', 'funcaptcha'];
+    for (const iframe of challengeIframes) {
+      const src = (iframe.getAttribute('src') || '').toLowerCase();
+      if (challengeDomains.some(d => src.includes(d))) {
+        // Avoid duplicate if we already detected this type
+        if (!challenges.some(c => c.challenge_type === 'recaptcha' && src.includes('recaptcha')) &&
+            !challenges.some(c => c.challenge_type === 'hcaptcha' && src.includes('hcaptcha')) &&
+            !challenges.some(c => c.challenge_type === 'cloudflare' && src.includes('cloudflare'))) {
+          challenges.push({ type: 'challenge', depth: 0, challenge_type: 'generic', name: 'Challenge iframe detected: ' + src.substring(0, 80), viewport: 'in' });
+        }
+      }
+    }
+
+    return challenges;
+  }
+
   walk(document.body, true);
+
+  // Append challenge detections after the main walk
+  const challengeNodes = detectChallenges();
+  for (const cn of challengeNodes) {
+    emit(cn);
+  }
 
   return {
     nodes: nodes,

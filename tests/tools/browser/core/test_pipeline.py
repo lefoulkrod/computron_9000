@@ -245,6 +245,28 @@ class TestRenderNode:
         node = DomNode(type=NodeType.INTERACTIVE, depth=0, role="button", name="Menu", expanded=False)
         assert _render_node(node, name_limit=150) == "[button] Menu (collapsed)"
 
+    def test_challenge_recaptcha(self):
+        """Challenge node renders with warning prefix and type."""
+        node = DomNode(type=NodeType.CHALLENGE, depth=0, challenge_type="recaptcha", name="reCAPTCHA challenge detected")
+        assert _render_node(node, name_limit=150) == "[⚠ CHALLENGE: recaptcha] reCAPTCHA challenge detected"
+
+    def test_challenge_slider(self):
+        """Slider challenge renders correctly."""
+        node = DomNode(type=NodeType.CHALLENGE, depth=0, challenge_type="slider", name="Slider/puzzle CAPTCHA detected")
+        assert _render_node(node, name_limit=150) == "[⚠ CHALLENGE: slider] Slider/puzzle CAPTCHA detected"
+
+    def test_challenge_no_name(self):
+        """Challenge without name uses type as fallback."""
+        node = DomNode(type=NodeType.CHALLENGE, depth=0, challenge_type="hcaptcha")
+        assert _render_node(node, name_limit=150) == "[⚠ CHALLENGE: hcaptcha] hcaptcha challenge"
+
+    def test_challenge_name_truncated(self):
+        """Challenge name respects name_limit."""
+        node = DomNode(type=NodeType.CHALLENGE, depth=0, challenge_type="generic", name="A" * 200)
+        result = _render_node(node, name_limit=20)
+        assert result.startswith("[⚠ CHALLENGE: generic] ")
+        assert len(result.split("] ", 1)[1]) <= 23  # 20 + "..."
+
 
 @pytest.mark.unit
 class TestApplyBudget:
@@ -424,3 +446,36 @@ class TestProcessSnapshot:
         raw = [_interactive("button", "Submit")]
         content, truncated = process_snapshot(raw, budget=8000)
         assert content.strip() == "[button] Submit"
+
+    def test_challenge_node_recaptcha(self):
+        """reCAPTCHA challenge renders with warning prefix."""
+        raw = [
+            _heading("Login", 1),
+            {"type": "challenge", "depth": 0, "challenge_type": "recaptcha", "name": "reCAPTCHA challenge detected", "viewport": "in"},
+        ]
+        content, truncated = process_snapshot(raw, budget=8000)
+        assert "[⚠ CHALLENGE: recaptcha] reCAPTCHA challenge detected" in content
+
+    def test_challenge_node_slider(self):
+        """Slider CAPTCHA challenge renders correctly."""
+        raw = [
+            {"type": "challenge", "depth": 0, "challenge_type": "slider", "name": "Slider/puzzle CAPTCHA detected", "viewport": "in"},
+        ]
+        content, truncated = process_snapshot(raw, budget=8000)
+        assert "[⚠ CHALLENGE: slider] Slider/puzzle CAPTCHA detected" in content
+
+    def test_challenge_node_cloudflare(self):
+        """Cloudflare challenge renders correctly."""
+        raw = [
+            {"type": "challenge", "depth": 0, "challenge_type": "cloudflare", "name": "Cloudflare challenge detected", "viewport": "in"},
+        ]
+        content, truncated = process_snapshot(raw, budget=8000)
+        assert "[⚠ CHALLENGE: cloudflare] Cloudflare challenge detected" in content
+
+    def test_challenge_node_no_name(self):
+        """Challenge node without name uses challenge_type as fallback."""
+        raw = [
+            {"type": "challenge", "depth": 0, "challenge_type": "hcaptcha", "viewport": "in"},
+        ]
+        content, truncated = process_snapshot(raw, budget=8000)
+        assert "[⚠ CHALLENGE: hcaptcha] hcaptcha challenge" in content

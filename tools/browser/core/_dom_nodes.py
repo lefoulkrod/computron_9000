@@ -19,6 +19,7 @@ class NodeType(Enum):
     IMAGE = "image"
     CONTAINER_START = "container_start"
     CONTAINER_END = "container_end"
+    CHALLENGE = "challenge"
 
 
 class ViewportPosition(Enum):
@@ -48,6 +49,7 @@ class DomNode:
     checked: bool | None = None
     pressed: bool | None = None
     extra: dict | None = None
+    challenge_type: str | None = None
 
 
 __all__ = ["DomNode", "NodeType", "ViewportPosition", "parse_nodes"]
@@ -73,5 +75,6 @@ def parse_nodes(raw: list[dict]) -> list[DomNode]:
             checked=d.get("checked"),
             pressed=d.get("pressed"),
             extra=d.get("extra"),
+            challenge_type=d.get("challenge_type"),
         ))
     return result
