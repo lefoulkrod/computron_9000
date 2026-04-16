@@ -6,7 +6,6 @@ import pytest
 
 from agents._agent_profiles import (
     AgentProfile,
-    build_llm_options,
     delete_agent_profile,
     duplicate_agent_profile,
     get_agent_profile,
@@ -202,35 +201,6 @@ class TestDuplicate:
         save_agent_profile(clone)
         original = get_agent_profile("test")
         assert original.name == "Test"
-
-
-@pytest.mark.unit
-class TestBuildLLMOptions:
-    """Converting profiles to LLMOptions."""
-
-    def test_basic_conversion(self):
-        """Profile fields map to LLMOptions."""
-        p = _make_profile(temperature=0.5, top_k=40, think=True, num_ctx=16000)
-        opts = build_llm_options(p)
-        assert opts.model == "test-model:7b"
-        assert opts.temperature == 0.5
-        assert opts.top_k == 40
-        assert opts.think is True
-        assert opts.num_ctx == 16000
-
-    def test_none_fields_stay_none(self):
-        """Unset profile fields remain None in options."""
-        p = _make_profile()
-        opts = build_llm_options(p)
-        assert opts.temperature is None
-        assert opts.top_k is None
-        assert opts.max_iterations is None
-
-    def test_missing_model_raises(self):
-        """Profile with no model raises RuntimeError."""
-        p = _make_profile(id="child", model="")
-        with pytest.raises(RuntimeError, match="no model configured"):
-            build_llm_options(p)
 
 
 @pytest.mark.unit

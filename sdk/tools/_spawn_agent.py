@@ -2,49 +2,49 @@
 
 import logging
 import uuid as _uuid
-from textwrap import dedent
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from agents.types import Agent
+from agents import AgentProfile, build_agent, get_agent_profile
 from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
-from sdk.events import agent_span, get_current_agent_id, get_model_options
-from sdk.hooks import default_hooks
-from sdk.hooks._persistence import PersistenceHook
+from sdk.events import agent_span
+from sdk.hooks import PersistenceHook, default_hooks
+from sdk.skills import AgentState, get_skill, list_skills
+from sdk.tools._core import get_core_tools
 from sdk.turn import StopRequestedError, get_conversation_id, run_turn
+
 logger = logging.getLogger(__name__)
 
 _console = Console(stderr=True)
 
 
-def _log_spawn(agent_name: str, profile_id: str | None, agent_profile, model_options, skills: list[str], instruction_preview: str) -> None:
+def _log_spawn(agent_name: str, profile: AgentProfile, instruction_preview: str) -> None:
     """Print a Rich panel when a sub-agent is spawned."""
     body = Text()
     body.append("agent:   ", style="bold")
     body.append(agent_name, style="bright_cyan")
     body.append("\nprofile: ", style="bold")
-    body.append(profile_id or "(parent)", style="bright_magenta")
+    body.append(profile.id, style="bright_magenta")
     body.append("\nmodel:   ", style="bold")
-    body.append(model_options.model or "—", style="bright_yellow")
-    if skills:
+    body.append(profile.model or "—", style="bright_yellow")
+    if profile.skills:
         body.append("\nskills:  ", style="bold")
-        body.append(", ".join(skills), style="bright_cyan")
-    # Show non-default inference params
+        body.append(", ".join(profile.skills), style="bright_cyan")
     params = []
-    if model_options.temperature is not None:
-        params.append(f"temp={model_options.temperature}")
-    if model_options.top_k is not None:
-        params.append(f"top_k={model_options.top_k}")
-    if model_options.top_p is not None:
-        params.append(f"top_p={model_options.top_p}")
-    if model_options.think:
+    if profile.temperature is not None:
+        params.append(f"temp={profile.temperature}")
+    if profile.top_k is not None:
+        params.append(f"top_k={profile.top_k}")
+    if profile.top_p is not None:
+        params.append(f"top_p={profile.top_p}")
+    if profile.think:
         params.append("think")
-    if model_options.num_ctx is not None:
-        params.append(f"ctx={model_options.num_ctx}")
-    if model_options.max_iterations is not None:
-        params.append(f"max_iter={model_options.max_iterations}")
+    if profile.num_ctx is not None:
+        params.append(f"ctx={profile.num_ctx}")
+    if profile.max_iterations is not None:
+        params.append(f"max_iter={profile.max_iterations}")
     if params:
         body.append("\nparams:  ", style="bold")
         body.append(", ".join(params), style="dim")
@@ -96,23 +96,10 @@ def _log_spawn_error(agent_name: str, error: str) -> None:
         expand=False,
     ))
 
-_BASE_PROMPT = dedent("""\
-    You are a worker sub-agent. Complete your task thoroughly.
-
-    Use save_to_scratchpad to store important results for other agents.
-    Scratchpad entries persist for the entire conversation and are shared
-    across all agents. Earlier tool results may be cleared from context,
-    so the scratchpad is the reliable way to keep important data available.
-
-    Verify correctness, retry on failure.
-    Return a concise summary with all file paths when done.
-""")
-
-
 async def spawn_agent(
     instructions: str,
+    profile: str,
     agent_name: str = "SUB_AGENT",
-    profile: str | None = None,
 ) -> str:
     """Spawn a sub-agent to handle a task in isolation.
 
@@ -126,78 +113,57 @@ async def spawn_agent(
     Args:
         instructions: Complete, self-contained task description. Include
             EVERYTHING the agent needs — it has zero context from the parent.
-        agent_name: Short UPPERCASE name for the UI (e.g. DATA_ANALYST).
         profile: Agent profile ID (e.g. "code_expert", "research_agent").
             Determines the model, skills, system prompt, and inference
-            parameters. Omit to use the parent agent's settings.
+            parameters.
+        agent_name: Short UPPERCASE name for the UI (e.g. DATA_ANALYST).
 
     Returns:
         Summary of what the sub-agent accomplished.
     """
-    from agents._agent_profiles import AgentProfile, build_llm_options, get_agent_profile
-    from sdk.skills.agent_state import AgentState
+    agent_profile = get_agent_profile(profile)
+    if agent_profile is None:
+        msg = (
+            f"Agent profile '{profile}' not found. "
+            "Call list_agent_profiles() to see available profiles."
+        )
+        _log_spawn_error(agent_name, msg)
+        return msg
+    if not agent_profile.enabled:
+        msg = (
+            f"Agent profile '{profile}' is disabled and cannot be used "
+            "by spawn_agent. Call list_agent_profiles() to see available profiles."
+        )
+        _log_spawn_error(agent_name, msg)
+        return msg
 
-    from sdk.tools._core import get_core_tools
-
-    # Resolve profile. Unknown or disabled IDs return a clear error string
-    # so the caller can pick a valid one instead of silently getting the
-    # parent's options.
-    agent_profile: AgentProfile | None = None
-    if profile:
-        agent_profile = get_agent_profile(profile)
-        if agent_profile is None:
+    agent_state = AgentState(get_core_tools())
+    for skill_name in agent_profile.skills:
+        skill = get_skill(skill_name)
+        if skill is None:
+            available = [n for n, _ in list_skills()]
             msg = (
-                f"Agent profile '{profile}' not found. "
-                "Call list_agent_profiles() to see available profiles."
+                f"Profile '{profile}' references skill '{skill_name}', which is "
+                f"not registered. Available skills: {available}."
             )
             _log_spawn_error(agent_name, msg)
             return msg
-        if not agent_profile.enabled:
-            msg = (
-                f"Agent profile '{profile}' is disabled and cannot be used "
-                "by spawn_agent. Call list_agent_profiles() to see available profiles."
-            )
-            _log_spawn_error(agent_name, msg)
-            return msg
+        agent_state.add(skill)
 
-    if agent_profile:
-        model_options = build_llm_options(agent_profile)
-        system_prompt = agent_profile.system_prompt or _BASE_PROMPT
-        skills = list(agent_profile.skills)
-    else:
-        model_options = get_model_options()
-        system_prompt = _BASE_PROMPT
-        skills = []
-
-    loaded = AgentState(get_core_tools())
-    for skill_name in skills:
-        if loaded.load(skill_name) is None:
-            _log_spawn_error(agent_name, f"Unknown skill: {skill_name}")
-            return f"Unknown skill: {skill_name}"
-
-    effective_max_iterations = 0
-    if model_options and model_options.max_iterations is not None:
-        effective_max_iterations = model_options.max_iterations
-
-    agent = Agent(
-        name=agent_name,
-        description="",
-        instruction=system_prompt,
-        tools=loaded.tools,
-        model=model_options.model if model_options and model_options.model else "",
-        think=model_options.think if model_options and model_options.think is not None else False,
-        options=model_options.to_options() if model_options else {},
-        max_iterations=effective_max_iterations,
-    )
+    agent = build_agent(agent_profile, tools=agent_state.tools, name=agent_name)
 
     logger.info(
         "Spawning sub-agent '%s' (profile=%s, max_iter=%d, instruction=%.100s)",
-        agent_name, profile or "(parent)", effective_max_iterations, instructions,
+        agent_name, profile, agent.max_iterations, instructions,
     )
-    _log_spawn(agent_name, profile, agent_profile, model_options, skills, instructions)
+    _log_spawn(agent_name, agent_profile, instructions)
 
-    _profile_name = agent_profile.name if agent_profile else None
-    async with agent_span(agent_name, instruction=instructions, agent_state=loaded, profile_name=_profile_name):
+    async with agent_span(
+        agent_name,
+        instruction=instructions,
+        agent_state=agent_state,
+        profile_name=agent_profile.name,
+    ):
         conv_id = get_conversation_id() or "default"
         short_id = _uuid.uuid4().hex[:8]
         instance_id = f"{conv_id}/{agent_name}_{short_id}"
@@ -218,7 +184,7 @@ async def spawn_agent(
         )
         hooks = default_hooks(
             agent,
-            max_iterations=effective_max_iterations,
+            max_iterations=agent.max_iterations,
             ctx_manager=ctx_manager,
         )
         hooks.append(PersistenceHook(

@@ -23,8 +23,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
     from collections.abc import AsyncGenerator
 
-from agents.types import LLMOptions
-
 from sdk.skills.agent_state import AgentState, _active_agent_state
 
 from ._dispatcher import EventDispatcher
@@ -43,19 +41,6 @@ _current_dispatcher: ContextVar[EventDispatcher | None] = ContextVar(
 _context_stack: ContextVar[tuple[tuple[str, str | None], ...]] = ContextVar(
     "assistant_events_context_stack", default=()
 )
-
-# LLM options propagated from the user's UI selection for the current turn.
-_model_options: ContextVar[LLMOptions | None] = ContextVar("assistant_events_model_options", default=None)
-
-def get_model_options() -> LLMOptions | None:
-    """Return the LLM options set for the current request context, or None."""
-    return _model_options.get()
-
-
-def set_model_options(options: LLMOptions | None) -> None:
-    """Set the LLM options for the current request context."""
-    _model_options.set(options)
-
 
 _subcontext_counter = itertools.count(1)
 _ROOT_CONTEXT_ID = "root"

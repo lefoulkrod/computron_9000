@@ -12,7 +12,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from agents.types import LLMOptions
 from config import load_config
 from settings import load_settings
 
@@ -148,32 +147,9 @@ def duplicate_agent_profile(profile_id: str, new_name: str | None = None) -> Age
     return save_agent_profile(clone)
 
 
-def build_llm_options(profile: AgentProfile) -> LLMOptions:
-    """Convert an AgentProfile to LLMOptions for the turn machinery.
-
-    Raises:
-        RuntimeError: If the profile has no model configured.
-    """
-    if not profile.model:
-        msg = f"Profile '{profile.id}' has no model configured — run setup wizard"
-        raise RuntimeError(msg)
-    return LLMOptions(
-        model=profile.model,
-        think=profile.think,
-        num_ctx=profile.num_ctx,
-        num_predict=profile.num_predict,
-        temperature=profile.temperature,
-        top_k=profile.top_k,
-        top_p=profile.top_p,
-        repeat_penalty=profile.repeat_penalty,
-        max_iterations=profile.max_iterations,
-    )
-
-
 __all__ = [
     "COMPUTRON_ID",
     "AgentProfile",
-    "build_llm_options",
     "delete_agent_profile",
     "duplicate_agent_profile",
     "get_agent_profile",

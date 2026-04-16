@@ -6,25 +6,16 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
-from sdk.events import (
-    AgentEvent,
-    ContentPayload,
-    TurnEndPayload,
-    agent_span,
-    get_current_dispatcher,
-    set_model_options,
-)
-from sdk.turn import turn_scope
-from agents.types import Agent, Data
-from tools.memory import load_memory
-from tools.virtual_computer.receive_file import receive_attachment
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from agents import (
     AgentProfile,
-    build_llm_options,
+    build_agent,
     get_agent_profile,
 )
+from agents.types import Agent, Data
 from conversations import (
     generate_conversation_title,
     load_conversation_history,
@@ -38,14 +29,21 @@ from sdk import (
     default_hooks,
     run_turn,
 )
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
+from sdk.events import (
+    AgentEvent,
+    ContentPayload,
+    TurnEndPayload,
+    agent_span,
+    get_current_dispatcher,
+)
 from sdk.hooks._agent_event_buffer import AgentEventBufferHook
-from sdk.skills.agent_state import AgentState
+from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
+from sdk.turn import turn_scope
 from sdk.turn._turn import StopRequestedError
-
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
+from tools.memory import load_memory
+from tools.virtual_computer.receive_file import receive_attachment
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -53,40 +51,42 @@ _console = Console(stderr=True)
 _DEFAULT_CONVERSATION_ID = "default"
 
 
-def _log_turn_start(profile, options) -> None:
+def _log_turn_start(profile: AgentProfile) -> None:
     """Print a Rich panel showing the active profile and its settings."""
     body = Text()
     body.append("profile: ", style="bold")
     body.append(profile.name, style="bright_magenta")
     body.append(f" ({profile.id})", style="dim")
     body.append("\nmodel:   ", style="bold")
-    body.append(options.model or "—", style="bright_yellow")
+    body.append(profile.model or "—", style="bright_yellow")
     if profile.skills:
         body.append("\nskills:  ", style="bold")
         body.append(", ".join(profile.skills), style="bright_cyan")
     params = []
-    if options.temperature is not None:
-        params.append(f"temp={options.temperature}")
-    if options.top_k is not None:
-        params.append(f"top_k={options.top_k}")
-    if options.top_p is not None:
-        params.append(f"top_p={options.top_p}")
-    if options.think:
+    if profile.temperature is not None:
+        params.append(f"temp={profile.temperature}")
+    if profile.top_k is not None:
+        params.append(f"top_k={profile.top_k}")
+    if profile.top_p is not None:
+        params.append(f"top_p={profile.top_p}")
+    if profile.think:
         params.append("think")
-    if options.num_ctx is not None:
-        params.append(f"ctx={options.num_ctx}")
-    if options.max_iterations is not None:
-        params.append(f"max_iter={options.max_iterations}")
+    if profile.num_ctx is not None:
+        params.append(f"ctx={profile.num_ctx}")
+    if profile.max_iterations is not None:
+        params.append(f"max_iter={profile.max_iterations}")
     if params:
         body.append("\nparams:  ", style="bold")
         body.append(", ".join(params), style="dim")
 
-    _console.print(Panel(
-        body,
-        title="[bold bright_magenta]🤖 Agent Turn[/bold bright_magenta]",
-        border_style="bright_magenta",
-        expand=False,
-    ))
+    _console.print(
+        Panel(
+            body,
+            title="[bold bright_magenta]🤖 Agent Turn[/bold bright_magenta]",
+            border_style="bright_magenta",
+            expand=False,
+        )
+    )
 
 
 @dataclass
@@ -166,11 +166,7 @@ def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str
         file_lines.append(f"  - {name} ({d.content_type}) -> {container_path}")
 
     files_block = "\n".join(file_lines)
-    return (
-        f"{message}\n\n"
-        f"[Attached files written to virtual computer]\n"
-        f"{files_block}"
-    )
+    return f"{message}\n\n[Attached files written to virtual computer]\n{files_block}"
 
 
 def _build_agent_from_profile(profile: AgentProfile) -> Agent:
@@ -178,21 +174,7 @@ def _build_agent_from_profile(profile: AgentProfile) -> Agent:
     from tools.memory import forget, remember
     from tools.virtual_computer.run_bash_cmd import run_bash_cmd
 
-    options = build_llm_options(profile)
-
-    # Base tools every profile gets (on top of core tools added in _run_turn)
-    agent_tools = [run_bash_cmd, remember, forget]
-
-    return Agent(
-        name=profile.name.upper(),
-        description=profile.description,
-        instruction=profile.system_prompt,
-        tools=agent_tools,
-        model=options.model or "",
-        think=options.think or False,
-        options=options.to_options(),
-        max_iterations=options.max_iterations or 0,
-    )
+    return build_agent(profile, tools=[run_bash_cmd, remember, forget])
 
 
 def _ensure_context_manager(
@@ -222,15 +204,13 @@ async def _run_turn(
     is_new_conversation: bool = False,
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
-    options = build_llm_options(profile)
     logger.info(
         "Turn started: conv=%s agent=%s message=%.80s",
         conversation_id or _DEFAULT_CONVERSATION_ID,
         active_agent.name,
         user_content,
     )
-    _log_turn_start(profile, options)
-    set_model_options(options)
+    _log_turn_start(profile)
 
     ctx_manager = _ensure_context_manager(conversation, active_agent)
     conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
@@ -239,11 +219,25 @@ async def _run_turn(
     # Pre-load skills from the profile.
     agent_state = AgentState(get_core_tools() + active_agent.tools)
     for skill_name in profile.skills:
-        if agent_state.load(skill_name) is not None:
-            logger.info("Pre-loaded profile skill '%s' for conv=%s", skill_name, conv_id)
+        skill = get_skill(skill_name)
+        if skill is None:
+            logger.warning("Profile skill '%s' not registered; skipping", skill_name)
+            continue
+        agent_state.add(skill)
+        logger.info("Pre-loaded profile skill '%s' for conv=%s", skill_name, conv_id)
     for skill_name in load_loaded_skills(conv_id):
-        if agent_state.load(skill_name) is not None:
-            logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
+        if skill_name in agent_state.loaded_skill_names:
+            continue
+        skill = get_skill(skill_name)
+        if skill is None:
+            logger.warning(
+                "Persisted skill '%s' for conv=%s was not found in the skills registry; skipping",
+                skill_name,
+                conv_id,
+            )
+            continue
+        agent_state.add(skill)
+        logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
 
     async with turn_scope(handler=handler, conversation_id=conversation_id):
         # Subscribe event buffer to capture agent lifecycle/preview events
@@ -252,7 +246,9 @@ async def _run_turn(
         if dispatcher:
             dispatcher.subscribe(event_buffer.handle_event)
 
-        async with agent_span(active_agent.name, instruction=user_content, agent_state=agent_state, profile_name=profile.name):
+        async with agent_span(
+            active_agent.name, instruction=user_content, agent_state=agent_state, profile_name=profile.name
+        ):
             conversation.history.append({"role": "user", "content": user_content})
             # Build full system prompt: profile prompt + loaded skill prompts
             full_prompt = active_agent.instruction
@@ -267,10 +263,12 @@ async def _run_turn(
                 ctx_manager=ctx_manager,
             )
 
-            hooks.append(PersistenceHook(
-                conversation_id=conv_id,
-                history=conversation.history,
-            ))
+            hooks.append(
+                PersistenceHook(
+                    conversation_id=conv_id,
+                    history=conversation.history,
+                )
+            )
 
             with suppress(StopRequestedError):
                 await run_turn(
@@ -395,8 +393,10 @@ async def handle_user_message(
 
     except Exception:
         logger.exception("Error handling user message")
-        yield AgentEvent(payload=ContentPayload(
-            type="content",
-            content="An error occurred while processing your message.",
-        ))
+        yield AgentEvent(
+            payload=ContentPayload(
+                type="content",
+                content="An error occurred while processing your message.",
+            )
+        )
         yield AgentEvent(payload=TurnEndPayload(type="turn_end"))

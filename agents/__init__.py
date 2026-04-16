@@ -1,8 +1,8 @@
 """The agents package contains AI agent definitions."""
 
+from agents._agent_builder import build_agent
 from agents._agent_profiles import (
     AgentProfile,
-    build_llm_options,
     delete_agent_profile,
     duplicate_agent_profile,
     get_agent_profile,
@@ -14,7 +14,7 @@ from agents._agent_profiles import (
 
 __all__ = [
     "AgentProfile",
-    "build_llm_options",
+    "build_agent",
     "delete_agent_profile",
     "duplicate_agent_profile",
     "get_agent_profile",
