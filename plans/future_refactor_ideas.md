@@ -41,11 +41,9 @@ This makes it hard to customize hook sets for different agent types — for exam
 
 A better approach might be a declarative hook configuration (e.g. a list of hook classes/names on the agent definition) or a builder pattern that lets callers include/exclude specific hooks. This would also make it easier to test individual hooks in isolation without standing up the full default set.
 
-## Remove strongly-typed agent result machinery
+## Delete NudgeCompactionStrategy
 
-`_agent_wrapper.py` has a `result_type` parameter and a bunch of supporting code to coerce agent text output into typed Python values (Pydantic models, `list[Model]`, builtins, etc.). This includes `_convert_result_to_type`, `_run_with_json_retry`, `_validate_pydantic_model`, `AgentToolConversionError`, and the `_PydanticV2`/`_PydanticV1` protocols. The `make_run_agent_as_tool_function` factory branches on `result_type is str` vs non-string and retries the entire tool loop up to 5 times on JSON parse failures.
-
-None of this is actually used — all agent tools return `str`. The typed-result path adds complexity (generic type vars, Pydantic protocol sniffing, retry loops) for a feature that never materialized. Remove `result_type` from the factory signature, delete the conversion/retry helpers and the custom exception, and simplify the factory to always return `str`. Also clean up any related test code.
+`NudgeCompactionStrategy` in `sdk/context/_strategy.py` (~90 lines) plus `_NUDGE_MESSAGE` and `_NUDGE_PREFIX` are dead code — the class is defined and exported but never instantiated. All three `strategies=[...]` call sites use `ToolClearingStrategy` and `LLMCompactionStrategy`. Note that `NudgeHook` (`sdk/hooks/_nudge_hook.py`) is a separate mechanism and is still in use.
 
 ## Eliminate integration tests
 
