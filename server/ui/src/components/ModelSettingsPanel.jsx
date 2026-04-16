@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import ChevronRightIcon from './icons/ChevronRightIcon';
 import localStyles from './ModelSettingsPanel.module.css';
 
 const SETTING_TIPS = {
@@ -166,9 +167,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                 className={localStyles.advancedToggle}
                 onClick={() => setShowAdvanced(!showAdvanced)}
             >
-                <svg className={`${localStyles.chevron} ${showAdvanced ? localStyles.chevronOpen : ''}`} viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z" />
-                </svg>
+                <ChevronRightIcon className={`${localStyles.chevron} ${showAdvanced ? localStyles.chevronOpen : ''}`} />
                 Advanced
             </button>
 
