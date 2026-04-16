@@ -267,7 +267,7 @@ function RunItem({ run, taskMap, isExpanded, onToggle, onViewOutput, onDelete })
                                 return (
                                     <tr key={taskResult.id}>
                                         <td>{task?.description || taskResult.task_id}</td>
-                                        <td><span className={styles.agentBadge}>{task?.agent_profile_name || task?.agent_profile || '—'}</span></td>
+                                        <td><span className={styles.agentBadge}>{task?.agent_profile_name || '—'}</span></td>
                                         <td><StatusIcon status={taskResult.status} size={12} /></td>
                                         <td>{taskDuration || '-'}</td>
                                         <td>
