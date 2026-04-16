@@ -74,6 +74,12 @@ _SKILL = Skill(
         - Can't find element → scroll + browse_page, or browse_page(scope="...")
         - Ref failed → try browser_visual_action("describe what to do")
         - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
+
+        CSP/FRAMING: Some sites (Reddit, Twitter) block being loaded in
+        iframes via Content-Security-Policy. Never use JavaScript
+        window.location.replace() or window.open() for navigation —
+        always use open_url() or click() which use Playwright's native
+        navigation. JS-based navigation can trigger CSP violations.
     """),
     tools=[
         open_url,

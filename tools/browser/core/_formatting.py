@@ -20,6 +20,7 @@ def format_page_view(
     content: str,
     truncated: bool,
     downloaded_file: Any | None = None,
+    redirect_warning: str | None = None,
 ) -> str:
     """Format a page view as a plain-text string for the LLM.
 
@@ -31,6 +32,7 @@ def format_page_view(
         content: Annotated page content.
         truncated: Whether content was truncated.
         downloaded_file: Optional DownloadInfo from file detection.
+        redirect_warning: Optional cross-domain redirect warning.
 
     Returns:
         Formatted string with header and content.
@@ -52,7 +54,11 @@ def format_page_view(
         doc_h = viewport.get("document_height", 0)
         vp_line = f"[Viewport: {scroll_top}-{scroll_top + vh} of {doc_h}px{trunc}]"
 
-    return f"{header}\n{vp_line}\n\n{content}"
+    warning_line = ""
+    if redirect_warning:
+        warning_line = f"\n[REDIRECT WARNING: {redirect_warning}]"
+
+    return f"{header}\n{vp_line}{warning_line}\n\n{content}"
 
 
 def format_javascript_result(

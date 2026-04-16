@@ -76,7 +76,17 @@ class DummyElementHandle:
         return None
 
     async def evaluate_handle(self, fn):
+        return _DummyLabelHandle()
+
+
+class _DummyLabelHandle:
+    """Stub for label handle returned by evaluate_handle."""
+
+    def as_element(self):
         return None
+
+    async def dispose(self):
+        pass
 
 
 class DummyLocator:
@@ -522,3 +532,99 @@ def test_build_trajectory_zero_distance() -> None:
     last_x, last_y = points[-1]
     assert abs(last_x - 50.0) < 1e-6
     assert abs(last_y - 50.0) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Force-click fallback tests (BTI-010)
+# ---------------------------------------------------------------------------
+
+
+class ForceClickLocator(DummyLocator):
+    """Locator that tracks force click calls for testing."""
+
+    def __init__(self, handle: DummyElementHandle | None, force_click_succeeds: bool = True) -> None:
+        super().__init__(handle)
+        self.force_click_called = False
+        self._force_click_succeeds = force_click_succeeds
+
+    async def click(self, timeout: int | None = None, force: bool = False) -> None:
+        if force:
+            self.force_click_called = True
+            if not self._force_click_succeeds:
+                from playwright.async_api import Error as PlaywrightError
+                raise PlaywrightError("force click failed")
+            return
+        raise NotImplementedError("direct click not supported in dummy")
+
+
+@pytest.mark.unit
+async def test_human_click_force_click_fallback_no_bbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When element has no bounding box, force click is tried as fallback (BTI-010)."""
+    recorder: list[str] = []
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+    frame = DummyFrame(page=page)
+
+    # Element with no bounding box (zero width/height)
+    handle = DummyElementHandle(bounding_box={"x": 10, "y": 20, "width": 0, "height": 0}, frame=frame)
+    locator = ForceClickLocator(handle, force_click_succeeds=True)
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        hover_min_ms=0, hover_max_ms=0,
+        click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
+        delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    # Should succeed via force click fallback without raising
+    await human_click(cast(Page, page), cast(Locator, locator))
+    assert locator.force_click_called
+
+
+@pytest.mark.unit
+async def test_human_click_force_click_fallback_none_bbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When element has None bounding box, force click is tried as fallback (BTI-010)."""
+    recorder: list[str] = []
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+    frame = DummyFrame(page=page)
+
+    # Element with None bounding box
+    handle = DummyElementHandle(bounding_box=None, frame=frame)
+    locator = ForceClickLocator(handle, force_click_succeeds=True)
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        hover_min_ms=0, hover_max_ms=0,
+        click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
+        delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    # Should succeed via force click fallback
+    await human_click(cast(Page, page), cast(Locator, locator))
+    assert locator.force_click_called
+
+
+@pytest.mark.unit
+async def test_human_click_force_click_fallback_fails_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When both bounding box and force click fail, BrowserToolError is raised (BTI-010)."""
+    recorder: list[str] = []
+    mouse = DummyMouse(recorder)
+    page = DummyPage(mouse=mouse)
+    frame = DummyFrame(page=page)
+
+    # Element with no bounding box and force click that also fails
+    handle = DummyElementHandle(bounding_box=None, frame=frame)
+    locator = ForceClickLocator(handle, force_click_succeeds=False)
+
+    monkeypatch.setattr("tools.browser.core.human._config_cache", _HumanConfig(
+        hover_min_ms=0, hover_max_ms=0,
+        click_hold_min_ms=0, click_hold_max_ms=0, delay_min_ms=0,
+        delay_max_ms=0, extra_pause_every_chars=0, extra_pause_min_ms=0,
+        extra_pause_max_ms=0,
+    ))
+
+    # Should raise BrowserToolError since both bbox and force click failed
+    with pytest.raises(BrowserToolError, match="no bounding box"):
+        await human_click(cast(Page, page), cast(Locator, locator))
+    assert locator.force_click_called

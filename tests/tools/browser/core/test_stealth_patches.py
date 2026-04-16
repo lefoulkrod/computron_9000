@@ -87,3 +87,46 @@ class TestWebGLPatch:
     def test_fallback_with_fail_if_major_performance_caveat(self):
         """Script retries with failIfMajorPerformanceCaveat=false on failure."""
         assert "failIfMajorPerformanceCaveat" in _ANTI_BOT_SCRIPT
+
+
+# ---------------------------------------------------------------------------
+# Permissions anti-bot patch (BTI-002, BTI-007, BTI-013, BTI-035)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPermissionsPatch:
+    """navigator.permissions.query override in the anti-bot script."""
+
+    def test_permissions_query_override_present(self):
+        """Anti-bot script patches Permissions.prototype.query."""
+        assert "Permissions.prototype.query" in _ANTI_BOT_SCRIPT
+
+    def test_notifications_denied_response(self):
+        """Script returns 'denied' state for notifications permission."""
+        assert "'denied'" in _ANTI_BOT_SCRIPT
+        assert "notifications" in _ANTI_BOT_SCRIPT
+
+    def test_permissions_query_marked_native(self):
+        """Permissions.prototype.query is marked as native via _makeNative."""
+        assert "_makeNative(Permissions.prototype.query" in _ANTI_BOT_SCRIPT
+
+
+# ---------------------------------------------------------------------------
+# Chrome args for anti-bot (BTI-002, BTI-007, BTI-013, BTI-035)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAntiBotChromeArgs:
+    """Verify anti-bot Chrome flags are present."""
+
+    def test_translate_ui_disabled(self):
+        """TranslateUI feature is disabled to reduce automation signal."""
+        source = inspect.getsource(Browser.start)
+        assert "--disable-features=TranslateUI" in source
+
+    def test_optimization_guide_disabled(self):
+        """OptimizationGuideModelDownloading feature is disabled."""
+        source = inspect.getsource(Browser.start)
+        assert "--disable-features=OptimizationGuideModelDownloading" in source

@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict
 import tools.browser.core.waits as browser_waits
 from config import load_config
 from tools.browser.core._file_detection import DownloadInfo
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
     from playwright.async_api import Geolocation, ProxySettings, ViewportSize
@@ -59,6 +60,35 @@ class ActiveView(NamedTuple):
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_registered_domain(url: str) -> str:
+    """Extract the registered domain from a URL.
+
+    Handles common URL patterns and strips subdomains to return the
+    base registered domain (e.g. "www.google.com" → "google.com",
+    "l.facebook.com" → "facebook.com").
+
+    Args:
+        url: A URL string to extract the domain from.
+
+    Returns:
+        The registered domain string, or empty string if extraction fails.
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return ""
+        parts = hostname.split(".")
+        # Handle common TLDs with two-part suffixes (co.uk, com.au, etc.)
+        # and standard single-part TLDs.  For simplicity, return the last
+        # two parts for most cases which covers the vast majority of
+        # registered domains.
+        if len(parts) >= 2:
+            return ".".join(parts[-2:])
+        return hostname
+    except Exception:
+        return ""
 
 
 # Small jitter so every run isn't pixel-identical
@@ -133,6 +163,18 @@ HTMLCanvasElement.prototype.getContext = function(type, ...args) {
   }
   return _origGetContext.call(this, type, ...args);
 };
+
+// Permissions — override navigator.permissions.query so sites that check
+// for notification/geolocation permissions don't see the default "prompt"
+// state that headless Chrome reports.
+const _origQuery = Permissions.prototype.query;
+Permissions.prototype.query = function(parameters) {
+  if (parameters.name === 'notifications') {
+    return Promise.resolve({ state: 'denied', onchange: null });
+  }
+  return _origQuery.call(this, parameters);
+};
+_makeNative(Permissions.prototype.query, 'query');
 """
 )
 
@@ -161,6 +203,7 @@ class BrowserInteractionResult(BaseModel):
     settle_timings: browser_waits.SettleTimings | None = None
     frame_transition: str | None = None
     action_ms: float = 0.0
+    redirect_warning: str | None = None
 
 
 class Browser:
@@ -342,6 +385,8 @@ class Browser:
             "--disable-pdf-viewer",
             "--enable-webgl",
             "--enable-webgl2-compute-context",
+            "--disable-features=TranslateUI",
+            "--disable-features=OptimizationGuideModelDownloading",
         ]
         if args:
             chrome_args.extend(args)
@@ -660,6 +705,27 @@ class Browser:
         """Return the underlying persistent ``BrowserContext``."""
         return self._context
 
+    @staticmethod
+    def _unwrap_tracking_url(url: str) -> str:
+        """Unwrap tracking redirect URLs to get the actual destination.
+
+        Handles common tracking redirect patterns:
+        - l.facebook.com/l.php?u=<encoded_url>
+        - lm.facebook.com/l.php?u=<encoded_url>
+        """
+        from urllib.parse import parse_qs as _parse_qs
+
+        try:
+            parsed = urlparse(url)
+            # Facebook tracking redirects
+            if parsed.hostname in ("l.facebook.com", "lm.facebook.com"):
+                qs = _parse_qs(parsed.query)
+                if "u" in qs and qs["u"]:
+                    return qs["u"][0]
+        except Exception:
+            pass
+        return url
+
     async def navigate(self, url: str) -> BrowserInteractionResult:
         """Navigate to *url* and return a ``BrowserInteractionResult``."""
         try:
@@ -669,6 +735,13 @@ class Browser:
         self.clear_active_frame()
         self._pending_downloads.clear()
         initial_url = getattr(page, "url", "")
+
+        # Unwrap tracking redirect URLs before navigation (BTI-017)
+        unwrapped_url = self._unwrap_tracking_url(url)
+        if unwrapped_url != url:
+            logger.info("Unwrapped tracking URL: %s -> %s", url, unwrapped_url)
+            url = unwrapped_url
+
         try:
             response = await page.goto(url, wait_until="domcontentloaded")
         except PlaywrightError as exc:
@@ -684,7 +757,29 @@ class Browser:
                 await page.wait_for_event("download", timeout=5_000)
             except (PlaywrightTimeoutError, PlaywrightError):
                 pass
-        return await self._finalize_action(page, response=response, initial_url=initial_url)
+
+        # Detect cross-domain redirects (BTI-001, BTI-003, etc.)
+        redirect_warning = None
+        try:
+            intended_domain = _extract_registered_domain(url)
+            final_domain = _extract_registered_domain(page.url)
+            if intended_domain and final_domain and intended_domain != final_domain:
+                redirect_warning = (
+                    "Cross-domain redirect detected: intended %s, "
+                    "landed on %s. This may indicate session contamination "
+                    "or DNS issues. Original URL: %s"
+                ) % (intended_domain, final_domain, url)
+                logger.warning(
+                    "Cross-domain redirect: %s -> %s (intended: %s)",
+                    url, page.url, intended_domain,
+                )
+        except Exception:
+            pass  # Best-effort detection
+
+        return await self._finalize_action(
+            page, response=response, initial_url=initial_url,
+            redirect_warning=redirect_warning,
+        )
 
     async def navigate_back(self) -> BrowserInteractionResult:
         """Navigate back in history via ``perform_interaction``."""
@@ -818,6 +913,7 @@ class Browser:
         response: Response | None,
         initial_url: str,
         saw_download_response: bool = False,
+        redirect_warning: str | None = None,
     ) -> BrowserInteractionResult:
         """Shared post-action pipeline: downloads, settle, iframe detection, logging."""
         wait_cfg = load_config().tools.browser.waits
@@ -887,6 +983,16 @@ class Browser:
         # 3. Iframe detection (skip if download — page may be a PDF viewer stub)
         frame_transition: str | None = None
         final_url = getattr(page, "url", initial_url)
+
+        # Handle about:blank transitional pages (BTI-023)
+        if final_url == "about:blank" and initial_url and initial_url != "about:blank":
+            try:
+                # Wait for the actual page to load after about:blank
+                await page.wait_for_url(lambda u: u != "about:blank", timeout=3000)
+                final_url = getattr(page, "url", initial_url)
+            except (PlaywrightTimeoutError, PlaywrightError):
+                logger.debug("Page remained at about:blank after wait; proceeding")
+
         navigated = bool(initial_url and final_url and final_url != initial_url)
 
         if download_info is not None:
@@ -918,6 +1024,7 @@ class Browser:
             download=download_info,
             settle_timings=settle_timings,
             frame_transition=frame_transition,
+            redirect_warning=redirect_warning,
         )
 
     async def _probe_file_url(self, new_page: Page, url: str) -> Page | None:
@@ -1050,9 +1157,29 @@ class Browser:
             except Exception:  # noqa: BLE001
                 pass
 
+        # Detect cross-domain redirects during interactions (BTI-001, etc.)
+        redirect_warning = None
+        try:
+            initial_domain = _extract_registered_domain(initial_url)
+            final_page_url = getattr(target_page, "url", initial_url)
+            final_domain = _extract_registered_domain(final_page_url)
+            if initial_domain and final_domain and initial_domain != final_domain:
+                redirect_warning = (
+                    "Cross-domain redirect detected: intended %s, "
+                    "landed on %s. This may indicate session contamination "
+                    "or DNS issues."
+                ) % (initial_domain, final_domain)
+                logger.warning(
+                    "Cross-domain redirect during interaction: %s -> %s (intended: %s)",
+                    initial_url, final_page_url, initial_domain,
+                )
+        except Exception:
+            pass  # Best-effort detection
+
         result = await self._finalize_action(
             target_page, response=response, initial_url=initial_url,
             saw_download_response=_saw_download_response,
+            redirect_warning=redirect_warning,
         )
         result.action_ms = action_ms
 

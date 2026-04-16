@@ -152,6 +152,7 @@ async def _format_result(
         viewport=snapshot.viewport,
         content=snapshot.content,
         truncated=snapshot.truncated,
+        redirect_warning=result.redirect_warning,
     )
 
 

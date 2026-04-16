@@ -374,7 +374,14 @@ async def human_click(target: Page | Frame, locator: Locator) -> None:
             await label_handle.dispose()
 
     if box is None or box.get("width", 0) <= 0 or box.get("height", 0) <= 0:
-        # No usable bounding box; the caller should ensure a visible element selector.
+        # Fallback: try force click for elements with no visible bounding box
+        # (e.g., download buttons with zero-size containers) (BTI-010)
+        try:
+            await locator.click(force=True, timeout=5000)
+            logger.debug("Used force click fallback for element with no bounding box")
+            return
+        except PlaywrightError as exc:
+            logger.debug("Force click fallback failed: %s", exc)
         raise BrowserToolError("Element has no bounding box to click", tool="click")
 
     if not hasattr(page, "mouse") or page.mouse is None:

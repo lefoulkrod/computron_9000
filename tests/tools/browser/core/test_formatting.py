@@ -109,3 +109,44 @@ class TestFormatPageView:
             truncated=False,
         )
         assert "[Viewport: unavailable]" in out
+
+    def test_redirect_warning_included(self) -> None:
+        """Redirect warning is included when provided (BTI-001)."""
+        out = format_page_view(
+            title="Example",
+            url="https://bing.com",
+            status_code=200,
+            viewport={"scroll_top": 0, "viewport_height": 800, "document_height": 2000},
+            content="Hello world",
+            truncated=False,
+            redirect_warning="Cross-domain redirect detected: intended google.com, landed on bing.com",
+        )
+        assert "[REDIRECT WARNING:" in out
+        assert "google.com" in out
+        assert "bing.com" in out
+
+    def test_no_redirect_warning(self) -> None:
+        """No redirect warning line when redirect_warning is None."""
+        out = format_page_view(
+            title="Example",
+            url="https://example.com",
+            status_code=200,
+            viewport={"scroll_top": 0, "viewport_height": 800, "document_height": 2000},
+            content="Hello world",
+            truncated=False,
+            redirect_warning=None,
+        )
+        assert "REDIRECT WARNING" not in out
+
+    def test_empty_redirect_warning_omitted(self) -> None:
+        """Empty string redirect_warning is treated as falsy and omitted."""
+        out = format_page_view(
+            title="T",
+            url="u",
+            status_code=None,
+            viewport=None,
+            content="",
+            truncated=False,
+            redirect_warning="",
+        )
+        assert "REDIRECT WARNING" not in out
