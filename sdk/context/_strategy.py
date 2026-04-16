@@ -18,6 +18,7 @@ from config import load_config
 from conversations import ClearedItem, ClearingRecord, SummaryRecord, save_clearing_record, save_summary_record
 from sdk.events import get_current_agent_name
 from sdk.turn import get_conversation_id
+from settings import load_settings
 
 from ._history import ConversationHistory
 from ._models import ContextStats
@@ -453,7 +454,10 @@ class LLMCompactionStrategy:
 
         # Resolve model name up front so we can unload on any exit path.
         cfg = load_config()
-        resolved_model, resolved_options = self._resolve_model(cfg)
+        resolved = self._resolve_model(cfg)
+        if resolved is None:
+            return
+        resolved_model, resolved_options = resolved
 
         import time as _time
         t0 = _time.monotonic()
@@ -676,27 +680,26 @@ class LLMCompactionStrategy:
         )
         return response.message.content or ""
 
-    def _resolve_model(self, cfg: object) -> tuple[str, dict]:
-        """Determine which model and options to use for summarization."""
-        # Explicit override
-        if self._summary_model:
-            return self._summary_model, {}
+    def _resolve_model(self, cfg: object) -> tuple[str, dict] | None:
+        """Determine which model and options to use for summarization.
 
-        # Check settings.json (set by setup wizard / system settings)
-        try:
-            from settings import load_settings
-            compaction_model = load_settings().get("compaction_model")
-            if compaction_model:
-                return compaction_model, {}
-        except Exception:
-            pass
-
-        # Fall back to the summary section from config.yaml
+        The model name comes from an explicit constructor arg or the
+        ``compaction_model`` setting. Inference options come from
+        config.yaml's summary section. Returns None if no model is
+        configured.
+        """
         summary_cfg = getattr(cfg, "summary", None)
-        if summary_cfg is None:
-            msg = "No summary model configured. Set one in Settings > System."
-            raise RuntimeError(msg)
-        return summary_cfg.model, summary_cfg.options
+        options = summary_cfg.options if summary_cfg else {}
+
+        if self._summary_model:
+            return self._summary_model, options
+
+        compaction_model = load_settings().get("compaction_model")
+        if compaction_model:
+            return compaction_model, options
+
+        logger.warning("No compaction model configured — compaction disabled")
+        return None
 
 
 _NUDGE_MESSAGE = (
