@@ -181,8 +181,20 @@ def _get_profile_usage(profile_id: str) -> list[dict]:
     return usage
 
 
+async def handle_list_agents(_request: web.Request) -> web.Response:
+    """Return agent profile IDs and the default agent."""
+    from settings import load_settings
+    profiles = list_agent_profiles()
+    default_agent = load_settings().get("default_agent", "computron")
+    return web.json_response({
+        "agents": [p.id for p in profiles],
+        "default": default_agent,
+    })
+
+
 def register_profile_routes(app: web.Application) -> None:
     """Register all profile API routes."""
+    app.router.add_route("GET", "/api/agents", handle_list_agents)
     app.router.add_route("GET", "/api/profiles", handle_list_profiles)
     app.router.add_route("POST", "/api/profiles", handle_create_profile)
     app.router.add_route("POST", "/api/profiles/set-model", handle_set_model)

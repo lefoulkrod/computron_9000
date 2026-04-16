@@ -53,18 +53,7 @@ async def handle_refresh_models(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-async def handle_list_agents(_request: web.Request) -> web.Response:
-    """Return the list of available agent profiles."""
-    from agents._agent_profiles import list_agent_profiles
-    profiles = list_agent_profiles()
-    return web.json_response({
-        "agents": [p.id for p in profiles],
-        "default": "computron",
-    })
-
-
 def register_model_routes(app: web.Application) -> None:
     """Register model API routes."""
     app.router.add_route("GET", "/api/models", handle_list_models)
     app.router.add_route("POST", "/api/models/refresh", handle_refresh_models)
-    app.router.add_route("GET", "/api/agents", handle_list_agents)
