@@ -37,7 +37,7 @@ function _makeAgent(id, name, parentId, instruction, startedAt) {
         terminalLines: [],       // bash output
         desktopActive: false,
         generationPreview: null,
-        openFiles: [],           // file preview tabs (not carried across turns)
+        openFiles: [],           // file preview tabs
         activeTool: null,        // what tool is running right now
         completedAt: null,       // when the agent finished (for frozen elapsed time)
         iteration: null,         // current loop iteration
@@ -73,6 +73,7 @@ function _agentReducer(state, action) {
                 agent.terminalLines = prev.terminalLines;
                 agent.desktopActive = prev.desktopActive;
                 agent.generationPreview = prev.generationPreview;
+                agent.openFiles = prev.openFiles;
             }
 
             const agents = { ...state.agents, [agentId]: agent };

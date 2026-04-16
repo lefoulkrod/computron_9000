@@ -95,6 +95,10 @@ publish registry="ghcr.io/lefoulkrod/computron_9000":
     [ -n "${GITHUB_PACKAGES_TOKEN:-}" ] && echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin
     docker push "{{registry}}:${tag}"
     docker push "{{registry}}:${branch}-latest"
+    if [ "$branch" = "main" ]; then
+        docker tag {{_image}} "{{registry}}:latest"
+        docker push "{{registry}}:latest"
+    fi
     echo "✅ Published: {{registry}}:${tag}"
 
 

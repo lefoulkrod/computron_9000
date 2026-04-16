@@ -32,6 +32,32 @@ def test_terminal_persists_across_turns(page: Page):
     )
 
 
+def test_file_tabs_persist_across_turns(page: Page):
+    """File preview tabs from turn 1 should still be visible after turn 2."""
+    chat = ChatView(page).goto().new_conversation()
+
+    # Turn 1 — ask the agent to create a file
+    chat.send(
+        'create a simple text file called persist_test.txt '
+        'with the content "hello" and send it to me'
+    ).wait_streaming(timeout=LLM_TIMEOUT)
+
+    assert chat.file_preview_btns.count() > 0, (
+        "Agent should produce a file output with a Preview button"
+    )
+    chat.file_preview_btns.first.click()
+    chat.preview.file_tabs.first.wait_for(state="visible", timeout=5_000)
+    file_tab_count = chat.preview.file_tabs.count()
+
+    # Turn 2 — send a follow-up that doesn't produce files
+    chat.send('say "acknowledged"').wait_streaming(timeout=LLM_TIMEOUT)
+
+    assert chat.preview.file_tabs.count() == file_tab_count, (
+        f"File tabs should persist across turns, expected {file_tab_count} "
+        f"but got {chat.preview.file_tabs.count()}"
+    )
+
+
 def test_new_conversation_clears_previews(page: Page):
     """Starting a new conversation should clear all preview tabs."""
     chat = ChatView(page).goto().new_conversation()

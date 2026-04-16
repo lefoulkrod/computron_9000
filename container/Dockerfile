@@ -51,14 +51,6 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Firefox (real .deb, not the snap stub) ────────────────────────────────────
-RUN add-apt-repository -y ppa:mozillateam/ppa && \
-    printf 'Package: *\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001\n' \
-      > /etc/apt/preferences.d/mozilla-firefox && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends firefox && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
 # ── Google Chrome (browser automation) ───────────────────────────────────────
 RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
       | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
@@ -229,13 +221,9 @@ COPY server/ui/package.json server/ui/package-lock.json server/ui/
 RUN cd server/ui && npm ci
 
 # ── App source ───────────────────────────────────────────────────────────────
-COPY . /opt/computron/
+COPY --chmod=755 . /opt/computron/
 RUN uv pip install --system --no-cache -e .
 RUN cd server/ui && npm run build
-
-# Lock down app directory
-RUN chown -R root:root /opt/computron && \
-    chmod -R 755 /opt/computron
 
 # ── Entrypoint (late COPY so edits don't bust app/UI cache) ─────────────────
 COPY container/entrypoint.sh /opt/entrypoint.sh

@@ -319,7 +319,7 @@ describe('useAgentState reducer', () => {
     });
 
     describe('openFiles carryover', () => {
-        it('does not carry openFiles from previous root to new root', () => {
+        it('carries openFiles from previous root to new root', () => {
             const { getState, dispatch } = renderWithProvider();
 
             dispatch(agentStarted('root-1'));
@@ -327,7 +327,8 @@ describe('useAgentState reducer', () => {
 
             dispatch(agentStarted('root-2'));
 
-            expect(getState().agents['root-2'].openFiles).toHaveLength(0);
+            expect(getState().agents['root-2'].openFiles).toHaveLength(1);
+            expect(getState().agents['root-2'].openFiles[0].filename).toBe('readme.md');
         });
     });
 });
