@@ -15,7 +15,17 @@ logger = logging.getLogger(__name__)
 def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
     """Replace a unique block of text in a file with new content.
 
-    The old_text must match exactly one location in the file.
+    The old_text must match exactly one location in the file (character-for-
+    character, including whitespace). If it matches zero or multiple locations
+    the operation fails with a descriptive error.
+
+    Args:
+        path: Target file path.
+        old_text: Exact text to find and replace. Must be unique in the file.
+        new_text: Replacement text.
+
+    Returns:
+        ApplyPatchResult: Success flag, ``file_path``, and unified ``diff``.
     """
     try:
         abs_path = Path(path)
@@ -55,7 +65,20 @@ def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResul
 
 @truncate_args(patch_text=300)
 def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
-    """Apply unified diff patches to existing text files."""
+    """Apply unified diff patches to existing text files.
+
+    The given ``patch_text`` may contain hunks for one or more files. File
+    creation and deletion are not supported; attempts to patch non-existent
+    files yield error results for those entries.
+
+    Args:
+        patch_text: Unified diff text covering one or multiple files.
+
+    Returns:
+        list[ApplyPatchResult]: One result per file encountered in the diff,
+        reporting success and an optional unified diff of the applied changes,
+        or an ``error`` message.
+    """
     results: list[ApplyPatchResult] = []
     lines = patch_text.splitlines(keepends=False)
     idx = 0
