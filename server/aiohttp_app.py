@@ -400,10 +400,10 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # setup.mark_ready).
     app.on_startup.append(_init_ready_signal)
 
-    # Phase 3: Deferred subsystems — start in background tasks that await
-    # the ready event before doing real work.
-    app.on_startup.append(_start_task_runner)
-    app.on_cleanup.append(_stop_task_runner)
+    # Phase 3: Deferred subsystems — a single background task awaits the
+    # ready event, then initializes all subsystems that need setup first.
+    app.on_startup.append(_start_deferred_subsystems)
+    app.on_cleanup.append(_stop_deferred_subsystems)
 
     return app
 
@@ -429,43 +429,49 @@ async def _init_ready_signal(app: web.Application) -> None:
         logger.info("Setup not complete — subsystems will wait for ready signal")
 
 
-async def _start_task_runner(app: web.Application) -> None:
-    """Start the task runner in a background task that waits for setup."""
-    config = load_config()
-    if not config.goals.enabled:
-        return
+async def _start_deferred_subsystems(app: web.Application) -> None:
+    """Wait for setup to complete, then initialize all deferred subsystems."""
 
     async def _deferred() -> None:
         try:
             if not app["ready"].is_set():
-                logger.info("Task runner waiting for setup to complete")
+                logger.info("Deferred subsystems waiting for setup to complete")
             await app["ready"].wait()
-            logger.info("Task runner ready signal received — starting")
-            from tasks import TaskExecutor, TaskRunner, TelegramNotifier, get_store
-
-            store = get_store()
-            executor = TaskExecutor(store)
-
-            notifier = None
-            if config.goals.notifications.enabled:
-                notifier = TelegramNotifier(config.goals.notifications)
-                if not notifier.enabled:
-                    notifier = None
-
-            runner = TaskRunner(store, executor, config.goals, notifier=notifier)
-            app["task_runner"] = runner
-            await runner.start()
+            logger.info("Setup ready — starting deferred subsystems")
+            await _init_task_runner(app)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Failed to start task runner")
+            logger.exception("Failed to start deferred subsystems")
 
-    app["_task_runner_init"] = asyncio.create_task(_deferred(), name="task-runner-init")
+    app["_deferred_init"] = asyncio.create_task(_deferred(), name="deferred-init")
 
 
-async def _stop_task_runner(app: web.Application) -> None:
-    """Gracefully stop the background task runner."""
-    init_task = app.get("_task_runner_init")
+async def _init_task_runner(app: web.Application) -> None:
+    """Initialize and start the task runner."""
+    config = load_config()
+    if not config.goals.enabled:
+        return
+
+    from tasks import TaskExecutor, TaskRunner, TelegramNotifier, get_store
+
+    store = get_store()
+    executor = TaskExecutor(store)
+
+    notifier = None
+    if config.goals.notifications.enabled:
+        notifier = TelegramNotifier(config.goals.notifications)
+        if not notifier.enabled:
+            notifier = None
+
+    runner = TaskRunner(store, executor, config.goals, notifier=notifier)
+    app["task_runner"] = runner
+    await runner.start()
+
+
+async def _stop_deferred_subsystems(app: web.Application) -> None:
+    """Cancel the deferred init task and stop all subsystems."""
+    init_task = app.get("_deferred_init")
     if init_task and not init_task.done():
         init_task.cancel()
     runner = app.get("task_runner")
