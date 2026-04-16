@@ -2,12 +2,13 @@
 
 ## Conceptual Framework
 
-The UI is built around two core concepts:
+The UI is built around three core views:
 
 - **Chat View** — A multi-turn conversation between the user and the root agent. Messages accumulate as a scrollable thread. Always mounted (hidden via CSS when other views are active to preserve scroll and input state).
-- **Activity View** — A real-time log of a single agent's work: thinking, content, tool calls, file outputs. Shown when drilling into an agent from the network graph.
+- **Network View** — A graph of the running agent tree: root agent plus any sub-agents it has spawned. Click an agent to drill into its Activity View.
+- **Activity View** — A real-time log of a single agent's work: thinking, content, tool calls, file outputs. Shown when drilling into an agent from the Network View.
 
-Both views share a **tabbed preview panel** on the right side for browser screenshots, terminal output, file previews, desktop VNC, and media generation.
+Chat and Activity share a **tabbed preview panel** on the right side for browser screenshots, terminal output, file previews, desktop VNC, and media generation. Network View is full-width — no preview panel.
 
 ---
 
