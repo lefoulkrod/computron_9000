@@ -509,13 +509,6 @@ class StubPage:
             record_history=False,
         )
 
-    async def go_back(self, wait_until: str | None = None) -> None:
-        if not self._history:
-            return
-        self._history_index = max(0, self._history_index - 1)
-        entry = self._history[self._history_index]
-        self._apply_navigation(url=entry["url"], title=entry.get("title"), body=entry.get("body"))
-
     def expect_navigation(self, *args: Any, **kwargs: Any) -> _NavigationContext:
         return _NavigationContext(self)
 
