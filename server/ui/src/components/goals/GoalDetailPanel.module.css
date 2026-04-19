@@ -3,8 +3,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: var(--primary);
-    border-left: 1px solid var(--muted);
+    background: var(--canvas);
 }
 
 .empty {
@@ -16,89 +15,58 @@
 
 .emptyText {
     font-size: 14px;
-    color: var(--muted);
+    color: var(--text-tertiary);
     opacity: 0.6;
 }
 
-/* Header */
-.header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--muted);
+/* ─── Actions bar (top, sticky) ───────────────────────── */
+.actionsBar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-6);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 
-.headerMain {
-    margin-bottom: 16px;
+.activeLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-family: var(--font-brand);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
 }
 
-.titleRow {
+.actionsRight {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-}
-
-.statusIcon {
-    flex-shrink: 0;
-}
-
-.title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--text);
-}
-
-.scheduleRow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.cronBadge {
-    font-size: 11px;
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.08);
-    padding: 3px 8px;
-    border-radius: 0;
-    font-family: var(--font-mono, monospace);
-}
-
-.timezone {
-    font-size: 11px;
-    color: var(--muted);
-}
-
-.nextRun {
-    font-size: 11px;
-    color: #7b8cff;
-    background: rgba(123, 140, 255, 0.1);
-    padding: 3px 8px;
-    border-radius: 0;
-}
-
-/* Actions */
-.actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: var(--sp-1);
+    margin-left: auto;
 }
 
 .actionBtn {
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 0;
-    border: 1px solid var(--muted);
-    background: var(--secondary);
-    color: var(--text);
+    font-family: var(--font-brand);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px var(--sp-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
     cursor: pointer;
-    font-family: inherit;
-    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    transition: background 150ms var(--ease, ease), border-color 150ms var(--ease, ease);
 }
 
+.actionBtn i { font-size: 10px; }
+
 .actionBtn:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--secondary) 90%, var(--text));
-    border-color: color-mix(in srgb, var(--muted) 80%, var(--text));
+    background: var(--accent-muted);
+    border-color: var(--accent-muted);
 }
 
 .actionBtn:disabled {
@@ -106,285 +74,367 @@
     cursor: not-allowed;
 }
 
+.actionBtn.success {
+    background: var(--success-muted);
+    border-color: var(--success-muted);
+    color: var(--success);
+}
+
 .actionBtn.danger {
-    border-color: #f87171;
-    color: #f87171;
+    background: var(--danger-muted);
+    border-color: var(--danger-muted);
+    color: var(--danger);
 }
 
-.actionBtn.danger:hover:not(:disabled) {
-    background: rgba(248, 113, 113, 0.1);
-}
-
-/* Tabs */
-.tabBar {
-    display: flex;
-    border-bottom: 1px solid var(--muted);
+/* ─── Heading block (title + desc + schedule, sticky) ── */
+.headingBlock {
+    padding: var(--sp-4) var(--sp-6) var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
 }
 
-.tab {
-    flex: 1;
-    padding: 12px 16px;
-    font-size: 12px;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--muted);
-    cursor: pointer;
-    font-family: inherit;
-    transition: all 0.15s ease;
+.title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    margin: 0 0 var(--sp-1);
 }
 
-.tab:hover {
-    color: var(--text);
+.desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 var(--sp-3);
 }
+
+.schedule {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+}
+
+.cronChip {
+    font-family: var(--font-brand);
+    font-size: 11px;
+    padding: 4px var(--sp-2);
+    background: var(--accent-muted);
+    color: var(--accent);
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.03em;
+}
+
+.timezone {
+    font-family: var(--font-brand);
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.8;
+}
+
+.nextRun {
+    font-family: var(--font-brand);
+    font-size: 11px;
+    color: var(--accent);
+    margin-left: auto;
+}
+
+/* ─── Tabs (matches SettingsPage / design-language spec) ── */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 var(--sp-6);
+    flex-shrink: 0;
+    background: var(--canvas);
+}
+
+.tab {
+    font-family: var(--font-brand);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    opacity: 0.4;
+    background: none;
+    border: none;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    padding: 10px var(--sp-4);
+    cursor: pointer;
+    transition: opacity 150ms var(--ease, ease), border-color 150ms var(--ease, ease);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    box-shadow: none;
+}
+
+.tab:hover { opacity: 0.7; }
 
 .tabActive {
-    color: var(--text);
-    border-bottom-color: #7b8cff;
+    opacity: 1;
+    border-bottom-color: var(--accent);
 }
 
-/* Tab Content */
-.tabContent {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-}
-
-.emptyTab {
-    padding: 40px;
-    text-align: center;
-    font-size: 13px;
-    color: var(--muted);
+.tabCount {
+    font-size: 10px;
+    font-weight: 500;
     opacity: 0.6;
 }
 
-/* Runs Tab */
-.runsList {
+.tabContent {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4) var(--sp-6);
+}
+
+.emptyTab {
+    padding: var(--sp-8);
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    opacity: 0.6;
+}
+
+/* ─── Row list (used inside tab content) ─────────────── */
+.rowList {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--sp-1);
 }
 
-.runItem {
-    border: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
-    border-radius: 0;
-    background: var(--secondary);
-    overflow: hidden;
+.row {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: border-color 150ms var(--ease, ease);
 }
 
-.runHeader {
+.row:hover { border-color: var(--border-strong); }
+
+.rowHead {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
     cursor: pointer;
     user-select: none;
-    transition: background 0.12s ease;
 }
 
-.deleteRunBtn {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text);
-    opacity: 0;
-    cursor: pointer;
-    font-size: 0.8rem;
-    padding: 0.2em 0.45em;
-    line-height: 1;
-    transition: background 0.15s, opacity 0.15s, color 0.15s;
-}
-
-.runHeader:hover .deleteRunBtn {
-    opacity: 0.3;
-}
-
-.deleteRunBtn:hover {
-    opacity: 1;
-    color: #f87171;
-    background: rgba(220, 60, 60, 0.15);
-}
-
-.runHeader:hover {
-    background: color-mix(in srgb, var(--secondary) 95%, var(--text));
-}
-
-.runToggle {
-    font-size: 10px;
-    color: var(--muted);
+.chevron {
+    font-family: var(--font-brand);
+    font-size: 9px;
+    color: var(--text-tertiary);
     width: 16px;
     text-align: center;
+    flex-shrink: 0;
 }
 
-.runInfo {
+.num {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    color: var(--text-tertiary);
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.rowMain {
     flex: 1;
     min-width: 0;
-}
-
-.runTitle {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 2px;
-}
-
-.runMeta {
-    font-size: 11px;
-    color: var(--muted);
-}
-
-.taskResults {
-    padding: 0 16px 16px 48px;
-    border-top: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
-}
-
-.resultsTable {
-    width: 100%;
-    font-size: 12px;
-    border-collapse: collapse;
-    margin-top: 12px;
-}
-
-.resultsTable th,
-.resultsTable td {
-    padding: 8px 10px;
-    text-align: left;
-    color: var(--text);
-}
-
-.resultsTable th {
-    color: var(--muted);
-    font-weight: 500;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.resultsTable td {
-    border-bottom: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
-}
-
-.viewOutputBtn {
-    font-size: 10px;
-    padding: 4px 10px;
-    border-radius: 0;
-    border: 1px solid #7b8cff;
-    background: transparent;
-    color: #7b8cff;
-    cursor: pointer;
-    font-family: inherit;
-}
-
-.viewOutputBtn:hover {
-    background: rgba(123, 140, 255, 0.1);
-}
-
-.agentBadge {
-    display: inline-block;
-    font-size: 10px;
-    padding: 2px 6px;
-    background: rgba(123, 140, 255, 0.15);
-    color: #7b8cff;
-    border-radius: 0;
-}
-
-/* Tasks Tab */
-.tasksList {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 2px;
 }
 
-.taskDefItem {
-    border: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
-    border-radius: 0;
-    background: var(--secondary);
-    overflow: hidden;
-    cursor: pointer;
-    transition: border-color 0.12s ease;
-}
-
-.taskDefItem:hover {
-    border-color: color-mix(in srgb, var(--muted) 80%, transparent);
-}
-
-.taskExpanded {
-    border-color: color-mix(in srgb, #7b8cff 50%, var(--muted));
-}
-
-.taskDefHeader {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-}
-
-.taskNum {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--muted);
-    width: 20px;
-    text-align: center;
-}
-
-.taskDefName {
-    flex: 1;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.taskToggle {
-    font-size: 10px;
-    color: var(--muted);
-    width: 20px;
-    text-align: right;
-}
-
-.taskDefBody {
-    padding: 16px;
-    border-top: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
-    background: rgba(0, 0, 0, 0.1);
-}
-
-.taskDefSection {
-    margin-bottom: 16px;
-}
-
-.taskDefSection:last-child {
-    margin-bottom: 0;
-}
-
-.sectionLabel {
-    font-size: 10px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
-}
-
-.sectionContent {
+.rowTitle {
     font-size: 12px;
-    color: var(--text);
-    line-height: 1.5;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.rowMeta {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+/* Status dot used inline in rows */
+.statusDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-tertiary);
+}
+.statusDotRunning {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success-muted);
+    animation: pulse 2s infinite;
+}
+.statusDotComplete { background: var(--accent); }
+.statusDotError { background: var(--danger); }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Row badge — small status pill */
+.rowBadge {
+    display: inline-block;
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    line-height: 1.4;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.rowBadgeReady {
+    background: var(--success-muted);
+    color: var(--success);
+    border-color: var(--success-muted);
+}
+.rowBadgeComplete {
+    background: var(--accent-muted);
+    color: var(--accent);
+    border-color: var(--accent-muted);
+}
+.rowBadgeError {
+    background: var(--danger-muted);
+    color: var(--danger);
+    border-color: var(--danger-muted);
+}
+.rowBadgeAgent {
+    background: var(--accent-muted);
+    color: var(--accent);
+    border-color: var(--accent-muted);
+}
+
+/* Per-row delete button — matches MemoryPanel/CustomToolsPanel pattern */
+.rowDeleteBtn {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 3px 7px;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1;
+    margin-left: var(--sp-1);
+    opacity: 0.3;
+    transition: background 150ms var(--ease, ease), color 150ms var(--ease, ease),
+                border-color 150ms var(--ease, ease), opacity 150ms var(--ease, ease);
+    cursor: pointer;
+}
+.rowDeleteBtn:hover:not(:disabled) {
+    background: var(--danger-muted);
+    border-color: var(--danger-muted);
+    color: var(--danger);
+    opacity: 1;
+}
+.rowDeleteBtn:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+}
+
+/* ─── Row body (expanded content) ────────────────────── */
+.rowBody {
+    padding: var(--sp-3) var(--sp-4) var(--sp-3) calc(16px + var(--sp-3) + var(--sp-3));
+    border-top: 1px solid var(--border-subtle);
+    background: var(--canvas);
+}
+
+.detailSection {
+    margin-bottom: var(--sp-3);
+}
+.detailSection:last-child { margin-bottom: 0; }
+
+.detailLabel {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-1);
+}
+
+.detailContent {
+    font-size: 12px;
+    color: var(--text-primary);
+    line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
 .dependency {
     font-size: 12px;
-    color: var(--text);
-    padding: 4px 0;
+    color: var(--text-secondary);
+    padding: 2px 0;
 }
 
-.taskMetaRow {
-    display: flex;
-    gap: 16px;
+.detailMeta {
+    margin-top: var(--sp-3);
+    padding-top: var(--sp-2);
+    border-top: 1px solid var(--border-subtle);
+    font-family: var(--font-brand);
     font-size: 11px;
-    color: var(--muted);
-    padding-top: 12px;
-    border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
+    color: var(--text-secondary);
+    display: flex;
+    gap: var(--sp-4);
+}
+.detailMeta strong {
+    color: var(--text-primary);
+    opacity: 0.7;
+    font-weight: normal;
+}
+
+/* ─── Per-task results table (in expanded run row) ──── */
+.resultsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.resultsTable th {
+    text-align: left;
+    padding: var(--sp-1) var(--sp-2);
+    font-family: var(--font-brand);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border);
+}
+.resultsTable td {
+    padding: var(--sp-2);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+.resultsTable tr:last-child td { border-bottom: none; }
+.resultsTable .statusDot { display: inline-block; vertical-align: middle; }
+
+.viewOutputBtn {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    padding: 2px var(--sp-2);
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    cursor: pointer;
+}
+.viewOutputBtn:hover { background: var(--accent-muted); }
+
+.skipped {
+    font-family: var(--font-brand);
+    font-size: 11px;
+    color: var(--text-tertiary);
 }

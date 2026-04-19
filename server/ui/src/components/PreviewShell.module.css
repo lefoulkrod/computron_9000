@@ -1,7 +1,7 @@
 .shell {
-  background: var(--card-bg, #1a1a1a);
-  border: 1px solid var(--border-color, #333);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   animation: slideIn 0.3s ease-out;
 }
@@ -23,14 +23,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: var(--header-bg, #252525);
-  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
   user-select: none;
 }
 
 .header:hover {
-  background: var(--header-hover-bg, #2a2a2a);
+  background: var(--elevated);
 }
 
 .headerLeft {
@@ -43,7 +43,7 @@
 .icon {
   font-size: 14px;
   flex-shrink: 0;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
 }
@@ -51,7 +51,7 @@
 .title {
   font-weight: 600;
   font-size: 13px;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -67,20 +67,20 @@
 .actionBtn {
   background: none;
   border: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   transition: color 0.2s, background 0.2s;
 }
 
 .actionBtn:hover {
-  color: var(--text-primary, #e0e0e0);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--accent-muted);
 }
 
 .content {
@@ -91,8 +91,8 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
+  z-index: var(--z-modal);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -102,14 +102,14 @@
 .overlayPanel {
   width: 90vw;
   height: 90vh;
-  background: var(--card-bg, #1a1a1a);
-  border: 1px solid var(--border-color, #333);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   cursor: default;
-  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
 }
 
 .overlayPanelFit {
@@ -124,15 +124,15 @@
   align-items: center;
   justify-content: flex-end;
   padding: 10px 14px;
-  background: var(--header-bg, #252525);
-  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .overlayCloseBtn {
   background: none;
   border: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 8px;
   font-size: 16px;
@@ -140,14 +140,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: color 0.2s, background 0.2s;
   flex-shrink: 0;
 }
 
 .overlayCloseBtn:hover {
-  color: var(--text-primary, #e0e0e0);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--accent-muted);
 }
 
 .overlayContent {
@@ -158,49 +158,49 @@
 }
 
 /* Light theme overrides */
-:global(body:not(.dark-theme)) .shell {
-  background: #ffffff;
-  border-color: #ddd;
+:global([data-theme="light"]) .shell {
+  background: var(--elevated);
+  border-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .header {
-  background: #f5f5f5;
-  border-bottom-color: #ddd;
+:global([data-theme="light"]) .header {
+  background: var(--surface);
+  border-bottom-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .header:hover {
-  background: #ececec;
+:global([data-theme="light"]) .header:hover {
+  background: var(--surface);
 }
 
-:global(body:not(.dark-theme)) .icon,
-:global(body:not(.dark-theme)) .actionBtn {
-  color: #666;
+:global([data-theme="light"]) .icon,
+:global([data-theme="light"]) .actionBtn {
+  color: var(--text-secondary);
 }
 
-:global(body:not(.dark-theme)) .title {
-  color: #222;
+:global([data-theme="light"]) .title {
+  color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .actionBtn:hover {
-  color: #222;
-  background: rgba(0, 0, 0, 0.06);
+:global([data-theme="light"]) .actionBtn:hover {
+  color: var(--text-primary);
+  background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .overlayPanel {
-  background: #ffffff;
-  border-color: #ddd;
+:global([data-theme="light"]) .overlayPanel {
+  background: var(--elevated);
+  border-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .overlayHeader {
-  background: #f5f5f5;
-  border-bottom-color: #ddd;
+:global([data-theme="light"]) .overlayHeader {
+  background: var(--surface);
+  border-bottom-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .overlayCloseBtn {
-  color: #666;
+:global([data-theme="light"]) .overlayCloseBtn {
+  color: var(--text-secondary);
 }
 
-:global(body:not(.dark-theme)) .overlayCloseBtn:hover {
-  color: #222;
-  background: rgba(0, 0, 0, 0.06);
+:global([data-theme="light"]) .overlayCloseBtn:hover {
+  color: var(--text-primary);
+  background: var(--border-subtle);
 }

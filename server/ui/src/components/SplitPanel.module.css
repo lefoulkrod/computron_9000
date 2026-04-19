@@ -1,0 +1,46 @@
+.container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.list {
+    width: 35%;
+    min-width: 280px;
+    max-width: 420px;
+    flex-shrink: 0;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--canvas);
+    border-right: 1px solid var(--border);
+}
+
+.detail {
+    flex: 1;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Stack vertically on narrow screens */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    .list {
+        width: 100%;
+        max-width: none;
+        min-width: auto;
+        height: 40%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .detail {
+        height: 60%;
+    }
+}

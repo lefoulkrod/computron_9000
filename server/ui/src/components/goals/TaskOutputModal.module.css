@@ -1,12 +1,12 @@
 .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--scrim);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
     padding: 20px;
     animation: fadeIn 0.15s ease;
 }
@@ -20,12 +20,13 @@
     width: 100%;
     max-width: 900px;
     max-height: 80vh;
-    background: var(--primary);
-    border: 1px solid var(--muted);
-    border-radius: 12px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     animation: slideIn 0.2s ease;
 }
 
@@ -45,7 +46,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 
@@ -54,15 +55,17 @@
 }
 
 .headerTitle {
-    font-size: 14px;
+    font-family: var(--font-brand);
+    font-size: 13px;
     font-weight: 600;
-    color: var(--text);
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
     margin-bottom: 2px;
 }
 
 .headerSubtitle {
     font-size: 11px;
-    color: var(--muted);
+    color: var(--text-tertiary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -76,27 +79,27 @@
 .copyBtn {
     font-size: 12px;
     padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid #7b8cff;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--accent);
     background: transparent;
-    color: #7b8cff;
+    color: var(--accent);
     cursor: pointer;
     font-family: inherit;
     transition: all 0.15s ease;
 }
 
 .copyBtn:hover {
-    background: rgba(123, 140, 255, 0.15);
+    background: var(--accent-muted);
 }
 
 .closeBtn {
     font-size: 14px;
     width: 32px;
     height: 32px;
-    border-radius: 6px;
-    border: 1px solid var(--muted);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
     background: transparent;
-    color: var(--text);
+    color: var(--text-primary);
     cursor: pointer;
     font-family: inherit;
     display: flex;
@@ -106,13 +109,13 @@
 }
 
 .closeBtn:hover {
-    background: var(--secondary);
-    border-color: color-mix(in srgb, var(--muted) 80%, var(--text));
+    background: var(--surface);
+    border-color: var(--border-strong);
 }
 
 .content {
     flex: 1;
     overflow: auto;
     padding: 20px;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--border-subtle);
 }

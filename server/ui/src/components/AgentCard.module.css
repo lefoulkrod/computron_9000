@@ -1,7 +1,7 @@
 .card {
-    background: var(--primary);
-    border: 1px solid var(--muted);
-    border-radius: 9px;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     padding: 7px 10px;
     width: 155px;
     cursor: pointer;
@@ -9,8 +9,8 @@
     user-select: none;
 }
 .card:hover {
-    border-color: #3a3a4c;
-    background: var(--secondary);
+    border-color: var(--border-strong);
+    background: var(--surface);
 }
 
 /* Header row */
@@ -21,28 +21,6 @@
     margin-bottom: 2px;
 }
 
-/* Status dot */
-.dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: #6b7280;
-}
-.dot.running {
-    background: #4ade80;
-    box-shadow: 0 0 5px #4ade8055;
-    animation: pulse 2s infinite;
-}
-.dot.complete { background: #60a5fa; }
-.dot.success { background: #60a5fa; }
-.dot.error { background: #f87171; }
-.dot.stopped { background: #6b7280; }
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
 
 .name {
     font-size: 10.5px;
@@ -51,7 +29,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 /* Browser thumbnail */
@@ -63,7 +41,7 @@
     height: 30px;
     border-radius: 3px;
     object-fit: cover;
-    border: 1px solid var(--muted);
+    border: 1px solid var(--border);
 }
 
 /* Meta badges row */
@@ -82,22 +60,22 @@
 }
 
 .tool {
-    background: #1e2a1e;
-    color: #4ade80;
-    border: 1px solid #2a3a2a;
+    background: var(--success-muted);
+    color: var(--success);
+    border: 1px solid var(--success-muted);
 }
 .agents {
-    background: #1e2a1e;
-    color: #4ade80;
-    border: 1px solid #2a3a2a;
+    background: var(--success-muted);
+    color: var(--success);
+    border: 1px solid var(--success-muted);
 }
 .iter {
-    background: #1e1e2a;
-    color: #60a5fa;
-    border: 1px solid #2a2a4a;
+    background: var(--accent-muted);
+    color: var(--accent);
+    border: 1px solid var(--accent-muted);
 }
 .time {
-    background: var(--secondary);
-    color: var(--muted);
-    border: 1px solid var(--muted);
+    background: var(--surface);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
 }

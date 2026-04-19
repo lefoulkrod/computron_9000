@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { formatElapsed } from '../utils/agentUtils.js';
+import StatusDot from './StatusDot.jsx';
 import styles from './AgentCard.module.css';
 
 function formatAgentName(name) {
@@ -17,21 +18,20 @@ function formatAgentName(name) {
  * Memoized — only re-renders when something visible changes.
  */
 function AgentCard({ agent, onClick }) {
-    const statusClass = styles[agent.status] || '';
     const toolCallCount = agent.activityLog
         ? agent.activityLog.filter((e) => e.type === 'tool_call').length
         : 0;
 
     return (
         <div
-            className={`${styles.card} ${statusClass}`}
+            className={styles.card}
             onClick={() => onClick(agent.id)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && onClick(agent.id)}
         >
             <div className={styles.header}>
-                <span className={`${styles.dot} ${statusClass}`} />
+                <StatusDot status={agent.status} />
                 <span className={styles.name}>{formatAgentName(agent.name)}</span>
             </div>
 

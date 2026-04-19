@@ -7,7 +7,7 @@
 
 .header {
     padding: 8px 12px;
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px solid var(--border);
     font-size: 12px;
     font-weight: 600;
     flex-shrink: 0;
@@ -16,7 +16,7 @@
 }
 
 .agentName {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
 }
 
 .networkBtn {
@@ -24,39 +24,22 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     padding: 2px 10px 2px 7px;
     font-size: 10px;
-    color: var(--text);
+    color: var(--text-primary);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s, border-color 0.15s;
 }
 .networkBtn:hover {
-    border-color: #3a3a4c;
-    background: var(--muted);
+    border-color: var(--border-strong);
+    background: var(--border-strong);
 }
 .networkBtn:focus-visible {
-    outline: 2px solid #7aa2ff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
-.networkDot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #60a5fa;
-    flex-shrink: 0;
-}
-.networkDotActive {
-    background: #4ade80;
-    box-shadow: 0 0 5px #4ade8055;
-    animation: networkPulse 2s infinite;
-}
-
-@keyframes networkPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}

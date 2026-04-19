@@ -1,13 +1,13 @@
 .block {
     margin: 0 0 0.5em 0;
-    border-left: 2px solid var(--muted);
+    border-left: 2px solid var(--border);
     padding-left: 0.75em;
 }
 
 .header {
     cursor: pointer;
     padding: 0.2em 0;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.45;
     font-size: 0.8em;
     font-weight: 500;

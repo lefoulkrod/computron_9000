@@ -12,9 +12,9 @@
 }
 
 .label {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.75rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.55;
     width: 4.5rem;
     flex-shrink: 0;
@@ -27,10 +27,10 @@
     height: 30px;
     font-size: 0.8rem;
     padding: 0 0.4rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--muted);
-    background: var(--primary);
-    color: var(--text);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--canvas);
+    color: var(--text-primary);
     cursor: pointer;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .select:focus-visible {
-    outline: 2px solid #7aa2ff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
@@ -50,10 +50,10 @@
     height: 30px;
     font-size: 0.8rem;
     padding: 0 0.4rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--muted);
-    background: var(--primary);
-    color: var(--text);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--canvas);
+    color: var(--text-primary);
 }
 
 .modelInput::placeholder {
@@ -66,7 +66,7 @@
 }
 
 .modelInput:focus-visible {
-    outline: 2px solid #7aa2ff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
@@ -83,10 +83,10 @@
     height: 30px;
     font-size: 0.8rem;
     padding: 0 0.3rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--muted);
-    background: var(--primary);
-    color: var(--text);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--canvas);
+    color: var(--text-primary);
     text-align: right;
     appearance: textfield;
 }
@@ -102,71 +102,16 @@
 }
 
 .numInput:focus-visible {
-    outline: 2px solid #7aa2ff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
 .unit {
     font-size: 0.75rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.45;
 }
 
-/* Toggle switch */
-.toggleLabel {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-    height: 20px;
-}
-
-.toggleInput {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.toggle {
-    display: inline-block;
-    width: 34px;
-    height: 20px;
-    border-radius: 999px;
-    background: var(--muted);
-    border: 1px solid rgba(0,0,0,0.2);
-    transition: background 0.2s;
-    position: relative;
-}
-
-.toggle::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--text);
-    opacity: 0.5;
-    transition: transform 0.2s, opacity 0.2s;
-}
-
-.toggleInput:checked + .toggle {
-    background: #7aa2ff;
-    border-color: transparent;
-}
-
-.toggleInput:checked + .toggle::after {
-    transform: translateX(14px);
-    opacity: 1;
-    background: #fff;
-}
-
-.toggleLabel:has(.toggleInput:disabled) {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
 
 /* Turns row */
 .turnsGroup {
@@ -179,16 +124,16 @@
 
 .turnsHint {
     font-size: 0.75rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.45;
     font-style: italic;
 }
 
 /* Section label */
 .sectionLabel {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.7rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.4;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -210,9 +155,9 @@
     align-items: flex-start;
     gap: 0.15rem;
     padding: 0.45rem 0.55rem;
-    background: var(--primary);
-    border: 1px solid var(--muted);
-    border-radius: var(--radius);
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     cursor: pointer;
     text-align: left;
     transition: border-color 120ms ease;
@@ -220,24 +165,24 @@
 }
 
 .presetCard:hover:not(:disabled) {
-    border-color: var(--text);
+    border-color: var(--text-primary);
 }
 
 .presetActive {
-    border-color: #7aa2ff;
-    background: rgba(122, 162, 255, 0.08);
+    border-color: var(--accent);
+    background: var(--accent-muted);
 }
 
 .presetName {
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-primary);
     line-height: 1;
 }
 
 .presetDesc {
     font-size: 0.65rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.4;
     line-height: 1.2;
 }
@@ -251,9 +196,9 @@
     border: none;
     padding: 0.25rem 0;
     margin-top: 0.15rem;
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.7rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.5;
     cursor: pointer;
     box-shadow: none;
@@ -280,7 +225,7 @@
     flex-direction: column;
     gap: 0.5rem;
     padding-top: 0.25rem;
-    border-top: 1px solid var(--muted);
+    border-top: 1px solid var(--border);
 }
 
 /* Info tooltip */
@@ -294,7 +239,7 @@
 .infoIcon {
     width: 12px;
     height: 12px;
-    color: #7aa2ff;
+    color: var(--accent);
     opacity: 0.45;
     cursor: help;
     transition: opacity 0.15s;
@@ -307,16 +252,16 @@
 
 .tooltip {
     position: fixed;
-    background: #2a2a3d;
-    color: #e8e8f0;
+    background: var(--elevated);
+    color: var(--text-primary);
     font-size: 0.7rem;
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     line-height: 1.4;
     padding: 0.45rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid rgba(122, 162, 255, 0.35);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--accent-muted);
     white-space: nowrap;
-    z-index: 9999;
+    z-index: var(--z-tooltip);
     pointer-events: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+    box-shadow: var(--shadow-lg);
 }

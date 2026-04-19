@@ -10,22 +10,22 @@
 .resumeBtn {
     background: transparent;
     border: 1px solid transparent;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.3;
     cursor: pointer;
     font-size: 0.9rem;
     padding: 0.2em 0.45em;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     line-height: 1;
     box-shadow: none;
     transition: background 0.15s, opacity 0.15s, border-color 0.15s;
 }
 
 .resumeBtn:hover:not(:disabled) {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.35);
+    background: var(--accent-muted);
+    border-color: var(--accent-glow);
     opacity: 1;
-    color: #2563eb;
+    color: var(--accent);
 }
 
 .resumeBtn:disabled {
@@ -33,7 +33,7 @@
     cursor: default;
 }
 
-:global(.dark-theme) .resumeBtn:hover:not(:disabled) {
-    color: #93c5fd;
-    background: rgba(59, 130, 246, 0.2);
+:global([data-theme="dark"]) .resumeBtn:hover:not(:disabled) {
+    color: var(--accent);
+    background: var(--accent-glow);
 }

@@ -12,8 +12,8 @@
 }
 
 .agentBadge {
-    font-family: var(--font-mono);
-    color: #7b8cff;
+    font-family: var(--font-brand);
+    color: var(--accent);
     font-size: 10px;
 }
 
@@ -32,13 +32,13 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--muted);
+    color: var(--text-tertiary);
     margin-bottom: 6px;
 }
 
 .value {
     font-size: 12px;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .muted {
@@ -50,13 +50,13 @@
 }
 
 .instruction {
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     padding: 10px 12px;
     font-size: 12px;
     line-height: 1.55;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.85;
     white-space: pre-wrap;
     word-break: break-word;

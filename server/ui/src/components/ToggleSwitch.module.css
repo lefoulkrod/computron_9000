@@ -1,0 +1,56 @@
+/* Toggle switch — SIGNAL spec: 34×20 pill, accent when checked.
+ * Rendered as a <span> so callers can wrap the row in a <label> for
+ * native label/checkbox association. */
+.control {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+}
+
+.input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.track {
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+    border-radius: var(--radius-full);
+    background: var(--border-strong);
+    border: 1px solid var(--border-subtle);
+    transition: background 0.2s;
+    position: relative;
+}
+
+.track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    opacity: 0.5;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+.input:checked + .track {
+    background: var(--accent);
+    border-color: transparent;
+}
+
+.input:checked + .track::after {
+    transform: translateX(14px);
+    opacity: 1;
+    background: var(--elevated);
+}
+
+.control:has(.input:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

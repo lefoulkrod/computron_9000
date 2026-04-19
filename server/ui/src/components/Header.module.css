@@ -1,11 +1,11 @@
 .header {
   width: 100%;
-  height: 36px;
-  border-bottom: 1px solid var(--muted);
+  height: var(--header-height);
+  border-bottom: 1px solid var(--border);
   box-sizing: border-box;
-  background: var(--primary);
+  background: var(--surface);
   flex-shrink: 0;
-  z-index: 50;
+  z-index: var(--z-sticky);
 }
 
 .headerInner {
@@ -13,60 +13,46 @@
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 14px;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
   box-sizing: border-box;
-}
-
-.logo {
-  height: 24px;
-}
-
-.logoDark {
-  display: none;
-}
-
-:global(.dark-theme) .logoLight {
-  display: none;
-}
-
-:global(.dark-theme) .logoDark {
-  display: inline;
 }
 
 .appTitle {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  font-family: 'Share Tech Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
-  color: var(--text);
+  letter-spacing: 0.04em;
+  font-family: var(--font-brand);
+  color: var(--text-primary);
   margin-right: auto;
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .iconButton {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: var(--radius-md);
   background: none;
-  color: var(--muted);
+  color: var(--text-tertiary);
   border: none;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  font-size: 14px;
+  transition: background 150ms var(--ease), color 150ms var(--ease);
+  box-shadow: none;
 }
 
 .iconButton:hover {
-  background: var(--secondary);
-  color: var(--text);
+  background: var(--accent-muted);
+  color: var(--text-primary);
 }
 
 .iconButton:active {
@@ -74,6 +60,6 @@
 }
 
 .iconButton:focus-visible {
-  outline: 2px solid #7aa2ff;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--shadow-glow);
 }

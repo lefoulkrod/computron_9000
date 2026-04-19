@@ -10,7 +10,7 @@
     justify-content: space-between;
     padding: 8px 0;
     margin-bottom: 4px;
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px solid var(--border);
     font-size: 11px;
 }
 
@@ -20,7 +20,7 @@
 
 .runnerMeta {
     opacity: 0.5;
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 10px;
 }
 
@@ -32,14 +32,14 @@
 
 .item {
     padding: 8px 4px;
-    border-bottom: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     transition: background 0.12s;
 }
 
 .item:hover {
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 .itemHeader {
@@ -66,12 +66,12 @@
 }
 
 .cron {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-family: var(--font-brand);
+    font-size: 10px;
 }
 
 .tz {
-    font-size: 9.5px;
+    font-size: 10px;
     opacity: 0.6;
 }
 

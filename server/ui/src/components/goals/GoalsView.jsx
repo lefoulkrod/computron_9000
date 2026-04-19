@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import GoalsListPanel from './GoalsListPanel.jsx';
 import GoalDetailPanel from './GoalDetailPanel.jsx';
+import SplitPanel from '../SplitPanel.jsx';
 import styles from './GoalsView.module.css';
 
 /**
- * Split-screen Goals view (35% left list, 65% right detail).
- * Main container for the new Goals UI.
+ * Split-screen Goals view using the shared SplitPanel shell.
  */
 export default function GoalsView({
     goals,
@@ -17,14 +17,13 @@ export default function GoalsView({
     pauseGoal,
     resumeGoal,
     triggerGoal,
-    fetchDetail,  // Passed from useGoals hook
+    fetchDetail,
 }) {
     const [detail, setDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [refreshCounter, setRefreshCounter] = useState(0);
 
-    // Fetch detail when selected goal changes
     useEffect(() => {
         if (!selectedGoalId) {
             setDetail(null);
@@ -36,19 +35,14 @@ export default function GoalsView({
         setError(null);
 
         fetchDetail(selectedGoalId)
-            .then(data => {
-                setDetail(data);
-            })
+            .then(data => { setDetail(data); })
             .catch(err => {
                 setError(err.message);
                 setDetail(null);
             })
-            .finally(() => {
-                setIsLoading(false);
-            });
+            .finally(() => { setIsLoading(false); });
     }, [selectedGoalId, fetchDetail, refreshCounter]);
 
-    // Refresh detail periodically while a goal is selected
     useEffect(() => {
         if (!selectedGoalId) return;
 
@@ -61,11 +55,8 @@ export default function GoalsView({
         return () => clearInterval(interval);
     }, [selectedGoalId, fetchDetail]);
 
-    // Clear selection on unmount
     useEffect(() => {
-        return () => {
-            setSelectedGoalId(null);
-        };
+        return () => { setSelectedGoalId(null); };
     }, [setSelectedGoalId]);
 
     const refresh = () => setRefreshCounter(c => c + 1);
@@ -97,16 +88,16 @@ export default function GoalsView({
     const selectedGoal = goals.find(g => g.id === selectedGoalId) || null;
 
     return (
-        <div className={styles.container}>
-            <div className={styles.leftPanel}>
+        <SplitPanel>
+            <SplitPanel.List>
                 <GoalsListPanel
                     goals={goals}
                     runnerStatus={runnerStatus}
                     selectedGoalId={selectedGoalId}
                     onSelectGoal={setSelectedGoalId}
                 />
-            </div>
-            <div className={styles.rightPanel}>
+            </SplitPanel.List>
+            <SplitPanel.Detail>
                 {error && (
                     <div className={styles.errorBanner}>
                         Error loading goal: {error}
@@ -122,7 +113,7 @@ export default function GoalsView({
                     onResumeGoal={handleResume}
                     onTriggerGoal={handleTrigger}
                 />
-            </div>
-        </div>
+            </SplitPanel.Detail>
+        </SplitPanel>
     );
 }

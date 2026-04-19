@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
 import ChevronRightIcon from './icons/ChevronRightIcon';
+import ToggleSwitch from './ToggleSwitch.jsx';
 
 const PRESETS = {
     balanced: { temperature: 0.7 },
@@ -362,13 +363,13 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.iterations}</span>
                                 </div>
                                 <div className={styles.advancedField}>
-                                    <div className={styles.fieldRow}>
+                                    <label className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Thinking</span>
-                                        <label className={styles.toggleLabel}>
-                                            <input type="checkbox" className={styles.toggleInput} data-testid="profile-think-toggle" checked={draft.think || false} onChange={(e) => updateInference('think', e.target.checked || null)} />
-                                            <span className={styles.toggle} />
-                                        </label>
-                                    </div>
+                                        <ToggleSwitch
+                                            checked={draft.think || false}
+                                            onChange={(e) => updateInference('think', e.target.checked || null)}
+                                        />
+                                    </label>
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.thinking}</span>
                                 </div>
                             </div>

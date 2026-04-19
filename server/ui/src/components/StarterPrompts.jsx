@@ -2,22 +2,22 @@ import styles from './StarterPrompts.module.css';
 
 const PROMPTS = [
     {
-        icon: '🔍',
+        icon: 'bi-search',
         title: 'Research a topic',
         text: 'Do a deep research on the latest developments in large language models',
     },
     {
-        icon: '💻',
+        icon: 'bi-code-slash',
         title: 'Write some code',
         text: 'Write an HTML snake game',
     },
     {
-        icon: '🌐',
+        icon: 'bi-globe2',
         title: 'Browse the web',
         text: 'Go to wikipedia.org and summarize the featured article of the day',
     },
     {
-        icon: '🖥️',
+        icon: 'bi-display',
         title: 'Use the computer',
         text: 'Open a terminal and show me what OS is running on this machine',
     },
@@ -34,7 +34,7 @@ export default function StarterPrompts({ onSelect }) {
                         className={styles.card}
                         onClick={() => onSelect(prompt.text)}
                     >
-                        <span className={styles.icon}>{prompt.icon}</span>
+                        <span className={styles.icon}><i className={prompt.icon} /></span>
                         <span className={styles.title}>{prompt.title}</span>
                         <span className={styles.text}>{prompt.text}</span>
                     </button>

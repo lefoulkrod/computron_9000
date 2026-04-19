@@ -1,12 +1,12 @@
 .select {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.75rem;
     height: 26px;
     padding: 0 0.4rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--muted);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
     background: transparent;
-    color: var(--text);
+    color: var(--text-primary);
     cursor: pointer;
     appearance: auto;
     outline: none;
@@ -14,16 +14,16 @@
 }
 
 .select option {
-    background: var(--secondary);
-    color: var(--text);
+    background: var(--surface);
+    color: var(--text-primary);
 }
 
 .select:hover:not(:disabled) {
-    border-color: var(--text);
+    border-color: var(--text-primary);
 }
 
 .select:focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 

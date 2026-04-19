@@ -11,8 +11,8 @@
     align-items: center;
     gap: 4px;
     padding: 4px 8px;
-    background: var(--secondary);
-    border-bottom: 1px solid var(--muted);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 
@@ -31,47 +31,47 @@
   justify-content: center;
   background: none;
   border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--text-secondary, #999);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 2px 4px;
   transition: color 0.15s, border-color 0.15s;
 }
 
 .controlBtn:hover {
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary);
 }
 
 .controlBtnActive {
-  color: var(--accent, #58a6ff);
-  border-color: var(--accent, #58a6ff);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .expandBtn {
   background: none;
   border: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   transition: color 0.2s, background 0.2s;
 }
 
 .expandBtn:hover {
-  color: var(--text-primary, #e0e0e0);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--accent-muted);
 }
 
 /* Desktop lightbox */
 .lightbox {
   position: fixed;
   inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
+  z-index: var(--z-modal);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -82,13 +82,13 @@
   height: auto;
   max-width: 90vw;
   max-height: 90vh;
-  background: var(--card-bg, #1a1a1a);
-  border: 1px solid var(--border-color, #333);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
 }
 
 .lightboxHeader {
@@ -97,15 +97,15 @@
   justify-content: flex-end;
   gap: 4px;
   padding: 8px 14px;
-  background: var(--header-bg, #252525);
-  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .lightboxCloseBtn {
   background: none;
   border: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 8px;
   font-size: 16px;
@@ -113,48 +113,48 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: color 0.2s, background 0.2s;
 }
 
 .lightboxCloseBtn:hover {
-  color: var(--text-primary, #e0e0e0);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--accent-muted);
 }
 
 /* Light theme */
-:global(body:not(.dark-theme)) .controlBtn {
-  color: #666;
+:global([data-theme="light"]) .controlBtn {
+  color: var(--text-secondary);
 }
 
-:global(body:not(.dark-theme)) .controlBtn:hover {
-  color: #222;
+:global([data-theme="light"]) .controlBtn:hover {
+  color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .expandBtn {
-  color: #666;
+:global([data-theme="light"]) .expandBtn {
+  color: var(--text-secondary);
 }
 
-:global(body:not(.dark-theme)) .expandBtn:hover {
-  color: #222;
-  background: rgba(0, 0, 0, 0.06);
+:global([data-theme="light"]) .expandBtn:hover {
+  color: var(--text-primary);
+  background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .lightboxPanel {
-  background: #ffffff;
-  border-color: #ddd;
+:global([data-theme="light"]) .lightboxPanel {
+  background: var(--elevated);
+  border-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .lightboxHeader {
-  background: #f5f5f5;
-  border-bottom-color: #ddd;
+:global([data-theme="light"]) .lightboxHeader {
+  background: var(--surface);
+  border-bottom-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .lightboxCloseBtn {
-  color: #666;
+:global([data-theme="light"]) .lightboxCloseBtn {
+  color: var(--text-secondary);
 }
 
-:global(body:not(.dark-theme)) .lightboxCloseBtn:hover {
-  color: #222;
-  background: rgba(0, 0, 0, 0.06);
+:global([data-theme="light"]) .lightboxCloseBtn:hover {
+  color: var(--text-primary);
+  background: var(--border-subtle);
 }

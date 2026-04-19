@@ -2,11 +2,11 @@
 .overlay {
     position: fixed;
     inset: 0;
-    z-index: 10000;
+    z-index: var(--z-wizard);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim);
     backdrop-filter: blur(6px);
 }
 
@@ -17,10 +17,10 @@
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    background: var(--primary);
-    border: 1px solid var(--muted);
+    background: var(--canvas);
+    border: 1px solid var(--border);
     border-radius: 0;
-    box-shadow: var(--shadow), 0 24px 64px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-md), 0 24px 64px var(--scrim);
     overflow: hidden;
 }
 
@@ -42,12 +42,12 @@
 .progressLine {
     width: 48px;
     height: 2px;
-    background: var(--muted);
+    background: var(--border-strong);
     transition: background 200ms ease;
 }
 
 .progressLineDone {
-    background: var(--color-success);
+    background: var(--success);
 }
 
 .progressCircle {
@@ -57,25 +57,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.72rem;
     font-weight: 600;
-    border: 2px solid var(--muted);
-    color: var(--muted);
+    border: 2px solid var(--border);
+    color: var(--text-tertiary);
     background: transparent;
     transition: border-color 200ms ease, background 200ms ease, color 200ms ease;
     flex-shrink: 0;
 }
 
 .progressCircleActive {
-    border-color: var(--color-accent);
-    color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-muted);
 }
 
 .progressCircleDone {
-    border-color: var(--color-success);
-    background: var(--color-success);
+    border-color: var(--success);
+    background: var(--success);
     color: #fff;
 }
 
@@ -92,7 +92,7 @@
 }
 
 .stepContent::-webkit-scrollbar { width: 8px; }
-.stepContent::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+.stepContent::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: var(--radius-sm); }
 .stepContent::-webkit-scrollbar-track { background: transparent; }
 
 .stepIcon {
@@ -104,13 +104,13 @@
 .title {
     font-size: 1.25rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-primary);
     margin: 0 0 0.5rem;
 }
 
 .subtitle {
     font-size: 0.85rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.55;
     max-width: 380px;
     line-height: 1.5;
@@ -118,9 +118,9 @@
 }
 
 .hint {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.7rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.4;
     margin: 0 0 0.75rem;
 }
@@ -141,8 +141,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.65rem 0.85rem;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 0;
     cursor: pointer;
     text-align: left;
@@ -151,12 +151,12 @@
 }
 
 .modelCard:hover:not(:disabled) {
-    border-color: var(--text);
+    border-color: var(--text-primary);
 }
 
 .modelCardSelected {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+    border-color: var(--accent);
+    background: var(--accent-muted);
 }
 
 /* Radio circle */
@@ -164,14 +164,14 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    border: 2px solid var(--muted);
+    border: 2px solid var(--border);
     flex-shrink: 0;
     position: relative;
     transition: border-color 120ms ease;
 }
 
 .radioSelected {
-    border-color: var(--color-accent);
+    border-color: var(--accent);
 }
 
 .radioSelected::after {
@@ -182,7 +182,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--color-accent);
+    background: var(--accent);
 }
 
 .modelInfo {
@@ -193,10 +193,10 @@
 }
 
 .modelName {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-primary);
     line-height: 1;
 }
 
@@ -210,7 +210,7 @@
 
 .badge {
     display: inline-block;
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.62rem;
     padding: 0.1em 0.45em;
     border-radius: 3px;
@@ -220,34 +220,34 @@
 }
 
 .badgeParams {
-    background: rgba(230, 160, 60, 0.15);
-    color: #c77e1a;
-    border: 1px solid rgba(230, 160, 60, 0.35);
+    background: var(--warning-muted);
+    color: var(--warning);
+    border: 1px solid var(--warning-muted);
 }
 
 .badgeQuant {
-    background: rgba(150, 150, 170, 0.1);
-    color: var(--text);
+    background: var(--border-subtle);
+    color: var(--text-primary);
     opacity: 0.5;
-    border: 1px solid var(--muted);
+    border: 1px solid var(--border);
 }
 
 .badgeFamily {
-    background: rgba(160, 120, 220, 0.12);
-    color: #8b5fc7;
-    border: 1px solid rgba(160, 120, 220, 0.3);
+    background: var(--accent-muted);
+    color: var(--accent);
+    border: 1px solid var(--accent-muted);
 }
 
 .badgeCloud {
-    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-    color: var(--color-accent);
-    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    background: var(--accent-muted);
+    color: var(--accent);
+    border: 1px solid var(--accent-muted);
 }
 
 .badgeVision {
-    background: color-mix(in srgb, var(--color-success) 12%, transparent);
-    color: var(--color-success);
-    border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+    background: var(--success-muted);
+    color: var(--success);
+    border: 1px solid var(--success-muted);
 }
 
 /* ── Summary (step 4) ────────────────────────────────────────── */
@@ -266,31 +266,31 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.5rem 0.75rem;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 0;
 }
 
 .summaryLabel {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.72rem;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.5;
 }
 
 .summaryValue {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .error {
     padding: 0.5rem 0.75rem;
-    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+    background: var(--danger-muted);
+    border: 1px solid var(--danger-muted);
     border-radius: 0;
-    color: var(--color-danger);
+    color: var(--danger);
     font-size: 0.8rem;
     line-height: 1.4;
 }
@@ -305,30 +305,30 @@
 }
 
 .backBtn {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.78rem;
     padding: 0.45rem 1rem;
     border-radius: 0;
-    border: 1px solid var(--muted);
+    border: 1px solid var(--border);
     background: transparent;
-    color: var(--text);
+    color: var(--text-primary);
     cursor: pointer;
     box-shadow: none;
     transition: background 120ms ease;
 }
 
 .backBtn:hover {
-    background: var(--secondary);
+    background: var(--surface);
 }
 
 .nextBtn {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.78rem;
     font-weight: 600;
     padding: 0.45rem 1.25rem;
     border-radius: 0;
     border: 1px solid transparent;
-    background: var(--color-accent);
+    background: var(--accent);
     color: #fff;
     cursor: pointer;
     box-shadow: none;
@@ -346,7 +346,7 @@
 
 .nextBtn:focus-visible,
 .backBtn:focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
@@ -355,10 +355,10 @@
 .errorPanel {
     margin: 0.5rem 0;
     padding: 1rem 1.25rem;
-    background: color-mix(in srgb, var(--color-danger) 8%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+    background: var(--danger-muted);
+    border: 1px solid var(--danger-muted);
     border-radius: 0;
-    color: var(--text);
+    color: var(--text-primary);
     font-size: 0.85rem;
     line-height: 1.5;
     display: flex;
@@ -369,23 +369,23 @@
 
 .errorTitle {
     font-weight: 600;
-    color: var(--color-danger);
+    color: var(--danger);
     font-size: 0.95rem;
 }
 
 .errorMessage {
-    color: var(--text);
+    color: var(--text-primary);
     word-break: break-word;
 }
 
 .errorDetail {
-    color: var(--muted-text, var(--text));
+    color: var(--muted-text, var(--text-primary));
     font-size: 0.8rem;
 }
 
 .errorDetail code,
 .errorHints code {
-    background: color-mix(in srgb, var(--muted) 50%, transparent);
+    background: var(--border-subtle);
     padding: 0.05rem 0.35rem;
     border-radius: 0;
     font-size: 0.8em;
@@ -394,7 +394,7 @@
 .errorHints {
     margin: 0.25rem 0 0;
     padding-left: 1.25rem;
-    color: var(--muted-text, var(--text));
+    color: var(--muted-text, var(--text-primary));
     font-size: 0.8rem;
     display: flex;
     flex-direction: column;
@@ -408,15 +408,15 @@
     font-size: 0.85rem;
     font-weight: 600;
     border-radius: 0;
-    border: 1px solid var(--color-danger);
+    border: 1px solid var(--danger);
     background: transparent;
-    color: var(--color-danger);
+    color: var(--danger);
     cursor: pointer;
     transition: background 120ms ease, color 120ms ease;
 }
 
 .retryBtn:hover:not(:disabled) {
-    background: var(--color-danger);
+    background: var(--danger);
     color: #fff;
 }
 

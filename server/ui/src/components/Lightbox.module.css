@@ -1,8 +1,8 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
+  z-index: var(--z-modal);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,7 +13,7 @@
   max-width: 90vw;
   max-height: 90vh;
   object-fit: contain;
-  border-radius: 0.5rem;
-  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   cursor: default;
 }

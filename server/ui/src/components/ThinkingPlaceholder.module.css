@@ -1,17 +1,17 @@
 .container {
-    color: var(--muted);
+    color: var(--text-tertiary);
     line-height: 1.5;
 }
 
 .text {
-    color: var(--muted);
+    color: var(--text-tertiary);
 }
 
 .cursor {
     display: inline-block;
     width: 6px;
     height: 13px;
-    background: var(--muted);
+    background: var(--border-strong);
     animation: blink 1s step-end infinite;
     margin-left: 2px;
     vertical-align: text-bottom;

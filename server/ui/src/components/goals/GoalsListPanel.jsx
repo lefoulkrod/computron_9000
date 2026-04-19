@@ -1,10 +1,11 @@
 import { formatTime } from './goalUtils.jsx';
-import shared from '../CustomToolsPanel.module.css';
+import Badge from '../Badge.jsx';
+import ListItem from '../ListItem.jsx';
 import styles from './GoalsListPanel.module.css';
 
 /**
  * Left panel showing list of goals.
- * Uses the same shared list styles as ConversationsPanel / CustomToolsPanel.
+ * Uses shared Badge + ListItem primitives per the SIGNAL design language.
  */
 export default function GoalsListPanel({ goals, runnerStatus, selectedGoalId, onSelectGoal }) {
     const sortedGoals = [...goals].sort((a, b) => {
@@ -23,38 +24,32 @@ export default function GoalsListPanel({ goals, runnerStatus, selectedGoalId, on
     return (
         <div className={styles.container}>
             <div className={styles.header}>
-                <div className={styles.title}>Goals</div>
-                <div className={styles.runnerStatus}>
-                    <RunnerStatusBadge status={runnerStatus} />
-                </div>
+                <span className={styles.title}>Goals</span>
+                <RunnerStatusBadge status={runnerStatus} />
             </div>
 
             <div className={styles.goalsList}>
                 {sortedGoals.length === 0 ? (
-                    <div className={shared.empty}>No goals yet</div>
+                    <div className={styles.empty}>No goals yet</div>
                 ) : (
                     sortedGoals.map(goal => {
                         const lastRunTime = goal.last_run_at ? formatTime(goal.last_run_at) : null;
-                        const isSelected = goal.id === selectedGoalId;
                         const displayStatus = goal.is_running ? 'running' : goal.status;
 
                         return (
-                            <div
+                            <ListItem
                                 key={goal.id}
-                                className={`${shared.item} ${isSelected ? styles.itemSelected : ''}`}
+                                active={goal.id === selectedGoalId}
                                 onClick={() => onSelectGoal(goal.id)}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <div className={shared.itemMain}>
-                                    <span className={`${shared.name} ${styles.goalName}`}>{goal.description}</span>
-                                </div>
-                                <p className={shared.desc}>
-                                    {lastRunTime ? `Last run ${lastRunTime}` : 'No runs yet'}
-                                </p>
-                                <div className={styles.statusBadge} style={{ color: getStatusColor(displayStatus), borderColor: getStatusColor(displayStatus) }}>
-                                    {displayStatus}
-                                </div>
-                            </div>
+                                name={goal.description}
+                                description={lastRunTime ? `Last run ${lastRunTime}` : 'No runs yet'}
+                                badges={
+                                    <>
+                                        <StatusBadge status={displayStatus} />
+                                        {goal.cron && <Badge variant="neutral">{goal.cron}</Badge>}
+                                    </>
+                                }
+                            />
                         );
                     })
                 )}
@@ -63,24 +58,25 @@ export default function GoalsListPanel({ goals, runnerStatus, selectedGoalId, on
     );
 }
 
-function RunnerStatusBadge({ status }) {
-    if (status === 'running') {
-        return <span className={styles.runnerActive}>⚡ Runner Active</span>;
-    }
-    if (status === 'error') {
-        return <span className={styles.runnerError}>⚠ Runner Error</span>;
-    }
-    return <span className={styles.runnerIdle}>○ Runner Idle</span>;
+function StatusBadge({ status }) {
+    const variants = {
+        running: { variant: 'info', label: 'RUNNING' },
+        active: { variant: 'success', label: 'ACTIVE' },
+        completed: { variant: 'success', label: 'COMPLETE' },
+        failed: { variant: 'danger', label: 'ERROR' },
+        paused: { variant: 'neutral', label: 'PAUSED' },
+        pending: { variant: 'neutral', label: 'PENDING' },
+    };
+    const v = variants[status] || { variant: 'neutral', label: String(status || '').toUpperCase() };
+    return <Badge variant={v.variant}>{v.label}</Badge>;
 }
 
-function getStatusColor(status) {
-    const colors = {
-        active: 'var(--text)',
-        completed: '#4ade80',
-        running: '#22d3ee',
-        failed: '#f87171',
-        pending: 'var(--muted)',
-        paused: '#fbbf24',
-    };
-    return colors[status] || 'var(--muted)';
+function RunnerStatusBadge({ status }) {
+    if (status === 'running') {
+        return <span className={`${styles.runnerStatus} ${styles.runnerActive}`}><i className="bi bi-lightning-charge-fill" /> ACTIVE</span>;
+    }
+    if (status === 'error') {
+        return <span className={`${styles.runnerStatus} ${styles.runnerError}`}><i className="bi bi-exclamation-triangle" /> ERROR</span>;
+    }
+    return <span className={`${styles.runnerStatus} ${styles.runnerIdle}`}><i className="bi bi-circle" /> IDLE</span>;
 }

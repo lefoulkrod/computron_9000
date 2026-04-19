@@ -5,18 +5,18 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  z-index: 1000;
+  z-index: var(--z-toast);
   max-width: 320px;
   pointer-events: none;
   /* Allow clicks through if not on toast */
 }
 
 .toast {
-  background: #222;
-  color: #fff;
+  background: var(--elevated);
+  color: var(--text-primary);
   padding: 0.75rem 1rem;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   font-size: 0.9rem;
   line-height: 1.3;
   display: flex;
@@ -30,19 +30,19 @@
 }
 
 .toast.info {
-  background: #2d4a78;
+  background: var(--accent-muted);
 }
 
 .toast.success {
-  background: #1f6b3b;
+  background: var(--success-muted);
 }
 
 .toast.error {
-  background: #7a1f2d;
+  background: var(--danger-muted);
 }
 
 .toast.warn {
-  background: #7a5a1f;
+  background: var(--warning-muted);
 }
 
 .message {

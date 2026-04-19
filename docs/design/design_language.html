@@ -1,0 +1,4641 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGNAL -- COMPUTRON 9000 Design Language</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+/* ═══════════════════════════════════════════════════════
+   SIGNAL Design Language -- Token Definitions
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Primitives (never used directly in components) ── */
+  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+  --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+  --slate-900: #0f172a; --slate-950: #020617;
+
+  --blue-50: #eff6ff; --blue-100: #dbeafe; --blue-200: #bfdbfe;
+  --blue-300: #93c5fd; --blue-400: #60a5fa; --blue-500: #3b82f6;
+  --blue-600: #2563eb; --blue-700: #1d4ed8;
+
+  --green-50: #f0fdf4; --green-100: #dcfce7; --green-400: #4ade80;
+  --green-500: #22c55e; --green-600: #16a34a;
+
+  --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-400: #fbbf24;
+  --amber-500: #f59e0b; --amber-600: #d97706;
+
+  --red-50: #fef2f2; --red-100: #fee2e2; --red-400: #f87171;
+  --red-500: #ef4444; --red-600: #dc2626;
+
+  /* ── Layout constants ── */
+  --header-height: 36px;
+  --sidebar-width: 44px;
+  --flyout-width: 270px;
+
+  /* ── Radius scale ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* ── Spacing scale (4px base) ── */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* ── Font stacks ── */
+  --font-brand: 'Share Tech Mono', 'Roboto Mono', 'Consolas', monospace;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-code: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+
+  /* ── Z-index scale ── */
+  --z-sticky: 10;
+  --z-flyout: 100;
+  --z-toast: 1000;
+  --z-modal: 9999;
+  --z-wizard: 10000;
+  --z-tooltip: 10001;
+
+  /* ── Motion ── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Light Mode: "Blueprint" ── */
+[data-theme="light"] {
+  --canvas: #f8f9fb;
+  --surface: #eef0f5;
+  --elevated: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --border-strong: #cbd5e1;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37,99,235,0.08);
+  --accent-glow: rgba(37,99,235,0.15);
+  --success: #16a34a;
+  --success-muted: rgba(22,163,74,0.08);
+  --warning: #d97706;
+  --warning-muted: rgba(217,119,6,0.08);
+  --danger: #dc2626;
+  --danger-muted: rgba(220,38,38,0.08);
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.05);
+  --shadow-md: 0 2px 8px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-lg: 0 4px 16px rgba(15,23,42,0.10), 0 2px 4px rgba(15,23,42,0.05);
+  --shadow-glow: 0 0 0 3px var(--accent-glow);
+  --scrim: rgba(15,23,42,0.40);
+
+  /* Terminal (Blueprint Tint, light mode) */
+  --terminal-bg: #edf1fb;
+  --terminal-surface: #e2e9f7;
+  --terminal-border: #c8d4ec;
+  --terminal-text: #1e293b;
+  --terminal-prompt: #16a34a;
+  --terminal-stderr: #dc2626;
+  --terminal-comment: #8898b5;
+
+  /* Syntax highlighting (light) */
+  --code-keyword: #7c3aed;
+  --code-function: #1d4ed8;
+  --code-string: #15803d;
+  --code-comment: #8898b5;
+  --code-number: #c2410c;
+  --code-operator: #0e7490;
+  --code-type: #b45309;
+}
+
+/* ── Dark Mode: "Terminal" ── */
+[data-theme="dark"] {
+  --canvas: #0c0e14;
+  --surface: #151821;
+  --elevated: #1e2130;
+  --text-primary: #e8ecf4;
+  --text-secondary: #8892a8;
+  --text-tertiary: #4a5168;
+  --border: #252a3a;
+  --border-subtle: #1a1e2a;
+  --border-strong: #363d52;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-muted: rgba(59,130,246,0.12);
+  --accent-glow: rgba(59,130,246,0.20);
+  --success: #4ade80;
+  --success-muted: rgba(74,222,128,0.12);
+  --warning: #fbbf24;
+  --warning-muted: rgba(251,191,36,0.12);
+  --danger: #f87171;
+  --danger-muted: rgba(248,113,113,0.12);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  --shadow-glow: 0 0 0 3px var(--accent-glow);
+  --scrim: rgba(0,0,0,0.60);
+
+  /* Terminal (Terminal mode, dark) */
+  --terminal-bg: #111318;
+  --terminal-surface: #1a1d26;
+  --terminal-border: #252a3a;
+  --terminal-text: #c8cdd8;
+  --terminal-prompt: #4ade80;
+  --terminal-stderr: #ff7043;
+  --terminal-comment: #4a5168;
+
+  /* Syntax highlighting (dark) */
+  --code-keyword: #c792ea;
+  --code-function: #82aaff;
+  --code-string: #c3e88d;
+  --code-comment: #546e7a;
+  --code-number: #f78c6c;
+  --code-operator: #89ddff;
+  --code-type: #ffcb6b;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Base Reset & Global Styles
+   ═══════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { height: 100%; }
+
+body {
+  height: 100%;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: var(--radius-full); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Focus */
+:focus-visible { outline: none; box-shadow: var(--shadow-glow); }
+
+/* ═══════════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════════ */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes typing {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Mockup Page Layout
+   ═══════════════════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Top bar for the mockup page ── */
+.mockup-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  backdrop-filter: blur(12px);
+}
+
+.mockup-topbar h1 {
+  font-family: var(--font-brand);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  margin-right: auto;
+}
+
+.mockup-topbar h1 span {
+  color: var(--accent);
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-brand);
+  letter-spacing: 0.04em;
+}
+
+.theme-toggle button {
+  width: 44px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  position: relative;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.theme-toggle button::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: transform 150ms var(--ease), background 150ms var(--ease);
+}
+
+[data-theme="dark"] .theme-toggle button {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+}
+
+[data-theme="dark"] .theme-toggle button::after {
+  transform: translateX(20px);
+  background: var(--accent);
+}
+
+/* ── Sections ── */
+.section {
+  padding: 40px 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section:last-child { border-bottom: none; }
+
+.section-title {
+  font-family: var(--font-brand);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 24px;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+  max-width: 640px;
+  line-height: 1.7;
+}
+
+/* ═══════════════════════════════════════════════════════
+   1. Color Palette
+   ═══════════════════════════════════════════════════════ */
+
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.palette-group h3 {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.palette-swatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.swatch-color {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.swatch-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.swatch-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.swatch-value {
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════
+   2. Typography
+   ═══════════════════════════════════════════════════════ */
+
+.type-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.type-row {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.type-label {
+  width: 60px;
+  flex-shrink: 0;
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.type-sample {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════
+   3. Components
+   ═══════════════════════════════════════════════════════ */
+
+.component-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.component-label {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms var(--ease);
+  border: 1px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:active { transform: translateY(1px); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-tertiary);
+  border: none;
+}
+.btn-ghost:hover { background: var(--surface); color: var(--text-primary); }
+
+.btn-outline {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.btn-outline:hover { background: var(--surface); border-color: var(--border-strong); }
+
+.btn-filled {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-filled:hover { background: var(--accent-hover); }
+
+.btn-danger {
+  background: var(--danger-muted);
+  color: var(--danger);
+}
+.btn-danger:hover { background: rgba(220,38,38,0.15); }
+
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 120ms var(--ease);
+  font-size: 16px;
+}
+.btn-icon:hover { background: var(--surface); color: var(--text-primary); }
+.btn-icon:active { transform: translateY(1px); }
+
+/* ── Inputs ── */
+.input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+  width: 240px;
+}
+.input::placeholder { color: var(--text-tertiary); }
+.input:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
+
+[data-theme="dark"] .input { background: var(--surface); }
+
+.textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-body);
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+.textarea::placeholder { color: var(--text-tertiary); }
+.textarea:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
+
+[data-theme="dark"] .textarea { background: var(--surface); }
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge-success { background: var(--success-muted); color: var(--success); border-color: var(--success-muted); }
+.badge-warning { background: var(--warning-muted); color: var(--warning); border-color: var(--warning-muted); }
+.badge-danger  { background: var(--danger-muted);  color: var(--danger);  border-color: var(--danger-muted); }
+.badge-info    { background: var(--accent-muted);  color: var(--accent);  border-color: var(--accent-muted); }
+.badge-neutral { background: var(--border-subtle); color: var(--text-tertiary); border-color: var(--border); }
+
+/* ── Status Dots ── */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.dot-running {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success-muted);
+  animation: pulse 2s infinite;
+}
+.dot-complete { background: var(--accent); }
+.dot-error { background: var(--danger); }
+.dot-idle { background: var(--text-tertiary); }
+.dot-warning { background: var(--warning); }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3);
+  transition: border-color 150ms var(--ease);
+}
+.card:hover { border-color: var(--border-strong); }
+
+/* ═══════════════════════════════════════════════════════
+   4. Composite Mockups
+   ═══════════════════════════════════════════════════════ */
+
+/* ── App Shell ── */
+.app-mockup {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--canvas);
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 32px;
+}
+
+/* ── Header ── */
+.m-header {
+  height: var(--header-height);
+  background: var(--canvas);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 8px;
+}
+
+.m-header-logo {
+  font-family: var(--font-brand);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin-right: auto;
+}
+
+.m-header-logo span { color: var(--accent); }
+
+/* ── Sidebar ── */
+.m-sidebar {
+  width: var(--sidebar-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.m-sidebar-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 16px;
+  transition: all 120ms var(--ease);
+  position: relative;
+}
+.m-sidebar-icon:hover { background: var(--border); color: var(--text-primary); }
+
+.m-sidebar-icon.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+/* Signal Line on active sidebar icon */
+.m-sidebar-icon.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+}
+
+.m-sidebar-sep {
+  width: 20px;
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}
+
+.m-msg {
+  display: flex;
+  animation: fadeInUp 250ms var(--ease-out);
+}
+
+.m-msg-user { justify-content: flex-end; }
+.m-msg-assistant { justify-content: flex-start; }
+
+.m-msg-bubble {
+  max-width: 85%;
+  border-radius: var(--radius-lg);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.m-msg-user .m-msg-bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 12px;
+}
+
+.m-msg-assistant .m-msg-bubble {
+  background: transparent;
+  color: var(--text-primary);
+  padding: 6px 0;
+  max-width: 100%;
+}
+
+.m-msg-assistant .m-msg-bubble p { margin-bottom: 8px; }
+.m-msg-assistant .m-msg-bubble p:last-child { margin-bottom: 0; }
+
+/* Inline code in messages */
+.m-msg-bubble code {
+  font-family: var(--font-code);
+  font-size: 12px;
+  background: var(--surface);
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Tool call block in messages */
+.m-toolcall {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin: 6px 0;
+  overflow: hidden;
+}
+
+.m-toolcall-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-brand);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.m-toolcall-header i {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.m-toolcall-body {
+  padding: 8px 10px;
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Chat Input ── */
+.m-chat-input {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.m-chat-textarea {
+  width: 100%;
+  min-height: 38px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-body);
+  resize: none;
+  outline: none;
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+  line-height: 1.5;
+}
+.m-chat-textarea:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
+.m-chat-textarea::placeholder { color: var(--text-tertiary); }
+
+[data-theme="dark"] .m-chat-textarea { background: var(--surface); }
+
+.m-chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.m-chat-actions .btn-icon { font-size: 14px; }
+.m-chat-actions .spacer { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════
+   5. Agent Network Cards
+   ═══════════════════════════════════════════════════════ */
+
+.agent-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agent-card {
+  width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease);
+}
+.agent-card:hover { border-color: var(--border-strong); }
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+
+.agent-card-name {
+  font-family: var(--font-brand);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.agent-card-meta {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.agent-card-thumb {
+  margin-top: 5px;
+  width: 50px;
+  height: 32px;
+  border-radius: 3px;
+  background: var(--terminal-bg);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════
+   6. Flyout Panel Mockup
+   ═══════════════════════════════════════════════════════ */
+
+.flyout-demo {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  height: 380px;
+}
+
+.flyout-sidebar-mini {
+  width: var(--sidebar-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.flyout-panel {
+  width: var(--flyout-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-shadow: 4px 0 20px var(--scrim);
+}
+
+.flyout-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  font-family: var(--font-brand);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.flyout-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  transition: color 120ms var(--ease);
+}
+.flyout-close:hover { color: var(--text-primary); }
+
+.flyout-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.flyout-scrim {
+  flex: 1;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-family: var(--font-brand);
+  letter-spacing: 0.04em;
+}
+
+/* Flyout form elements */
+.flyout-field {
+  margin-bottom: 14px;
+}
+
+.flyout-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.flyout-select {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease);
+}
+.flyout-select:focus { border-color: var(--accent); }
+
+[data-theme="dark"] .flyout-select { background: var(--elevated); }
+
+.flyout-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flyout-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  outline: none;
+}
+.flyout-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.flyout-val {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 32px;
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════
+   8. Signal Line Showcase
+   ═══════════════════════════════════════════════════════ */
+
+.signal-showcase {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.signal-example {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signal-label {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Signal Line - Tab variant */
+.signal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.signal-tab {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  position: relative;
+  transition: color 150ms var(--ease);
+  background: none;
+  border: none;
+}
+.signal-tab:hover { color: var(--text-primary); }
+
+.signal-tab.active {
+  color: var(--accent);
+}
+
+.signal-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: var(--radius-full) var(--radius-full) 0 0;
+}
+
+/* Signal Line - Input variant */
+.signal-input {
+  width: 200px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+.signal-input:focus {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--accent);
+}
+.signal-input::placeholder { color: var(--text-tertiary); }
+
+/* Signal Line - List item variant */
+.signal-list {
+  display: flex;
+  flex-direction: column;
+  width: 180px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.signal-list-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  transition: all 120ms var(--ease);
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+}
+.signal-list-item:hover { background: var(--border-subtle); color: var(--text-primary); }
+
+.signal-list-item.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.signal-list-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+}
+
+/* ═══════════════════════════════════════════════════════
+   9. Memory Panel Mockup (inside flyout)
+   ═══════════════════════════════════════════════════════ */
+
+.memory-item {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .memory-item { background: var(--elevated); }
+
+.memory-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.memory-item-key {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+}
+
+.memory-item-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.memory-item-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════
+   10. Depth Stack Illustration
+   ═══════════════════════════════════════════════════════ */
+
+.depth-demo {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.depth-layer {
+  width: 200px;
+  height: 140px;
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.depth-layer-name {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.depth-layer-token {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.depth-canvas { background: var(--canvas); }
+.depth-surface { background: var(--surface); box-shadow: var(--shadow-sm); }
+.depth-elevated { background: var(--elevated); box-shadow: var(--shadow-md); }
+
+/* ═══════════════════════════════════════════════════════
+   11. Phosphor Glow Showcase
+   ═══════════════════════════════════════════════════════ */
+
+.glow-demo {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.glow-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.glow-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.glow-dot-running {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success-muted), 0 0 20px rgba(74,222,128,0.08);
+  animation: pulse 2s infinite;
+}
+
+.glow-dot-error {
+  background: var(--danger);
+  box-shadow: 0 0 10px var(--danger-muted);
+}
+
+.glow-dot-warning {
+  background: var(--warning);
+  box-shadow: 0 0 10px var(--warning-muted);
+}
+
+.glow-dot-info {
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-muted);
+}
+
+.glow-dot-idle {
+  background: var(--text-tertiary);
+}
+
+.glow-label {
+  font-family: var(--font-brand);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Focus glow on a button */
+.glow-btn-demo {
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ═══════════════════════════════════════════════════════
+   View Patterns (sections 10–13)
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Form Section ────────────────────────────────────── */
+.fs-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.fs-section-label {
+  font-family: var(--font-brand);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-top: var(--sp-3);
+}
+.fs-section-label:first-child { margin-top: 0; }
+.fs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.fs-row-icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+.fs-row-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fs-row-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.fs-row-desc  { font-size: 11px; color: var(--text-tertiary); line-height: 1.3; }
+.fs-row-control { flex-shrink: 0; }
+.fs-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--accent-muted);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
+}
+
+/* ── Wizard Body ─────────────────────────────────────── */
+.wz-card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0 auto;
+}
+.wz-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-8) var(--sp-2);
+}
+.wz-step-circle {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-brand);
+  font-size: 12px;
+  font-weight: 600;
+  border: 2px solid var(--border);
+  color: var(--text-tertiary);
+}
+.wz-step-circle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+.wz-step-circle.done { border-color: var(--success); background: var(--success); color: #fff; }
+.wz-step-line {
+  width: 48px; height: 2px;
+  background: var(--border);
+  margin: 0 6px;
+}
+.wz-step-line.done { background: var(--success); }
+.wz-body {
+  padding: var(--sp-6) var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-2);
+  min-height: 200px;
+}
+.wz-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.wz-subtitle { font-size: 13px; color: var(--text-secondary); line-height: 1.5; max-width: 380px; margin: 0; }
+.wz-content { width: 100%; margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.wz-footer {
+  padding: var(--sp-4) var(--sp-8) var(--sp-6);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ── Sectioned Detail Page ───────────────────────────── */
+.sd-page {
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.sd-header {
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.sd-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.sd-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.sd-meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.sd-meta-item {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-brand);
+  letter-spacing: 0.03em;
+}
+.sd-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.sd-tab {
+  padding: var(--sp-3) var(--sp-4);
+  font-family: var(--font-brand);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  border-top: none; border-left: none; border-right: none;
+}
+.sd-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.sd-content {
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.sd-block {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+.sd-block-label {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-2);
+}
+.sd-block-body { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+
+/* ── Cluster Gap ─────────────────────────────────────── */
+.cg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cg-row:last-child { border-bottom: none; }
+.cg-label {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  width: 130px;
+  flex-shrink: 0;
+}
+.cg-cluster {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+.cg-tight { gap: 3px; }
+.cg-snug  { gap: var(--sp-1); }
+.cg-loose { gap: var(--sp-2); }
+.cg-wide  { gap: var(--sp-3); }
+.cg-note { font-size: 11px; color: var(--text-tertiary); width: 200px; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════
+   Part labels (PART I, PART II, ...) and foundation visuals
+   ═══════════════════════════════════════════════════════ */
+
+.part-label {
+  padding: 28px 32px 16px;
+  background: var(--surface);
+  border-top: 2px solid var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+.part-label .part-eyebrow {
+  font-family: var(--font-brand);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.part-label .part-title {
+  font-family: var(--font-brand);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+.part-label .part-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  max-width: 720px;
+  line-height: 1.6;
+}
+
+/* ── Subsection within a section ──────────────────────── */
+.subsection {
+  margin-bottom: 32px;
+}
+.subsection:last-child { margin-bottom: 0; }
+.subsection-label {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+
+/* ── Spacing scale visualizer ─────────────────────────── */
+.spacing-scale { display: grid; grid-template-columns: 60px 60px 1fr; gap: 6px 16px; align-items: center; max-width: 720px; }
+.spacing-tok { font-family: var(--font-code); font-size: 11px; color: var(--text-secondary); }
+.spacing-px { font-family: var(--font-code); font-size: 11px; color: var(--text-tertiary); }
+.spacing-bar { height: 12px; background: var(--accent); border-radius: var(--radius-sm); }
+
+/* ── Constants table (layout, z-index) ────────────────── */
+.const-table { width: 100%; max-width: 700px; border-collapse: collapse; font-size: 12px; }
+.const-table th, .const-table td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--border-subtle); }
+.const-table th { font-family: var(--font-brand); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 500; background: var(--surface); }
+.const-table td code { font-family: var(--font-code); color: var(--text-primary); }
+.const-table td.val { font-family: var(--font-code); color: var(--text-tertiary); }
+.const-table td.desc { color: var(--text-secondary); }
+
+/* ── Radius samples ───────────────────────────────────── */
+.radius-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 16px; max-width: 800px; }
+.radius-sample { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.radius-box { width: 88px; height: 88px; background: var(--surface); border: 1px solid var(--border-strong); }
+.radius-tok { font-family: var(--font-code); font-size: 11px; color: var(--text-secondary); }
+.radius-px { font-family: var(--font-code); font-size: 10px; color: var(--text-tertiary); }
+
+/* ── Shadow samples ───────────────────────────────────── */
+.shadow-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 32px; max-width: 800px; padding: 16px 0 24px; }
+.shadow-sample { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.shadow-box { width: 140px; height: 84px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.shadow-tok { font-family: var(--font-code); font-size: 11px; color: var(--text-secondary); }
+
+/* ── Motion ───────────────────────────────────────────── */
+.motion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; max-width: 940px; }
+.motion-card { padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.motion-name { font-family: var(--font-brand); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px; }
+.motion-curve { font-family: var(--font-code); font-size: 10px; color: var(--text-tertiary); margin-bottom: 12px; }
+.motion-stage { height: 32px; background: var(--canvas); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); position: relative; overflow: hidden; cursor: pointer; }
+.motion-puck { width: 24px; height: 24px; background: var(--accent); border-radius: var(--radius-sm); position: absolute; top: 3px; left: 3px; }
+.motion-stage:hover .motion-puck { left: calc(100% - 27px); }
+.motion-puck.ease { transition: left 600ms var(--ease); }
+.motion-puck.ease-in { transition: left 600ms var(--ease-in); }
+.motion-puck.ease-out { transition: left 600ms var(--ease-out); }
+.motion-puck.ease-bounce { transition: left 600ms var(--ease-bounce); }
+.motion-hint { font-size: 10px; color: var(--text-tertiary); text-align: center; margin-top: 6px; font-style: italic; }
+
+.anim-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; max-width: 760px; padding: 16px 0; }
+.anim-card { padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 110px; justify-content: center; }
+.anim-name { font-family: var(--font-brand); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); }
+.anim-pulse-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success-muted); animation: pulse 2s infinite; }
+.anim-fadeup { padding: 6px 14px; background: var(--accent-muted); color: var(--accent); border-radius: var(--radius-sm); font-family: var(--font-brand); font-size: 11px; animation: fadeInUp 1.8s ease-out infinite; }
+.anim-slidein-frame { width: 100%; height: 40px; background: var(--canvas); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); overflow: hidden; position: relative; }
+.anim-slidein-puck { position: absolute; top: 4px; left: 4px; height: 30px; padding: 0 12px; background: var(--accent); color: #fff; font-family: var(--font-brand); font-size: 11px; display: inline-flex; align-items: center; border-radius: var(--radius-sm); animation: slideInLeft 1.8s ease-out infinite; }
+
+/* ── Monospace voice demo ─────────────────────────────── */
+.voice-grid { display: grid; grid-template-columns: 160px 1fr; gap: 12px 24px; max-width: 720px; align-items: center; }
+.voice-grid > .role { font-size: 11px; color: var(--text-tertiary); padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+.voice-grid > .sample { padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-family: var(--font-brand); letter-spacing: 0.04em; color: var(--text-primary); }
+.voice-grid > .role:last-of-type, .voice-grid > .sample:last-of-type { border-bottom: none; }
+
+/* ── Status vocabulary table ──────────────────────────── */
+.status-vocab { width: 100%; max-width: 820px; border-collapse: collapse; font-size: 12px; }
+.status-vocab th, .status-vocab td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+.status-vocab th { font-family: var(--font-brand); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 500; background: var(--surface); }
+.status-vocab td code { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); }
+.status-vocab .vocab-state { font-family: var(--font-brand); font-size: 11px; letter-spacing: 0.04em; color: var(--text-primary); }
+.vocab-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 6px; }
+
+/* ═══════════════════════════════════════════════════════
+   Part III — Building Blocks
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Toggle Switch ───────────────────────────────────── */
+.toggle {
+  display: inline-block;
+  width: 34px; height: 20px;
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  position: relative;
+  cursor: pointer;
+  transition: background 150ms var(--ease);
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  background: var(--elevated);
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+  transition: transform 150ms var(--ease);
+}
+.toggle.on { background: var(--accent); }
+.toggle.on::after { transform: translateX(14px); }
+
+/* ── Radio / Selection Card ──────────────────────────── */
+.radio-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease);
+  max-width: 320px;
+}
+.radio-card:hover { border-color: var(--border-strong); }
+.radio-card.selected { border-color: var(--accent); background: var(--accent-muted); }
+.radio-indicator {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color 150ms var(--ease);
+}
+.radio-card.selected .radio-indicator { border-color: var(--accent); }
+.radio-card.selected .radio-indicator::after {
+  content: '';
+  position: absolute; top: 3px; left: 3px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.radio-card-info { flex: 1; min-width: 0; }
+.radio-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.radio-card-desc { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+/* ── Chip / Tag ──────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-brand);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease), color 150ms var(--ease);
+}
+.chip:hover { border-color: var(--border-strong); }
+.chip.active { background: var(--success-muted); border-color: var(--success); color: var(--success); }
+
+/* ── Inline Code ─────────────────────────────────────── */
+.inline-code {
+  font-family: var(--font-code);
+  font-size: 12px;
+  background: var(--terminal-bg);
+  border: 1px solid var(--terminal-border);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  color: var(--terminal-text);
+}
+
+/* ── Tool Call Badge ─────────────────────────────────── */
+.toolcall-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-brand);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ── Context Usage Badge (SVG donut) ─────────────────── */
+.ctx-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-family: var(--font-brand);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.ctx-badge.low { background: var(--success-muted); color: var(--success); }
+.ctx-badge.med { background: var(--warning-muted); color: var(--warning); }
+.ctx-badge.high { background: var(--danger-muted); color: var(--danger); }
+.ctx-donut { width: 12px; height: 12px; }
+
+/* ── Display Card / Action Card ──────────────────────── */
+.display-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  width: 240px;
+  transition: border-color 150ms var(--ease);
+}
+.display-card:hover { border-color: var(--border-strong); }
+.action-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  width: 240px;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+.action-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+.action-card .icon-row { color: var(--accent); font-size: 18px; margin-bottom: 4px; }
+.action-card .title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.action-card .text { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; margin-top: 2px; }
+
+/* ── Settings Row ────────────────────────────────────── */
+.settings-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 480px;
+}
+.settings-row .icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+.settings-row .info { flex: 1; min-width: 0; }
+.settings-row .title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.settings-row .desc { font-size: 11px; color: var(--text-tertiary); line-height: 1.3; }
+.settings-row .control { flex-shrink: 0; }
+
+/* ── List Item ───────────────────────────────────────── */
+.list-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 150ms var(--ease);
+  border-left: 2px solid transparent;
+  background: transparent;
+  width: 100%;
+  max-width: 280px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+}
+.list-item:hover { background: var(--accent-muted); }
+.list-item.active {
+  background: var(--accent-muted);
+  border-left-color: var(--accent);
+  border-radius: 0;
+}
+.list-item .li-main { flex: 1; min-width: 0; }
+.list-item .li-name { font-size: 12px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-item .li-desc { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-item .li-meta { font-family: var(--font-brand); font-size: 10px; color: var(--text-tertiary); }
+
+/* ── Code Block ──────────────────────────────────────── */
+.codeblock {
+  background: var(--terminal-bg);
+  border: 1px solid var(--terminal-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  max-width: 640px;
+}
+.codeblock-header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--terminal-surface);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--terminal-border);
+}
+.codeblock-lang {
+  font-family: var(--font-brand);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.codeblock-copy {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  padding: 2px 10px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.codeblock-body {
+  padding: 12px 16px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  color: var(--terminal-text);
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+/* ── Empty State ─────────────────────────────────────── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 32px 16px;
+  text-align: center;
+  background: var(--canvas);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 540px;
+}
+.empty-state-heading {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.empty-state-desc {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+/* ── Toast ───────────────────────────────────────────── */
+.toast {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-md);
+  max-width: 360px;
+  animation: fadeInUp 250ms ease-out;
+}
+.toast .toast-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.toast .toast-info { flex: 1; min-width: 0; }
+.toast .toast-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.toast .toast-msg { font-size: 12px; color: var(--text-secondary); }
+.toast .toast-close { background: transparent; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 14px; padding: 2px; }
+.toast.success { background: var(--success-muted); border-color: var(--success-muted); }
+.toast.success .toast-icon { color: var(--success); }
+.toast.error { background: var(--danger-muted); border-color: var(--danger-muted); }
+.toast.error .toast-icon { color: var(--danger); }
+.toast.info { background: var(--accent-muted); border-color: var(--accent-muted); }
+.toast.info .toast-icon { color: var(--accent); }
+
+/* ── Info Tooltip ────────────────────────────────────── */
+.tooltip-trigger {
+  color: var(--accent);
+  font-size: 12px;
+  cursor: help;
+}
+.tooltip-pop {
+  display: inline-block;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+  max-width: 240px;
+  line-height: 1.5;
+}
+
+/* ── Tables ──────────────────────────────────────────── */
+.dl-table {
+  width: 100%;
+  max-width: 640px;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.dl-table th {
+  font-family: var(--font-brand);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.dl-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+.dl-table tr:hover td { background: var(--border-subtle); }
+
+/* ── Progress Bar ────────────────────────────────────── */
+.progressbar {
+  height: 6px;
+  width: 100%;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progressbar .fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 3px;
+  transition: width 400ms ease;
+}
+.progressbar .fill.complete { background: var(--success); }
+
+/* ── Stepper ─────────────────────────────────────────── */
+.stepper {
+  display: flex; align-items: center;
+}
+.stepper-circle {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-brand);
+  font-size: 12px;
+  font-weight: 600;
+  border: 2px solid var(--border);
+  color: var(--text-tertiary);
+}
+.stepper-circle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+.stepper-circle.done { border-color: var(--success); background: var(--success); color: #fff; }
+.stepper-line {
+  width: 48px; height: 2px;
+  background: var(--border);
+  margin: 0 6px;
+}
+.stepper-line.done { background: var(--success); }
+
+/* ── Typing Placeholder ──────────────────────────────── */
+.typing-placeholder {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-brand);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.typing-cursor {
+  display: inline-block;
+  width: 2px; height: 14px;
+  background: var(--success);
+  animation: typing 1s infinite;
+  vertical-align: middle;
+}
+
+/* ── Audio Indicator ─────────────────────────────────── */
+.audio-indicator {
+  display: inline-flex; align-items: center; gap: 2px;
+  width: 28px; height: 28px;
+  justify-content: center;
+}
+.audio-indicator .bar {
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: audioWave 0.8s ease-in-out infinite;
+}
+.audio-indicator .bar:nth-child(1) { height: 4px; animation-delay: 0s; }
+.audio-indicator .bar:nth-child(2) { height: 8px; animation-delay: 0.15s; }
+.audio-indicator .bar:nth-child(3) { height: 6px; animation-delay: 0.30s; }
+.audio-indicator .bar:nth-child(4) { height: 10px; animation-delay: 0.45s; }
+@keyframes audioWave {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.6); }
+}
+.audio-indicator.paused .bar { animation-play-state: paused; opacity: 0.5; }
+
+/* ── Collapsible Block ───────────────────────────────── */
+.collapsible {
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+  max-width: 540px;
+}
+.collapsible-header {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: opacity 150ms var(--ease);
+}
+.collapsible-header:hover { opacity: 0.85; }
+.collapsible-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.65;
+  padding: 4px 0;
+  line-height: 1.6;
+}
+
+/* ── Select ──────────────────────────────────────────── */
+.select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+[data-theme="dark"] .select { background-color: var(--surface); }
+
+/* ── File Output Card ────────────────────────────────── */
+.file-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  max-width: 420px;
+}
+.file-card-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+}
+.file-card-header .file-icon { color: var(--accent); font-size: 16px; flex-shrink: 0; }
+.file-card-header .file-name { font-family: var(--font-code); font-size: 12px; color: var(--text-primary); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-card-header .file-meta { font-size: 10px; color: var(--text-tertiary); white-space: nowrap; }
+.file-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.file-card-info .file-name { font-family: var(--font-code); font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-card-info .file-mime { font-size: 10px; color: var(--text-tertiary); }
+.file-card-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════
+   Part IV — Composed Patterns
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Icon grid (Part V) ──────────────────────────────── */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--sp-2);
+  max-width: 960px;
+}
+.icon-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.icon-row:hover { border-color: var(--border-strong); }
+.icon-row .glyph {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-primary);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.icon-row .icon-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.icon-row .icon-name { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); }
+.icon-row .icon-usage { font-size: 10px; color: var(--text-tertiary); line-height: 1.3; }
+
+.icon-group-label {
+  font-family: var(--font-brand);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin: var(--sp-5) 0 var(--sp-2);
+}
+.icon-group-label:first-of-type { margin-top: var(--sp-2); }
+
+.icon-size-demo {
+  display: flex; align-items: center; gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.icon-size-demo .cell {
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-1);
+  min-width: 80px;
+}
+.icon-size-demo .cell i { color: var(--text-primary); }
+.icon-size-demo .cell .label { font-family: var(--font-code); font-size: 10px; color: var(--text-tertiary); }
+
+/* ── Tabs (canonical design-language pattern) ────────── */
+.dl-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--canvas);
+  padding: 0 var(--sp-4);
+}
+.dl-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-brand);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  opacity: 0.4;
+  background: none;
+  border: none;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px var(--sp-4);
+  cursor: pointer;
+  transition: opacity 150ms var(--ease), border-color 150ms var(--ease);
+  box-shadow: none;
+}
+.dl-tab:hover { opacity: 0.7; }
+.dl-tab.active {
+  opacity: 1;
+  border-bottom-color: var(--accent);
+}
+.dl-tab-count {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+/* ── Modal / Dialog ──────────────────────────────────── */
+.dl-modal-stage {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 320px;
+  overflow: hidden;
+}
+.dl-modal-stage::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+}
+.dl-modal-stage-label {
+  position: absolute; top: 8px; left: 12px;
+  font-family: var(--font-brand); font-size: 10px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-tertiary); opacity: 0.6;
+}
+.dl-modal {
+  position: relative;
+  width: 100%; max-width: 500px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.dl-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.dl-modal-title {
+  font-family: var(--font-brand);
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+.dl-modal-body {
+  padding: var(--sp-4);
+  font-size: 13px; color: var(--text-primary); line-height: 1.6;
+}
+.dl-modal-footer {
+  display: flex; gap: var(--sp-2); justify-content: flex-end;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Split Panel ─────────────────────────────────────── */
+.dl-split {
+  display: flex;
+  height: 320px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.dl-split-list {
+  width: 35%;
+  min-width: 220px; max-width: 380px;
+  background: var(--canvas);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+.dl-split-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dl-split-list-title {
+  font-family: var(--font-brand);
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-primary); opacity: 0.7;
+}
+.dl-split-new-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-brand);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 4px var(--sp-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-muted);
+  background: var(--accent-muted);
+  color: var(--accent);
+  cursor: pointer;
+}
+.dl-split-list-body { flex: 1; overflow-y: auto; padding: 0; }
+.dl-split-item {
+  display: block;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease);
+  border-radius: 0;
+  box-shadow: none;
+}
+.dl-split-item:hover { background: var(--surface); }
+.dl-split-item.active {
+  background: var(--accent-muted);
+  border-left-color: var(--accent);
+}
+.dl-split-item .name {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.dl-split-item .desc {
+  font-size: 11px; color: var(--text-primary);
+  opacity: 0.5; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dl-split-detail {
+  flex: 1;
+  padding: var(--sp-4) var(--sp-5);
+  overflow-y: auto;
+}
+
+/* ── Split Handle ────────────────────────────────────── */
+.dl-handle-stage {
+  display: flex;
+  height: 140px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.dl-handle-side {
+  flex: 1;
+  padding: var(--sp-3);
+  font-family: var(--font-brand);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: flex-start;
+}
+.dl-handle-side.surface { background: var(--surface); }
+.dl-handle {
+  width: 9px;
+  background: var(--canvas);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  cursor: col-resize;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease);
+}
+.dl-handle::after {
+  content: '';
+  width: 3px; height: 24px;
+  background: var(--text-tertiary);
+  opacity: 0.5;
+  border-radius: 1.5px;
+  transition: background 150ms var(--ease), height 150ms var(--ease), opacity 150ms var(--ease);
+  pointer-events: none;
+}
+.dl-handle:hover,
+.dl-handle.dragging {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+}
+.dl-handle:hover::after,
+.dl-handle.dragging::after {
+  background: var(--accent);
+  height: 40px;
+  opacity: 1;
+}
+
+/* ── Preview Shell (generalized) ─────────────────────── */
+.dl-pshell {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-width: 640px;
+}
+.dl-pshell-header {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.dl-pshell-icon { color: var(--text-secondary); font-size: 13px; flex-shrink: 0; }
+.dl-pshell-title {
+  font-family: var(--font-brand);
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dl-pshell-status {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.dl-pshell-actions { display: flex; gap: var(--sp-1); flex-shrink: 0; }
+.dl-pshell-body { padding: var(--sp-3); }
+.dl-pshell-body.media { padding: 0; background: #000; }
+.dl-pshell-body.media img,
+.dl-pshell-body.media .media-placeholder {
+  display: block; width: 100%; height: 200px;
+}
+
+/* ── Tabbed Preview Panel ────────────────────────────── */
+.dl-ptabs {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-width: 640px;
+}
+.dl-ptabs-bar {
+  display: flex;
+  height: 36px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dl-ptabs-bar::-webkit-scrollbar { display: none; }
+.dl-ptab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px;
+  font-family: var(--font-brand);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dl-ptab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+.dl-ptab .close {
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 150ms var(--ease), background 150ms var(--ease);
+}
+.dl-ptab:hover .close { opacity: 1; }
+.dl-ptab .close:hover { background: var(--border-strong); }
+.dl-ptabs-content {
+  padding: var(--sp-3);
+  background: var(--canvas);
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-height: 80px;
+}
+
+/* ── File Preview Panel ──────────────────────────────── */
+.dl-fpreview {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-width: 720px;
+}
+.dl-fpreview-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: var(--sp-3);
+}
+.dl-fpreview-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: var(--accent-muted);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-code);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.dl-fpreview-toggle {
+  display: flex;
+  background: var(--canvas);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+.dl-fpreview-toggle button {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.dl-fpreview-toggle button.active { background: var(--surface); color: var(--text-primary); }
+.dl-fpreview-actions { display: flex; gap: 4px; }
+.dl-fpreview-content {
+  background: var(--canvas);
+  min-height: 220px;
+}
+.dl-fpreview-content.markdown { padding: 20px 24px; font-size: 14px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
+.dl-fpreview-content.source { padding: 16px 20px; font-family: var(--font-code); font-size: 13px; color: var(--text-primary); white-space: pre-wrap; }
+.dl-fpreview-content.image { display: flex; align-items: center; justify-content: center; padding: 20px; background: #000; }
+.dl-fpreview-content.image .placeholder { width: 100%; height: 220px; }
+
+</style>
+.file-pill-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-brand);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--accent-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms var(--ease);
+}
+.file-pill-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══ Mockup Top Bar ═══ -->
+  <div class="mockup-topbar">
+    <h1><span>SIGNAL</span> &mdash; Design Language for COMPUTRON 9000</h1>
+    <div class="theme-toggle">
+      LIGHT
+      <button onclick="toggleTheme()" aria-label="Toggle theme"></button>
+      DARK
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART I — FOUNDATIONS
+       Tokens (color, type, spacing, radius, shadow, motion)
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label">
+    <div class="part-eyebrow">Part I</div>
+    <div class="part-title">Foundations</div>
+    <div class="part-desc">
+      The design tokens — color, typography, spacing, borders, shadows, motion — that everything else builds on.
+      Each section visualizes the tokens as live examples; toggle the LIGHT/DARK switch in the top bar to see
+      both modes.
+    </div>
+  </div>
+
+  <!-- ═══ 1. Colors ═══ -->
+  <div class="section">
+    <div class="section-title">1. Colors</div>
+    <div class="section-desc">
+      Semantic tokens adapt to light and dark modes. Components reference these tokens, never raw primitives.
+      Surfaces stack from <code>--canvas</code> (deepest) → <code>--surface</code> → <code>--elevated</code>.
+      Text uses three weights of emphasis: <code>--text-primary</code>, <code>--text-secondary</code>,
+      <code>--text-tertiary</code>. Status vocabulary lives in <code>--success</code>, <code>--warning</code>,
+      <code>--danger</code> with matching <code>-muted</code> tinted backgrounds.
+    </div>
+
+    <div class="palette-grid">
+      <div class="palette-group">
+        <h3>Backgrounds</h3>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--canvas)"></div>
+          <div class="swatch-info"><span class="swatch-name">Canvas</span><span class="swatch-value">--canvas</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--surface)"></div>
+          <div class="swatch-info"><span class="swatch-name">Surface</span><span class="swatch-value">--surface</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--elevated)"></div>
+          <div class="swatch-info"><span class="swatch-name">Elevated</span><span class="swatch-value">--elevated</span></div>
+        </div>
+      </div>
+
+      <div class="palette-group">
+        <h3>Text</h3>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--text-primary)"></div>
+          <div class="swatch-info"><span class="swatch-name">Primary</span><span class="swatch-value">--text-primary</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--text-secondary)"></div>
+          <div class="swatch-info"><span class="swatch-name">Secondary</span><span class="swatch-value">--text-secondary</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--text-tertiary)"></div>
+          <div class="swatch-info"><span class="swatch-name">Tertiary</span><span class="swatch-value">--text-tertiary</span></div>
+        </div>
+      </div>
+
+      <div class="palette-group">
+        <h3>Borders</h3>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--border-subtle)"></div>
+          <div class="swatch-info"><span class="swatch-name">Subtle</span><span class="swatch-value">--border-subtle</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--border)"></div>
+          <div class="swatch-info"><span class="swatch-name">Default</span><span class="swatch-value">--border</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--border-strong)"></div>
+          <div class="swatch-info"><span class="swatch-name">Strong</span><span class="swatch-value">--border-strong</span></div>
+        </div>
+      </div>
+
+      <div class="palette-group">
+        <h3>Accent</h3>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--accent)"></div>
+          <div class="swatch-info"><span class="swatch-name">Accent</span><span class="swatch-value">--accent</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--accent-hover)"></div>
+          <div class="swatch-info"><span class="swatch-name">Accent Hover</span><span class="swatch-value">--accent-hover</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--accent-muted)"></div>
+          <div class="swatch-info"><span class="swatch-name">Accent Muted</span><span class="swatch-value">--accent-muted</span></div>
+        </div>
+      </div>
+
+      <div class="palette-group">
+        <h3>Status</h3>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--success)"></div>
+          <div class="swatch-info"><span class="swatch-name">Success</span><span class="swatch-value">--success</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--warning)"></div>
+          <div class="swatch-info"><span class="swatch-name">Warning</span><span class="swatch-value">--warning</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--danger)"></div>
+          <div class="swatch-info"><span class="swatch-name">Danger</span><span class="swatch-value">--danger</span></div>
+        </div>
+      </div>
+
+      <div class="palette-group">
+        <h3>Terminal</h3>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-bg)"></div>
+          <div class="swatch-info"><span class="swatch-name">Background</span><span class="swatch-value">--terminal-bg</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-surface)"></div>
+          <div class="swatch-info"><span class="swatch-name">Surface</span><span class="swatch-value">--terminal-surface</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-border)"></div>
+          <div class="swatch-info"><span class="swatch-name">Border</span><span class="swatch-value">--terminal-border</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-text)"></div>
+          <div class="swatch-info"><span class="swatch-name">Text</span><span class="swatch-value">--terminal-text</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-prompt)"></div>
+          <div class="swatch-info"><span class="swatch-name">Prompt</span><span class="swatch-value">--terminal-prompt</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-stderr)"></div>
+          <div class="swatch-info"><span class="swatch-name">Stderr</span><span class="swatch-value">--terminal-stderr</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--terminal-comment)"></div>
+          <div class="swatch-info"><span class="swatch-name">Comment</span><span class="swatch-value">--terminal-comment</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Syntax highlighting tokens -->
+    <div class="subsection" style="margin-top: 32px">
+      <div class="subsection-label">Syntax Highlighting</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;max-width:640px;line-height:1.6">
+        Code blocks and inline code use a dedicated palette that swaps between light and dark.
+        These tokens drive the highlighting in <code>&lt;pre&gt;</code> blocks across the app.
+      </div>
+      <div style="background: var(--terminal-bg); border: 1px solid var(--terminal-border); border-radius: var(--radius-md); padding: 16px 20px; font-family: var(--font-code); font-size: 13px; line-height: 1.7; max-width: 640px">
+<span style="color:var(--code-comment)"># Example syntax sample</span>
+<span style="color:var(--code-keyword)">def</span> <span style="color:var(--code-function)">fetch_endpoints</span>(<span style="color:var(--code-type)">url</span>: <span style="color:var(--code-type)">str</span>) <span style="color:var(--code-operator)">-&gt;</span> <span style="color:var(--code-type)">list</span>:
+    <span style="color:var(--code-keyword)">return</span> [
+        <span style="color:var(--code-string)">"/api/users"</span>,
+        <span style="color:var(--code-string)">"/api/projects"</span>,
+        <span style="color:var(--code-number)">42</span>,
+    ]
+      </div>
+
+      <div class="palette-grid" style="margin-top:20px">
+        <div class="palette-group">
+          <h3>Tokens</h3>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-keyword)"></div>
+            <div class="swatch-info"><span class="swatch-name">Keyword</span><span class="swatch-value">--code-keyword</span></div></div>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-function)"></div>
+            <div class="swatch-info"><span class="swatch-name">Function</span><span class="swatch-value">--code-function</span></div></div>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-string)"></div>
+            <div class="swatch-info"><span class="swatch-name">String</span><span class="swatch-value">--code-string</span></div></div>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-number)"></div>
+            <div class="swatch-info"><span class="swatch-name">Number</span><span class="swatch-value">--code-number</span></div></div>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-operator)"></div>
+            <div class="swatch-info"><span class="swatch-name">Operator</span><span class="swatch-value">--code-operator</span></div></div>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-type)"></div>
+            <div class="swatch-info"><span class="swatch-name">Type</span><span class="swatch-value">--code-type</span></div></div>
+          <div class="palette-swatch"><div class="swatch-color" style="background: var(--code-comment)"></div>
+            <div class="swatch-info"><span class="swatch-name">Comment</span><span class="swatch-value">--code-comment</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 2. Typography ═══ -->
+  <div class="section">
+    <div class="section-title">2. Typography</div>
+    <div class="section-desc">
+      Three font stacks serve distinct roles: <strong>Share Tech Mono</strong> for the COMPUTRON brand voice,
+      <strong>system-ui</strong> for readable body text, and <strong>JetBrains Mono</strong> for code.
+    </div>
+
+    <div class="type-scale">
+      <div class="type-row">
+        <span class="type-label">xl</span>
+        <span class="type-sample" style="font-size:24px; font-weight:700; line-height:1.3">COMPUTRON 9000</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">lg</span>
+        <span class="type-sample" style="font-size:18px; font-weight:600; line-height:1.4">Agent Network Overview</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">md</span>
+        <span class="type-sample" style="font-size:16px; font-weight:600; line-height:1.5">Model Settings</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">base</span>
+        <span class="type-sample" style="font-size:14px; line-height:1.6">The agent completed the browser automation task and returned structured results from the target page.</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">sm</span>
+        <span class="type-sample" style="font-size:12px; line-height:1.5; color: var(--text-secondary)">Panel header &middot; sidebar label &middot; secondary information</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">xs</span>
+        <span class="type-sample" style="font-size:11px; line-height:1.4; font-family: var(--font-brand); letter-spacing:0.03em; color: var(--text-secondary)">browser-agent &middot; 3.2s &middot; 12 iterations</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">2xs</span>
+        <span class="type-sample" style="font-size:10px; line-height:1.4; font-family: var(--font-brand); letter-spacing:0.04em; color: var(--text-tertiary)">RUNNING &middot; 47% CTX &middot; 3 TOOLS</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">code</span>
+        <span class="type-sample" style="font-size:12px; line-height:1.6; font-family: var(--font-code)">const result = await agent.execute(task);</span>
+      </div>
+    </div>
+
+    <!-- Font stacks -->
+    <div class="subsection" style="margin-top: 32px">
+      <div class="subsection-label">Font Stacks</div>
+      <div class="voice-grid">
+        <span class="role"><code style="font-family:var(--font-code);font-size:11px">--font-brand</code></span>
+        <span class="sample" style="font-family:var(--font-brand);font-size:14px">COMPUTRON 9000 &middot; browser-agent &middot; RUNNING</span>
+
+        <span class="role"><code style="font-family:var(--font-code);font-size:11px">--font-body</code></span>
+        <span class="sample" style="font-family:var(--font-body);font-size:14px;letter-spacing:0">The agent extracted 47 endpoints and structured them by HTTP method.</span>
+
+        <span class="role"><code style="font-family:var(--font-code);font-size:11px">--font-code</code></span>
+        <span class="sample" style="font-family:var(--font-code);font-size:14px;letter-spacing:-0.01em">const result = await agent.execute(task);</span>
+      </div>
+    </div>
+
+    <!-- Letter spacing -->
+    <div class="subsection">
+      <div class="subsection-label">Letter Spacing</div>
+      <table class="const-table">
+        <thead><tr><th>Role</th><th>Value</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Brand text</td>
+            <td class="val">0.04em</td>
+            <td><span style="font-family:var(--font-brand);font-size:13px;letter-spacing:0.04em;color:var(--text-primary)">COMPUTRON 9000</span></td>
+          </tr>
+          <tr>
+            <td>Uppercase labels</td>
+            <td class="val">0.06em</td>
+            <td><span style="font-family:var(--font-brand);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-secondary)">SETTINGS</span></td>
+          </tr>
+          <tr>
+            <td>Body text</td>
+            <td class="val">0</td>
+            <td>Default — system default for readable prose.</td>
+          </tr>
+          <tr>
+            <td>Code</td>
+            <td class="val">-0.01em</td>
+            <td><span style="font-family:var(--font-code);font-size:13px;letter-spacing:-0.01em;color:var(--text-primary)">npm install --save</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ 3. Spacing &amp; Layout ═══ -->
+  <div class="section">
+    <div class="section-title">3. Spacing &amp; Layout</div>
+    <div class="section-desc">
+      All spacing derives from a 4px base unit. Components use the <code>--sp-N</code> tokens for padding,
+      margin, and gap so the visual rhythm stays consistent across the app. Layout constants pin major
+      structural dimensions (header, sidebar, flyout). The Z-index scale prevents stacking-order bugs.
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Spacing Scale (4px base)</div>
+      <div class="spacing-scale">
+        <span class="spacing-tok">--sp-1</span><span class="spacing-px">4px</span><div class="spacing-bar" style="width:4px"></div>
+        <span class="spacing-tok">--sp-2</span><span class="spacing-px">8px</span><div class="spacing-bar" style="width:8px"></div>
+        <span class="spacing-tok">--sp-3</span><span class="spacing-px">12px</span><div class="spacing-bar" style="width:12px"></div>
+        <span class="spacing-tok">--sp-4</span><span class="spacing-px">16px</span><div class="spacing-bar" style="width:16px"></div>
+        <span class="spacing-tok">--sp-5</span><span class="spacing-px">20px</span><div class="spacing-bar" style="width:20px"></div>
+        <span class="spacing-tok">--sp-6</span><span class="spacing-px">24px</span><div class="spacing-bar" style="width:24px"></div>
+        <span class="spacing-tok">--sp-8</span><span class="spacing-px">32px</span><div class="spacing-bar" style="width:32px"></div>
+        <span class="spacing-tok">--sp-10</span><span class="spacing-px">40px</span><div class="spacing-bar" style="width:40px"></div>
+        <span class="spacing-tok">--sp-12</span><span class="spacing-px">48px</span><div class="spacing-bar" style="width:48px"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+        Use <code>--sp-1</code> for tight gaps (badge padding, icon margins). <code>--sp-2</code> for
+        button-y/inline spacing. <code>--sp-3</code> for panel/card padding and form gaps.
+        <code>--sp-4</code> for section spacing. <code>--sp-6</code>+ for major layout gaps.
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Layout Constants</div>
+      <table class="const-table">
+        <thead><tr><th>Token</th><th>Value</th><th>Usage</th></tr></thead>
+        <tbody>
+          <tr><td><code>--header-height</code></td><td class="val">36px</td><td class="desc">Top header bar height</td></tr>
+          <tr><td><code>--sidebar-width</code></td><td class="val">44px</td><td class="desc">Left icon sidebar width</td></tr>
+          <tr><td><code>--flyout-width</code></td><td class="val">270px</td><td class="desc">Sliding flyout panel width</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Z-Index Scale</div>
+      <table class="const-table">
+        <thead><tr><th>Token</th><th>Value</th><th>Usage</th></tr></thead>
+        <tbody>
+          <tr><td><code>--z-sticky</code></td><td class="val">10</td><td class="desc">Sticky headers, floating input</td></tr>
+          <tr><td><code>--z-flyout</code></td><td class="val">100</td><td class="desc">Flyout panels, scrim overlays</td></tr>
+          <tr><td><code>--z-toast</code></td><td class="val">1000</td><td class="desc">Toast notifications</td></tr>
+          <tr><td><code>--z-modal</code></td><td class="val">9999</td><td class="desc">Modals, fullscreen, lightbox</td></tr>
+          <tr><td><code>--z-wizard</code></td><td class="val">10000</td><td class="desc">Setup wizard (above everything)</td></tr>
+          <tr><td><code>--z-tooltip</code></td><td class="val">10001</td><td class="desc">Tooltips (above wizard)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ 4. Borders &amp; Radius ═══ -->
+  <div class="section">
+    <div class="section-title">4. Borders &amp; Radius</div>
+    <div class="section-desc">
+      Standard border weight is <strong>1px</strong>. Heavier borders are reserved for the
+      <strong>Signal Line</strong> (2px accent indicator on active elements — see Part II). The radius
+      scale ranges from sharp pixel-aligned (<code>--radius-sm</code>) to pill-shaped
+      (<code>--radius-full</code>). Match radius to component scale: small for badges, medium for
+      buttons/inputs, large for cards and modals.
+    </div>
+
+    <div class="radius-grid">
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 0"></div>
+        <span class="radius-tok">--radius-none</span>
+        <span class="radius-px">0</span>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: var(--radius-sm)"></div>
+        <span class="radius-tok">--radius-sm</span>
+        <span class="radius-px">4px</span>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: var(--radius-md)"></div>
+        <span class="radius-tok">--radius-md</span>
+        <span class="radius-px">6px</span>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: var(--radius-lg)"></div>
+        <span class="radius-tok">--radius-lg</span>
+        <span class="radius-px">8px</span>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: var(--radius-xl)"></div>
+        <span class="radius-tok">--radius-xl</span>
+        <span class="radius-px">12px</span>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: var(--radius-full)"></div>
+        <span class="radius-tok">--radius-full</span>
+        <span class="radius-px">999px</span>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:24px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Usage:</strong>
+      <code>--radius-sm</code> badges, tiny elements, toolbar buttons.
+      <code>--radius-md</code> buttons, inputs, sidebar icons, dropdowns.
+      <code>--radius-lg</code> cards, panels, terminal blocks.
+      <code>--radius-xl</code> modals, large cards, code blocks.
+      <code>--radius-full</code> pills, dots, circular elements.
+    </div>
+  </div>
+
+  <!-- ═══ 5. Shadows ═══ -->
+  <div class="section">
+    <div class="section-title">5. Shadows</div>
+    <div class="section-desc">
+      Shadows are minimal. They appear only on <strong>floating elements</strong> (modals, flyouts, toasts)
+      and interactive hover states. Resting cards and panels use borders, not shadows. The
+      <code>--shadow-glow</code> is reserved for focus rings on inputs and primary buttons.
+    </div>
+
+    <div class="shadow-grid">
+      <div class="shadow-sample">
+        <div class="shadow-box" style="box-shadow: var(--shadow-sm)"></div>
+        <span class="shadow-tok">--shadow-sm</span>
+      </div>
+      <div class="shadow-sample">
+        <div class="shadow-box" style="box-shadow: var(--shadow-md)"></div>
+        <span class="shadow-tok">--shadow-md</span>
+      </div>
+      <div class="shadow-sample">
+        <div class="shadow-box" style="box-shadow: var(--shadow-lg)"></div>
+        <span class="shadow-tok">--shadow-lg</span>
+      </div>
+      <div class="shadow-sample">
+        <div class="shadow-box" style="box-shadow: var(--shadow-glow)"></div>
+        <span class="shadow-tok">--shadow-glow</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 6. Motion ═══ -->
+  <div class="section">
+    <div class="section-title">6. Motion</div>
+    <div class="section-desc">
+      Motion is subtle and functional. Hover the easing demos to see each curve in action.
+      Use the shortest duration that still reads — micro-interactions at 80ms, hover/color changes at 150ms,
+      panel transitions at 250ms, page-level changes at 400ms.
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Durations</div>
+      <table class="const-table">
+        <thead><tr><th>Duration</th><th>Usage</th></tr></thead>
+        <tbody>
+          <tr><td class="val">80ms</td><td class="desc">Micro-interactions: button press, checkbox toggle</td></tr>
+          <tr><td class="val">150ms</td><td class="desc">Standard transitions: hover states, color changes, border color</td></tr>
+          <tr><td class="val">250ms</td><td class="desc">Panel transitions: flyout slide, collapse/expand</td></tr>
+          <tr><td class="val">400ms</td><td class="desc">Page transitions: view changes, modal entrance</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Easings (hover to play)</div>
+      <div class="motion-grid">
+        <div class="motion-card">
+          <div class="motion-name">--ease (default)</div>
+          <div class="motion-curve">cubic-bezier(0.4, 0, 0.2, 1)</div>
+          <div class="motion-stage"><div class="motion-puck ease"></div></div>
+          <div class="motion-hint">Most transitions</div>
+        </div>
+        <div class="motion-card">
+          <div class="motion-name">--ease-in</div>
+          <div class="motion-curve">cubic-bezier(0.4, 0, 1, 1)</div>
+          <div class="motion-stage"><div class="motion-puck ease-in"></div></div>
+          <div class="motion-hint">Elements exiting view</div>
+        </div>
+        <div class="motion-card">
+          <div class="motion-name">--ease-out</div>
+          <div class="motion-curve">cubic-bezier(0, 0, 0.2, 1)</div>
+          <div class="motion-stage"><div class="motion-puck ease-out"></div></div>
+          <div class="motion-hint">Elements entering view</div>
+        </div>
+        <div class="motion-card">
+          <div class="motion-name">--ease-bounce</div>
+          <div class="motion-curve">cubic-bezier(0.34, 1.56, 0.64, 1)</div>
+          <div class="motion-stage"><div class="motion-puck ease-bounce"></div></div>
+          <div class="motion-hint">Playful micro-feedback (sparingly)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Signature Animations</div>
+      <div class="anim-grid">
+        <div class="anim-card">
+          <div class="anim-pulse-dot"></div>
+          <div class="anim-name">pulse</div>
+          <div style="font-family:var(--font-code);font-size:10px;color:var(--text-tertiary)">2s infinite</div>
+        </div>
+        <div class="anim-card">
+          <div class="anim-fadeup">FADE IN UP</div>
+          <div class="anim-name">fadeInUp</div>
+          <div style="font-family:var(--font-code);font-size:10px;color:var(--text-tertiary)">250ms ease-out</div>
+        </div>
+        <div class="anim-card">
+          <div class="anim-slidein-frame"><div class="anim-slidein-puck">PANEL</div></div>
+          <div class="anim-name">slideIn</div>
+          <div style="font-family:var(--font-code);font-size:10px;color:var(--text-tertiary)">250ms ease-out</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART II — SIGNATURE DETAILS
+       Distinctive patterns that make SIGNAL recognizable
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label">
+    <div class="part-eyebrow">Part II</div>
+    <div class="part-title">Signature Details</div>
+    <div class="part-desc">
+      The patterns that make SIGNAL recognizable when you see it: the Signal Line marking active elements,
+      the Phosphor Glow on running status, the Depth Stack of layered surfaces, the Monospace Voice for
+      structural text, and a strict Status Vocabulary so colors mean the same thing everywhere.
+    </div>
+  </div>
+
+  <!-- ═══ 7. Signature Details ═══ -->
+  <div class="section">
+    <div class="section-title">7. Signature Details</div>
+    <div class="section-desc">
+      Five patterns make SIGNAL recognizable when you see it: the <strong>Signal Line</strong> (2px accent
+      indicator on active elements), <strong>Phosphor Glow</strong> (CRT-inspired status glows on running
+      states and focused inputs), the <strong>Depth Stack</strong> (canvas → surface → elevated layering),
+      <strong>Monospace Voice</strong> (Share Tech Mono on structural UI text), and the strict
+      <strong>Status Vocabulary</strong> (a fixed mapping from state to color, dot, and badge).
+    </div>
+
+    <!-- Signal Line Showcase -->
+    <div style="margin-bottom: 32px">
+      <div class="component-label">Signal Line</div>
+      <div class="signal-showcase">
+        <div class="signal-example">
+          <span class="signal-label">Tabs</span>
+          <div class="signal-tabs">
+            <button class="signal-tab active">Chat</button>
+            <button class="signal-tab">Network</button>
+            <button class="signal-tab">Goals</button>
+          </div>
+        </div>
+
+        <div class="signal-example">
+          <span class="signal-label">Input</span>
+          <input class="signal-input" placeholder="Search agents..." value="">
+        </div>
+
+        <div class="signal-example">
+          <span class="signal-label">List</span>
+          <div class="signal-list">
+            <button class="signal-list-item">Conversations</button>
+            <button class="signal-list-item active">Memory</button>
+            <button class="signal-list-item">Settings</button>
+            <button class="signal-list-item">Tools</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phosphor Glow -->
+    <div style="margin-bottom: 32px">
+      <div class="component-label">Phosphor Glow</div>
+      <div class="glow-demo">
+        <div class="glow-item">
+          <div class="glow-dot glow-dot-running"></div>
+          <span class="glow-label">Running</span>
+        </div>
+        <div class="glow-item">
+          <div class="glow-dot glow-dot-info"></div>
+          <span class="glow-label">Complete</span>
+        </div>
+        <div class="glow-item">
+          <div class="glow-dot glow-dot-error"></div>
+          <span class="glow-label">Error</span>
+        </div>
+        <div class="glow-item">
+          <div class="glow-dot glow-dot-warning"></div>
+          <span class="glow-label">Warning</span>
+        </div>
+        <div class="glow-item">
+          <div class="glow-dot glow-dot-idle"></div>
+          <span class="glow-label">Idle</span>
+        </div>
+        <div style="width: 24px"></div>
+        <div class="glow-item">
+          <button class="glow-btn-demo">Focus Glow</button>
+          <span class="glow-label">Focused Button</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Depth Stack -->
+    <div style="margin-bottom: 32px">
+      <div class="component-label">Depth Stack</div>
+      <div class="depth-demo">
+        <div class="depth-layer depth-canvas">
+          <span class="depth-layer-name">Canvas</span>
+          <span class="depth-layer-token">--canvas</span>
+        </div>
+        <div class="depth-layer depth-surface">
+          <span class="depth-layer-name">Surface</span>
+          <span class="depth-layer-token">--surface</span>
+        </div>
+        <div class="depth-layer depth-elevated">
+          <span class="depth-layer-name">Elevated</span>
+          <span class="depth-layer-token">--elevated</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monospace Voice -->
+    <div style="margin-bottom: 32px">
+      <div class="component-label">Monospace Voice</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;max-width:680px;line-height:1.6">
+        Structural UI elements speak in Share Tech Mono to maintain the COMPUTRON identity.
+        Body text stays in system fonts for reading comfort. The brand voice never appears in
+        message content or long-form prose.
+      </div>
+      <div class="voice-grid">
+        <span class="role">App title</span>
+        <span class="sample" style="font-size:14px;font-weight:600">COMPUTRON 9000</span>
+
+        <span class="role">Panel headers</span>
+        <span class="sample" style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;opacity:0.7">MEMORY &middot; SETTINGS &middot; AGENTS</span>
+
+        <span class="role">Agent names</span>
+        <span class="sample" style="font-size:13px">browser-agent &middot; coder-001 &middot; researcher</span>
+
+        <span class="role">Status labels</span>
+        <span class="sample" style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase">RUNNING &middot; COMPLETE &middot; ERROR</span>
+
+        <span class="role">Stat values</span>
+        <span class="sample" style="font-size:11px">3.2s &middot; 47% &middot; 12 tools</span>
+      </div>
+    </div>
+
+    <!-- Status Vocabulary -->
+    <div>
+      <div class="component-label">Status Vocabulary</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;max-width:680px;line-height:1.6">
+        State always reads the same way. Running glows. Complete is calm. Error is unmistakable. Idle recedes.
+        These five states cover every status indication across the app — agents, tasks, runs, connections,
+        feature flags. Anything else means we're inventing a new state and should ask whether that's necessary.
+      </div>
+      <table class="status-vocab">
+        <thead>
+          <tr><th>State</th><th>Color token</th><th>Dot</th><th>Badge background</th><th>Usage</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="vocab-state">Running</span></td>
+            <td><code>--success</code></td>
+            <td><span class="vocab-dot" style="background:var(--success);box-shadow:0 0 6px var(--success-muted);animation:pulse 2s infinite"></span><span style="color:var(--text-tertiary)">pulsing</span></td>
+            <td><code>--success-muted</code></td>
+            <td>Active agents, executing tasks</td>
+          </tr>
+          <tr>
+            <td><span class="vocab-state">Complete</span></td>
+            <td><code>--accent</code></td>
+            <td><span class="vocab-dot" style="background:var(--accent)"></span><span style="color:var(--text-tertiary)">solid</span></td>
+            <td><code>--accent-muted</code></td>
+            <td>Finished tasks, info states</td>
+          </tr>
+          <tr>
+            <td><span class="vocab-state">Error</span></td>
+            <td><code>--danger</code></td>
+            <td><span class="vocab-dot" style="background:var(--danger)"></span><span style="color:var(--text-tertiary)">solid</span></td>
+            <td><code>--danger-muted</code></td>
+            <td>Failed tasks, errors</td>
+          </tr>
+          <tr>
+            <td><span class="vocab-state">Warning</span></td>
+            <td><code>--warning</code></td>
+            <td><span class="vocab-dot" style="background:var(--warning)"></span><span style="color:var(--text-tertiary)">solid</span></td>
+            <td><code>--warning-muted</code></td>
+            <td>Attention needed</td>
+          </tr>
+          <tr>
+            <td><span class="vocab-state">Idle</span></td>
+            <td><code>--text-tertiary</code></td>
+            <td><span class="vocab-dot" style="background:var(--text-tertiary)"></span><span style="color:var(--text-tertiary)">solid</span></td>
+            <td><code>--border</code></td>
+            <td>Inactive, stopped</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART III — BUILDING BLOCKS
+       Atomic components: form controls, display primitives, containers, feedback
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label">
+    <div class="part-eyebrow">Part III</div>
+    <div class="part-title">Building Blocks</div>
+    <div class="part-desc">
+      The atomic components everything else is assembled from. Each one has a single responsibility and
+      a defined visual treatment. Larger views (in Part IV) compose these primitives — the goal is that
+      designing a new screen is a question of "which building blocks do I need" rather than "what does
+      this look like."
+    </div>
+  </div>
+
+  <!-- ═══ 8. Form Controls ═══ -->
+  <div class="section">
+    <div class="section-title">8. Form Controls</div>
+    <div class="section-desc">
+      Buttons, inputs, and selectables. All form controls run on a 32px standard height. Buttons sit on
+      <code>--radius-md</code>; inputs and textareas use the same. The focus ring is always
+      <code>--shadow-glow</code>.
+    </div>
+
+    <!-- Buttons -->
+    <div class="subsection">
+      <div class="subsection-label">Buttons</div>
+      <div class="component-row">
+        <button class="btn btn-filled">Primary</button>
+        <button class="btn btn-outline">Outline</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-danger">Danger</button>
+        <button class="btn btn-filled" disabled style="opacity:0.5;cursor:not-allowed">Disabled</button>
+      </div>
+      <div class="component-row" style="margin-top:4px">
+        <button class="btn-icon" title="Settings"><i class="bi bi-gear"></i></button>
+        <button class="btn-icon" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn-icon" title="More"><i class="bi bi-three-dots"></i></button>
+        <span style="font-size:11px;color:var(--text-tertiary);margin-left:8px;align-self:center">Icon buttons (28&times;28)</span>
+      </div>
+    </div>
+
+    <!-- Inputs -->
+    <div class="subsection">
+      <div class="subsection-label">Inputs</div>
+      <div class="component-row">
+        <input class="input" placeholder="Search...">
+        <input class="input" value="llama3:70b">
+        <select class="select"><option>llama3:70b</option><option>llama3:8b</option><option>mistral:7b</option></select>
+      </div>
+      <div class="component-row" style="max-width: 400px">
+        <textarea class="textarea" placeholder="Enter your message..." rows="3"></textarea>
+      </div>
+    </div>
+
+    <!-- Toggle -->
+    <div class="subsection">
+      <div class="subsection-label">Toggle Switch</div>
+      <div class="component-row" style="gap:24px">
+        <span style="display:inline-flex;align-items:center;gap:10px"><span class="toggle"></span><span style="font-size:12px;color:var(--text-secondary)">Off</span></span>
+        <span style="display:inline-flex;align-items:center;gap:10px"><span class="toggle on"></span><span style="font-size:12px;color:var(--text-secondary)">On</span></span>
+      </div>
+    </div>
+
+    <!-- Radio / Selection Card -->
+    <div class="subsection">
+      <div class="subsection-label">Radio / Selection Card</div>
+      <div class="component-row" style="flex-direction:column;align-items:flex-start">
+        <div class="radio-card selected">
+          <div class="radio-indicator"></div>
+          <div class="radio-card-info">
+            <div class="radio-card-title">llama3:70b</div>
+            <div class="radio-card-desc">70B params &middot; Q4 quantization</div>
+          </div>
+        </div>
+        <div class="radio-card">
+          <div class="radio-indicator"></div>
+          <div class="radio-card-info">
+            <div class="radio-card-title">llama3:8b</div>
+            <div class="radio-card-desc">8B params &middot; Q4 quantization</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chips -->
+    <div class="subsection">
+      <div class="subsection-label">Chip / Tag</div>
+      <div class="component-row">
+        <button class="chip active"><i class="bi bi-check2" style="font-size:10px"></i> WEB</button>
+        <button class="chip active"><i class="bi bi-check2" style="font-size:10px"></i> MEMORY</button>
+        <button class="chip">CODE</button>
+        <button class="chip">FS</button>
+        <button class="chip">BROWSER</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 9. Display Primitives ═══ -->
+  <div class="section">
+    <div class="section-title">9. Display Primitives</div>
+    <div class="section-desc">
+      Small inline elements that decorate other content: badges, status dots, inline code, tool call markers,
+      context usage indicators. They never stand alone; they live inside cards, list items, and message bodies.
+    </div>
+
+    <!-- Badges -->
+    <div class="subsection">
+      <div class="subsection-label">Badges</div>
+      <div class="component-row">
+        <span class="badge badge-success"><span class="status-dot dot-running" style="width:5px;height:5px"></span> RUNNING</span>
+        <span class="badge badge-info">COMPLETE</span>
+        <span class="badge badge-danger">ERROR</span>
+        <span class="badge badge-warning">ATTENTION</span>
+        <span class="badge badge-neutral">IDLE</span>
+        <span class="badge badge-success">3 tools</span>
+        <span class="badge badge-info">12 iter</span>
+        <span class="badge badge-neutral">4.7s</span>
+      </div>
+    </div>
+
+    <!-- Status Dots -->
+    <div class="subsection">
+      <div class="subsection-label">Status Dot</div>
+      <div class="component-row" style="gap: 16px">
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-running"></span><span style="font-size:12px;color:var(--text-secondary)">Running (pulses)</span></span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-complete"></span><span style="font-size:12px;color:var(--text-secondary)">Complete</span></span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-error"></span><span style="font-size:12px;color:var(--text-secondary)">Error</span></span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-warning"></span><span style="font-size:12px;color:var(--text-secondary)">Warning</span></span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-idle"></span><span style="font-size:12px;color:var(--text-secondary)">Idle</span></span>
+      </div>
+    </div>
+
+    <!-- Inline Code -->
+    <div class="subsection">
+      <div class="subsection-label">Inline Code</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;max-width:640px">
+        Run <code class="inline-code">just dev</code> to start the dev server. Configuration lives in
+        <code class="inline-code">~/.computron_9000/</code>; pass <code class="inline-code">--port 8080</code>
+        to override the default.
+      </div>
+    </div>
+
+    <!-- Tool Call Badge -->
+    <div class="subsection">
+      <div class="subsection-label">Tool Call Badge</div>
+      <div class="component-row" style="gap:16px">
+        <span class="toolcall-badge"><i class="bi bi-wrench"></i> browser.navigate</span>
+        <span class="toolcall-badge"><i class="bi bi-wrench"></i> code.execute</span>
+        <span class="toolcall-badge"><i class="bi bi-wrench"></i> fs.write_file</span>
+      </div>
+    </div>
+
+    <!-- Context Usage Badge -->
+    <div class="subsection">
+      <div class="subsection-label">Context Usage Badge</div>
+      <div class="component-row" style="gap:16px">
+        <span class="ctx-badge low">
+          <svg class="ctx-donut" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2"/><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="9.4 31.4" transform="rotate(-90 6 6)"/></svg>
+          30% CTX
+        </span>
+        <span class="ctx-badge med">
+          <svg class="ctx-donut" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2"/><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="22 31.4" transform="rotate(-90 6 6)"/></svg>
+          75% CTX
+        </span>
+        <span class="ctx-badge high">
+          <svg class="ctx-donut" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2"/><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="29 31.4" transform="rotate(-90 6 6)"/></svg>
+          92% CTX
+        </span>
+        <span style="font-size:11px;color:var(--text-tertiary);align-self:center">low (&lt;70%) &middot; med (70-84%) &middot; high (85%+)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 10. Containers ═══ -->
+  <div class="section">
+    <div class="section-title">10. Containers</div>
+    <div class="section-desc">
+      Containers hold and organize content. Cards are static or clickable. Settings rows are icon-led
+      form layouts. List items appear in flyouts and lists with the Signal Line on the active state.
+      Code blocks display syntax-highlighted code. Tables are for structured data.
+    </div>
+
+    <!-- Display Card / Action Card -->
+    <div class="subsection">
+      <div class="subsection-label">Display Card &middot; Action Card</div>
+      <div class="component-row" style="align-items:stretch">
+        <div class="display-card">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--text-primary)">Browser Automation</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">Navigate to the target URL and extract structured data from the listing page.</div>
+          <div style="margin-top:8px;display:flex;gap:4px">
+            <span class="badge badge-success"><span class="status-dot dot-running" style="width:4px;height:4px"></span> RUNNING</span>
+            <span class="badge badge-neutral">3.2s</span>
+          </div>
+        </div>
+        <div class="action-card">
+          <div class="icon-row"><i class="bi bi-search"></i></div>
+          <div class="title">Research a topic</div>
+          <div class="text">Open the web, gather sources, summarize findings.</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+        Display Card has no hover affordance. Action Card adds <code>cursor: pointer</code>,
+        a <code>--shadow-sm</code> on hover, and translates 1px down on active.
+      </div>
+    </div>
+
+    <!-- Agent Card -->
+    <div class="subsection">
+      <div class="subsection-label">Agent Card</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;max-width:680px;line-height:1.5">
+        Compact 155px card representing an individual agent in the network graph. Status dot + name in the
+        brand font, optional thumbnail, badges in the monospace brand font. Border strengthens on hover.
+      </div>
+      <div class="agent-grid">
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="status-dot dot-running"></span>
+            <span class="agent-card-name">ollama-agent</span>
+          </div>
+          <div class="agent-card-meta">
+            <span class="badge badge-success" style="font-size:8px;padding:1px 5px">5 tools</span>
+            <span class="badge badge-info" style="font-size:8px;padding:1px 5px">8 iter</span>
+            <span class="badge badge-neutral" style="font-size:8px;padding:1px 5px">12.3s</span>
+          </div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="status-dot dot-running"></span>
+            <span class="agent-card-name">browser-agent</span>
+          </div>
+          <div class="agent-card-thumb"><i class="bi bi-globe2"></i></div>
+          <div class="agent-card-meta">
+            <span class="badge badge-success" style="font-size:8px;padding:1px 5px">3 tools</span>
+            <span class="badge badge-neutral" style="font-size:8px;padding:1px 5px">4.1s</span>
+          </div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="status-dot dot-complete"></span>
+            <span class="agent-card-name">coder-001</span>
+          </div>
+          <div class="agent-card-meta">
+            <span class="badge badge-info" style="font-size:8px;padding:1px 5px">COMPLETE</span>
+            <span class="badge badge-info" style="font-size:8px;padding:1px 5px">2 iter</span>
+            <span class="badge badge-neutral" style="font-size:8px;padding:1px 5px">1.8s</span>
+          </div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="status-dot dot-error"></span>
+            <span class="agent-card-name">research-agent</span>
+          </div>
+          <div class="agent-card-meta">
+            <span class="badge badge-danger" style="font-size:8px;padding:1px 5px">ERROR</span>
+            <span class="badge badge-neutral" style="font-size:8px;padding:1px 5px">0.4s</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Row -->
+    <div class="subsection">
+      <div class="subsection-label">Settings Row</div>
+      <div style="display:flex;flex-direction:column;gap:var(--sp-2)">
+        <div class="settings-row">
+          <div class="icon"><i class="bi bi-cpu"></i></div>
+          <div class="info">
+            <div class="title">Default model</div>
+            <div class="desc">The model used when no agent specifies one.</div>
+          </div>
+          <div class="control">
+            <select class="select" style="width:140px;height:30px;font-size:12px"><option>llama3:70b</option></select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="icon"><i class="bi bi-hdd-network"></i></div>
+          <div class="info">
+            <div class="title">Ollama host</div>
+            <div class="desc">Endpoint for the inference backend.</div>
+          </div>
+          <div class="control">
+            <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> CONNECTED</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- List Item -->
+    <div class="subsection">
+      <div class="subsection-label">List Item</div>
+      <div style="display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--sp-2);max-width:300px">
+        <button class="list-item">
+          <div class="li-main">
+            <div class="li-name">user_preferences</div>
+            <div class="li-desc">Prefers concise responses, dark mode</div>
+          </div>
+        </button>
+        <button class="list-item active">
+          <div class="li-main">
+            <div class="li-name">project_context</div>
+            <div class="li-desc">Working on docs aggregator</div>
+          </div>
+        </button>
+        <button class="list-item">
+          <div class="li-main">
+            <div class="li-name">api_keys</div>
+            <div class="li-desc">Cloud fallback model + Brave Search</div>
+          </div>
+        </button>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+        Active state shows the Signal Line (2px accent left bar) plus <code>--accent-muted</code> background.
+      </div>
+    </div>
+
+    <!-- Code Block -->
+    <div class="subsection">
+      <div class="subsection-label">Code Block</div>
+      <div class="codeblock">
+        <div class="codeblock-header">
+          <span class="codeblock-lang">python</span>
+          <button class="codeblock-copy"><i class="bi bi-clipboard" style="font-size:9px"></i> COPY</button>
+        </div>
+        <pre class="codeblock-body" style="margin:0"><span style="color:var(--code-comment)"># Endpoint summary</span>
+<span style="color:var(--code-keyword)">endpoints</span> <span style="color:var(--code-operator)">=</span> {
+    <span style="color:var(--code-string)">"GET"</span>: <span style="color:var(--code-number)">28</span>,
+    <span style="color:var(--code-string)">"POST"</span>: <span style="color:var(--code-number)">12</span>,
+    <span style="color:var(--code-string)">"PUT"</span>: <span style="color:var(--code-number)">5</span>,
+}</pre>
+      </div>
+    </div>
+
+    <!-- Tables -->
+    <div class="subsection">
+      <div class="subsection-label">Tables</div>
+      <table class="dl-table">
+        <thead>
+          <tr><th>Task</th><th>Agent</th><th>Status</th><th>Duration</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Fetch /api/reference</td><td>browser</td><td><span class="badge badge-info" style="font-size:9px">DONE</span></td><td>4.1s</td></tr>
+          <tr><td>Parse and structure</td><td>coder</td><td><span class="badge badge-info" style="font-size:9px">DONE</span></td><td>6.8s</td></tr>
+          <tr><td>Write results.json</td><td>fs</td><td><span class="badge badge-info" style="font-size:9px">DONE</span></td><td>1.4s</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- File Output Card -->
+    <div class="subsection">
+      <div class="subsection-label">File Output Card</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;max-width:680px;line-height:1.5">
+        Header-only card for file artifacts produced by agents: icon + name (mono) + mime/size + pill actions.
+        The card itself never renders preview content inline — clicking <code class="inline-code">Preview</code>
+        opens the file in a separate <strong>File Preview</strong> panel (see Part IV) which has its own
+        toolbar and renders the file as image, code, markdown, HTML, or PDF as appropriate. Files that
+        can't be previewed (binaries, archives) hide the Preview button and only show Download.
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:480px">
+        <!-- Image (previewable) -->
+        <div class="file-card">
+          <div class="file-card-header">
+            <i class="bi bi-file-image file-icon"></i>
+            <div class="file-card-info">
+              <span class="file-name">homepage_hero.png</span>
+              <span class="file-mime">image/png</span>
+            </div>
+            <div class="file-card-actions">
+              <button class="file-pill-btn"><i class="bi bi-eye" style="font-size:10px"></i> Preview</button>
+              <button class="file-pill-btn"><i class="bi bi-download" style="font-size:10px"></i> Download</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Code/JSON (previewable) -->
+        <div class="file-card">
+          <div class="file-card-header">
+            <i class="bi bi-file-code file-icon"></i>
+            <div class="file-card-info">
+              <span class="file-name">results.json</span>
+              <span class="file-mime">application/json</span>
+            </div>
+            <div class="file-card-actions">
+              <button class="file-pill-btn"><i class="bi bi-eye" style="font-size:10px"></i> Preview</button>
+              <button class="file-pill-btn"><i class="bi bi-download" style="font-size:10px"></i> Download</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Binary (not previewable) -->
+        <div class="file-card">
+          <div class="file-card-header">
+            <i class="bi bi-file-earmark file-icon"></i>
+            <div class="file-card-info">
+              <span class="file-name">archive.tar.gz</span>
+              <span class="file-mime">application/gzip</span>
+            </div>
+            <div class="file-card-actions">
+              <button class="file-pill-btn"><i class="bi bi-download" style="font-size:10px"></i> Download</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 11. Feedback ═══ -->
+  <div class="section">
+    <div class="section-title">11. Feedback</div>
+    <div class="section-desc">
+      Components that communicate state back to the user: empty states, toasts, tooltips, progress indicators,
+      typing/loading affordances, audio playback, collapsible reveals.
+    </div>
+
+    <!-- Empty State -->
+    <div class="subsection">
+      <div class="subsection-label">Empty State</div>
+      <div class="empty-state">
+        <div class="empty-state-heading">No goals yet</div>
+        <div class="empty-state-desc">Create one in chat or use the <code class="inline-code">+ NEW</code> button to get started.</div>
+      </div>
+    </div>
+
+    <!-- Toasts -->
+    <div class="subsection">
+      <div class="subsection-label">Toasts</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="toast success">
+          <i class="bi bi-check-circle toast-icon"></i>
+          <div class="toast-info">
+            <div class="toast-title">Saved</div>
+            <div class="toast-msg">Profile updated successfully.</div>
+          </div>
+          <button class="toast-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="toast error">
+          <i class="bi bi-exclamation-circle toast-icon"></i>
+          <div class="toast-info">
+            <div class="toast-title">Connection failed</div>
+            <div class="toast-msg">Could not reach the Ollama host. Retrying in 5s.</div>
+          </div>
+          <button class="toast-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="toast info">
+          <i class="bi bi-info-circle toast-icon"></i>
+          <div class="toast-info">
+            <div class="toast-title">Run scheduled</div>
+            <div class="toast-msg">Goal will execute at the next cron tick.</div>
+          </div>
+          <button class="toast-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Tooltip -->
+    <div class="subsection">
+      <div class="subsection-label">Info Tooltip</div>
+      <div class="component-row" style="gap:24px;align-items:flex-start">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary)">
+          Temperature
+          <i class="bi bi-info-circle tooltip-trigger"></i>
+        </span>
+        <div class="tooltip-pop">Sampling randomness. Lower values are more deterministic; higher values produce more varied output.</div>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="subsection">
+      <div class="subsection-label">Progress Bar</div>
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:480px">
+        <div>
+          <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-brand);margin-bottom:6px">GENERATING &middot; 35%</div>
+          <div class="progressbar"><div class="fill" style="width:35%"></div></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-brand);margin-bottom:6px">UPLOADING &middot; 78%</div>
+          <div class="progressbar"><div class="fill" style="width:78%"></div></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-brand);margin-bottom:6px">COMPLETE</div>
+          <div class="progressbar"><div class="fill complete" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stepper -->
+    <div class="subsection">
+      <div class="subsection-label">Stepper</div>
+      <div class="stepper">
+        <div class="stepper-circle done"><i class="bi bi-check-lg" style="font-size:14px"></i></div>
+        <div class="stepper-line done"></div>
+        <div class="stepper-circle active">2</div>
+        <div class="stepper-line"></div>
+        <div class="stepper-circle">3</div>
+        <div class="stepper-line"></div>
+        <div class="stepper-circle">4</div>
+      </div>
+    </div>
+
+    <!-- Typing Placeholder -->
+    <div class="subsection">
+      <div class="subsection-label">Typing Placeholder</div>
+      <div class="typing-placeholder">
+        <span class="typing-cursor"></span>
+        crunching the numbers...
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+        2px-wide, 14px-tall cursor in <code>--success</code>, blinking at 1s interval. Cycling phrases while
+        the agent is mid-thought ("consulting the oracle...", "rummaging through memory...", etc.).
+      </div>
+    </div>
+
+    <!-- Audio Indicator -->
+    <div class="subsection">
+      <div class="subsection-label">Audio Indicator</div>
+      <div class="component-row" style="gap:24px">
+        <span style="display:inline-flex;align-items:center;gap:8px"><span class="audio-indicator"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></span><span style="font-size:12px;color:var(--text-secondary)">Playing</span></span>
+        <span style="display:inline-flex;align-items:center;gap:8px"><span class="audio-indicator paused"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></span><span style="font-size:12px;color:var(--text-secondary)">Paused</span></span>
+      </div>
+    </div>
+
+    <!-- Collapsible Block -->
+    <div class="subsection">
+      <div class="subsection-label">Collapsible Block</div>
+      <div class="collapsible">
+        <div class="collapsible-header">
+          <i class="bi bi-chevron-down" style="font-size:10px"></i>
+          <i class="bi bi-lightbulb"></i>
+          Show thoughts
+        </div>
+        <div class="collapsible-body">
+          The user wants to see API endpoints, so I'll fetch the reference page first, then parse the
+          structured data into a JSON array sorted by HTTP method.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART IV — COMPOSED PATTERNS
+       Multi-part assemblies built from building blocks
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label">
+    <div class="part-eyebrow">Part IV</div>
+    <div class="part-title">Composed Patterns</div>
+    <div class="part-desc">
+      Multi-part assemblies that combine building blocks into reusable structures. Each pattern defines a
+      shell (positioning, sticky regions, scroll behavior) plus how primitives sit inside it. Building a
+      new screen is a question of "which patterns do I assemble" — Header on top, Sidebar on the left,
+      Split Panel for master-detail, Tabbed Preview for parallel previews, etc.
+    </div>
+  </div>
+
+  <!-- ═══ 12. Header ═══ -->
+  <div class="section">
+    <div class="section-title">12. Header</div>
+    <div class="section-desc">
+      The top app bar, always visible. Logo + brand title on the left; ghost icon buttons on the right
+      (audio, theme, settings, new conversation). Sits on <code>--surface</code> with a 1px border-bottom.
+      Height: <code>--header-height</code> (36px).
+    </div>
+
+    <div class="m-header" style="border-radius:var(--radius-lg);border:1px solid var(--border)">
+      <span class="m-header-logo"><span>COMPUTRON</span> 9000</span>
+      <span class="audio-indicator"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></span>
+      <button class="btn-icon" title="Theme"><i class="bi bi-moon"></i></button>
+      <button class="btn-icon" title="Settings"><i class="bi bi-gear"></i></button>
+      <button class="btn-icon" title="New chat"><i class="bi bi-plus-lg"></i></button>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      header padding <code>0 --sp-3</code>; logo + title in brand font at 12px / 600 / 0.04em letter-spacing.
+      Right-aligned action cluster uses <code>gap: --sp-1</code>.
+    </div>
+  </div>
+
+  <!-- ═══ 13. Sidebar ═══ -->
+  <div class="section">
+    <div class="section-title">13. Sidebar</div>
+    <div class="section-desc">
+      Vertical icon navigation, always visible on desktop. Width: <code>--sidebar-width</code> (44px).
+      Icons stack vertically; a separator divides primary destinations from secondary ones; the bottom
+      reserves space for Settings. Active state shows the Signal Line on the left edge.
+    </div>
+
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <div class="m-sidebar" style="height:280px;border-radius:var(--radius-lg);border:1px solid var(--border)">
+        <button class="m-sidebar-icon active" title="Chat"><i class="bi bi-chat"></i></button>
+        <button class="m-sidebar-icon" title="Agent Network"><i class="bi bi-diagram-3"></i></button>
+        <button class="m-sidebar-icon" title="Goals"><i class="bi bi-bullseye"></i></button>
+        <button class="m-sidebar-icon" title="Memory"><i class="bi bi-database"></i></button>
+        <div class="m-sidebar-sep"></div>
+        <button class="m-sidebar-icon" title="Conversations"><i class="bi bi-clock-history"></i></button>
+        <button class="m-sidebar-icon" title="Custom Tools"><i class="bi bi-wrench"></i></button>
+        <div style="flex:1"></div>
+        <button class="m-sidebar-icon" title="Settings"><i class="bi bi-gear"></i></button>
+      </div>
+
+      <div style="font-size:12px;color:var(--text-secondary);max-width:480px;line-height:1.6">
+        <strong style="color:var(--text-primary)">Layout:</strong> 28&times;28 icon buttons,
+        <code>--radius-md</code>, <code>gap: --sp-1</code> between buttons, <code>padding: --sp-2 0</code>
+        for the column. Separator is 20px wide, 1px solid <code>--border</code>, vertical margin
+        <code>--sp-1</code>.
+        <br><br>
+        <strong style="color:var(--text-primary)">Active state:</strong> <code>--accent-muted</code>
+        background, <code>--accent</code> color. Pseudo-element <code>::before</code> draws a 2px
+        accent bar on the left edge — the Signal Line.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 14. Tabs ═══ -->
+  <div class="section">
+    <div class="section-title">14. Tabs</div>
+    <div class="section-desc">
+      Standalone horizontal tab bar pattern, used for switching between content modes within a panel
+      (Settings tabs, Goal Detail tabs, etc.). Active tab shows the Signal Line: 2px accent bottom
+      border. Brand monospace, uppercase, <code>0.06em</code> letter-spacing.
+    </div>
+
+    <!-- Tabs without counts -->
+    <div class="subsection">
+      <div class="subsection-label">Plain</div>
+      <div style="background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;max-width:640px">
+        <div class="dl-tabs">
+          <button class="dl-tab active">General</button>
+          <button class="dl-tab">Inference</button>
+          <button class="dl-tab">Connection</button>
+          <button class="dl-tab">Advanced</button>
+        </div>
+        <div style="padding:var(--sp-4);font-size:12px;color:var(--text-tertiary);min-height:80px">
+          Tab content area scrolls independently of the tab bar.
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs with counts -->
+    <div class="subsection">
+      <div class="subsection-label">With counts</div>
+      <div style="background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;max-width:640px">
+        <div class="dl-tabs">
+          <button class="dl-tab active">Recent Runs <span class="dl-tab-count">3</span></button>
+          <button class="dl-tab">Tasks <span class="dl-tab-count">5</span></button>
+          <button class="dl-tab">Schedule</button>
+        </div>
+        <div style="padding:var(--sp-4);font-size:12px;color:var(--text-tertiary);min-height:80px">
+          Counts use the <code class="inline-code">.dl-tab-count</code> span — 10px, weight 500, 0.6 opacity.
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      tab padding <code>10px --sp-4</code>; tab bar sits on the container's <code>border-bottom: 1px --border</code>
+      (no own background). Active tab opacity 1.0, inactive 0.4, hover 0.7.
+    </div>
+  </div>
+
+  <!-- ═══ 15. Modal / Dialog ═══ -->
+  <div class="section">
+    <div class="section-title">15. Modal / Dialog</div>
+    <div class="section-desc">
+      Centered overlay for confirmations, focused tasks, and content viewing. Scrim + blur backdrop
+      (<code>--scrim</code> + <code>backdrop-filter: blur(2px)</code>), modal sits on
+      <code>--elevated</code> with <code>--radius-xl</code> and <code>--shadow-lg</code>. Dismissable
+      via the close button, backdrop click, or Escape.
+    </div>
+
+    <div class="dl-modal-stage">
+      <div class="dl-modal-stage-label">Backdrop · scrim + blur</div>
+      <div class="dl-modal">
+        <div class="dl-modal-header">
+          <div class="dl-modal-title">Delete profile?</div>
+          <button class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="dl-modal-body">
+          This will permanently remove the <code class="inline-code">researcher</code> profile and any
+          associated history. This action cannot be undone.
+        </div>
+        <div class="dl-modal-footer">
+          <button class="btn btn-outline">Cancel</button>
+          <button class="btn btn-danger"><i class="bi bi-trash3"></i> Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      modal max-width 500px (default — wider for content-heavy modals); header + footer padding
+      <code>--sp-3 --sp-4</code>; body padding <code>--sp-4</code>; footer right-aligned with gap
+      <code>--sp-2</code>. Title in brand font, 13px / 600 / 0.04em.
+      <strong style="color:var(--text-secondary)">Containment:</strong> always set
+      <code>overflow: hidden</code> on the modal so the body's tinted background gets clipped to the
+      rounded corners.
+    </div>
+  </div>
+
+  <!-- ═══ 16. Flyout Panel ═══ -->
+  <div class="section">
+    <div class="section-title">16. Flyout Panel</div>
+    <div class="section-desc">
+      Sliding side panel anchored to the sidebar. Width: <code>--flyout-width</code> (270px). Used for
+      Memory, Conversations, Custom Tools, and any quick-access list/form. A scrim covers the rest of
+      the main content; clicking it dismisses the flyout. Animation: slideIn from the left, 250ms ease-out.
+    </div>
+
+    <div class="flyout-demo">
+      <div class="flyout-sidebar-mini">
+        <button class="m-sidebar-icon" title="Chat"><i class="bi bi-chat"></i></button>
+        <button class="m-sidebar-icon active" title="Settings"><i class="bi bi-gear"></i></button>
+        <button class="m-sidebar-icon" title="Goals"><i class="bi bi-bullseye"></i></button>
+      </div>
+      <div class="flyout-panel">
+        <div class="flyout-header">
+          Model Settings
+          <button class="flyout-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="flyout-body">
+          <div class="flyout-field">
+            <label class="flyout-label">Model</label>
+            <select class="flyout-select">
+              <option>llama3:70b</option>
+              <option>llama3:8b</option>
+              <option>mistral:7b</option>
+            </select>
+          </div>
+
+          <div class="flyout-field">
+            <label class="flyout-label">Temperature</label>
+            <div class="flyout-slider-row">
+              <input type="range" class="flyout-slider" min="0" max="100" value="70">
+              <span class="flyout-val">0.7</span>
+            </div>
+          </div>
+
+          <div class="flyout-field">
+            <label class="flyout-label">Top P</label>
+            <div class="flyout-slider-row">
+              <input type="range" class="flyout-slider" min="0" max="100" value="90">
+              <span class="flyout-val">0.9</span>
+            </div>
+          </div>
+
+          <div class="flyout-field">
+            <label class="flyout-label">Max Turns</label>
+            <div class="flyout-slider-row">
+              <input type="range" class="flyout-slider" min="1" max="100" value="25">
+              <span class="flyout-val">25</span>
+            </div>
+          </div>
+
+          <div class="flyout-field">
+            <label class="flyout-label">System Prompt</label>
+            <textarea class="textarea" style="min-height:60px;font-size:12px" placeholder="Optional system prompt override..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="flyout-scrim">
+        (scrim overlay)
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 17. Split Panel & Split Handle ═══ -->
+  <div class="section">
+    <div class="section-title">17. Split Panel &amp; Split Handle</div>
+    <div class="section-desc">
+      Master-detail layout — list on the left, detail on the right. Used for Goals, Profiles,
+      Conversations, and any browse-and-edit interface. The list panel uses the Signal Line on the
+      active item (see List Item in §10). For resizable splits (chat + preview), a draggable
+      <strong>Split Handle</strong> sits between the columns and respects <code>--split-min</code>
+      (20%) / <code>--split-max</code> (80%) bounds.
+    </div>
+
+    <!-- Split Panel demo -->
+    <div class="subsection">
+      <div class="subsection-label">Split Panel</div>
+      <div class="dl-split">
+        <div class="dl-split-list">
+          <div class="dl-split-list-header">
+            <span class="dl-split-list-title">Profiles</span>
+            <button class="dl-split-new-btn"><i class="bi bi-plus-lg" style="font-size:9px"></i> NEW</button>
+          </div>
+          <div class="dl-split-list-body">
+            <button class="dl-split-item active">
+              <div class="name">researcher</div>
+              <div class="desc">Investigates topics via web + memory</div>
+            </button>
+            <button class="dl-split-item">
+              <div class="name">coder</div>
+              <div class="desc">Writes and runs Python in the sandbox</div>
+            </button>
+            <button class="dl-split-item">
+              <div class="name">notes-archiver</div>
+              <div class="desc">Reads and writes the memory store</div>
+            </button>
+          </div>
+        </div>
+        <div class="dl-split-detail">
+          <div style="font-size:16px;font-weight:600;margin-bottom:6px;color:var(--text-primary)">researcher</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:20px;line-height:1.5">Investigates topics via web + memory.</div>
+          <div class="component-label">Skills</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="chip active"><i class="bi bi-check2" style="font-size:10px"></i> WEB</button>
+            <button class="chip active"><i class="bi bi-check2" style="font-size:10px"></i> MEMORY</button>
+            <button class="chip">CODE</button>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+        <strong style="color:var(--text-secondary)">Layout:</strong> list panel 35-40% width
+        (min 220px, max 380-420px), border-right; detail panel fills remaining space.
+        Both panels scroll independently. List header is <code>display: flex</code> with the title
+        on the left and a single accent-pill action on the right (<code>+ NEW</code>, or whatever
+        the panel's primary creation flow is).
+      </div>
+    </div>
+
+    <!-- Split Handle demo -->
+    <div class="subsection">
+      <div class="subsection-label">Split Handle (resizable)</div>
+      <div class="dl-handle-stage">
+        <div class="dl-handle-side surface">CHAT COLUMN</div>
+        <div class="dl-handle" title="Drag to resize"></div>
+        <div class="dl-handle-side">PREVIEW COLUMN</div>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+        9px wide drag target that owns the visual divider between the two columns. At rest:
+        <code>--canvas</code> background bracketed by two 1px <code>--border</code> lines, with a
+        centered 3px&times;24px pill at <code>--text-tertiary</code> opacity 0.5. On hover and during
+        drag: background fills with <code>--accent-muted</code>, both border lines become
+        <code>--accent</code>, and the pill becomes solid <code>--accent</code> at full opacity,
+        growing to 40px tall. The handle is the column boundary — the panels themselves don't need
+        their own dividing borders. Hover the handle above to see it light up.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 18. Form Section ═══ -->
+  <div class="section">
+    <div class="section-title">18. Form Section</div>
+    <div class="section-desc">
+      The form section pattern is a centered settings page composed of labeled subsections, each containing
+      one or more <strong>setting rows</strong> (icon + label/description + control). Used by:
+      System Settings, Profile Builder, Model Settings, and any standalone configuration page.
+      The page itself sits on <code>--canvas</code>; rows live on <code>--surface</code>.
+    </div>
+
+    <div class="fs-page">
+      <div class="fs-section-label">Inference</div>
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-cpu"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Default model</div>
+          <div class="fs-row-desc">The model used when no agent specifies one.</div>
+        </div>
+        <div class="fs-row-control">
+          <select class="input" style="width:160px;height:30px;font-size:12px">
+            <option>llama3:70b</option>
+            <option>llama3:8b</option>
+            <option>mistral:7b</option>
+          </select>
+        </div>
+      </div>
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-thermometer-half"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Temperature</div>
+          <div class="fs-row-desc">Sampling randomness. Lower is more deterministic.</div>
+        </div>
+        <div class="fs-row-control">
+          <input class="input" value="0.7" style="width:80px;height:30px;font-size:12px;text-align:right">
+        </div>
+      </div>
+
+      <div class="fs-section-label">Connection</div>
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-hdd-network"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Ollama host</div>
+          <div class="fs-row-desc">Endpoint for the inference backend.</div>
+        </div>
+        <div class="fs-row-control">
+          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> CONNECTED</span>
+        </div>
+      </div>
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-key"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">API key</div>
+          <div class="fs-row-desc">Required for cloud-hosted models.</div>
+        </div>
+        <div class="fs-row-control">
+          <button class="btn btn-outline" style="font-size:11px;height:30px">Configure</button>
+        </div>
+      </div>
+
+      <div class="fs-note">
+        <strong>Spacing:</strong> page padding <code>--sp-6 --sp-8</code>; gap between rows <code>--sp-2</code>;
+        section labels add <code>--sp-3</code> top margin; row internal padding <code>--sp-2 --sp-3</code>;
+        gap between icon/info/control <code>--sp-3</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 19. Wizard Body ═══ -->
+  <div class="section">
+    <div class="section-title">19. Wizard Body</div>
+    <div class="section-desc">
+      The wizard body pattern is a centered, modal-style card with three regions:
+      a <strong>stepper</strong> at top, a <strong>step content</strong> area (title + subtitle + body), and a
+      <strong>footer nav</strong> with back/next buttons. Used by Setup Wizard; the same shell applies to any
+      multi-step flow.
+    </div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle done"><i class="bi bi-check-lg" style="font-size:14px"></i></div>
+        <div class="wz-step-line done"></div>
+        <div class="wz-step-circle active">2</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">3</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">4</div>
+      </div>
+
+      <div class="wz-body">
+        <h2 class="wz-title">Choose a model</h2>
+        <p class="wz-subtitle">Pick the inference model COMPUTRON 9000 should default to. You can change this later in Settings.</p>
+        <div class="wz-content">
+          <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--accent-muted);border:1px solid var(--accent);border-radius:var(--radius-md);text-align:left">
+            <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--accent);position:relative;flex-shrink:0">
+              <div style="position:absolute;top:3px;left:3px;width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>
+            </div>
+            <div style="flex:1">
+              <div style="font-family:var(--font-brand);font-size:13px;font-weight:600;color:var(--text-primary)">llama3:70b</div>
+              <div style="display:flex;gap:var(--sp-1);margin-top:4px">
+                <span class="badge badge-warning" style="font-size:9px">70B params</span>
+                <span class="badge badge-info" style="font-size:9px">Q4</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);text-align:left">
+            <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
+            <div style="flex:1">
+              <div style="font-family:var(--font-brand);font-size:13px;font-weight:600;color:var(--text-primary)">llama3:8b</div>
+              <div style="display:flex;gap:var(--sp-1);margin-top:4px">
+                <span class="badge badge-warning" style="font-size:9px">8B params</span>
+                <span class="badge badge-info" style="font-size:9px">Q4</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wz-footer">
+        <button class="btn btn-outline" style="font-size:12px;height:32px">Back</button>
+        <button class="btn btn-filled" style="font-size:12px;height:32px">Next</button>
+      </div>
+    </div>
+
+    <div class="fs-note" style="margin-top:var(--sp-4);max-width:560px">
+      <strong>Spacing:</strong> stepper padding <code>--sp-6 --sp-8 --sp-2</code>;
+      step body padding <code>--sp-6 --sp-8</code>;
+      gap inside body <code>--sp-2</code>; content block top margin <code>--sp-3</code>;
+      footer padding <code>--sp-4 --sp-8 --sp-6</code>; footer button gap <code>--sp-2</code>.
+    </div>
+  </div>
+
+  <!-- ═══ 20. Sectioned Detail Page ═══ -->
+  <div class="section">
+    <div class="section-title">20. Sectioned Detail Page</div>
+    <div class="section-desc">
+      The sectioned detail pattern is a header-tabs-content layout used for entity detail views (Goal Detail,
+      Run Detail, Profile Detail, Conversation Detail). Header has a title row and a meta row in monospace.
+      Below: tabs, then a content area of stacked labeled blocks.
+    </div>
+
+    <div class="sd-page" style="max-width:720px">
+      <div class="sd-header">
+        <div class="sd-title-row">
+          <span class="status-dot dot-running"></span>
+          <h2 class="sd-title">Scrape API docs daily</h2>
+          <button class="btn btn-outline" style="font-size:11px;height:28px;margin-left:auto"><i class="bi bi-pause-fill" style="font-size:11px"></i> Pause</button>
+          <button class="btn btn-outline" style="font-size:11px;height:28px"><i class="bi bi-play-fill" style="font-size:11px"></i> Run now</button>
+        </div>
+        <div class="sd-meta-row">
+          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> ACTIVE</span>
+          <span class="sd-meta-item">cron: 0 6 * * *</span>
+          <span class="sd-meta-item">tz: UTC</span>
+          <span class="sd-meta-item">next: 06:00</span>
+        </div>
+      </div>
+
+      <div class="sd-tabs">
+        <button class="sd-tab active">Runs</button>
+        <button class="sd-tab">Tasks</button>
+        <button class="sd-tab">Schedule</button>
+      </div>
+
+      <div class="sd-content">
+        <div class="sd-block">
+          <div class="sd-block-label">Most recent run</div>
+          <div class="sd-block-body">
+            <div style="display:flex;align-items:center;gap:var(--sp-3)">
+              <span class="status-dot dot-complete"></span>
+              <div style="flex:1">
+                <div style="font-size:13px;color:var(--text-primary)">Run #3 &middot; Apr 8, 2026 06:00</div>
+                <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-brand)">12.3s &middot; 47 endpoints</div>
+              </div>
+              <span class="badge badge-info" style="font-size:9px">COMPLETE</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sd-block">
+          <div class="sd-block-label">Schedule</div>
+          <div class="sd-block-body">
+            Runs every day at 06:00 UTC. Historical runs are kept for 30 days.
+          </div>
+        </div>
+
+        <div class="sd-block">
+          <div class="sd-block-label">Tasks (3)</div>
+          <div class="sd-block-body" style="display:flex;flex-direction:column;gap:var(--sp-2)">
+            <div style="display:flex;gap:var(--sp-3);align-items:center">
+              <span style="font-family:var(--font-brand);font-size:11px;color:var(--text-tertiary);width:20px">01</span>
+              <span style="flex:1;font-size:12px">Fetch /api/reference</span>
+              <span class="badge badge-neutral" style="font-size:9px">browser</span>
+            </div>
+            <div style="display:flex;gap:var(--sp-3);align-items:center">
+              <span style="font-family:var(--font-brand);font-size:11px;color:var(--text-tertiary);width:20px">02</span>
+              <span style="flex:1;font-size:12px">Parse and structure endpoint data</span>
+              <span class="badge badge-neutral" style="font-size:9px">coder</span>
+            </div>
+            <div style="display:flex;gap:var(--sp-3);align-items:center">
+              <span style="font-family:var(--font-brand);font-size:11px;color:var(--text-tertiary);width:20px">03</span>
+              <span style="flex:1;font-size:12px">Write results.json to disk</span>
+              <span class="badge badge-neutral" style="font-size:9px">fs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fs-note" style="margin-top:var(--sp-4);max-width:720px">
+      <strong>Spacing:</strong> header padding <code>--sp-4 --sp-5</code>;
+      title-row gap <code>--sp-3</code>; meta-row gap <code>--sp-3</code>;
+      tab padding <code>--sp-3 --sp-4</code>;
+      content area padding <code>--sp-4</code>; gap between blocks <code>--sp-4</code>;
+      block internal padding <code>--sp-3 --sp-4</code>; block label margin-bottom <code>--sp-2</code>.
+    </div>
+  </div>
+
+  <!-- ═══ 21. Cluster Gap ═══ -->
+  <div class="section">
+    <div class="section-title">21. Cluster Gap</div>
+    <div class="section-desc">
+      A "cluster" is a horizontal group of small sibling elements -- badges, chips, action buttons.
+      The gap between siblings depends on density and the role they play together.
+      Four density tiers, smallest to largest:
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:0 var(--sp-4)">
+      <div class="cg-row">
+        <span class="cg-label">Tight (3px)</span>
+        <div class="cg-cluster cg-tight">
+          <span class="badge badge-success" style="font-size:8px;padding:1px 5px">5 tools</span>
+          <span class="badge badge-info" style="font-size:8px;padding:1px 5px">8 iter</span>
+          <span class="badge badge-neutral" style="font-size:8px;padding:1px 5px">12.3s</span>
+        </div>
+        <span class="cg-note">Dense card meta (Agent Card)</span>
+      </div>
+
+      <div class="cg-row">
+        <span class="cg-label">Snug (--sp-1)</span>
+        <div class="cg-cluster cg-snug">
+          <span class="badge badge-success">RUNNING</span>
+          <span class="badge badge-info">3 tools</span>
+          <span class="badge badge-neutral">4.7s</span>
+        </div>
+        <span class="cg-note">Standard chip/badge clusters</span>
+      </div>
+
+      <div class="cg-row">
+        <span class="cg-label">Loose (--sp-2)</span>
+        <div class="cg-cluster cg-loose">
+          <button class="btn btn-outline" style="font-size:11px;height:26px"><i class="bi bi-pause-fill" style="font-size:11px"></i> Pause</button>
+          <button class="btn btn-outline" style="font-size:11px;height:26px"><i class="bi bi-play-fill" style="font-size:11px"></i> Run now</button>
+          <button class="btn btn-outline" style="font-size:11px;height:26px"><i class="bi bi-trash3" style="font-size:11px"></i> Delete</button>
+        </div>
+        <span class="cg-note">Action button groups, toolbars</span>
+      </div>
+
+      <div class="cg-row">
+        <span class="cg-label">Wide (--sp-3)</span>
+        <div class="cg-cluster cg-wide">
+          <span style="font-family:var(--font-brand);font-size:11px;color:var(--text-secondary)">cron: 0 6 * * *</span>
+          <span style="font-family:var(--font-brand);font-size:11px;color:var(--text-secondary)">tz: UTC</span>
+          <span style="font-family:var(--font-brand);font-size:11px;color:var(--accent)">next: 06:00</span>
+        </div>
+        <span class="cg-note">Distinct meta items in a header</span>
+      </div>
+    </div>
+
+    <div class="fs-note" style="margin-top:var(--sp-4)">
+      <strong>Choosing a tier:</strong> use <em>tight</em> only when space is critical (compact cards under 160px).
+      Default to <em>snug</em> for most badge/chip rows. Use <em>loose</em> when items are interactive
+      (the gap reads as separation between targets). Use <em>wide</em> when the items are conceptually distinct
+      pieces of metadata that shouldn't visually merge.
+    </div>
+  </div>
+
+  <!-- ═══ 22. Preview Shell ═══ -->
+  <div class="section">
+    <div class="section-title">22. Preview Shell</div>
+    <div class="section-desc">
+      Shared wrapper for all preview panels — Browser, Terminal, Generation, Desktop, File. Header with
+      icon + title + optional status/url + ghost action buttons (fullscreen, collapse, close). Body adapts
+      to content (text, media on <code>#000</code>, scrollable content). Animation:
+      <code>fadeInUp</code> 300ms ease-out on mount.
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Browser variant</div>
+      <div class="dl-pshell">
+        <div class="dl-pshell-header">
+          <i class="bi bi-globe2 dl-pshell-icon"></i>
+          <span class="dl-pshell-title">Browser</span>
+          <span class="dl-pshell-status">https://docs.example.com/api/reference</span>
+          <div class="dl-pshell-actions">
+            <button class="btn-icon" title="Attach"><i class="bi bi-paperclip"></i></button>
+            <button class="btn-icon" title="Fullscreen"><i class="bi bi-arrows-fullscreen"></i></button>
+            <button class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </div>
+        <div class="dl-pshell-body media">
+          <div class="media-placeholder" style="background:linear-gradient(180deg,#1d2640,#0c0e14);display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);font-family:var(--font-brand);font-size:11px">BROWSER VIEWPORT</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Terminal variant</div>
+      <div class="dl-pshell">
+        <div class="dl-pshell-header">
+          <i class="bi bi-terminal dl-pshell-icon"></i>
+          <span class="dl-pshell-title">Terminal</span>
+          <span class="dl-pshell-status">EXIT 0</span>
+          <div class="dl-pshell-actions">
+            <button class="btn-icon" title="Fullscreen"><i class="bi bi-arrows-fullscreen"></i></button>
+            <button class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </div>
+        <div class="dl-pshell-body" style="background:var(--terminal-bg);font-family:var(--font-code);font-size:12px;line-height:1.6;color:var(--terminal-text);padding:var(--sp-3)">
+          <div><span style="color:var(--terminal-prompt);font-weight:600">$ </span>python3 scrape.py --url docs.example.com</div>
+          <div style="padding-left:14px">Fetching page... done</div>
+          <div style="padding-left:14px">Extracted 47 endpoints</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      header padding <code>--sp-2 --sp-3</code>; body padding <code>--sp-3</code> (or 0 for media).
+      Title in brand font 12px. Status text in font-code, color <code>--text-tertiary</code>.
+      Actions cluster gap <code>--sp-1</code>. Container <code>--radius-lg</code>, overflow hidden.
+    </div>
+  </div>
+
+  <!-- ═══ 23. Tabbed Preview Panel ═══ -->
+  <div class="section">
+    <div class="section-title">23. Tabbed Preview Panel</div>
+    <div class="section-desc">
+      Tab bar for switching between multiple open previews (different agents' browser previews,
+      different files, etc.). Each tab has icon + name + close button (opacity 0 → 1 on tab hover).
+      Active tab uses the Signal Line. Tab bar overflows horizontally with hidden scrollbar.
+    </div>
+
+    <div class="dl-ptabs">
+      <div class="dl-ptabs-bar">
+        <button class="dl-ptab"><i class="bi bi-globe2"></i> docs.example.com<span class="close"><i class="bi bi-x-lg"></i></span></button>
+        <button class="dl-ptab active"><i class="bi bi-terminal"></i> scrape.py · output<span class="close"><i class="bi bi-x-lg"></i></span></button>
+        <button class="dl-ptab"><i class="bi bi-file-image"></i> screenshot.png<span class="close"><i class="bi bi-x-lg"></i></span></button>
+        <button class="dl-ptab"><i class="bi bi-file-code"></i> results.json<span class="close"><i class="bi bi-x-lg"></i></span></button>
+      </div>
+      <div class="dl-ptabs-content">
+        Active tab content renders here. Content varies by tab type — terminal output, file viewer, browser screenshot, etc.
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      tab bar 36px height on <code>--surface</code>; tab padding <code>0 --sp-3</code>, gap
+      <code>--sp-2</code> between icon and name. Close button 16px square, becomes visible on tab hover.
+    </div>
+  </div>
+
+  <!-- ═══ 24. File Preview ═══ -->
+  <div class="section">
+    <div class="section-title">24. File Preview</div>
+    <div class="section-desc">
+      The preview panel that opens when a File Output Card's <code class="inline-code">Preview</code> action
+      is invoked (see §10). Toolbar has the file pill on the left, a Source/Preview toggle in the center
+      (when both views make sense — e.g. markdown), and action buttons on the right (Download, Fullscreen).
+      Content area renders the file appropriately (markdown rendered, code with syntax, image edge-to-edge
+      on <code>#000</code>, HTML in a sandboxed iframe, PDF in an iframe).
+    </div>
+
+    <div class="dl-fpreview">
+      <div class="dl-fpreview-toolbar">
+        <span class="dl-fpreview-pill"><i class="bi bi-file-text" style="color:var(--text-secondary)"></i> README.md</span>
+        <div class="dl-fpreview-toggle">
+          <button><i class="bi bi-code-slash" style="font-size:11px"></i> Source</button>
+          <button class="active"><i class="bi bi-eye" style="font-size:11px"></i> Preview</button>
+        </div>
+        <div class="dl-fpreview-actions">
+          <button class="btn-icon" title="Download"><i class="bi bi-download"></i></button>
+          <button class="btn-icon" title="Fullscreen"><i class="bi bi-arrows-fullscreen"></i></button>
+        </div>
+      </div>
+      <div class="dl-fpreview-content markdown">
+        <h3 style="margin:0 0 8px;font-size:18px;color:var(--text-primary)">SIGNAL Design Language</h3>
+        <p style="margin:0 0 12px;color:var(--text-secondary)">The design language for COMPUTRON 9000 — clear communication between human and machine.</p>
+        <p style="margin:0 0 12px;color:var(--text-secondary)">Components reference semantic tokens (<code class="inline-code">--canvas</code>, <code class="inline-code">--surface</code>, <code class="inline-code">--accent</code>) rather than raw color primitives.</p>
+        <ul style="margin:0;padding-left:20px;color:var(--text-secondary)">
+          <li>Signal over Noise</li>
+          <li>Instrument Panel</li>
+          <li>Computational Warmth</li>
+          <li>Depth through Layering</li>
+          <li>Monospace Moments</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      toolbar padding <code>--sp-2 --sp-3</code> on <code>--surface</code>. File pill in font-code at 12px
+      with <code>--accent-muted</code> background. Toggle is two pill buttons inside a
+      <code>--canvas</code> rounded container; active button gets <code>--surface</code> background.
+      Content padding varies by renderer: 16-20px for source/markdown, 0 for image (edge-to-edge).
+    </div>
+  </div>
+
+  <!-- ═══ 25. Message Bubbles ═══ -->
+  <div class="section">
+    <div class="section-title">25. Message Bubbles</div>
+    <div class="section-desc">
+      Chat messages use asymmetric styling. <strong>User messages</strong> right-align with a surface
+      bubble, max-width 80%. <strong>Assistant messages</strong> left-align with no bubble background — they
+      take full width on canvas, letting content (paragraphs, code blocks, tool calls, file outputs) flow
+      naturally without nesting visual containers.
+    </div>
+
+    <div style="background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--sp-4);max-width:720px">
+      <!-- User -->
+      <div class="m-msg m-msg-user">
+        <div class="m-msg-bubble">
+          Scrape the API reference from docs.example.com and summarize all available endpoints.
+        </div>
+      </div>
+
+      <!-- Assistant -->
+      <div class="m-msg m-msg-assistant">
+        <div class="m-msg-bubble">
+          <p>I'll fetch the reference page and extract the endpoint data.</p>
+          <div class="m-toolcall">
+            <div class="m-toolcall-header">
+              <i class="bi bi-globe2"></i>
+              browser.navigate
+              <span class="badge badge-info" style="margin-left:auto;font-size:8px">DONE</span>
+            </div>
+            <div class="m-toolcall-body">url: "https://docs.example.com/api/reference"</div>
+          </div>
+          <p>I found <strong>47 API endpoints</strong>. Here's the summary by HTTP method:</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      user bubble padding <code>6px --sp-3</code> (sub-grid for tight bubble), <code>--surface</code> bg,
+      1px border, <code>--radius-lg</code>, max-width 80%, right-aligned.
+      Assistant message padding <code>--sp-2 --sp-3</code>, no bg, no border, no radius, full width on canvas.
+    </div>
+  </div>
+
+  <!-- ═══ 26. Chat Input ═══ -->
+  <div class="section">
+    <div class="section-title">26. Chat Input</div>
+    <div class="section-desc">
+      The composer at the bottom of the chat column. Wrapped textarea with focus glow, button bar below
+      (profile selector + attach + send / stop). Streaming-state placeholder ("Send a nudge to the
+      agent..."). Optional inline attachment preview area sits above the textarea.
+    </div>
+
+    <div class="m-chat-input" style="border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);max-width:640px">
+      <textarea class="m-chat-textarea" placeholder="Send a message..." rows="2" style="background:transparent;border:none;resize:none">Scrape the API reference from docs.example.com</textarea>
+      <div class="m-chat-actions">
+        <button class="btn-icon" title="Attach file"><i class="bi bi-paperclip"></i></button>
+        <select class="select" style="height:26px;font-size:11px;font-family:var(--font-brand);padding-left:8px">
+          <option>ollama-agent</option>
+          <option>browser-agent</option>
+          <option>coder-agent</option>
+        </select>
+        <span class="spacer"></span>
+        <button class="btn-icon" title="Stop" style="color:var(--danger)"><i class="bi bi-stop-circle"></i></button>
+        <button class="btn-icon" title="Send" style="color:var(--accent)"><i class="bi bi-send"></i></button>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;max-width:680px;line-height:1.5">
+      <strong style="color:var(--text-secondary)">Spacing:</strong>
+      wrapper on <code>--surface</code> with 1px border, <code>--radius-lg</code>;
+      <code>focus-within</code> applies <code>--accent</code> border + <code>--shadow-glow</code>.
+      Textarea is transparent, no border. Button bar uses <code>padding: --sp-1 --sp-2</code>.
+      Profile selector is brand-font, 11px, 26px height.
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART V — ICONOGRAPHY
+       Canonical icon set + sizing rules
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label">
+    <div class="part-eyebrow">Part V</div>
+    <div class="part-title">Iconography</div>
+    <div class="part-desc">
+      One icon library, consistent sizing, a shared set of glyphs mapped to canonical uses. Picking an
+      icon from outside this set means inventing new semantics — prefer an existing one or propose an
+      addition rather than reaching for a custom SVG.
+    </div>
+  </div>
+
+  <!-- ═══ 27. Iconography ═══ -->
+  <div class="section">
+    <div class="section-title">27. Iconography</div>
+    <div class="section-desc">
+      <strong>Library:</strong> <a href="https://icons.getbootstrap.com/" style="color:var(--accent)">Bootstrap Icons 1.11.3</a> via CDN (already linked in the mockup head).
+      All icons render at <strong>16px</strong> default, inheriting <code>currentColor</code>.
+      Icon buttons are <strong>28&times;28px</strong>, <code>--radius-md</code>, with the glyph centered.
+    </div>
+
+    <!-- Sizing -->
+    <div class="subsection">
+      <div class="subsection-label">Sizing</div>
+      <div class="icon-size-demo">
+        <div class="cell"><i class="bi bi-gear" style="font-size:10px"></i><span class="label">10px</span></div>
+        <div class="cell"><i class="bi bi-gear" style="font-size:12px"></i><span class="label">12px</span></div>
+        <div class="cell"><i class="bi bi-gear" style="font-size:14px"></i><span class="label">14px</span></div>
+        <div class="cell"><i class="bi bi-gear" style="font-size:16px"></i><span class="label">16px (default)</span></div>
+        <div class="cell"><i class="bi bi-gear" style="font-size:18px"></i><span class="label">18px</span></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+        Default 16px for most inline icons. 10-12px for tight contexts (inside badges, table cells,
+        row-meta text). 18-20px for emphasis (action cards, empty-state headings). Don't go above 20px
+        unless it's a hero/empty-state illustration.
+      </div>
+    </div>
+
+    <!-- Icon button variants -->
+    <div class="subsection">
+      <div class="subsection-label">Icon buttons</div>
+      <div class="component-row">
+        <button class="btn-icon" title="Settings"><i class="bi bi-gear"></i></button>
+        <button class="btn-icon" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn-icon" title="More"><i class="bi bi-three-dots"></i></button>
+        <button class="btn-icon" title="Delete" style="color:var(--danger)"><i class="bi bi-trash3"></i></button>
+        <button class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
+        <span style="font-size:11px;color:var(--text-tertiary);margin-left:8px;align-self:center">28&times;28px default; danger color per action, not per component</span>
+      </div>
+    </div>
+
+    <!-- Full icon set -->
+    <div class="subsection">
+      <div class="subsection-label">Icon Set</div>
+
+      <div class="icon-group-label">Navigation</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-chat"></i></span><div class="icon-info"><span class="icon-name">bi-chat</span><span class="icon-usage">Chat sidebar tab</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-diagram-3"></i></span><div class="icon-info"><span class="icon-name">bi-diagram-3</span><span class="icon-usage">Agent Network view</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-bullseye"></i></span><div class="icon-info"><span class="icon-name">bi-bullseye</span><span class="icon-usage">Goals sidebar tab</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-clock-history"></i></span><div class="icon-info"><span class="icon-name">bi-clock-history</span><span class="icon-usage">Conversations</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-wrench"></i></span><div class="icon-info"><span class="icon-name">bi-wrench</span><span class="icon-usage">Custom Tools</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-database"></i></span><div class="icon-info"><span class="icon-name">bi-database</span><span class="icon-usage">Memory</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-gear"></i></span><div class="icon-info"><span class="icon-name">bi-gear</span><span class="icon-usage">Settings</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Global actions</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-moon"></i></span><div class="icon-info"><span class="icon-name">bi-moon</span><span class="icon-usage">Theme toggle</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-plus-lg"></i></span><div class="icon-info"><span class="icon-name">bi-plus-lg</span><span class="icon-usage">New / add</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-x-lg"></i></span><div class="icon-info"><span class="icon-name">bi-x-lg</span><span class="icon-usage">Close (flyouts, modals)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-arrow-clockwise"></i></span><div class="icon-info"><span class="icon-name">bi-arrow-clockwise</span><span class="icon-usage">Refresh / retry</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-three-dots"></i></span><div class="icon-info"><span class="icon-name">bi-three-dots</span><span class="icon-usage">More / overflow menu</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Chat input</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-send"></i></span><div class="icon-info"><span class="icon-name">bi-send</span><span class="icon-usage">Send message (accent color)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-stop-circle"></i></span><div class="icon-info"><span class="icon-name">bi-stop-circle</span><span class="icon-usage">Stop generation (danger color)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-paperclip"></i></span><div class="icon-info"><span class="icon-name">bi-paperclip</span><span class="icon-usage">Attach file / browser</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Item actions</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-pencil"></i></span><div class="icon-info"><span class="icon-name">bi-pencil</span><span class="icon-usage">Edit (memory, custom tool)</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--danger)"><i class="bi bi-trash3"></i></span><div class="icon-info"><span class="icon-name">bi-trash3</span><span class="icon-usage">Delete (always danger color)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-clipboard"></i></span><div class="icon-info"><span class="icon-name">bi-clipboard</span><span class="icon-usage">Copy to clipboard</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-eye"></i></span><div class="icon-info"><span class="icon-name">bi-eye</span><span class="icon-usage">Show / preview</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-eye-slash"></i></span><div class="icon-info"><span class="icon-name">bi-eye-slash</span><span class="icon-usage">Hide / mask</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-download"></i></span><div class="icon-info"><span class="icon-name">bi-download</span><span class="icon-usage">Download file</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Directional / disclosure</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-chevron-down"></i></span><div class="icon-info"><span class="icon-name">bi-chevron-down</span><span class="icon-usage">Expanded / dropdown open</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-chevron-right"></i></span><div class="icon-info"><span class="icon-name">bi-chevron-right</span><span class="icon-usage">Collapsed / expand</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-chevron-left"></i></span><div class="icon-info"><span class="icon-name">bi-chevron-left</span><span class="icon-usage">Back navigation</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-arrows-fullscreen"></i></span><div class="icon-info"><span class="icon-name">bi-arrows-fullscreen</span><span class="icon-usage">Fullscreen / expand preview</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-check2"></i></span><div class="icon-info"><span class="icon-name">bi-check2</span><span class="icon-usage">Inline confirmation (chips, selections)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-check-lg"></i></span><div class="icon-info"><span class="icon-name">bi-check-lg</span><span class="icon-usage">Completed step (wizard)</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Status &amp; feedback</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph" style="color:var(--success)"><i class="bi bi-check-circle"></i></span><div class="icon-info"><span class="icon-name">bi-check-circle</span><span class="icon-usage">Success toast, wizard complete</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--danger)"><i class="bi bi-exclamation-circle"></i></span><div class="icon-info"><span class="icon-name">bi-exclamation-circle</span><span class="icon-usage">Error toast</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--warning)"><i class="bi bi-exclamation-triangle"></i></span><div class="icon-info"><span class="icon-name">bi-exclamation-triangle</span><span class="icon-usage">Warning indicator</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-info-circle"></i></span><div class="icon-info"><span class="icon-name">bi-info-circle</span><span class="icon-usage">Info toast, tooltip trigger</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--success)"><i class="bi bi-lightning-charge-fill"></i></span><div class="icon-info"><span class="icon-name">bi-lightning-charge-fill</span><span class="icon-usage">Runner active indicator</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Execution &amp; playback</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-play-fill"></i></span><div class="icon-info"><span class="icon-name">bi-play-fill</span><span class="icon-usage">Run now / resume</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-pause-fill"></i></span><div class="icon-info"><span class="icon-name">bi-pause-fill</span><span class="icon-usage">Pause</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-lightbulb"></i></span><div class="icon-info"><span class="icon-name">bi-lightbulb</span><span class="icon-usage">Thinking / reasoning block</span></div></div>
+      </div>
+
+      <div class="icon-group-label">Tool &amp; context</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph"><i class="bi bi-globe2"></i></span><div class="icon-info"><span class="icon-name">bi-globe2</span><span class="icon-usage">Browser / web tool call</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-terminal"></i></span><div class="icon-info"><span class="icon-name">bi-terminal</span><span class="icon-usage">Terminal / code execution</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-display"></i></span><div class="icon-info"><span class="icon-name">bi-display</span><span class="icon-usage">Desktop / VNC</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--success)"><i class="bi bi-lock-fill"></i></span><div class="icon-info"><span class="icon-name">bi-lock-fill</span><span class="icon-usage">HTTPS indicator (browser url bar)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-mouse"></i></span><div class="icon-info"><span class="icon-name">bi-mouse</span><span class="icon-usage">Interactive mode (VNC)</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-search"></i></span><div class="icon-info"><span class="icon-name">bi-search</span><span class="icon-usage">Research starter prompt</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-code-slash"></i></span><div class="icon-info"><span class="icon-name">bi-code-slash</span><span class="icon-usage">Code starter prompt / source view</span></div></div>
+        <div class="icon-row"><span class="glyph"><i class="bi bi-image"></i></span><div class="icon-info"><span class="icon-name">bi-image</span><span class="icon-usage">Generation preview</span></div></div>
+      </div>
+
+      <div class="icon-group-label">File types</div>
+      <div class="icon-grid">
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-file-image"></i></span><div class="icon-info"><span class="icon-name">bi-file-image</span><span class="icon-usage">Image file output</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-file-code"></i></span><div class="icon-info"><span class="icon-name">bi-file-code</span><span class="icon-usage">Code / JSON / structured file</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-file-text"></i></span><div class="icon-info"><span class="icon-name">bi-file-text</span><span class="icon-usage">Markdown / plain text</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-file-music"></i></span><div class="icon-info"><span class="icon-name">bi-file-music</span><span class="icon-usage">Audio file</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-file-earmark"></i></span><div class="icon-info"><span class="icon-name">bi-file-earmark</span><span class="icon-usage">Generic / non-previewable file</span></div></div>
+      </div>
+    </div>
+
+    <!-- Migration note -->
+    <div class="subsection" style="margin-top:var(--sp-6)">
+      <div class="subsection-label">A note on inline SVG icons</div>
+      <div style="font-size:12px;color:var(--text-secondary);max-width:680px;line-height:1.6;padding:var(--sp-3) var(--sp-4);background:var(--accent-muted);border-left:3px solid var(--accent);border-radius:var(--radius-md)">
+        A handful of inline-SVG icon components still exist in the codebase
+        (<code class="inline-code">TrashIcon</code>, <code class="inline-code">SendIcon</code>,
+        <code class="inline-code">PaperclipIcon</code>, <code class="inline-code">EyeIcon</code>,
+        <code class="inline-code">ThemeIcon</code>, etc.) — holdovers from before the Bootstrap
+        Icons migration. <strong style="color:var(--text-primary)">The canonical library going forward
+        is Bootstrap Icons.</strong> Inline SVGs are being migrated to their
+        <code class="inline-code">bi-*</code> equivalents; any new UI should use the Bootstrap class
+        directly rather than introducing another inline SVG.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+}
+</script>
+</body>
+</html>

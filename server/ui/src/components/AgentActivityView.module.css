@@ -9,7 +9,7 @@
 /* Agent header bar */
 .agentBar {
     padding: 10px 16px 12px;
-    border-bottom: 1px solid var(--secondary);
+    border-bottom: 1px solid var(--surface);
     flex-shrink: 0;
 }
 
@@ -24,10 +24,10 @@
 
 .breadcrumb {
     font-size: 9px;
-    color: var(--muted);
+    color: var(--text-tertiary);
 }
 .breadcrumbCurrent {
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .titleRow {
@@ -36,30 +36,15 @@
     gap: 8px;
 }
 
-.dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: #6b7280;
-}
-.dot.running {
-    background: #4ade80;
-    box-shadow: 0 0 6px #4ade8055;
-}
-.dot.complete { background: #60a5fa; }
-.dot.success { background: #60a5fa; }
-.dot.error { background: #f87171; }
-.dot.stopped { background: #6b7280; }
 
 .title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
 }
 
 .meta {
     font-size: 10px;
-    color: var(--muted);
+    color: var(--text-tertiary);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -89,17 +74,17 @@
 .instruction {
     padding: 8px 10px;
     margin-bottom: 8px;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     font-size: 11px;
-    color: var(--text);
+    color: var(--text-primary);
     line-height: 1.5;
 }
 .instructionLabel {
     display: block;
     font-size: 9px;
-    color: #7b8cff;
+    color: var(--accent);
     font-weight: 600;
     margin-bottom: 3px;
 }
@@ -111,9 +96,9 @@
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
 }
 .fileIcon {
     font-size: 14px;
@@ -124,11 +109,11 @@
 .fileName {
     font-size: 10px;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-primary);
 }
 .fileMeta {
     font-size: 8px;
-    color: var(--muted);
+    color: var(--text-tertiary);
 }
 
 /* Streaming cursor */
@@ -136,7 +121,7 @@
     display: inline-block;
     width: 2px;
     height: 14px;
-    background: #4ade80;
+    background: var(--success);
     margin-left: 2px;
     animation: blink 1s infinite;
     vertical-align: text-bottom;
@@ -149,7 +134,7 @@
 /* Preview panels (right pane — 60%) */
 .previews {
     flex: 1;
-    border-left: 1px solid var(--muted);
+    border-left: 1px solid var(--border);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -161,31 +146,31 @@
 .nudgeBar {
     flex-shrink: 0;
     padding: 8px 16px;
-    border-top: 1px solid var(--muted);
+    border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--primary);
+    background: var(--canvas);
 }
 .nudgeLabel {
     font-size: 9px;
-    color: var(--muted);
+    color: var(--text-tertiary);
     flex-shrink: 0;
 }
 .nudgeInput {
     flex: 1;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     padding: 6px 10px;
-    color: var(--text);
+    color: var(--text-primary);
     font-size: 10px;
     outline: none;
 }
 .nudgeInput:focus {
-    border-color: #4a4a6a;
+    border-color: var(--border-strong);
 }
 .nudgeHint {
     font-size: 8px;
-    color: var(--muted);
+    color: var(--text-tertiary);
 }

@@ -15,7 +15,7 @@ function App() {
     }, []);
 
     useEffect(() => {
-        document.body.classList.toggle('dark-theme', dark);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     }, [dark]);
 
     const toggleTheme = () => setDark((d) => !d);

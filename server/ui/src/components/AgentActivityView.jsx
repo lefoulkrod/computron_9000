@@ -7,6 +7,7 @@ import { formatElapsed } from '../utils/agentUtils.js';
 import ContextUsageBadge from './ContextUsageBadge.jsx';
 import AgentOutput from './AgentOutput.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
+import StatusDot from './StatusDot.jsx';
 import styles from './AgentActivityView.module.css';
 
 /**
@@ -48,7 +49,6 @@ export default function AgentActivityView({ onNudge, onPreview }) {
     if (!agent) return null;
 
     const breadcrumb = _buildBreadcrumb(agents, selectedAgentId);
-    const statusClass = styles[agent.status] || '';
 
     return (
         <div className={styles.container} data-testid="agent-activity-view">
@@ -68,7 +68,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                     </span>
                 </div>
                 <div className={styles.titleRow}>
-                    <span className={`${styles.dot} ${statusClass}`} />
+                    <StatusDot status={agent.status} />
                     <span className={styles.title} data-testid="agent-activity-title">{formatAgentName(agent.name)}</span>
                     <div className={styles.meta}>
                         {agent.startedAt && <span>{formatElapsed(agent.startedAt, agent.completedAt)}</span>}

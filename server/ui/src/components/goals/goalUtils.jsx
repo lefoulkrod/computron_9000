@@ -6,13 +6,13 @@
 // Status Icon component (reused across goals)
 export function StatusIcon({ status, size = 14 }) {
     const color = {
-        active: 'var(--text)',
-        completed: '#4ade80',
-        running: '#22d3ee',
-        failed: '#f87171',
-        pending: 'var(--muted)',
-        paused: '#fbbf24',
-    }[status] || 'var(--muted)';
+        active: 'var(--text-primary)',
+        completed: 'var(--success)',
+        running: 'var(--accent)',
+        failed: 'var(--danger)',
+        pending: 'var(--text-tertiary)',
+        paused: 'var(--warning)',
+    }[status] || 'var(--text-tertiary)';
 
     return (
         <svg width={size} height={size} viewBox="0 0 14 14" fill={color}>

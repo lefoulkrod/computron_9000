@@ -1,8 +1,8 @@
 .btn {
     background: none;
-    border: 1px solid var(--muted);
-    border-radius: 5px;
-    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
     font-size: 10px;
     padding: 2px 8px;
     cursor: pointer;
@@ -19,10 +19,10 @@
     font-size: 11px;
 }
 .btn:hover {
-    color: var(--text);
-    border-color: #3a3a4c;
+    color: var(--text-primary);
+    border-color: var(--border-strong);
 }
 .btn:focus-visible {
-    outline: 2px solid #7aa2ff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }

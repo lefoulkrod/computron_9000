@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import ChevronRightIcon from './icons/ChevronRightIcon';
+import ToggleSwitch from './ToggleSwitch.jsx';
 import localStyles from './ModelSettingsPanel.module.css';
 
 const SETTING_TIPS = {
@@ -38,7 +39,12 @@ function InfoTip({ text }) {
     const hide = useCallback(() => setPos(null), []);
 
     return (
-        <span className={localStyles.infoWrap} onMouseEnter={show} onMouseLeave={hide}>
+        <span
+            className={localStyles.infoWrap}
+            onMouseEnter={show}
+            onMouseLeave={hide}
+            onClick={(e) => e.preventDefault()}
+        >
             <svg ref={iconRef} className={localStyles.infoIcon} viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM7.25 5a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0ZM7.25 7.25a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5Z" />
             </svg>
@@ -133,19 +139,14 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                     <span className={localStyles.unit}>K tok</span>
                 </div>
             </label>
-            <div className={localStyles.row}>
+            <label className={localStyles.row}>
                 <span className={localStyles.label}>Turns<InfoTip text={SETTING_TIPS.turns} /></span>
                 <div className={localStyles.turnsGroup}>
-                    <label className={localStyles.toggleLabel}>
-                        <input
-                            type="checkbox"
-                            className={localStyles.toggleInput}
-                            checked={unlimitedTurns}
-                            onChange={(e) => onUnlimitedTurnsChange(e.target.checked)}
-                            disabled={disabled}
-                        />
-                        <span className={localStyles.toggle} />
-                    </label>
+                    <ToggleSwitch
+                        checked={unlimitedTurns}
+                        onChange={(e) => onUnlimitedTurnsChange(e.target.checked)}
+                        disabled={disabled}
+                    />
                     {unlimitedTurns
                         ? <span className={localStyles.turnsHint}>unlimited</span>
                         : <input
@@ -160,7 +161,7 @@ export default function ModelSettingsPanel({ settings, disabled }) {
                         />
                     }
                 </div>
-            </div>
+            </label>
 
             {/* Advanced toggle */}
             <button
@@ -174,32 +175,22 @@ export default function ModelSettingsPanel({ settings, disabled }) {
             {/* Advanced settings */}
             {showAdvanced && (
                 <div className={localStyles.advancedSection}>
-                    <div className={localStyles.row}>
+                    <label className={localStyles.row}>
                         <span className={localStyles.label}>Think<InfoTip text={SETTING_TIPS.think} /></span>
-                        <label className={localStyles.toggleLabel}>
-                            <input
-                                type="checkbox"
-                                className={localStyles.toggleInput}
-                                checked={think}
-                                onChange={(e) => { onThinkChange(e.target.checked); setSelectedPreset(''); }}
-                                disabled={disabled}
-                            />
-                            <span className={localStyles.toggle} />
-                        </label>
-                    </div>
-                    <div className={localStyles.row}>
+                        <ToggleSwitch
+                            checked={think}
+                            onChange={(e) => { onThinkChange(e.target.checked); setSelectedPreset(''); }}
+                            disabled={disabled}
+                        />
+                    </label>
+                    <label className={localStyles.row}>
                         <span className={localStyles.label}>Think history<InfoTip text={SETTING_TIPS.thinkHistory} /></span>
-                        <label className={localStyles.toggleLabel}>
-                            <input
-                                type="checkbox"
-                                className={localStyles.toggleInput}
-                                checked={persistThinking}
-                                onChange={(e) => onPersistThinkingChange(e.target.checked)}
-                                disabled={disabled}
-                            />
-                            <span className={localStyles.toggle} />
-                        </label>
-                    </div>
+                        <ToggleSwitch
+                            checked={persistThinking}
+                            onChange={(e) => onPersistThinkingChange(e.target.checked)}
+                            disabled={disabled}
+                        />
+                    </label>
                     <label className={localStyles.row}>
                         <span className={localStyles.label}>Temp<InfoTip text={SETTING_TIPS.temp} /></span>
                         <input

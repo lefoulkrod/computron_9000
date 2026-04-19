@@ -11,8 +11,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    background: var(--secondary);
-    border-bottom: 1px solid var(--muted);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     gap: 12px;
 }
@@ -43,10 +43,10 @@
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 4px;
+    background: var(--border-subtle);
+    border-radius: var(--radius-sm);
     font-size: 12px;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .fileIcon {
@@ -67,8 +67,8 @@
 .toggle {
     display: flex;
     align-items: center;
-    background: var(--primary);
-    border-radius: 4px;
+    background: var(--canvas);
+    border-radius: var(--radius-sm);
     padding: 2px;
     gap: 2px;
 }
@@ -89,12 +89,12 @@
 }
 
 .toggleBtn:hover {
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .toggleBtnActive {
-    background: var(--secondary);
-    color: var(--text);
+    background: var(--surface);
+    color: var(--text-primary);
 }
 
 /* Toolbar buttons (right side) */
@@ -107,7 +107,7 @@
     padding: 0;
     background: transparent;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     box-shadow: none;
     color: var(--text-secondary);
     cursor: pointer;
@@ -115,28 +115,28 @@
 }
 
 .toolbarBtn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text);
+    background: var(--accent-muted);
+    color: var(--text-primary);
 }
 
 /* Content area */
 .content {
     flex: 1;
     overflow-y: auto;
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 /* Source code view */
 .sourceCode {
     margin: 0;
     padding: 16px 20px;
-    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: var(--font-code);
     font-size: 13px;
     line-height: 1.6;
-    color: var(--text);
+    color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-word;
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 /* Markdown content */
@@ -144,7 +144,7 @@
     padding: 20px 24px;
     font-size: 14px;
     line-height: 1.6;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .markdownContent h1,
@@ -152,7 +152,7 @@
 .markdownContent h3,
 .markdownContent h4 {
     margin: 1em 0 0.5em;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .markdownContent p {
@@ -160,16 +160,16 @@
 }
 
 .markdownContent code {
-    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: var(--font-code);
     font-size: 12px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--accent-muted);
     border-radius: 3px;
     padding: 1px 4px;
 }
 
 .markdownContent pre {
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 6px;
+    background: var(--border-subtle);
+    border-radius: var(--radius-md);
     padding: 12px 16px;
     overflow-x: auto;
 }
@@ -180,7 +180,7 @@
 }
 
 .markdownContent a {
-    color: var(--color-accent);
+    color: var(--accent);
 }
 
 .markdownContent ul,
@@ -196,13 +196,13 @@
 
 .markdownContent th,
 .markdownContent td {
-    border: 1px solid var(--muted);
+    border: 1px solid var(--border);
     padding: 6px 10px;
     text-align: left;
 }
 
 .markdownContent th {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--border-subtle);
 }
 
 /* HTML iframe */
@@ -210,7 +210,7 @@
     width: 100%;
     height: 100%;
     border: none;
-    background: #fff;
+    background: var(--elevated);
 }
 
 /* PDF iframe */
@@ -244,60 +244,60 @@
 }
 
 /* Light theme overrides */
-:global(body:not(.dark-theme)) .toolbar {
-    background: #f5f5f5;
-    border-bottom-color: #ddd;
+:global([data-theme="light"]) .toolbar {
+    background: var(--surface);
+    border-bottom-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .filePill {
-    background: rgba(0, 0, 0, 0.04);
+:global([data-theme="light"]) .filePill {
+    background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .toggle {
-    background: #fff;
+:global([data-theme="light"]) .toggle {
+    background: var(--elevated);
 }
 
-:global(body:not(.dark-theme)) .toggleBtnActive {
-    background: #f5f5f5;
+:global([data-theme="light"]) .toggleBtnActive {
+    background: var(--surface);
 }
 
-:global(body:not(.dark-theme)) .toolbarBtn:hover {
-    background: rgba(0, 0, 0, 0.06);
+:global([data-theme="light"]) .toolbarBtn:hover {
+    background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .content {
-    background: #fff;
+:global([data-theme="light"]) .content {
+    background: var(--elevated);
 }
 
-:global(body:not(.dark-theme)) .sourceCode {
-    background: #fff;
-    color: #222;
+:global([data-theme="light"]) .sourceCode {
+    background: var(--elevated);
+    color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .markdownContent {
-    color: #222;
+:global([data-theme="light"]) .markdownContent {
+    color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .markdownContent h1,
-:global(body:not(.dark-theme)) .markdownContent h2,
-:global(body:not(.dark-theme)) .markdownContent h3,
-:global(body:not(.dark-theme)) .markdownContent h4 {
-    color: #111;
+:global([data-theme="light"]) .markdownContent h1,
+:global([data-theme="light"]) .markdownContent h2,
+:global([data-theme="light"]) .markdownContent h3,
+:global([data-theme="light"]) .markdownContent h4 {
+    color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .markdownContent code {
-    background: rgba(0, 0, 0, 0.06);
+:global([data-theme="light"]) .markdownContent code {
+    background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .markdownContent pre {
-    background: rgba(0, 0, 0, 0.04);
+:global([data-theme="light"]) .markdownContent pre {
+    background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .markdownContent th,
-:global(body:not(.dark-theme)) .markdownContent td {
-    border-color: #ddd;
+:global([data-theme="light"]) .markdownContent th,
+:global([data-theme="light"]) .markdownContent td {
+    border-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .markdownContent th {
-    background: rgba(0, 0, 0, 0.04);
+:global([data-theme="light"]) .markdownContent th {
+    background: var(--border-subtle);
 }

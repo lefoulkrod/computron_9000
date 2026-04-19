@@ -1,12 +1,15 @@
 .splitHandle {
     width: 9px;
     cursor: col-resize;
-    background: transparent;
+    background: var(--canvas);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
     position: relative;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background 150ms var(--ease), border-color 150ms var(--ease);
 }
 
 /* Centered pill indicator */
@@ -15,20 +18,21 @@
     width: 3px;
     height: 24px;
     border-radius: 1.5px;
-    background: var(--muted);
-    opacity: 0.4;
-    transition: opacity 0.2s ease, background 0.2s ease, height 0.2s ease;
+    background: var(--text-tertiary);
+    opacity: 0.5;
+    transition: background 150ms var(--ease), height 150ms var(--ease), opacity 150ms var(--ease);
     pointer-events: none;
 }
 
-.splitHandle:hover::after {
-    background: var(--color-accent);
-    height: 40px;
-    opacity: 1;
+.splitHandle:hover,
+.splitHandle.dragging {
+    background: var(--accent-muted);
+    border-color: var(--accent);
 }
 
+.splitHandle:hover::after,
 .splitHandle.dragging::after {
-    background: var(--color-accent);
+    background: var(--accent);
     height: 40px;
     opacity: 1;
 }

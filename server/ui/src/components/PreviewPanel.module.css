@@ -3,14 +3,14 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 /* Tab bar */
 .tabBar {
-    height: 36px;
-    background: var(--secondary);
-    border-bottom: 1px solid var(--muted);
+    height: var(--header-height);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -36,7 +36,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 36px;
+    height: var(--header-height);
     padding: 0 12px;
     background: transparent;
     border: none;
@@ -51,12 +51,12 @@
 }
 
 .tab:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--border-subtle);
 }
 
 .tabActive {
-    border-bottom-color: var(--color-accent);
-    color: var(--text);
+    border-bottom-color: var(--accent);
+    color: var(--text-primary);
 }
 
 .tabIcon {
@@ -81,7 +81,7 @@
     width: 16px;
     height: 16px;
     font-size: 11px;
-    color: var(--muted);
+    color: var(--text-tertiary);
     border-radius: 3px;
     margin-left: 4px;
     opacity: 0;
@@ -94,42 +94,42 @@
 }
 
 .tabClose:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text);
+    background: var(--accent-muted);
+    color: var(--text-primary);
 }
 
 /* Content area */
 .contentArea {
     flex: 1;
     overflow-y: auto;
-    background: var(--primary);
+    background: var(--canvas);
     display: flex;
     flex-direction: column;
 }
 
 /* Light theme overrides */
-:global(body:not(.dark-theme)) .tabBar {
-    background: #f5f5f5;
-    border-bottom-color: #ddd;
+:global([data-theme="light"]) .tabBar {
+    background: var(--surface);
+    border-bottom-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .tab:hover {
-    background: rgba(0, 0, 0, 0.04);
+:global([data-theme="light"]) .tab:hover {
+    background: var(--border-subtle);
 }
 
-:global(body:not(.dark-theme)) .tabActive {
-    color: #222;
+:global([data-theme="light"]) .tabActive {
+    color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .tabClose {
-    color: #999;
+:global([data-theme="light"]) .tabClose {
+    color: var(--text-tertiary);
 }
 
-:global(body:not(.dark-theme)) .tabClose:hover {
-    background: rgba(0, 0, 0, 0.06);
-    color: #222;
+:global([data-theme="light"]) .tabClose:hover {
+    background: var(--border-subtle);
+    color: var(--text-primary);
 }
 
-:global(body:not(.dark-theme)) .contentArea {
-    background: #fff;
+:global([data-theme="light"]) .contentArea {
+    background: var(--elevated);
 }

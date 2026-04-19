@@ -3,26 +3,26 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: var(--primary);
-    color: var(--text);
+    background: var(--canvas);
+    color: var(--text-primary);
 }
 
 .tabBar {
     display: flex;
     gap: 0;
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px solid var(--border);
     padding: 0 1.5rem;
     flex-shrink: 0;
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 .tab {
-    font-family: var(--font-mono);
+    font-family: var(--font-brand);
     font-size: 0.78rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text);
+    color: var(--text-primary);
     opacity: 0.4;
     background: none;
     border: none;
@@ -40,7 +40,7 @@
 
 .tabActive {
     opacity: 1;
-    border-bottom-color: var(--color-accent);
+    border-bottom-color: var(--accent);
 }
 
 .content {

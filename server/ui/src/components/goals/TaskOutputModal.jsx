@@ -44,13 +44,13 @@ export default function TaskOutputModal({ output, taskName, runNumber, onClose }
                             className={styles.copyBtn}
                             onClick={handleCopy}
                         >
-                            {copied ? '✓ Copied' : '📋 Copy'}
+                            {copied ? <><i className="bi bi-check-lg" /> Copied</> : <><i className="bi bi-clipboard" /> Copy</>}
                         </button>
                         <button
                             className={styles.closeBtn}
                             onClick={onClose}
                         >
-                            ✕
+                            <i className="bi bi-x-lg" />
                         </button>
                     </div>
                 </div>

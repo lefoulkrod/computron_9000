@@ -4,23 +4,22 @@
     align-items: center;
     justify-content: center;
     flex: 1;
-    padding: 2rem 1rem;
-    gap: 1.5rem;
+    padding: var(--sp-8) var(--sp-4);
+    gap: var(--sp-5);
 }
 
 .heading {
-    font-size: 1.25rem;
+    font-size: 22px;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-secondary);
     margin: 0;
-    opacity: 0.8;
 }
 
 .grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    max-width: 540px;
+    gap: 10px;
+    max-width: 440px;
     width: 100%;
 }
 
@@ -28,38 +27,49 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.35rem;
-    padding: 0.9rem 1rem;
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: var(--radius);
+    gap: 4px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     cursor: pointer;
     text-align: left;
-    transition: border-color 160ms ease, box-shadow 160ms ease;
+    transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
     box-shadow: none;
 }
 
 .card:hover {
-    border-color: var(--text);
-    box-shadow: var(--shadow);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+}
+
+.card:active {
+    transform: translateY(1px);
+}
+
+.card:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-glow);
 }
 
 .icon {
-    font-size: 1.25rem;
+    font-size: 18px;
+    color: var(--accent);
     line-height: 1;
+    display: block;
+    margin-bottom: 2px;
 }
 
 .title {
-    font-size: 0.85rem;
+    font-size: 13px;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .text {
-    font-size: 0.78rem;
-    color: var(--text);
-    opacity: 0.45;
-    line-height: 1.35;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
 }
 
 @media (max-width: 480px) {

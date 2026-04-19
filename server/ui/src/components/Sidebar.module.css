@@ -1,44 +1,63 @@
 .sidebar {
     width: 44px;
-    background: var(--secondary);
-    border-right: 1px solid var(--muted);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding-top: 10px;
-    gap: 5px;
+    padding: var(--sp-2) 0;
+    gap: var(--sp-1);
     flex-shrink: 0;
-    z-index: 20;
+    z-index: var(--z-sticky);
 }
 
-.icon {
+.btn {
     width: 28px;
     height: 28px;
-    border-radius: 6px;
-    background: var(--primary);
+    border-radius: var(--radius-md);
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: var(--muted);
-    border: 1px solid transparent;
+    color: var(--text-tertiary);
+    border: none;
     padding: 0;
+    font-size: 14px;
+    position: relative;
+    transition: color 150ms var(--ease), background 150ms var(--ease);
+    box-shadow: none;
 }
-.icon:hover {
-    background: var(--muted);
-    color: var(--text);
+.btn:hover {
+    background: var(--accent-muted);
+    color: var(--text-primary);
 }
-.icon.active {
-    background: #1e1e30;
-    color: #7b8cff;
-    border-color: #3a3a5a;
+.btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-glow);
+}
+
+/* Signal Line -- 2px accent bar on left edge */
+.btn.active {
+    color: var(--accent);
+    background: var(--accent-muted);
+}
+.btn.active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: var(--radius-full);
 }
 
 .sep {
     width: 20px;
     height: 1px;
-    background: var(--muted);
-    margin: 3px 0;
+    background: var(--border);
+    margin: var(--sp-1) 0;
 }
 
 .spacer {

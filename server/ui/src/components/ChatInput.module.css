@@ -17,10 +17,10 @@
   width: 100%;
   box-sizing: border-box;
   margin-bottom: 0.4rem;
-  border: 1px solid var(--muted);
-  border-radius: var(--radius);
-  background: var(--primary);
-  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--text-primary);
   resize: none;
 }
 
@@ -32,12 +32,12 @@
 }
 
 .customInput::placeholder {
-  color: var(--muted);
+  color: var(--text-tertiary);
 }
 
 .customInput:focus {
-  border-color: #7aa2ff;
-  box-shadow: 0 0 0 2px rgba(122,162,255,0.2);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-glow);
 }
 
 .inputArea {
@@ -78,9 +78,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: none;
-  color: var(--muted);
+  color: var(--text-tertiary);
   border: none;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
@@ -88,15 +88,15 @@
 
 .iconButton svg { width: 16px; height: 16px; display: block; }
 
-.iconButton:hover:not(:disabled) { background: var(--secondary); color: var(--text); }
+.iconButton:hover:not(:disabled) { background: var(--surface); color: var(--text-primary); }
 .iconButton:active:not(:disabled) { transform: translateY(1px); }
 .iconButton:disabled { opacity: 0.4; cursor: not-allowed; }
-.iconButton:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.iconButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .stopButton {
-  color: var(--color-danger);
+  color: var(--danger);
 }
-.stopButton:hover { background: rgba(192, 57, 43, 0.1); color: var(--color-danger); }
+.stopButton:hover { background: var(--danger-muted); color: var(--danger); }
 
 /* Inline preview that sits inside the textarea area (top-left) */
 .inlinePreview {
@@ -105,9 +105,9 @@
   left: 8px;
   width: 180px;
   height: 120px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--muted);
+  border: 1px solid var(--border);
   pointer-events: none;
 }
 
@@ -124,10 +124,10 @@
   right: 8px;
   width: 22px;
   height: 22px;
-  border-radius: 5px;
-  background: var(--secondary);
-  color: var(--text);
-  border: 1px solid var(--muted);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,7 +139,7 @@
 }
 
 .removeAttachment:hover {
-  background: var(--muted);
+  background: var(--border-strong);
 }
 
 /* Generic file chip for non-image attachments */
@@ -151,8 +151,8 @@
   height: 100%;
   padding: 0.5rem;
   box-sizing: border-box;
-  background: var(--secondary);
-  border-radius: 6px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
 }
 
 .fileChipIcon {
@@ -161,9 +161,9 @@
 }
 
 .fileChipName {
-  font-family: var(--font-mono);
+  font-family: var(--font-brand);
   font-size: 0.75em;
-  color: var(--text);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

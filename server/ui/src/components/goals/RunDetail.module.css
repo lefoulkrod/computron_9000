@@ -7,7 +7,7 @@
 
 .runHeader {
     padding: 14px 18px;
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 12px;
@@ -25,7 +25,7 @@
 }
 
 .taskResult {
-    border-bottom: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .taskHeader {
@@ -37,7 +37,7 @@
 }
 
 .taskHeader:hover {
-    background: color-mix(in srgb, var(--primary) 80%, transparent);
+    background: var(--canvas);
 }
 
 .statusIcon {
@@ -52,27 +52,27 @@
 }
 
 .iconDone {
-    background: rgba(74, 222, 128, 0.15);
-    color: #4ade80;
-    border: 1px solid rgba(74, 222, 128, 0.3);
+    background: var(--success-muted);
+    color: var(--success);
+    border: 1px solid var(--success-muted);
 }
 
 .iconRunning {
-    background: rgba(34, 211, 238, 0.15);
-    color: #22d3ee;
-    border: 1px solid rgba(34, 211, 238, 0.3);
+    background: var(--accent-muted);
+    color: var(--accent);
+    border: 1px solid var(--accent-muted);
 }
 
 .iconFailed {
-    background: rgba(248, 113, 113, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(248, 113, 113, 0.3);
+    background: var(--danger-muted);
+    color: var(--danger);
+    border: 1px solid var(--danger-muted);
 }
 
 .iconPending {
-    background: color-mix(in srgb, var(--muted) 30%, transparent);
-    color: var(--muted);
-    border: 1px solid var(--muted);
+    background: var(--border-subtle);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
 }
 
 .taskName {
@@ -82,9 +82,9 @@
 }
 
 .agentBadge {
-    font-family: var(--font-mono);
-    color: #7b8cff;
-    font-size: 9.5px;
+    font-family: var(--font-brand);
+    color: var(--accent);
+    font-size: 10px;
 }
 
 .duration {
@@ -97,9 +97,9 @@
 }
 
 .resultText {
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     padding: 10px 12px;
     font-size: 12px;
     line-height: 1.55;
@@ -109,7 +109,7 @@
 }
 
 .errorText {
-    background: rgba(248, 113, 113, 0.05);
-    border-color: rgba(248, 113, 113, 0.15);
-    color: #f87171;
+    background: var(--danger-muted);
+    border-color: var(--danger-muted);
+    color: var(--danger);
 }

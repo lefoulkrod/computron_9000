@@ -1,9 +1,9 @@
 .panel {
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 8px;
+    background: var(--terminal-bg);
+    border: 1px solid var(--terminal-border);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: var(--font-code);
     font-size: 0.8rem;
     display: flex;
     flex-direction: column;
@@ -21,8 +21,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 8px 12px;
-    background: #2d2d2d;
-    border-bottom: 1px solid #333;
+    background: var(--terminal-surface);
+    border-bottom: 1px solid var(--terminal-border);
     flex-shrink: 0;
     cursor: pointer;
     user-select: none;
@@ -45,21 +45,21 @@
 .closeBtn {
     background: none;
     border: none;
-    color: #999;
+    color: var(--text-tertiary);
     cursor: pointer;
     padding: 4px 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font-size: 12px;
     transition: color 0.2s, background 0.2s;
 }
 
 .collapseBtn:hover,
 .closeBtn:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--terminal-text);
+    background: var(--accent-muted);
 }
 
 .dot {
@@ -71,7 +71,7 @@
 }
 
 .title {
-    color: #888;
+    color: var(--text-tertiary);
     font-size: 0.75rem;
     margin-left: 4px;
 }
@@ -98,21 +98,21 @@
 }
 
 .prompt {
-    color: #4caf50;
+    color: var(--terminal-prompt);
     font-weight: bold;
     flex-shrink: 0;
 }
 
 .cmd {
-    color: #e0e0e0;
+    color: var(--terminal-text);
     flex: 1;
     word-break: break-all;
 }
 
 .exitBadge {
     font-size: 0.7rem;
-    background: #3a1b1b;
-    color: #f44336;
+    background: var(--danger-muted);
+    color: var(--danger);
     padding: 1px 5px;
     border-radius: 3px;
     flex-shrink: 0;
@@ -120,8 +120,8 @@
 
 .runningBadge {
     font-size: 0.7rem;
-    background: #1b2e3a;
-    color: #42a5f5;
+    background: var(--accent-muted);
+    color: var(--accent);
     padding: 1px 5px;
     border-radius: 3px;
     flex-shrink: 0;
@@ -135,8 +135,8 @@
 
 .okBadge {
     font-size: 0.7rem;
-    background: #1b3a1b;
-    color: #4caf50;
+    background: var(--success-muted);
+    color: var(--terminal-prompt);
     padding: 1px 5px;
     border-radius: 3px;
     flex-shrink: 0;
@@ -152,9 +152,9 @@
 }
 
 .stdout {
-    color: #c8c8c8;
+    color: var(--terminal-text);
 }
 
 .stderr {
-    color: #ff7043;
+    color: var(--terminal-stderr);
 }

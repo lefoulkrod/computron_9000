@@ -10,7 +10,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    border-bottom: 1px solid var(--secondary);
+    border-bottom: 1px solid var(--surface);
     flex-shrink: 0;
 }
 
@@ -21,12 +21,12 @@
 }
 
 .count {
-    background: var(--secondary);
-    border: 1px solid var(--muted);
-    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     padding: 1px 8px;
     font-size: 10px;
-    color: var(--muted);
+    color: var(--text-tertiary);
 }
 
 .legend {
@@ -34,7 +34,7 @@
     gap: 12px;
     margin-left: auto;
     font-size: 10px;
-    color: var(--muted);
+    color: var(--text-tertiary);
 }
 
 .legendItem {
@@ -49,10 +49,10 @@
     border-radius: 50%;
 }
 
-.legendDot.running { background: #4ade80; }
-.legendDot.complete { background: #60a5fa; }
-.legendDot.success { background: #60a5fa; }
-.legendDot.error { background: #f87171; }
+.legendDot.running { background: var(--success); }
+.legendDot.complete { background: var(--accent); }
+.legendDot.success { background: var(--accent); }
+.legendDot.error { background: var(--danger); }
 
 .graphArea {
     flex: 1;

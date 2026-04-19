@@ -4,12 +4,12 @@
     height: 100%;
     overflow: hidden;
     flex: 1;
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 .header {
     padding: 10px 16px 12px;
-    border-bottom: 1px solid var(--secondary);
+    border-bottom: 1px solid var(--surface);
     flex-shrink: 0;
 }
 
@@ -22,9 +22,9 @@
 
 .backBtn {
     background: none;
-    border: 1px solid var(--muted);
-    border-radius: 5px;
-    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
     font-size: 10px;
     padding: 2px 8px;
     cursor: pointer;
@@ -32,8 +32,8 @@
 }
 
 .backBtn:hover {
-    color: var(--text);
-    border-color: #3a3a4c;
+    color: var(--text-primary);
+    border-color: var(--border-strong);
 }
 
 .titleRow {
@@ -43,7 +43,7 @@
 }
 
 .title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     flex: 1;
     white-space: nowrap;
@@ -59,19 +59,19 @@
 }
 
 .cronBadge {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-family: var(--font-brand);
+    font-size: 10px;
     padding: 3px 8px;
-    border-radius: 5px;
-    background: var(--secondary);
-    color: var(--muted);
-    border: 1px solid var(--muted);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
 }
 
 .tzSuffix {
     margin-left: 6px;
     padding-left: 6px;
-    border-left: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-left: 1px solid var(--border-subtle);
     opacity: 0.55;
     font-family: inherit;
 }
@@ -79,25 +79,25 @@
 .actionBtn {
     font-size: 11px;
     padding: 5px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--muted);
-    background: var(--secondary);
-    color: var(--text);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
     cursor: pointer;
     font-family: inherit;
 }
 
 .actionBtn:hover {
-    background: var(--primary);
+    background: var(--canvas);
 }
 
 .danger {
-    border-color: rgba(248, 113, 113, 0.3);
-    color: #f87171;
+    border-color: var(--danger-muted);
+    color: var(--danger);
 }
 
 .danger:hover {
-    background: rgba(248, 113, 113, 0.1);
+    background: var(--danger-muted);
 }
 
 .body {
@@ -110,7 +110,7 @@
 
 .leftPane {
     width: 280px;
-    border-right: 1px solid var(--muted);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
@@ -118,7 +118,7 @@
 
 .tabBar {
     display: flex;
-    border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, transparent);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 
@@ -130,7 +130,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--muted);
+    color: var(--text-tertiary);
     cursor: pointer;
     background: none;
     border: none;
@@ -141,12 +141,12 @@
 }
 
 .tab:hover {
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .tabActive {
-    color: #7b8cff;
-    border-bottom-color: #7b8cff;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
 }
 
 .tabContent {
@@ -161,18 +161,18 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
     transition: background 0.12s;
 }
 
 .runItem:hover {
-    background: var(--secondary);
+    background: var(--surface);
 }
 
 .selected {
-    background: rgba(123, 140, 255, 0.06);
-    border-left: 2px solid #7b8cff;
+    background: var(--accent-muted);
+    border-left: 2px solid var(--accent);
 }
 
 .runInfo {
@@ -193,12 +193,12 @@
 
 .deleteRunBtn {
     font-size: 10px;
-    color: var(--muted);
+    color: var(--text-tertiary);
     background: none;
     border: none;
     cursor: pointer;
     padding: 4px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     opacity: 0;
     transition: opacity 0.12s, color 0.12s;
 }
@@ -208,7 +208,7 @@
 }
 
 .deleteRunBtn:hover {
-    color: #f87171;
+    color: var(--danger);
 }
 
 /* ── Task definition items ── */
@@ -218,23 +218,23 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    border-bottom: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
     transition: background 0.12s;
 }
 
 .taskDefItem:hover {
-    background: var(--secondary);
+    background: var(--surface);
 }
 
 .taskNum {
     font-size: 9px;
     font-weight: 600;
-    color: var(--muted);
+    color: var(--text-tertiary);
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 1px solid color-mix(in srgb, var(--muted) 70%, transparent);
+    border: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -264,24 +264,24 @@
 }
 
 .agentBadge {
-    font-family: var(--font-mono);
-    color: #7b8cff;
-    font-size: 9.5px;
+    font-family: var(--font-brand);
+    color: var(--accent);
+    font-size: 10px;
     flex-shrink: 0;
 }
 
 .taskDefMeta {
     font-size: 10px;
-    color: var(--muted);
+    color: var(--text-tertiary);
 }
 
 .depArrow {
-    color: var(--muted);
+    color: var(--text-tertiary);
     margin-right: 3px;
 }
 
 .depName {
-    color: color-mix(in srgb, var(--text) 60%, transparent);
+    color: var(--text-secondary);
 }
 
 /* ── Shared ── */

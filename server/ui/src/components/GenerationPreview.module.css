@@ -8,7 +8,7 @@
 
 .progressBar {
   height: 6px;
-  background: var(--input-bg, #2a2a2a);
+  background: var(--surface);
   border-radius: 3px;
   overflow: hidden;
   margin-bottom: 6px;
@@ -16,7 +16,7 @@
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #818cf8);
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
   border-radius: 3px;
   transition: width 0.4s ease;
   min-width: 2%;
@@ -24,23 +24,23 @@
 
 .statusText {
   font-size: 12px;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .errorMessage {
   font-size: 13px;
-  color: #ef4444;
+  color: var(--danger);
   padding: 12px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 6px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--danger-muted);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--danger-muted);
 }
 
 .previewContainer {
   position: relative;
-  border: 1px solid var(--border-color, #333);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: #000;
 }
@@ -69,11 +69,11 @@
   bottom: 12px;
   right: 12px;
   padding: 6px 14px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-md);
+  background: var(--scrim);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -81,20 +81,20 @@
 }
 
 .downloadBtn:hover {
-  background: rgba(0, 0, 0, 0.85);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--scrim);
+  border-color: var(--text-tertiary);
   color: #fff;
 }
 
 /* Light theme */
-:global(body:not(.dark-theme)) .statusText {
-  color: #666;
+:global([data-theme="light"]) .statusText {
+  color: var(--text-secondary);
 }
 
-:global(body:not(.dark-theme)) .previewContainer {
-  border-color: #ddd;
+:global([data-theme="light"]) .previewContainer {
+  border-color: var(--border);
 }
 
-:global(body:not(.dark-theme)) .progressBar {
-  background: #e5e5e5;
+:global([data-theme="light"]) .progressBar {
+  background: var(--border);
 }

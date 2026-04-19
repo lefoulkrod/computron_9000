@@ -1,38 +1,164 @@
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ═══════════════════════════════════════════════════════
+   SIGNAL Design Language -- Token Definitions
+   ═══════════════════════════════════════════════════════ */
 
 :root {
-  --primary: #fafafa;         /* app background */
-  --secondary: #f3f3f3;       /* surfaces/cards */
-  --muted: #ababab;          /* borders, muted text, chrome */
-  --text: #222;               /* foreground text */
-  --text-secondary: #666;     /* subdued text (tabs, labels, status) */
-  --radius: 0.5rem;
-  --header-height: 4.75rem;
-  --shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
-  --font-mono: 'Fira Mono', 'Consolas', 'Menlo', monospace;
-  --color-accent: #5b8ad9;
-  --color-danger: #c0392b;
-  --color-success: #2a9d52;
-  --color-warning: #b8860b;
+  /* ── Light mode ("Blueprint") is the default ── */
+
+  /* Surfaces (depth stack) */
+  --canvas: #f8f9fb;
+  --surface: #eef0f5;
+  --elevated: #ffffff;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+
+  /* Borders */
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --border-strong: #cbd5e1;
+
+  /* Accent (interactive) */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37,99,235,0.08);
+  --accent-glow: rgba(37,99,235,0.15);
+
+  /* Status */
+  --success: #16a34a;
+  --success-muted: rgba(22,163,74,0.08);
+  --warning: #d97706;
+  --warning-muted: rgba(217,119,6,0.08);
+  --danger: #dc2626;
+  --danger-muted: rgba(220,38,38,0.08);
+
+  /* Overlay */
+  --scrim: rgba(15,23,42,0.40);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.05);
+  --shadow-md: 0 2px 8px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-lg: 0 4px 16px rgba(15,23,42,0.10), 0 2px 4px rgba(15,23,42,0.05);
+  --shadow-glow: 0 0 0 3px var(--accent-glow);
+
+  /* Terminal (Blueprint Tint) */
+  --terminal-bg: #edf1fb;
+  --terminal-surface: #e2e9f7;
+  --terminal-border: #c8d4ec;
+  --terminal-text: #1e293b;
+  --terminal-prompt: #16a34a;
+  --terminal-stderr: #dc2626;
+  --terminal-comment: #8898b5;
+
+  /* Syntax highlighting (light) */
+  --code-keyword: #7c3aed;
+  --code-function: #1d4ed8;
+  --code-string: #15803d;
+  --code-comment: #8898b5;
+  --code-number: #c2410c;
+  --code-operator: #0e7490;
+  --code-type: #b45309;
+
+  /* ── Layout constants ── */
+  --header-height: 36px;
+  --sidebar-width: 44px;
+  --flyout-width: 270px;
+
+  /* ── Radius scale ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* ── Spacing (4px base) ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* ── Font stacks ── */
+  --font-brand: 'Share Tech Mono', 'Roboto Mono', 'Consolas', monospace;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-code: 'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
+
+  /* ── Z-index scale ── */
+  --z-sticky: 10;
+  --z-flyout: 100;
+  --z-toast: 1000;
+  --z-modal: 9999;
+  --z-wizard: 10000;
+  --z-tooltip: 10001;
+
+  /* ── Motion ── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
 }
 
-/* Dark theme variables */
-.dark-theme {
-  --primary: #0b0b0c;
-  --secondary: #1b1b1d;       /* darker card for contrast */
-  --muted: #3a3a3c;
-  --text: #f3f3f3;
-  --text-secondary: #999;     /* subdued text (tabs, labels, status) */
-  --radius: 0.5rem;
-  --header-height: 4.75rem;
-  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.2);
-  --color-accent: #7aa2ff;
-  --color-success: #6bcf8e;
-  --color-warning: #e8c547;
+/* ── Dark mode ("Terminal") ── */
+[data-theme="dark"] {
+  --canvas: #0c0e14;
+  --surface: #151821;
+  --elevated: #1e2130;
+
+  --text-primary: #e8ecf4;
+  --text-secondary: #8892a8;
+  --text-tertiary: #4a5168;
+
+  --border: #252a3a;
+  --border-subtle: #1a1e2a;
+  --border-strong: #363d52;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-muted: rgba(59,130,246,0.12);
+  --accent-glow: rgba(59,130,246,0.20);
+
+  --success: #4ade80;
+  --success-muted: rgba(74,222,128,0.12);
+  --warning: #fbbf24;
+  --warning-muted: rgba(251,191,36,0.12);
+  --danger: #f87171;
+  --danger-muted: rgba(248,113,113,0.12);
+
+  --scrim: rgba(0,0,0,0.60);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  --shadow-glow: 0 0 0 3px var(--accent-glow);
+
+  --terminal-bg: #111318;
+  --terminal-surface: #1a1d26;
+  --terminal-border: #252a3a;
+  --terminal-text: #c8cdd8;
+  --terminal-prompt: #4ade80;
+  --terminal-stderr: #ff7043;
+  --terminal-comment: #4a5168;
+
+  --code-keyword: #c792ea;
+  --code-function: #82aaff;
+  --code-string: #c3e88d;
+  --code-comment: #546e7a;
+  --code-number: #f78c6c;
+  --code-operator: #89ddff;
+  --code-type: #ffcb6b;
 }
 
-html,
-body {
+/* ═══════════════════════════════════════════════════════
+   Base Reset
+   ═══════════════════════════════════════════════════════ */
+
+html, body {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -42,36 +168,37 @@ body {
 body {
   min-height: 100vh;
   width: 100%;
-  background: var(--primary);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color: var(--text);
+  background: var(--canvas);
+  font-family: var(--font-body);
+  color: var(--text-primary);
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
 *, *::before, *::after { box-sizing: inherit; }
 
-i {
-  color: var(--text);
-}
+/* ═══════════════════════════════════════════════════════
+   Global Button Reset
+   Minimal reset — component CSS modules add their own
+   variant styles (Ghost, Outline, Filled, Danger).
+   ═══════════════════════════════════════════════════════ */
 
 button {
-  background: var(--muted);
-  border-radius: var(--radius);
-  color: var(--text);
-  border: 1px solid transparent;
-  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 0;
+  margin: 0;
+  font: inherit;
   cursor: pointer;
-  transition: background-color 160ms ease, box-shadow 160ms ease, transform 60ms ease;
-  box-shadow: var(--shadow);
+  transition: background 150ms var(--ease), color 150ms var(--ease), border-color 150ms var(--ease), box-shadow 150ms var(--ease), transform 60ms var(--ease);
 }
 
 button:disabled {
   cursor: not-allowed;
-}
-
-button:hover:not(:disabled) {
-  filter: brightness(1.05);
+  opacity: 0.5;
 }
 
 button:active:not(:disabled) {
@@ -79,11 +206,20 @@ button:active:not(:disabled) {
 }
 
 button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--shadow-glow);
 }
 
-/* Subtle custom scrollbars */
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+/* ═══════════════════════════════════════════════════════
+   Scrollbars
+   ═══════════════════════════════════════════════════════ */
+
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
 *::-webkit-scrollbar-track { background: transparent; }

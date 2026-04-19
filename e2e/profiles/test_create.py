@@ -62,8 +62,8 @@ def test_create_profile_persists_all_settings(page: Page):
     page.locator("input[placeholder='unlimited']").nth(0).fill("4096")
     # Iterations / max_iterations
     page.locator("input[placeholder='unlimited']").nth(1).fill("25")
-    # Thinking toggle — checkbox is visually hidden, click the label wrapper
-    page.locator("[class*='toggleLabel']").click()
+    # Thinking toggle
+    page.locator("label", has_text="Thinking").click()
 
     # --- Save ---
     page.get_by_role("button", name="Save").click()
