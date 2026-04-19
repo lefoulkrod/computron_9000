@@ -11,12 +11,6 @@ features:
   custom_tools: ${ENABLE_CUSTOM_TOOLS:-false}
 
 tools:
-  web:
-    search_google:
-      state_file: ".browser-state.json"
-      no_save_state: false
-      timeout: 6000
-      search_engine_id: ${GOOGLE_SEARCH_ENGINE_ID}
   browser:
     headless: false  # true = no GUI, false = visible browser window
     human:
