@@ -16,12 +16,10 @@ from collections.abc import Callable
 from tools.browser.core._dom_nodes import DomNode
 from tools.browser.core.site_filters._amazon import filter_amazon
 from tools.browser.core.site_filters._ebay import filter_ebay
-from tools.browser.core.site_filters._reddit import filter_reddit
 
 _SITE_FILTERS: dict[str, Callable[[list[DomNode]], list[DomNode]]] = {
     "amazon.com": filter_amazon,
     "ebay.com": filter_ebay,
-    "reddit.com": filter_reddit,
 }
 
 

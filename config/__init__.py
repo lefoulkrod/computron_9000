@@ -123,14 +123,6 @@ class AgentsConfig(BaseModel):
     file_system: AgentConfig = Field(default_factory=AgentConfig)
 
 
-class RedditConfig(BaseModel):
-    """Reddit API configuration."""
-
-    client_id: str = ""
-    client_secret: str = ""
-    user_agent: str = ""
-
-
 class DesktopConfig(BaseModel):
     """Configuration for the desktop environment (noVNC + Xfce4)."""
 
@@ -225,7 +217,6 @@ class AppConfig(BaseModel):
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
-    reddit: RedditConfig = Field(default_factory=RedditConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     desktop: DesktopConfig = Field(default_factory=DesktopConfig)
     vision: VisionConfig | None = None

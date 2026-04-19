@@ -12,7 +12,6 @@ dependencies = [
     "ollama>=0.6",
     "cachetools>=5.5.2",
     "python-dotenv>=1.1.0",
-    "asyncpraw>=7.8.1",
     "html2text>=2025.4.15",
     "rich>=14.3.3",
     "anthropic>=0.52.0",
@@ -117,11 +116,6 @@ plugins = ["pydantic.mypy"]             # Enable Pydantic plugin for proper mode
 warn_untyped_fields = true              # Force fields to be annotated
 init_typed = true                       # Enforce correct __init__ signatures
 init_forbid_extra = true                # Respect ConfigDict(extra="forbid")
-
-[[tool.mypy.overrides]]
-module = ["asyncpraw.*"]
-ignore_missing_imports = true           # AsyncPRAW stubs aren’t complete → ignore them
-
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
