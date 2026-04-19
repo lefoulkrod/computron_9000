@@ -33,17 +33,9 @@ tools:
       dom_mutation_timeout_ms: 1500
       dom_quiet_window_ms: 150
       animation_timeout_ms: 1000
-agents:
-  web:
-    think: false
-  file_system:
-    think: false
-
 desktop:
-  display: ":0"
   resolution: "1280x720"
   websocket_port: 6080
-  screenshot_quality: 70
   vision_model: qwen3.5:4b
 
 vision:
@@ -64,16 +56,6 @@ summary:
     temperature: 0.3
     top_k: 20
 
-skills:
-  enabled: false
-  extraction_interval_seconds: 300
-  extraction_model: qwen3.5:cloud
-  extraction_options:
-    num_ctx: 60000
-    temperature: 0.3
-  max_skills: 200
-  single_conversation_extraction: true
-
 llm:
   provider: ollama
   host: ${LLM_HOST}
@@ -87,9 +69,6 @@ goals:
   enabled: true
   poll_interval: 5
   max_concurrent: 2
-  max_retries: 3
   timezone: America/Chicago
-  model: "kimi-k2.5:cloud"
-  num_ctx: 60000
   notifications:
     enabled: true

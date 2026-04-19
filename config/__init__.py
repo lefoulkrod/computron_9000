@@ -110,29 +110,13 @@ class ToolsConfig(BaseModel):
     browser: BrowserToolsConfig = Field(default_factory=BrowserToolsConfig)
 
 
-class AgentConfig(BaseModel):
-    """Settings for an individual agent."""
-
-    think: bool = False
-
-
-class AgentsConfig(BaseModel):
-    """Settings for all agents."""
-
-    web: AgentConfig = Field(default_factory=AgentConfig)
-    file_system: AgentConfig = Field(default_factory=AgentConfig)
-
-
 class DesktopConfig(BaseModel):
     """Configuration for the desktop environment (noVNC + Xfce4)."""
 
-    display: str = ":1"
     user_display: str = ":99"
     agent_display_base: int = 100
     resolution: str = "1280x720"
-    vnc_port: int = 5900
     websocket_port: int = 6080
-    screenshot_quality: int = 70
     vision_model: str | None = "qwen3.5:4b"
 
 
@@ -161,19 +145,6 @@ class LLMConfig(BaseModel):
     base_url: str | None = None
 
 
-class SkillsConfig(BaseModel):
-    """Configuration for the skills learning system."""
-
-    enabled: bool = True
-    extraction_interval_seconds: int = 300
-    extraction_model: str = "qwen3:8b"
-    extraction_options: dict[str, Any] = Field(
-        default_factory=lambda: {"num_ctx": 60000},
-    )
-    max_skills: int = 200
-    single_conversation_extraction: bool = True
-
-
 class ParallelConfig(BaseModel):
     """Configuration for parallel agent execution."""
 
@@ -198,15 +169,9 @@ class GoalsConfig(BaseModel):
     goals_dir: str = ""  # empty = ~/.computron_9000/goals/
     poll_interval: int = 5
     max_concurrent: int = 2
-    max_retries: int = 3
     shutdown_timeout: int = 60
     timezone: str = "UTC"  # Default timezone for goals (IANA name)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
-    # LLM options for task execution
-    model: str = ""  # empty = use server default
-    num_ctx: int = 0  # 0 = use model default
-    think: bool = False
-    max_iterations: int = 0
 
 
 class AppConfig(BaseModel):
@@ -216,12 +181,10 @@ class AppConfig(BaseModel):
     virtual_computer: VirtualComputerConfig
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
-    agents: AgentsConfig = Field(default_factory=AgentsConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     desktop: DesktopConfig = Field(default_factory=DesktopConfig)
     vision: VisionConfig | None = None
     summary: SummaryConfig | None = None
-    skills: SkillsConfig = Field(default_factory=SkillsConfig)
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
     goals: GoalsConfig = Field(default_factory=GoalsConfig)
 
