@@ -12,6 +12,7 @@ Phase signatures:
     on_turn_end(final_content, agent_name) -> None
 """
 
+from ._agent_event_buffer import AgentEventBufferHook
 from ._budget_guard import BudgetGuard
 from ._context_hook import ContextHook
 from ._default import default_hooks
@@ -25,6 +26,7 @@ from ._scratchpad_hook import ScratchpadHook
 from ._stop_hook import StopHook
 
 __all__ = [
+    "AgentEventBufferHook",
     "BudgetGuard",
     "ContextHook",
     "LoadedSkillHook",
