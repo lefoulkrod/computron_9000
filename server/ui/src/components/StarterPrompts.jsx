@@ -17,9 +17,9 @@ const PROMPTS = [
         text: 'Go to wikipedia.org and summarize the featured article of the day',
     },
     {
-        icon: 'bi-display',
-        title: 'Use the computer',
-        text: 'Open a terminal and show me what OS is running on this machine',
+        icon: 'bi-bullseye',
+        title: 'Create a goal',
+        text: 'Help me create a goal and break it down into actionable steps',
     },
 ];
 
