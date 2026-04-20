@@ -22,11 +22,12 @@ _DESKTOP="${ENABLE_DESKTOP:-false}"
 # Default LLM_HOST to host Ollama if not explicitly set
 export LLM_HOST="${LLM_HOST:-http://localhost:11434}"
 
-# ── Fix volume-mount ownership ───────────────────────────────────────────────
-# When host directories are bind-mounted, they may arrive owned by the host
-# user (e.g. UID 1000).  Ensure the container users own their directories.
-chown -R computron:computron /home/computron /var/lib/computron
-chmod 755 /home/computron
+# ── Set up /home/computron ───────────────────────────────────────────────────
+# Bind-mounted host dirs may arrive owned by the host UID, so we chown to
+# computron AFTER creating any subdirectories below. Chowning first leaves
+# anything mkdir'd later (e.g. .config) root-owned, which silently breaks
+# Chrome: its crashpad handler can't write to ~/.config/google-chrome and the
+# launcher pipe closes with "recvmsg: Connection reset by peer".
 mkdir -p /home/computron/Desktop /home/computron/downloads
 
 # Copy default Xfce config on first run (named volume starts empty)
@@ -34,6 +35,9 @@ if [ ! -d /home/computron/.config/xfce4/panel ]; then
     mkdir -p /home/computron/.config/xfce4
     cp -rn /etc/xdg/xfce4/* /home/computron/.config/xfce4/ 2>/dev/null
 fi
+
+chown -R computron:computron /home/computron /var/lib/computron
+chmod 755 /home/computron
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
 Xvfb ":${_DISPLAY_NUM}" -screen 0 1280x720x24 -ac &

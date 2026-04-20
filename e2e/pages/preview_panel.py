@@ -35,6 +35,10 @@ class PreviewPanel:
         return self.page.get_by_test_id("preview-tab-terminal")
 
     @property
+    def browser_tab(self) -> Locator:
+        return self.page.get_by_test_id("preview-tab-browser")
+
+    @property
     def file_tabs(self) -> Locator:
         """All file tabs across the panel."""
         return self.page.locator("[data-testid^='preview-tab-file:']")

@@ -86,3 +86,19 @@ Rename `context_id` → `agent_id` throughout `_context.py`, and rename `_contex
 ## Optimize FLUX model downloads
 
 `_download_model()` in `container/inference_server.py` uses `snapshot_download()` which pulls the entire HuggingFace repo. FLUX repos contain both single-file weights (e.g. `flux1-schnell.safetensors`, ~24 GB) and diffusers-sharded weights (`transformer/`, ~24 GB) — downloading both doubles the size from ~34 GB to ~58 GB per model. Use `allow_patterns` to skip single-file weights, or switch to `from_pretrained()` which only fetches what the pipeline needs.
+
+## Run dbus-launch as the computron user
+
+`container/entrypoint.sh:48` runs `eval $(dbus-launch --sh-syntax)` as root, then exports the resulting `DBUS_SESSION_BUS_ADDRESS` so subsequent `gosu computron` processes (Xfce, AT-SPI clients) connect to a session bus owned by root. It usually works because the daemon's unix socket is in `/tmp` and world-accessible, but session buses are conceptually per-user — flaky AT-SPI behavior or Xfce startup quirks would land here first. Cleaner: launch the bus as the computron user (`gosu computron dbus-launch ...`) and capture the address via temp file.
+
+## Add `set -eu` to entrypoint.sh
+
+`container/entrypoint.sh` runs without `set -e` or `set -u`, so silent failures accumulate. The `chown` ordering bug that broke Chrome would have been louder if errors propagated. The `cp -rn /etc/xdg/xfce4/* ... 2>/dev/null` on line 35 also swallows real failures — drop the `2>/dev/null` so a missing xdg dir surfaces. Skip `-o pipefail` since several lines deliberately use `|| true` and `2>/dev/null` patterns that would conflict.
+
+## Monitor or supervise desktop background services
+
+When `ENABLE_DESKTOP=true`, `container/entrypoint.sh` starts `startxfce4`, `x11vnc -bg`, and `websockify ... &` as fire-and-forget background processes. No PID tracking, no restart on death, no log if they crash. The app loop has restart-on-crash logic; the desktop services don't. If x11vnc dies 30s in, the noVNC bridge silently hangs and the user sees "connecting…" forever. Either capture their PIDs and `wait` on them like the app loop does, or run them under a tiny supervisor (s6-overlay, runit, or a shell loop per service).
+
+## Backoff for app restart loop
+
+`container/entrypoint.sh:96-97` sleeps 2 seconds between app restarts. If `main.py` crashes on import (e.g. bad config, broken migration), the loop respawns it every 2s indefinitely, flooding logs and burning CPU. An exponential backoff capped at ~30s would make crash-loops obvious without the noise — and a max retry count would let the container exit cleanly so an orchestrator could surface the failure.
