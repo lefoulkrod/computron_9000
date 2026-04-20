@@ -82,7 +82,7 @@ export default function FilePreviewInline({ item, onFullscreen }) {
                             </button>
                         </div>
                     )}
-                    {!showToggle && !isPdf && (
+                    {!showToggle && !isPdf && !isImageFile && (
                         <div className={styles.toggle} data-testid="file-view-source-only">
                             <button className={`${styles.toggleBtn} ${styles.toggleBtnActive}`}>
                                 <SourceIcon size={12} /> Source

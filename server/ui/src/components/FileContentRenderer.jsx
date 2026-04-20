@@ -24,9 +24,9 @@ export default function FileContentRenderer({
     const { filename, content_type, content } = item;
 
     const highlightedSource = useMemo(() => {
-        if (!text || isPdf) return null;
+        if (!text || isPdf || isImageFile) return null;
         return highlightCode(text, { filename, contentType: content_type });
-    }, [text, isPdf, filename, content_type]);
+    }, [text, isPdf, isImageFile, filename, content_type]);
 
     return (
         <>
@@ -40,7 +40,7 @@ export default function FileContentRenderer({
             {isPdf && !pdfSrc && (
                 <div className={styles.statusText}>Loading...</div>
             )}
-            {!isPdf && viewMode === 'source' && (
+            {!isPdf && !isImageFile && viewMode === 'source' && (
                 highlightedSource ? (
                     <pre className={styles.sourceCode}>
                         <code
@@ -76,7 +76,7 @@ export default function FileContentRenderer({
             {!isPdf && viewMode === 'preview' && isHtml && !iframeSrc && (
                 <div className={styles.statusText}>Loading...</div>
             )}
-            {!isPdf && viewMode === 'preview' && isImageFile && (
+            {!isPdf && isImageFile && (
                 <div className={styles.imageContainer}>
                     {content && (
                         <img
