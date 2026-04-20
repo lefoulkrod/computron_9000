@@ -113,29 +113,39 @@ function _handleStreamEvent(data, callbacks) {
 
 /**
  * Convert raw LLM messages into UI-friendly message objects for display.
+ *
+ * Each assistant message becomes an `entries[]` carrying thinking, content,
+ * and tool-call markers in chronological order — the same shape AgentOutput
+ * renders during live streaming. Tool result messages are skipped: the chat
+ * surface intentionally doesn't display them.
  */
 function _historyToMessages(rawMessages) {
     const uiMessages = [];
     for (const msg of rawMessages) {
-        if (msg.role === 'system') continue;
+        if (msg.role === 'system' || msg.role === 'tool') continue;
         if (msg.role === 'user') {
             uiMessages.push({
                 id: `hist_u_${uiMessages.length}`,
                 role: 'user',
                 content: msg.content || '',
             });
-        } else if (msg.role === 'assistant') {
-            const content = msg.content || '';
-            if (content) {
-                uiMessages.push({
-                    id: `hist_a_${uiMessages.length}`,
-                    role: 'assistant',
-                    entries: [{ type: 'content', content }],
-                    streaming: false,
-                });
-            }
+            continue;
         }
-        // Skip tool messages — they aren't displayed directly
+        if (msg.role === 'assistant') {
+            const entries = [];
+            if (msg.thinking) entries.push({ type: 'thinking', thinking: msg.thinking });
+            if (msg.content) entries.push({ type: 'content', content: msg.content });
+            for (const tc of (msg.tool_calls || [])) {
+                entries.push({ type: 'tool_call', name: tc?.function?.name || '' });
+            }
+            if (entries.length === 0) continue;
+            uiMessages.push({
+                id: `hist_a_${uiMessages.length}`,
+                role: 'assistant',
+                entries,
+                streaming: false,
+            });
+        }
     }
     return uiMessages;
 }
