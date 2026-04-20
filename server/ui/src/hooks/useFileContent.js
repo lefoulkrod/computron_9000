@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { hasPreviewToggle, isImageFile, isPdfFile } from '../utils/fileTypes.js';
+import copyToClipboard from '../utils/copyToClipboard.js';
 
 function _decodeText(b64) {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -82,6 +83,13 @@ export default function useFileContent(item) {
         };
     }, [iframeSrc, pdfSrc]);
 
+    const canCopy = !isImage && !isPdf && !!text;
+
+    const handleCopy = useCallback(async () => {
+        if (!text) return false;
+        return copyToClipboard(text);
+    }, [text]);
+
     const handleDownload = useCallback(() => {
         const link = document.createElement('a');
         if (text) {
@@ -113,5 +121,7 @@ export default function useFileContent(item) {
         pdfSrc,
         iframeSrc,
         handleDownload,
+        handleCopy,
+        canCopy,
     };
 }
