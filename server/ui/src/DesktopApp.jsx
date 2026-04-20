@@ -191,7 +191,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const openDesktop = useCallback(async () => {
         if (userDesktopOpen) return;
         try {
-            const res = await fetch('/api/desktop/start', { method: 'POST' });
+            const res = await fetch('/api/desktop/start', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const data = await res.json();
             if (data.running) {
                 setUserDesktopOpen(true);

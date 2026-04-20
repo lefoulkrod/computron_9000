@@ -64,27 +64,27 @@ export default function useGoals(panelOpen) {
     }, []);
 
     const deleteGoal = useCallback(async (goalId) => {
-        await fetch(`/api/goals/${goalId}`, { method: 'DELETE' });
+        await fetch(`/api/goals/${goalId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         setGoals(prev => prev.filter(g => g.id !== goalId));
         if (selectedGoalId === goalId) setSelectedGoalId(null);
     }, [selectedGoalId]);
 
     const deleteRun = useCallback(async (goalId, runId) => {
-        await fetch(`/api/goals/${goalId}/runs/${runId}`, { method: 'DELETE' });
+        await fetch(`/api/goals/${goalId}/runs/${runId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     }, []);
 
     const pauseGoal = useCallback(async (goalId) => {
-        await fetch(`/api/goals/${goalId}/pause`, { method: 'POST' });
+        await fetch(`/api/goals/${goalId}/pause`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         setGoals(prev => prev.map(g => g.id === goalId ? { ...g, status: 'paused' } : g));
     }, []);
 
     const resumeGoal = useCallback(async (goalId) => {
-        await fetch(`/api/goals/${goalId}/resume`, { method: 'POST' });
+        await fetch(`/api/goals/${goalId}/resume`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         setGoals(prev => prev.map(g => g.id === goalId ? { ...g, status: 'active' } : g));
     }, []);
 
     const triggerGoal = useCallback(async (goalId) => {
-        const res = await fetch(`/api/goals/${goalId}/trigger`, { method: 'POST' });
+        const res = await fetch(`/api/goals/${goalId}/trigger`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         return res.json();
     }, []);
 

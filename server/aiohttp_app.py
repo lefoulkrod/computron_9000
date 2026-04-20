@@ -77,18 +77,29 @@ class ChatRequest(BaseModel):
 
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS, GET, DELETE",
+    "Access-Control-Allow-Methods": "POST, PUT, OPTIONS, GET, DELETE",
+    # X-Requested-With is intentionally NOT listed here — cross-origin requests
+    # cannot set it (browser blocks them at preflight), so its presence signals
+    # that a request is same-origin. This is a lightweight CSRF guard.
     "Access-Control-Allow-Headers": "Content-Type",
 }
+
+_CSRF_METHODS = {"POST", "PUT", "DELETE"}
 
 
 @web.middleware
 async def cors_and_error_middleware(
     request: Request, handler: Callable[[Request], Awaitable[StreamResponse]]
 ) -> StreamResponse:
-    """Add CORS headers and convert validation errors to JSON responses."""
+    """Add CORS headers, enforce CSRF check, and convert validation errors to JSON."""
     if request.method == "OPTIONS":
         return web.Response(status=200, headers=_CORS_HEADERS)
+    # CSRF: mutating requests must carry X-Requested-With: XMLHttpRequest.
+    # Same-origin JS can always set this header; cross-origin JS cannot because
+    # the server does not list it in Access-Control-Allow-Headers.
+    if request.method in _CSRF_METHODS:
+        if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+            return web.json_response({"error": "CSRF check failed"}, status=403, headers=_CORS_HEADERS)
     try:
         resp: StreamResponse = await handler(request)
     except ValidationError as exc:  # pragma: no cover - handled uniformly

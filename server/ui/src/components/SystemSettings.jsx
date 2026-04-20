@@ -59,7 +59,7 @@ export default function SystemSettings({ onRunWizard }) {
         try {
             const res = await fetch('/api/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({ [key]: value }),
             });
             if (res.ok) {
@@ -74,7 +74,7 @@ export default function SystemSettings({ onRunWizard }) {
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
         try {
-            await fetch('/api/models/refresh', { method: 'POST' });
+            await fetch('/api/models/refresh', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             await fetchModels();
         } catch {
             // silent

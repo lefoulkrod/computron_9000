@@ -36,7 +36,7 @@ export default function MemoryPanel({ refreshSignal }) {
         try {
             await fetch(`/api/memory/${encodeURIComponent(key)}/hidden`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({ hidden: nowHidden }),
             });
         } catch (_) {

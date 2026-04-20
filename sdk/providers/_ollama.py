@@ -57,7 +57,8 @@ class OllamaProvider:
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
         """Construct from application config."""
-        return cls(host=llm_config.host)
+        # base_url comes from settings.json (wizard); host comes from config.yaml/env var
+        return cls(host=llm_config.base_url or llm_config.host)
 
     async def chat(
         self,

@@ -66,7 +66,7 @@ export default function useListPanel(endpoint, {
     const handleDelete = useCallback(async (key, deleteEndpoint, matchFn) => {
         setDeleting(key);
         try {
-            const resp = await fetch(deleteEndpoint, { method: 'DELETE' });
+            const resp = await fetch(deleteEndpoint, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (resp.ok || resp.status === 404) {
                 setItems((prev) => prev.filter(matchFn));
             }

@@ -180,7 +180,7 @@ export default function useStreamingChat(callbacks) {
             const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
             fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(body),
             }).catch(() => {});
             if (callbacks.onNudgeSent) callbacks.onNudgeSent(message || '');
@@ -219,7 +219,7 @@ export default function useStreamingChat(callbacks) {
 
             const resp = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(body),
                 signal: controller.signal,
             });
@@ -369,7 +369,7 @@ export default function useStreamingChat(callbacks) {
 
     /** Ask the backend to stop generation and update local state. */
     const stopGeneration = useCallback(() => {
-        fetch(`/api/chat/stop?conversation_id=${conversationIdRef.current}`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/chat/stop?conversation_id=${conversationIdRef.current}`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(() => {});
         setIsStreaming(false);
     }, []);
 
@@ -384,6 +384,7 @@ export default function useStreamingChat(callbacks) {
         try {
             const resp = await fetch(`/api/conversations/sessions/${conversationId}/resume`, {
                 method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
             });
             if (!resp.ok) return false;
             const data = await resp.json();
@@ -402,13 +403,13 @@ export default function useStreamingChat(callbacks) {
             abortControllerRef.current = null;
         }
         const oldConversationId = conversationIdRef.current;
-        fetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(() => {});
         setIsStreaming(false);
         setMessages([]);
         // Generate a fresh conversation ID for the new conversation
         conversationIdRef.current = _uuid();
         try {
-            await fetch(`/api/chat/history?conversation_id=${oldConversationId}`, { method: 'DELETE' });
+            await fetch(`/api/chat/history?conversation_id=${oldConversationId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         } catch (err) {
             // ignore
         }

@@ -424,3 +424,238 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* ── Screen reader only ──────────────────────────────────────── */
+
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ── Provider step ───────────────────────────────────────────── */
+
+.providerFieldset {
+    border: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.providerTiles {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 0.75rem;
+    text-align: left;
+}
+
+/* Each tile is a <label> wrapping a hidden <input type="radio"> */
+.providerTile {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.providerTile:hover {
+    border-color: var(--text-primary);
+}
+
+.providerTileSelected {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+}
+
+/* Visually hide the native radio but keep it accessible */
+.providerTileInput {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+}
+
+.providerTileInput:focus-visible + .providerTileMarker {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* Custom radio circle marker (aria-hidden) */
+.providerTileMarker {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    margin-top: 1px;
+    position: relative;
+    transition: border-color 120ms ease;
+}
+
+.providerTileSelected .providerTileMarker {
+    border-color: var(--accent);
+}
+
+.providerTileSelected .providerTileMarker::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.providerTileText {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.providerTileName {
+    font-family: var(--font-brand);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.providerTileDesc {
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    opacity: 0.5;
+    line-height: 1.3;
+}
+
+/* ── Provider inline fields ──────────────────────────────────── */
+
+.providerFields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-top: 1rem;
+    width: 100%;
+    text-align: left;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.fieldLabel {
+    font-family: var(--font-brand);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fieldInput {
+    font-family: var(--font-brand);
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 120ms ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.fieldInput:focus {
+    border-color: var(--accent);
+}
+
+.fieldHint {
+    font-size: 0.72rem;
+    color: var(--text-primary);
+    opacity: 0.45;
+    line-height: 1.4;
+}
+
+/* Cloud provider sub-select */
+.cloudSelect {
+    font-family: var(--font-brand);
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text-primary);
+    width: 100%;
+    outline: none;
+    cursor: pointer;
+}
+
+.cloudSelect:focus {
+    border-color: var(--accent);
+}
+
+/* ── Provider error (step 1) ─────────────────────────────────── */
+
+.providerError {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--danger-muted);
+    border: 1px solid var(--danger-muted);
+    color: var(--danger);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+/* ── Vision info panel ───────────────────────────────────────── */
+
+.infoPanel {
+    margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    background: var(--accent-muted);
+    border: 1px solid var(--accent-muted);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    text-align: left;
+}
+
+/* ── Skip button ─────────────────────────────────────────────── */
+
+.skipBtn {
+    align-self: center;
+    margin-top: 0.75rem;
+    padding: 0.4rem 1rem;
+    font-family: var(--font-brand);
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    opacity: 0.55;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    cursor: pointer;
+    transition: opacity 120ms ease, background 120ms ease;
+}
+
+.skipBtn:hover {
+    opacity: 1;
+    background: var(--surface);
+}
+
+.skipBtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    opacity: 1;
+}

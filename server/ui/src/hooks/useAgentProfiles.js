@@ -35,7 +35,7 @@ export default function useAgentProfiles() {
     const createProfile = useCallback(async (profile) => {
         const res = await fetch('/api/profiles', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(profile),
         });
         const created = await res.json();
@@ -47,7 +47,7 @@ export default function useAgentProfiles() {
     const updateProfile = useCallback(async (id, profile) => {
         const res = await fetch(`/api/profiles/${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(profile),
         });
         const body = await res.json();
@@ -61,7 +61,7 @@ export default function useAgentProfiles() {
     }, []);
 
     const deleteProfile = useCallback(async (id) => {
-        const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         if (res.status === 409) {
             const data = await res.json();
             return { conflict: true, ...data };
@@ -73,7 +73,7 @@ export default function useAgentProfiles() {
     }, [selectedProfileId]);
 
     const duplicateProfile = useCallback(async (id) => {
-        const res = await fetch(`/api/profiles/${id}/duplicate`, { method: 'POST' });
+        const res = await fetch(`/api/profiles/${id}/duplicate`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const duplicated = await res.json();
         setProfiles(prev => [...prev, duplicated]);
         setRevision(r => r + 1);

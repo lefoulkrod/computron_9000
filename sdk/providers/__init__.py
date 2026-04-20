@@ -4,7 +4,8 @@ import importlib
 import logging
 from typing import Any
 
-from config import load_config
+from config import LLMConfig, load_config
+from settings import load_settings
 
 from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._protocol import Provider
@@ -21,35 +22,55 @@ _PROVIDER_PATHS: dict[str, str] = {
 _cached_provider: Any | None = None
 
 
+def _get_llm_config() -> LLMConfig:
+    """Return LLM config merged from config.yaml defaults and settings.json overrides.
+
+    Load order: env var (resolved by load_config) → settings.json → config.yaml defaults.
+    The ``host`` field is Ollama-specific and is never overridden by settings.json.
+    """
+    base = load_config().llm
+    s = load_settings()
+    overrides: dict[str, Any] = {}
+    if s.get("llm_provider"):
+        overrides["provider"] = s["llm_provider"]
+    if s.get("llm_base_url"):
+        overrides["base_url"] = s["llm_base_url"]
+    if s.get("llm_api_key"):
+        overrides["api_key"] = s["llm_api_key"]
+    if not overrides:
+        return base
+    return base.model_copy(update=overrides)
+
+
 def get_provider() -> Provider:
     """Return the configured LLM provider singleton.
 
-    Reads ``cfg.llm.provider`` to determine which provider to instantiate,
-    looks up the dotted path in the registry, and calls ``cls.from_config()``.
-    The result is cached for the lifetime of the process.
+    Reads the merged LLM config (config.yaml + settings.json overrides) to
+    determine which provider to instantiate, looks up the dotted path in the
+    registry, and calls ``cls.from_config()``. The result is cached for the
+    lifetime of the process (or until ``reset_provider()`` is called).
     """
     global _cached_provider  # noqa: PLW0603
     if _cached_provider is not None:
         return _cached_provider
 
-    cfg = load_config()
-    provider_name = cfg.llm.provider
-    path = _PROVIDER_PATHS.get(provider_name)
+    llm_cfg = _get_llm_config()
+    path = _PROVIDER_PATHS.get(llm_cfg.provider)
     if path is None:
-        msg = f"Unknown LLM provider: {provider_name!r}. Available: {sorted(_PROVIDER_PATHS)}"
+        msg = f"Unknown LLM provider: {llm_cfg.provider!r}. Available: {sorted(_PROVIDER_PATHS)}"
         raise ValueError(msg)
 
     module_path, cls_name = path.rsplit(":", 1)
     module = importlib.import_module(module_path)
     cls = getattr(module, cls_name)
 
-    _cached_provider = cls.from_config(cfg.llm)
-    logger.info("Initialized LLM provider: %s", provider_name)
+    _cached_provider = cls.from_config(llm_cfg)
+    logger.info("Initialized LLM provider: %s", llm_cfg.provider)
     return _cached_provider
 
 
 def reset_provider() -> None:
-    """Clear the cached provider singleton. Intended for testing."""
+    """Clear the cached provider singleton so the next call re-reads config."""
     global _cached_provider  # noqa: PLW0603
     _cached_provider = None
 
