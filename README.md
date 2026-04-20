@@ -27,22 +27,47 @@ Any Ollama model works. The setup wizard shows what you have pulled and filters 
 
 ## Try It Out
 
+**Linux (Docker / rootful Podman):**
+
 ```bash
 docker run -d --name computron --shm-size=256m --network=host \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
-Open **[http://localhost:8080](http://localhost:8080)**. The setup wizard walks you through picking your main model and vision model on first launch.
+**Docker Desktop (macOS / Windows / WSL2):**
 
-> **macOS / Windows / WSL2:** Ollama runs on the host, not inside the container. Pass `-e LLM_HOST=http://host.docker.internal:11434` so the container can reach it. On Linux with `--network=host` this isn't needed.
+```bash
+docker run -d --name computron --shm-size=256m \
+  -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e LLM_HOST=http://host.docker.internal:11434 \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+> Docker Desktop also requires Ollama to be bound to `0.0.0.0` (it defaults to `127.0.0.1` on every platform, which the container can't reach). Set `OLLAMA_HOST=0.0.0.0` in Ollama's environment and restart it. Heads up: this exposes Ollama on your LAN — firewall it if that's a concern.
+
+Open **[http://localhost:8080](http://localhost:8080)**. The setup wizard walks you through picking your main model and vision model on first launch.
 
 Data won't persist when the container is removed. When you're ready to keep it, add volumes:
 
 ### Keep Your Data
 
+**Linux:**
+
+```bash
+docker run -d --name computron --shm-size=256m --network=host \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+**Docker Desktop:**
+
 ```bash
 docker run -d --name computron --shm-size=256m \
-  --network=host \
+  -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e LLM_HOST=http://host.docker.internal:11434 \
   -v computron_home:/home/computron \
   -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest
@@ -62,9 +87,10 @@ Image generation, music generation, and visual grounding are **disabled by defau
 
 Example with image and music generation enabled:
 
+**Linux:**
+
 ```bash
-docker run -d --name computron --shm-size=256m \
-  --network=host \
+docker run -d --name computron --shm-size=256m --network=host \
   --gpus all \
   -e HF_TOKEN=hf_your_token_here \
   -e ENABLE_IMAGE_GEN=1 \
@@ -74,7 +100,23 @@ docker run -d --name computron --shm-size=256m \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
-Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). See [GPU Setup](#gpu-setup) for install steps.
+**Docker Desktop (Windows + WSL2):**
+
+```bash
+docker run -d --name computron --shm-size=256m \
+  -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  --gpus all \
+  -e LLM_HOST=http://host.docker.internal:11434 \
+  -e HF_TOKEN=hf_your_token_here \
+  -e ENABLE_IMAGE_GEN=1 \
+  -e ENABLE_MUSIC_GEN=1 \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). See [GPU Setup](#gpu-setup) for install steps. (macOS isn't supported for GPU features.)
 
 ### Experimental Features
 
@@ -83,6 +125,35 @@ These features are disabled by default and may change or be removed in future ve
 | Feature | Env Var | Description |
 |---------|---------|-------------|
 | Desktop agent | `ENABLE_DESKTOP=1` | GUI automation — the agent can see and interact with a full Linux desktop (Xfce4) via mouse and keyboard. Works best with GPU and `ENABLE_GROUNDING=1` for precise visual targeting. |
+
+The desktop agent exposes VNC on `5900` (native viewer) and noVNC on `6080` (browser viewer at `http://localhost:6080/vnc.html`).
+
+**Linux:**
+
+```bash
+docker run -d --name computron --shm-size=256m --network=host \
+  --gpus all \
+  -e ENABLE_DESKTOP=1 \
+  -e ENABLE_GROUNDING=1 \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+**Docker Desktop (Windows + WSL2):**
+
+```bash
+docker run -d --name computron --shm-size=256m \
+  -p 8080:8080 -p 5900:5900 -p 6080:6080 \
+  --add-host=host.docker.internal:host-gateway \
+  --gpus all \
+  -e LLM_HOST=http://host.docker.internal:11434 \
+  -e ENABLE_DESKTOP=1 \
+  -e ENABLE_GROUNDING=1 \
+  -v computron_home:/home/computron \
+  -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
 
 ---
 
@@ -223,7 +294,7 @@ Pass these with `-e` when running the container:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `LLM_HOST` | No | Ollama URL. Defaults to `http://localhost:11434`. Override only if Ollama runs elsewhere. |
+| `LLM_HOST` | No | Ollama URL. Defaults to `http://localhost:11434` — works as-is with `--network=host`. On Docker Desktop, set to `http://host.docker.internal:11434` and pass `--add-host=host.docker.internal:host-gateway`. |
 | `HF_TOKEN` | For image gen | HuggingFace token. Required for FLUX.1 (gated model). |
 | `ENABLE_IMAGE_GEN` | No | Set to `1` to enable image generation (requires GPU + HF_TOKEN). |
 | `ENABLE_MUSIC_GEN` | No | Set to `1` to enable music generation (requires GPU). |
@@ -235,8 +306,7 @@ Pass these with `-e` when running the container:
 To pass multiple env vars, add `-e` for each one:
 
 ```bash
-docker run -d --name computron --shm-size=256m \
-  --network=host \
+docker run -d --name computron --shm-size=256m --network=host \
   -e HF_TOKEN=hf_your_token_here \
   -e TELEGRAM_BOT_TOKEN=your_bot_token \
   -e TELEGRAM_CHAT_ID=your_chat_id \
@@ -247,13 +317,15 @@ docker run -d --name computron --shm-size=256m \
 
 ### Ports
 
-Since the container uses `--network=host`, these ports are exposed directly on your machine:
+With `--network=host` (the Quick Start default on Linux), these ports are exposed directly on your machine:
 
-| Port | Service | Configurable |
-|------|---------|-------------|
-| 8080 | Web UI | Yes — set `PORT` env var (e.g. `-e PORT=9090`) |
-| 5900 | VNC (connect with any VNC viewer to watch the agent's desktop) | No |
-| 6080 | noVNC (browser-based VNC at `http://localhost:6080/vnc.html`) | No |
+| Port | Service | Notes |
+|------|---------|-------|
+| 8080 | Web UI | Configurable via `-e PORT=...` |
+| 5900 | VNC (connect with any VNC viewer to watch the agent's desktop) | Only useful with `ENABLE_DESKTOP=1` |
+| 6080 | noVNC (browser-based VNC at `http://localhost:6080/vnc.html`) | Only useful with `ENABLE_DESKTOP=1` |
+
+> **On Docker Desktop**, drop `--network=host` and publish each port explicitly: `-p 8080:8080` for the UI, plus `-p 5900:5900 -p 6080:6080` if `ENABLE_DESKTOP=1`.
 
 ### Data Persistence
 
@@ -313,7 +385,7 @@ sudo podman stop computron   # Podman
 
 **UI doesn't load** — Wait 10-15 seconds for startup. Check logs: `docker logs -f computron`.
 
-**"Ollama connection refused"** — Make sure Ollama is running on the host. The container uses `--network=host` so it connects to Ollama at `localhost:11434` directly.
+**"Ollama connection refused"** — On Linux with `--network=host`, just make sure Ollama is running on the host. On Docker Desktop, you need `--add-host=host.docker.internal:host-gateway` + `-e LLM_HOST=http://host.docker.internal:11434`, AND Ollama bound to `0.0.0.0` (set `OLLAMA_HOST=0.0.0.0` and restart it — it defaults to `127.0.0.1` everywhere).
 
 **No GPU detected** — Install the NVIDIA Container Toolkit and pass `--gpus all` (Docker) or `--device nvidia.com/gpu=all` (Podman).
 

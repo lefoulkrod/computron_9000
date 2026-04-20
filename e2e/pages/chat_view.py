@@ -41,6 +41,12 @@ class ChatView:
         self.page.wait_for_timeout(500)
         return self
 
+    def attach_file(self, path: str) -> "ChatView":
+        """Attach a file to the next outgoing message via the hidden file input."""
+        self.page.locator("#fileInput").set_input_files(path)
+        self.page.wait_for_timeout(200)
+        return self
+
     @property
     def file_preview_btns(self) -> Locator:
         """All 'Preview' buttons on file outputs in the chat stream."""
