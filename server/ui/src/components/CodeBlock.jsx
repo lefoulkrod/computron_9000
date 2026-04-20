@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import styles from './Message.module.css';
 import CopyIcon from './icons/CopyIcon.jsx';
 import copyToClipboard from '../utils/copyToClipboard.js';
+import { highlightCode } from '../utils/highlight.js';
 
 function CodeHeader({ lang, onCopy, copied }) {
   return (
@@ -45,6 +46,12 @@ export function PreCodeBlock({ children }) {
     return { lang, text, codeEl: codeEl ?? children };
   }, [children]);
 
+  const highlighted = useMemo(() => {
+    if (!text) return null;
+    const requested = lang && lang !== 'code' ? lang : null;
+    return highlightCode(text, { language: requested });
+  }, [text, lang]);
+
   const handleCopy = async () => {
     const success = await copyToClipboard(text);
     if (!success) return;
@@ -56,7 +63,14 @@ export function PreCodeBlock({ children }) {
   return (
     <pre>
       <CodeHeader lang={lang} onCopy={handleCopy} copied={copied} />
-      {codeEl}
+      {highlighted ? (
+        <code
+          className="hljs"
+          dangerouslySetInnerHTML={{ __html: highlighted.html }}
+        />
+      ) : (
+        codeEl
+      )}
     </pre>
   );
 }

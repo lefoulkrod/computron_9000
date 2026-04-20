@@ -128,7 +128,7 @@ dev:
         echo "ℹ️  Container already running"
     fi
     just _sync-src {{_ctr}}
-    docker exec {{_ctr}} bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    just _ui-build {{_ctr}}
     docker exec {{_ctr}} pkill -f "python3.12 main.py" 2>/dev/null || true
     just _wait-ready 8080
     echo "✅ Ready on http://localhost:8080"
@@ -151,7 +151,7 @@ rebuild-ui:
     set -euo pipefail
     just _require-running
     just _sync-src {{_ctr}}
-    docker exec {{_ctr}} bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
+    just _ui-build {{_ctr}}
     echo "✅ UI rebuilt — refresh browser"
 
 # Stop the dev container (keeps state in ~/.computron_9000/)
@@ -407,6 +407,26 @@ _sync-src ctr:
         --exclude='test-results' \
         -cf - . | docker exec -i {{ctr}} tar -xf - -C /opt/computron
     @echo "📦 Source synced into {{ctr}}"
+
+# Install UI deps if package-lock.json has drifted, then build dist/.
+# Cheap on steady state (skips install when the lockfile hash matches the
+# stamp file inside node_modules). _sync-src excludes node_modules, so
+# the image's baked deps persist across syncs — we only reinstall when
+# the lockfile actually changed.
+_ui-build ctr:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker exec {{ctr}} bash -euc '
+        cd /opt/computron/{{UI_DIR}}
+        lock_hash=$(sha256sum package-lock.json 2>/dev/null | cut -d" " -f1 || echo none)
+        stamp=node_modules/.deps-hash
+        if [ ! -f "$stamp" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$lock_hash" ]; then
+            echo "📦 Syncing UI deps (lockfile changed)..."
+            if [ -f package-lock.json ]; then npm ci; else npm install; fi
+            echo "$lock_hash" > "$stamp"
+        fi
+        npm run build
+    '
 
 # Poll until the app responds on the given port (up to ~60s)
 _wait-ready port:
