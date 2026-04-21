@@ -31,7 +31,7 @@ def test_create_profile_persists_all_settings(page: Page):
     # --- Model (first available) ---
     model_select = page.locator("select").first
     model_options = model_select.locator("option").all()
-    selected_model = model_options[1].get_attribute("value") if len(model_options) > 1 else ""
+    selected_model = model_options[0].get_attribute("value") if model_options else ""
     if selected_model:
         model_select.select_option(selected_model)
 
@@ -106,3 +106,21 @@ def test_create_profile_persists_all_settings(page: Page):
     # Clean up — delete the test profile
     resp = page.request.delete(f"/api/profiles/{created['id']}")
     assert resp.status == 204
+
+
+def test_new_button_does_not_persist_until_save(page: Page):
+    """Clicking + New opens the builder without writing anything to disk."""
+    before = {p["id"] for p in page.request.get("/api/profiles").json()}
+
+    page.goto("/")
+    page.get_by_role("button", name="Settings", exact=True).click()
+    expect(page.get_by_text("Agent Profiles")).to_be_visible()
+
+    page.get_by_role("button", name="+ New").click()
+    page.locator("input[placeholder='Profile name']").wait_for(state="visible")
+
+    # Discard the draft by selecting an existing profile.
+    page.locator("[data-testid^='profile-item-']").first.click()
+
+    after = {p["id"] for p in page.request.get("/api/profiles").json()}
+    assert before == after, "A profile was persisted without clicking Save"

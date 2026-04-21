@@ -7,22 +7,18 @@ import WrenchIcon from './icons/WrenchIcon';
 
 export default function SystemSettings({ onRunWizard }) {
     const [allModels, setAllModels] = useState([]);
-    const [visionModels, setVisionModels] = useState([]);
     const [profiles, setProfiles] = useState([]);
     const [settings, setSettings] = useState({ default_agent: 'computron', vision_model: '' });
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    const visionModels = allModels.filter((m) => (m.capabilities || []).includes('vision'));
+
     const fetchModels = useCallback(async () => {
         try {
-            const [allRes, visionRes] = await Promise.all([
-                fetch('/api/models'),
-                fetch('/api/models?capability=vision'),
-            ]);
-            const allData = await allRes.json();
-            const visionData = await visionRes.json();
-            setAllModels(allData.models || []);
-            setVisionModels(visionData.models || []);
+            const res = await fetch('/api/models');
+            const data = await res.json();
+            setAllModels(data.models || []);
         } catch {
             // keep existing state on error
         }
@@ -31,18 +27,15 @@ export default function SystemSettings({ onRunWizard }) {
     useEffect(() => {
         async function init() {
             try {
-                const [allRes, visionRes, settingsRes, profilesRes] = await Promise.all([
+                const [modelsRes, settingsRes, profilesRes] = await Promise.all([
                     fetch('/api/models'),
-                    fetch('/api/models?capability=vision'),
                     fetch('/api/settings'),
                     fetch('/api/profiles'),
                 ]);
-                const allData = await allRes.json();
-                const visionData = await visionRes.json();
+                const modelsData = await modelsRes.json();
                 const settingsData = await settingsRes.json();
                 const profilesData = await profilesRes.json();
-                setAllModels(allData.models || []);
-                setVisionModels(visionData.models || []);
+                setAllModels(modelsData.models || []);
                 setSettings(settingsData);
                 setProfiles(profilesData);
             } catch {

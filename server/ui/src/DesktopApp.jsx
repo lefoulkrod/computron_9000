@@ -9,8 +9,7 @@ import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import SystemSettings from './components/SystemSettings.jsx';
-import ProfileList from './components/ProfileList.jsx';
-import ProfileBuilder from './components/ProfileBuilder.jsx';
+import ProfilesTab from './components/ProfilesTab.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
 import useAgentProfiles from './hooks/useAgentProfiles.js';
 import TerminalPanel from './components/TerminalOutput.jsx';
@@ -76,12 +75,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     // Agent profiles for the settings page builder
     const profilesHook = useAgentProfiles();
-    const [allModels, setAllModels] = useState([]);
-    useEffect(() => {
-        fetch('/api/models').then(r => r.json()).then(data => {
-            setAllModels(data.models || []);
-        }).catch(() => {});
-    }, []);
 
     const goalsState = useGoals(flyoutPanel === 'goals');
     const goalsActive = flyoutPanel === 'goals';
@@ -338,46 +331,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     {flyoutPanel === 'settings' && (
                         <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab}>
                             {settingsTab === 'profiles' && (
-                                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                                    <ProfileList
-                                        profiles={profilesHook.profiles}
-                                        selectedId={profilesHook.selectedProfileId}
-                                        onSelect={profilesHook.setSelectedProfileId}
-                                        onNew={async () => {
-                                            const result = await profilesHook.createProfile({
-                                                id: `custom_${Date.now()}`,
-                                                name: 'New Profile',
-                                                description: '',
-                                                icon: '🤖',
-                                                model: allModels[0]?.name || '',
-                                                system_prompt: '',
-                                                skills: [],
-                                            });
-                                            if (result) profilesHook.setSelectedProfileId(result.id);
-                                        }}
-                                    />
-                                    <ProfileBuilder
-                                        profile={profilesHook.profiles.find(p => p.id === profilesHook.selectedProfileId) || null}
-                                        onSave={async (updated) => {
-                                            const result = await profilesHook.updateProfile(updated.id, updated);
-                                            return result;
-                                        }}
-                                        onDelete={async (id) => {
-                                            await profilesHook.deleteProfile(id);
-                                        }}
-                                        onDuplicate={async (id) => {
-                                            const result = await profilesHook.duplicateProfile(id);
-                                            if (result) profilesHook.setSelectedProfileId(result.id);
-                                        }}
-                                        models={allModels}
-                                        availableSkills={[
-                                            'coder', 'browser', 'goal_planner',
-                                            ...(features.desktop ? ['desktop'] : []),
-                                            ...(features.image_generation ? ['image_gen'] : []),
-                                            ...(features.music_generation ? ['music_gen'] : []),
-                                        ]}
-                                    />
-                                </div>
+                                <ProfilesTab profilesHook={profilesHook} features={features} />
                             )}
                             {settingsTab === 'system' && (
                                 <SystemSettings onRunWizard={() => setSetupComplete(false)} />

@@ -94,12 +94,8 @@ vi.mock('../components/SystemSettings.jsx', () => ({
     default: () => <div>SystemSettings</div>,
 }));
 
-vi.mock('../components/ProfileList.jsx', () => ({
-    default: () => <div>ProfileList</div>,
-}));
-
-vi.mock('../components/ProfileBuilder.jsx', () => ({
-    default: () => <div>ProfileBuilder</div>,
+vi.mock('../components/ProfilesTab.jsx', () => ({
+    default: () => <div>ProfilesTab</div>,
 }));
 
 vi.mock('../components/SetupWizard.jsx', () => ({
