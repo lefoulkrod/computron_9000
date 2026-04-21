@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Computron — Integrations Onboarding (SIGNAL)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+/* ═══════════════════════════════════════════════════════
+   SIGNAL tokens + canonical classes
+   (sourced from docs/design/design_language.html)
+   Only the subset used by this mockup is included.
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --slate-400:#94a3b8;
+  --header-height:36px; --sidebar-width:44px;
+  --radius-sm:4px; --radius-md:6px; --radius-lg:8px; --radius-xl:12px; --radius-full:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+  --font-brand:'Share Tech Mono','Roboto Mono','Consolas',monospace;
+  --font-body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-code:'JetBrains Mono','Fira Mono','Consolas',monospace;
+  --ease:cubic-bezier(0.4,0,0.2,1);
+  --ease-out:cubic-bezier(0,0,0.2,1);
+}
+
+[data-theme="light"] {
+  --canvas:#f8f9fb; --surface:#eef0f5; --elevated:#ffffff;
+  --text-primary:#0f172a; --text-secondary:#475569; --text-tertiary:#94a3b8;
+  --border:#e2e8f0; --border-subtle:#f1f5f9; --border-strong:#cbd5e1;
+  --accent:#2563eb; --accent-hover:#1d4ed8;
+  --accent-muted:rgba(37,99,235,0.08); --accent-glow:rgba(37,99,235,0.15);
+  --success:#16a34a; --success-muted:rgba(22,163,74,0.08);
+  --warning:#d97706; --warning-muted:rgba(217,119,6,0.08);
+  --danger:#dc2626; --danger-muted:rgba(220,38,38,0.08);
+  --shadow-sm:0 1px 2px rgba(15,23,42,0.05);
+  --shadow-md:0 2px 8px rgba(15,23,42,0.08),0 1px 2px rgba(15,23,42,0.04);
+  --shadow-lg:0 4px 16px rgba(15,23,42,0.10),0 2px 4px rgba(15,23,42,0.05);
+  --shadow-glow:0 0 0 3px var(--accent-glow);
+  --scrim:rgba(15,23,42,0.40);
+  --terminal-bg:#edf1fb; --terminal-border:#c8d4ec; --terminal-text:#1e293b;
+}
+
+[data-theme="dark"] {
+  --canvas:#0c0e14; --surface:#151821; --elevated:#1e2130;
+  --text-primary:#e8ecf4; --text-secondary:#8892a8; --text-tertiary:#4a5168;
+  --border:#252a3a; --border-subtle:#1a1e2a; --border-strong:#363d52;
+  --accent:#3b82f6; --accent-hover:#60a5fa;
+  --accent-muted:rgba(59,130,246,0.12); --accent-glow:rgba(59,130,246,0.20);
+  --success:#4ade80; --success-muted:rgba(74,222,128,0.12);
+  --warning:#fbbf24; --warning-muted:rgba(251,191,36,0.12);
+  --danger:#f87171; --danger-muted:rgba(248,113,113,0.12);
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:0 2px 8px rgba(0,0,0,0.4),0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg:0 4px 16px rgba(0,0,0,0.5),0 2px 4px rgba(0,0,0,0.3);
+  --shadow-glow:0 0 0 3px var(--accent-glow);
+  --scrim:rgba(0,0,0,0.60);
+  --terminal-bg:#111318; --terminal-border:#252a3a; --terminal-text:#c8cdd8;
+}
+
+/* ── base ── */
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html { height:100%; }
+body {
+  min-height:100%;
+  font-family:var(--font-body);
+  font-size:14px; line-height:1.6;
+  color:var(--text-primary); background:var(--canvas);
+  -webkit-font-smoothing:antialiased;
+}
+::-webkit-scrollbar { width:8px; height:8px; }
+::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:var(--radius-full); border:2px solid transparent; background-clip:padding-box; }
+::-webkit-scrollbar-track { background:transparent; }
+:focus-visible { outline:none; box-shadow:var(--shadow-glow); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+@keyframes fadeInUp { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── page + top bar ── */
+.page { display:flex; flex-direction:column; min-height:100vh; }
+.mockup-topbar {
+  position:sticky; top:0; z-index:100;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:10px 24px;
+  display:flex; align-items:center; gap:16px;
+  backdrop-filter:blur(12px);
+}
+.mockup-topbar h1 {
+  font-family:var(--font-brand);
+  font-size:13px; font-weight:400;
+  letter-spacing:0.06em;
+  color:var(--text-primary);
+  margin-right:auto;
+}
+.mockup-topbar h1 span { color:var(--accent); }
+.theme-toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); font-family:var(--font-brand); letter-spacing:0.04em; }
+.theme-toggle button {
+  width:44px; height:24px;
+  border-radius:var(--radius-full);
+  border:1px solid var(--border-strong);
+  background:var(--surface);
+  cursor:pointer; position:relative;
+  transition:background 150ms var(--ease), border-color 150ms var(--ease);
+}
+.theme-toggle button::after {
+  content:''; position:absolute; top:3px; left:3px;
+  width:16px; height:16px; border-radius:50%;
+  background:var(--text-tertiary);
+  transition:transform 150ms var(--ease), background 150ms var(--ease);
+}
+[data-theme="dark"] .theme-toggle button { background:var(--accent-muted); border-color:var(--accent); }
+[data-theme="dark"] .theme-toggle button::after { transform:translateX(20px); background:var(--accent); }
+
+/* ── part labels ── */
+.part-label {
+  padding:28px 32px 16px;
+  background:var(--surface);
+  border-top:2px solid var(--accent);
+  border-bottom:1px solid var(--border);
+}
+.part-label .part-eyebrow { font-family:var(--font-brand); font-size:11px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
+.part-label .part-title { font-family:var(--font-brand); font-size:18px; font-weight:600; letter-spacing:0.04em; color:var(--text-primary); }
+.part-label .part-desc { font-size:12px; color:var(--text-secondary); margin-top:8px; max-width:720px; line-height:1.6; }
+
+/* ── section + subsection ── */
+.section { padding:40px 32px; border-bottom:1px solid var(--border); }
+.section:last-child { border-bottom:none; }
+.section-title { font-family:var(--font-brand); font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+.section-desc { font-size:13px; color:var(--text-secondary); margin-bottom:24px; max-width:720px; line-height:1.7; }
+.subsection { margin-bottom:32px; }
+.subsection:last-child { margin-bottom:0; }
+.subsection-label { font-family:var(--font-brand); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-tertiary); margin-bottom:12px; }
+
+/* ── buttons ── */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:32px; padding:0 14px;
+  border-radius:var(--radius-md);
+  font-size:13px; font-family:var(--font-body); font-weight:500;
+  cursor:pointer; transition:all 150ms var(--ease);
+  border:1px solid transparent; text-decoration:none; white-space:nowrap;
+}
+.btn:active { transform:translateY(1px); }
+.btn-ghost { background:transparent; color:var(--text-tertiary); border:none; }
+.btn-ghost:hover { background:var(--surface); color:var(--text-primary); }
+.btn-outline { background:transparent; border-color:var(--border); color:var(--text-primary); }
+.btn-outline:hover { background:var(--surface); border-color:var(--border-strong); }
+.btn-filled { background:var(--accent); color:#fff; }
+.btn-filled:hover { background:var(--accent-hover); }
+.btn-danger { background:var(--danger-muted); color:var(--danger); }
+.btn-danger:hover { background:rgba(220,38,38,0.15); }
+.btn-icon {
+  width:28px; height:28px; padding:0; border-radius:var(--radius-md);
+  background:transparent; border:none; color:var(--text-tertiary);
+  cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+  transition:all 120ms var(--ease); font-size:16px;
+}
+.btn-icon:hover { background:var(--surface); color:var(--text-primary); }
+.btn-lg { height:38px; padding:0 18px; font-size:14px; }
+
+/* ── inputs ── */
+.input {
+  height:32px; padding:0 10px;
+  border:1px solid var(--border); border-radius:var(--radius-md);
+  background:var(--canvas); color:var(--text-primary);
+  font-size:13px; font-family:var(--font-body);
+  outline:none; transition:border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+  width:100%;
+}
+.input::placeholder { color:var(--text-tertiary); }
+.input:focus { border-color:var(--accent); box-shadow:var(--shadow-glow); }
+[data-theme="dark"] .input { background:var(--surface); }
+.input-mono { font-family:var(--font-code); font-size:12px; }
+
+/* ── badges + status dots ── */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-family:var(--font-brand); font-size:10px; letter-spacing:0.03em;
+  padding:2px 7px; border-radius:var(--radius-sm);
+  border:1px solid transparent; white-space:nowrap;
+}
+.badge-success { background:var(--success-muted); color:var(--success); border-color:var(--success-muted); }
+.badge-warning { background:var(--warning-muted); color:var(--warning); border-color:var(--warning-muted); }
+.badge-danger  { background:var(--danger-muted);  color:var(--danger);  border-color:var(--danger-muted); }
+.badge-info    { background:var(--accent-muted);  color:var(--accent);  border-color:var(--accent-muted); }
+.badge-neutral { background:var(--border-subtle); color:var(--text-tertiary); border-color:var(--border); }
+
+.status-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; display:inline-block; }
+.dot-running { background:var(--success); box-shadow:0 0 6px var(--success-muted); animation:pulse 2s infinite; }
+.dot-complete { background:var(--accent); }
+.dot-error { background:var(--danger); }
+.dot-idle { background:var(--text-tertiary); }
+.dot-warning { background:var(--warning); }
+
+/* ── cards, chips, toggles, radio card ── */
+.card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:var(--sp-3);
+  transition:border-color 150ms var(--ease);
+}
+.card:hover { border-color:var(--border-strong); }
+
+.chip {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 10px; border-radius:var(--radius-full);
+  font-family:var(--font-brand); font-size:11px;
+  border:1px solid var(--border);
+  background:transparent; color:var(--text-primary); cursor:pointer;
+  transition:all 150ms var(--ease);
+}
+.chip:hover { border-color:var(--border-strong); }
+.chip.active { background:var(--accent-muted); border-color:var(--accent); color:var(--accent); }
+.chip-success.active { background:var(--success-muted); border-color:var(--success); color:var(--success); }
+
+.toggle {
+  display:inline-block; width:34px; height:20px;
+  background:var(--border-strong); border-radius:var(--radius-full);
+  position:relative; cursor:pointer;
+  transition:background 150ms var(--ease);
+}
+.toggle::after {
+  content:''; position:absolute; top:2px; left:2px;
+  width:16px; height:16px;
+  background:var(--elevated); border-radius:50%;
+  box-shadow:var(--shadow-sm);
+  transition:transform 150ms var(--ease);
+}
+.toggle.on { background:var(--accent); }
+.toggle.on::after { transform:translateX(14px); }
+
+.radio-card {
+  display:flex; align-items:center; gap:12px;
+  padding:12px 14px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  cursor:pointer;
+  transition:border-color 150ms var(--ease), background 150ms var(--ease);
+}
+.radio-card:hover { border-color:var(--border-strong); }
+.radio-card.selected { border-color:var(--accent); background:var(--accent-muted); }
+.radio-indicator {
+  width:18px; height:18px; border-radius:50%;
+  border:2px solid var(--border);
+  position:relative; flex-shrink:0;
+  transition:border-color 150ms var(--ease);
+}
+.radio-card.selected .radio-indicator { border-color:var(--accent); }
+.radio-card.selected .radio-indicator::after {
+  content:''; position:absolute; top:3px; left:3px;
+  width:8px; height:8px; border-radius:50%;
+  background:var(--accent);
+}
+.radio-card-info { flex:1; min-width:0; }
+.radio-card-title { font-size:13px; font-weight:600; color:var(--text-primary); }
+.radio-card-desc { font-size:11px; color:var(--text-tertiary); margin-top:2px; }
+
+/* ── inline code + code block ── */
+.inline-code {
+  font-family:var(--font-code); font-size:12px;
+  background:var(--terminal-bg); border:1px solid var(--terminal-border);
+  padding:1px 5px; border-radius:var(--radius-sm);
+  color:var(--terminal-text);
+}
+.codeblock {
+  background:var(--terminal-bg); border:1px solid var(--terminal-border);
+  border-radius:var(--radius-lg); overflow:hidden;
+}
+.codeblock-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 12px; background:var(--surface);
+  border-bottom:1px solid var(--terminal-border);
+}
+.codeblock-lang { font-family:var(--font-brand); font-size:11px; color:var(--text-tertiary); }
+.codeblock-body {
+  padding:12px 16px;
+  font-family:var(--font-code); font-size:12px;
+  color:var(--terminal-text); line-height:1.6;
+  overflow-x:auto; white-space:pre;
+}
+
+/* ── empty state ── */
+.empty-state {
+  display:flex; flex-direction:column; align-items:center;
+  padding:48px 24px; text-align:center;
+  background:var(--canvas); border:1px dashed var(--border);
+  border-radius:var(--radius-lg);
+  max-width:620px; margin:0 auto;
+}
+.empty-state-icon {
+  width:48px; height:48px; border-radius:var(--radius-lg);
+  background:var(--accent-muted); color:var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; margin-bottom:16px;
+}
+.empty-state-heading { font-size:20px; font-weight:600; color:var(--text-primary); margin-bottom:6px; }
+.empty-state-desc { font-size:13px; color:var(--text-secondary); line-height:1.6; max-width:420px; margin-bottom:20px; }
+
+/* ── settings list (fs-*) ── */
+.fs-page {
+  max-width:680px; margin:0 auto;
+  padding:var(--sp-5) var(--sp-6);
+  display:flex; flex-direction:column; gap:var(--sp-2);
+  background:var(--canvas);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+}
+.fs-section-label {
+  font-family:var(--font-brand); font-size:11px;
+  letter-spacing:0.06em; text-transform:uppercase;
+  color:var(--text-tertiary);
+  margin-top:var(--sp-3);
+}
+.fs-section-label:first-child { margin-top:0; }
+.fs-row {
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:var(--sp-2) var(--sp-3);
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+}
+.fs-row-icon {
+  width:32px; height:32px;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; color:var(--text-secondary); font-size:18px;
+  background:var(--elevated); border-radius:var(--radius-md);
+  border:1px solid var(--border-subtle);
+}
+.fs-row-info { flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.fs-row-title { font-size:13px; font-weight:500; color:var(--text-primary); display:flex; align-items:center; gap:6px; }
+.fs-row-desc  { font-size:11px; color:var(--text-tertiary); line-height:1.3; font-family:var(--font-code); }
+.fs-row-control { flex-shrink:0; display:flex; align-items:center; gap:8px; }
+.fs-note {
+  font-size:12px; color:var(--text-secondary);
+  padding:var(--sp-2) var(--sp-3);
+  background:var(--accent-muted);
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius-md);
+  line-height:1.5;
+  display:flex; gap:8px; align-items:flex-start;
+}
+.fs-note.warn { background:var(--warning-muted); border-left-color:var(--warning); color:var(--text-secondary); }
+.fs-note i { font-size:15px; flex-shrink:0; }
+.fs-note.warn i { color:var(--warning); }
+.fs-note:not(.warn) i { color:var(--accent); }
+
+/* ── wizard (wz-*) ── */
+.wz-card {
+  width:100%; max-width:580px;
+  background:var(--elevated);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);
+  display:flex; flex-direction:column;
+  overflow:hidden; margin:0 auto;
+}
+.wz-stepper {
+  display:flex; align-items:center; justify-content:center;
+  padding:var(--sp-5) var(--sp-6) var(--sp-2);
+}
+.wz-step-circle {
+  width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-brand); font-size:12px; font-weight:600;
+  border:2px solid var(--border); color:var(--text-tertiary);
+}
+.wz-step-circle.active { border-color:var(--accent); color:var(--accent); background:var(--accent-muted); }
+.wz-step-circle.done { border-color:var(--success); background:var(--success); color:#fff; }
+.wz-step-line { width:48px; height:2px; background:var(--border); margin:0 6px; }
+.wz-step-line.done { background:var(--success); }
+.wz-body {
+  padding:var(--sp-4) var(--sp-6) var(--sp-5);
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:var(--sp-2); min-height:220px;
+}
+.wz-body.left { text-align:left; align-items:stretch; }
+.wz-title { font-size:18px; font-weight:700; color:var(--text-primary); margin:0; }
+.wz-subtitle { font-size:13px; color:var(--text-secondary); line-height:1.5; max-width:420px; margin:0; }
+.wz-content { width:100%; margin-top:var(--sp-3); display:flex; flex-direction:column; gap:var(--sp-2); }
+.wz-footer {
+  padding:var(--sp-3) var(--sp-6) var(--sp-5);
+  display:flex; justify-content:space-between; gap:var(--sp-2);
+  border-top:1px solid var(--border-subtle);
+}
+.wz-footer .right { display:flex; gap:var(--sp-2); margin-left:auto; }
+
+/* ── form field (for wizards) ── */
+.field { display:flex; flex-direction:column; gap:4px; }
+.field-label { font-family:var(--font-brand); font-size:10px; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-tertiary); }
+.field-hint  { font-size:11px; color:var(--text-tertiary); }
+
+/* ── provider grid (category + provider pickers) ── */
+.provider-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+  gap:var(--sp-2);
+  width:100%;
+}
+.provider-card {
+  display:flex; align-items:center; gap:10px;
+  padding:12px 14px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  cursor:pointer; text-align:left;
+  transition:border-color 150ms var(--ease), background 150ms var(--ease);
+}
+.provider-card:hover { border-color:var(--accent); background:var(--accent-muted); }
+.provider-card-icon {
+  width:32px; height:32px; flex-shrink:0;
+  border-radius:var(--radius-md);
+  background:var(--elevated); border:1px solid var(--border-subtle);
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; color:var(--accent);
+}
+.provider-card-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.provider-card-title { font-size:13px; font-weight:600; color:var(--text-primary); }
+.provider-card-desc  { font-size:11px; color:var(--text-tertiary); line-height:1.3; }
+.provider-card-chev { color:var(--text-tertiary); font-size:14px; }
+
+/* ── progress checks list (verify screen) ── */
+.check-list { display:flex; flex-direction:column; gap:var(--sp-2); width:100%; }
+.check-row {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px;
+  background:var(--surface); border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);
+  font-size:13px;
+}
+.check-row .check-icon {
+  width:20px; height:20px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px;
+}
+.check-row .check-icon.done { color:var(--success); }
+.check-row .check-icon.pending { color:var(--text-tertiary); }
+.check-row .check-icon.running { color:var(--accent); }
+.check-row .check-label { flex:1; color:var(--text-primary); }
+.check-row .check-meta  { font-family:var(--font-code); font-size:11px; color:var(--text-tertiary); }
+.spinner {
+  width:14px; height:14px; border-radius:50%;
+  border:2px solid var(--border); border-top-color:var(--accent);
+  animation:spin 800ms linear infinite;
+}
+
+/* ── success summary table (key/value) ── */
+.kv-table {
+  width:100%; border-collapse:collapse; font-size:12px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg); overflow:hidden;
+}
+.kv-table td { padding:8px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+.kv-table tr:last-child td { border-bottom:none; }
+.kv-table td:first-child {
+  width:170px;
+  font-family:var(--font-brand); font-size:10px; letter-spacing:0.05em;
+  text-transform:uppercase; color:var(--text-tertiary);
+  background:var(--elevated);
+}
+.kv-table td:last-child { font-family:var(--font-code); color:var(--text-primary); word-break:break-all; }
+.kv-table .val-ok { color:var(--success); }
+.kv-table .val-pending { color:var(--text-tertiary); }
+
+/* ── modal (for provider picker) ── */
+.dl-modal-stage {
+  position:relative;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:24px; display:flex; align-items:center; justify-content:center;
+  min-height:440px; overflow:hidden;
+}
+.dl-modal-stage::before {
+  content:''; position:absolute; inset:0;
+  background:var(--scrim); backdrop-filter:blur(2px);
+}
+.dl-modal {
+  position:relative;
+  width:100%; max-width:620px;
+  background:var(--elevated); border:1px solid var(--border);
+  border-radius:var(--radius-xl);
+  box-shadow:var(--shadow-lg);
+  overflow:hidden;
+}
+.dl-modal-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:var(--sp-3) var(--sp-4);
+  border-bottom:1px solid var(--border);
+}
+.dl-modal-title {
+  font-family:var(--font-brand);
+  font-size:13px; font-weight:600;
+  letter-spacing:0.04em;
+  color:var(--text-primary);
+}
+.dl-modal-body { padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-3); max-height:460px; overflow-y:auto; }
+.dl-modal-footer {
+  display:flex; gap:var(--sp-2); justify-content:flex-end;
+  padding:var(--sp-3) var(--sp-4);
+  border-top:1px solid var(--border);
+}
+
+/* ── view-picker strip ── */
+.viewstrip {
+  position:sticky; top:45px; z-index:90;
+  display:flex; gap:6px; flex-wrap:wrap;
+  padding:10px 32px;
+  background:var(--canvas);
+  border-bottom:1px solid var(--border-subtle);
+}
+.viewstrip a {
+  font-family:var(--font-brand); font-size:10px;
+  letter-spacing:0.04em; text-decoration:none;
+  padding:4px 10px; border-radius:var(--radius-full);
+  border:1px solid var(--border);
+  color:var(--text-secondary);
+  transition:all 120ms var(--ease);
+}
+.viewstrip a:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-muted); }
+
+/* ── small helpers ── */
+.stack-sm { display:flex; flex-direction:column; gap:var(--sp-2); }
+.row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.row-gap { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.dim { color:var(--text-tertiary); }
+.link {
+  color:var(--accent); text-decoration:none;
+  font-family:var(--font-brand); font-size:11px;
+  display:inline-flex; align-items:center; gap:4px;
+}
+.link:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══════════════════════════════════════════════════════
+       Top bar
+       ═══════════════════════════════════════════════════════ -->
+  <div class="mockup-topbar">
+    <h1><span>SIGNAL</span> &mdash; Integrations Onboarding</h1>
+    <div class="theme-toggle">
+      LIGHT
+      <button onclick="toggleTheme()" aria-label="Toggle theme"></button>
+      DARK
+    </div>
+  </div>
+
+  <!-- ═══ quick-nav strip ═══ -->
+  <div class="viewstrip">
+    <a href="#empty">01 · Empty state</a>
+    <a href="#list">02 · Populated list</a>
+    <a href="#edit">02a · Edit integration</a>
+    <a href="#picker">03 · Provider picker</a>
+    <a href="#gmail-1">04 · Gmail · Explainer</a>
+    <a href="#gmail-2">05 · Gmail · Credentials</a>
+    <a href="#gmail-3">06 · Gmail · Verifying</a>
+    <a href="#gmail-4">07 · Gmail · Success</a>
+    <a href="#ha">08 · Home Assistant · MCP</a>
+    <a href="#custom">09 · Custom MCP</a>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART I — Settings › Integrations
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label" id="empty">
+    <div class="part-eyebrow">Part I</div>
+    <div class="part-title">Settings › Integrations</div>
+    <div class="part-desc">
+      Where the user lives once set-up is done. Each row is one integration — a connected
+      service (Gmail, Fastmail, iCloud) or an MCP subprocess (Home Assistant, GitHub, Linear…).
+      Status, tools, and lifecycle actions in one place.
+    </div>
+  </div>
+
+  <!-- ─── 01 · empty state ─── -->
+  <div class="section">
+    <div class="section-title">01 · First run — no integrations yet</div>
+    <div class="section-desc">Computron gains capabilities when the user connects external accounts. The empty state explains the value and points at a single primary action.</div>
+
+    <div class="empty-state">
+      <div class="empty-state-icon"><i class="bi bi-plug"></i></div>
+      <div class="empty-state-heading">Connect your first integration</div>
+      <div class="empty-state-desc">
+        Give Computron access to your email, calendar, smart home, and dev tools.
+        Credentials stay encrypted in your own vault — the agent never sees them directly.
+      </div>
+      <button class="btn btn-filled btn-lg"><i class="bi bi-plus-lg"></i> Add integration</button>
+    </div>
+  </div>
+
+  <!-- ─── 02 · populated list ─── -->
+  <div class="section" id="list">
+    <div class="section-title">02 · Integrations list — populated</div>
+    <div class="section-desc">Four connected integrations. Status dots show live health. GitHub shows a degraded state (token expired) with an inline Reconnect action.</div>
+
+    <div class="fs-page">
+
+      <div class="fs-section-label">Email &amp; Calendar</div>
+
+      <!-- Gmail -->
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-envelope-at"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Gmail — personal
+            <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
+          </div>
+          <div class="fs-row-desc">larry@gmail.com · imap · caldav</div>
+        </div>
+        <div class="fs-row-control">
+          <button class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></button>
+          <button class="btn-icon" title="Disconnect"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+
+      <!-- Fastmail -->
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-envelope"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Fastmail
+            <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
+          </div>
+          <div class="fs-row-desc">larry@fastmail.com · imap · caldav · carddav</div>
+        </div>
+        <div class="fs-row-control">
+          <button class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></button>
+          <button class="btn-icon" title="Disconnect"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+
+      <div class="fs-section-label">Smart Home</div>
+
+      <!-- Home Assistant -->
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-house-gear"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Home Assistant
+            <span class="badge badge-info">MCP</span>
+            <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
+          </div>
+          <div class="fs-row-desc">homeassistant-mcp · stdio · 24 tools exposed</div>
+        </div>
+        <div class="fs-row-control">
+          <button class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></button>
+          <button class="btn-icon" title="Disconnect"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+
+      <div class="fs-section-label">Dev Tools</div>
+
+      <!-- GitHub (disconnected) -->
+      <div class="fs-row">
+        <div class="fs-row-icon"><i class="bi bi-github"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">GitHub
+            <span class="badge badge-info">MCP</span>
+            <span class="badge badge-danger"><span class="status-dot dot-error"></span>auth failed</span>
+          </div>
+          <div class="fs-row-desc">github-mcp · PAT expired 2026-04-14 · reconnect to restore</div>
+        </div>
+        <div class="fs-row-control">
+          <button class="btn btn-outline"><i class="bi bi-plug"></i> Reconnect</button>
+          <button class="btn-icon"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+
+      <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+        <button class="btn btn-filled"><i class="bi bi-plus-lg"></i> Add integration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 02a · edit integration ─── -->
+  <div class="section" id="edit">
+    <div class="section-title">02a · Edit integration · Gmail personal</div>
+    <div class="section-desc">Opened from the pencil icon on a row. Read-only identifiers on top, editable fields below. <strong>Test connection</strong> reruns the real login + PROPFIND probe and shows the result inline.</div>
+
+    <div class="fs-page" style="max-width:720px;">
+
+      <!-- header -->
+      <div class="row-between" style="padding:8px 4px 16px; border-bottom:1px solid var(--border-subtle);">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="fs-row-icon" style="width:40px; height:40px; font-size:20px;"><i class="bi bi-envelope-at"></i></div>
+          <div>
+            <div style="font-size:14px; font-weight:600; color:var(--text-primary);">Gmail · personal</div>
+            <div style="font-size:11px; color:var(--text-tertiary); font-family:var(--font-code);">larry@gmail.com · imap · caldav</div>
+          </div>
+        </div>
+        <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
+      </div>
+
+      <!-- credentials -->
+      <div class="fs-section-label">Credentials</div>
+
+      <div class="field" style="padding:0 4px;">
+        <label class="field-label">Gmail address</label>
+        <input class="input input-mono" value="larry@gmail.com" readonly style="background:var(--border-subtle); color:var(--text-secondary);">
+        <span class="field-hint">Address can't change — disconnect and re-add to swap accounts.</span>
+      </div>
+
+      <div class="field" style="padding:0 4px;">
+        <label class="field-label">App password</label>
+        <div style="display:flex; gap:8px;">
+          <input class="input input-mono" value="•••• •••• •••• ••••" readonly style="flex:1; background:var(--border-subtle); color:var(--text-secondary);">
+          <button class="btn btn-outline"><i class="bi bi-arrow-repeat"></i> Replace</button>
+        </div>
+        <span class="field-hint">Last rotated 2026-03-04 · value is never decrypted or displayed.</span>
+      </div>
+
+      <div class="field" style="padding:0 4px;">
+        <label class="field-label">Label</label>
+        <input class="input" value="Gmail · personal">
+      </div>
+
+      <!-- services -->
+      <div class="fs-section-label">Services</div>
+      <div class="stack-sm">
+        <label class="radio-card selected">
+          <div class="radio-indicator"></div>
+          <div class="radio-card-info">
+            <div class="radio-card-title">IMAP</div>
+            <div class="radio-card-desc">imap.gmail.com:993 · search &amp; read messages</div>
+          </div>
+        </label>
+        <label class="radio-card selected">
+          <div class="radio-indicator"></div>
+          <div class="radio-card-info">
+            <div class="radio-card-title">CalDAV</div>
+            <div class="radio-card-desc">apidata.googleusercontent.com/caldav · read &amp; write events</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- danger -->
+      <div class="fs-section-label" style="color:var(--danger);">Danger zone</div>
+      <div class="fs-row" style="border-color:var(--danger-muted);">
+        <div class="fs-row-icon" style="color:var(--danger); background:var(--danger-muted); border-color:var(--danger-muted);"><i class="bi bi-trash3"></i></div>
+        <div class="fs-row-info">
+          <div class="fs-row-title">Disconnect Gmail</div>
+          <div class="fs-row-desc">Removes the vault record, stops the broker, purges cached message ids. Reversible via re-add.</div>
+        </div>
+        <div class="fs-row-control">
+          <button class="btn btn-danger">Disconnect</button>
+        </div>
+      </div>
+
+      <!-- footer -->
+      <div style="display:flex; justify-content:space-between; gap:8px; padding:16px 4px 0; border-top:1px solid var(--border-subtle); margin-top:8px;">
+        <button class="btn btn-outline"><i class="bi bi-shield-check"></i> Test connection</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost">Cancel</button>
+          <button class="btn btn-filled">Save changes</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART II — Add flow
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label" id="picker">
+    <div class="part-eyebrow">Part II</div>
+    <div class="part-title">Add Integration</div>
+    <div class="part-desc">
+      A modal opens from “Add integration.” Step one: pick a provider. Everything downstream
+      is provider-specific: app-password wizards for IMAP+CalDAV, token forms for MCP servers,
+      and a free-form command runner for any uvx / npx server the user wants to try.
+    </div>
+  </div>
+
+  <!-- ─── 03 · provider picker (as a modal) ─── -->
+  <div class="section">
+    <div class="section-title">03 · Choose a provider</div>
+    <div class="section-desc">Grouped by category, with an escape hatch at the bottom for Custom MCP. Accounts that require OAuth-verified apps (Google Workspace, M365) show an advisory note rather than a disabled state.</div>
+
+    <div class="dl-modal-stage">
+      <div class="dl-modal">
+        <div class="dl-modal-header">
+          <div class="dl-modal-title">ADD INTEGRATION</div>
+          <button class="btn-icon"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="dl-modal-body">
+
+          <div class="subsection-label" style="margin-bottom:0;">Email &amp; Calendar</div>
+          <div class="provider-grid">
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-envelope-at"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Gmail · personal</div>
+                <div class="provider-card-desc">IMAP + CalDAV · app password</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-envelope"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Fastmail</div>
+                <div class="provider-card-desc">IMAP + CalDAV + CardDAV</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-apple"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">iCloud Mail</div>
+                <div class="provider-card-desc">IMAP + CalDAV · app password</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-envelope-paper"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Outlook.com (consumer)</div>
+                <div class="provider-card-desc">IMAP + CalDAV · app password</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-gear-wide"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Custom IMAP + CalDAV</div>
+                <div class="provider-card-desc">Any RFC-compliant host</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+          </div>
+
+          <div class="fs-note warn">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>
+              <strong>Workspace &amp; Microsoft 365</strong> disabled IMAP/SMTP basic-auth in 2024.
+              Those accounts require OAuth and aren’t supported here — use a consumer account.
+            </span>
+          </div>
+
+          <div class="subsection-label" style="margin-bottom:0;">Smart Home · Dev · Notes (MCP)</div>
+          <div class="provider-grid">
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-house-gear"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Home Assistant</div>
+                <div class="provider-card-desc">homeassistant-mcp · long-lived token</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-github"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">GitHub</div>
+                <div class="provider-card-desc">github-mcp · personal access token</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-kanban"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Linear</div>
+                <div class="provider-card-desc">linear-mcp · API key</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-journal-text"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Obsidian</div>
+                <div class="provider-card-desc">obsidian-mcp · vault path</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+            <button class="provider-card">
+              <div class="provider-card-icon"><i class="bi bi-terminal"></i></div>
+              <div class="provider-card-info">
+                <div class="provider-card-title">Custom MCP server</div>
+                <div class="provider-card-desc">Any uvx / npx launcher</div>
+              </div>
+              <i class="bi bi-chevron-right provider-card-chev"></i>
+            </button>
+          </div>
+
+        </div>
+        <div class="dl-modal-footer">
+          <button class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART III — Gmail wizard (IMAP + CalDAV)
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label" id="gmail-1">
+    <div class="part-eyebrow">Part III</div>
+    <div class="part-title">Gmail · App-password wizard</div>
+    <div class="part-desc">
+      Three screens: explain → paste → verify. The whole flow is designed to finish in under
+      two minutes, with the user never leaving Computron for more than a single browser tab.
+    </div>
+  </div>
+
+  <!-- ─── 04 · step 1: explainer ─── -->
+  <div class="section">
+    <div class="section-title">04 · Step 1 · Explainer</div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle active">1</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">2</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">3</div>
+      </div>
+      <div class="wz-body">
+        <h2 class="wz-title">Connect Gmail</h2>
+        <p class="wz-subtitle">
+          You’ll generate a Google <strong>app password</strong> — a 16-character credential
+          Gmail issues specifically for third-party apps. Nothing is ever shared with Google
+          as an OAuth app.
+        </p>
+        <div class="wz-content">
+          <div class="fs-note">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>
+              Requires a <strong>@gmail.com consumer account</strong> with 2-Step Verification on.
+              Google Workspace accounts aren’t supported.
+            </span>
+          </div>
+          <div class="stack-sm">
+            <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Encrypted at rest (AES-256-GCM)</span></div>
+            <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Agent never reads the password</span></div>
+            <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Revocable from Google at any time</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="wz-footer">
+        <button class="btn btn-ghost">Cancel</button>
+        <div class="right">
+          <button class="btn btn-filled">Next <i class="bi bi-arrow-right"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 05 · step 2: paste credential ─── -->
+  <div class="section" id="gmail-2">
+    <div class="section-title">05 · Step 2 · Credentials</div>
+    <div class="section-desc">One deep link, two input fields. The “Open Google app-passwords page” button launches the user directly at <span class="inline-code">myaccount.google.com/apppasswords</span> in a new tab.</div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle done"><i class="bi bi-check-lg"></i></div>
+        <div class="wz-step-line done"></div>
+        <div class="wz-step-circle active">2</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">3</div>
+      </div>
+      <div class="wz-body left">
+        <h2 class="wz-title" style="text-align:center;">Generate &amp; paste</h2>
+        <p class="wz-subtitle" style="margin:0 auto;">Open Google’s app-password page, name it “Computron,” and paste the 16-character code below.</p>
+
+        <div class="wz-content">
+
+          <a class="btn btn-outline" href="#" target="_blank" style="justify-content:space-between;">
+            <span><i class="bi bi-box-arrow-up-right"></i>&nbsp; Open Google app-passwords page</span>
+            <span class="dim" style="font-family:var(--font-code); font-size:11px;">myaccount.google.com/apppasswords</span>
+          </a>
+
+          <div class="field">
+            <label class="field-label">Gmail address</label>
+            <input class="input" value="larry@gmail.com" placeholder="you@gmail.com">
+          </div>
+
+          <div class="field">
+            <label class="field-label">App password</label>
+            <input class="input input-mono" value="xxxx xxxx xxxx xxxx" placeholder="16 characters, spaces optional">
+            <span class="field-hint">Pasted verbatim from Google — spaces are trimmed automatically.</span>
+          </div>
+
+          <div class="field">
+            <label class="field-label">Label (optional)</label>
+            <input class="input" value="Gmail · personal" placeholder="What to call this integration">
+          </div>
+
+          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Enable services</div>
+          <div class="stack-sm">
+            <label class="radio-card selected">
+              <div class="radio-indicator"></div>
+              <div class="radio-card-info">
+                <div class="radio-card-title">IMAP</div>
+                <div class="radio-card-desc">imap.gmail.com:993 · search &amp; read messages</div>
+              </div>
+            </label>
+            <label class="radio-card selected">
+              <div class="radio-indicator"></div>
+              <div class="radio-card-info">
+                <div class="radio-card-title">CalDAV</div>
+                <div class="radio-card-desc">apidata.googleusercontent.com/caldav · read &amp; write events</div>
+              </div>
+            </label>
+          </div>
+
+        </div>
+      </div>
+      <div class="wz-footer">
+        <button class="btn btn-outline"><i class="bi bi-arrow-left"></i> Back</button>
+        <div class="right">
+          <button class="btn btn-ghost">Cancel</button>
+          <button class="btn btn-filled">Verify &amp; save <i class="bi bi-shield-check"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 06 · step 3: verifying ─── -->
+  <div class="section" id="gmail-3">
+    <div class="section-title">06 · Step 3 · Verifying</div>
+    <div class="section-desc">Each check is a concrete action against the real infrastructure. A failure here is informative — we know exactly which layer broke.</div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle done"><i class="bi bi-check-lg"></i></div>
+        <div class="wz-step-line done"></div>
+        <div class="wz-step-circle done"><i class="bi bi-check-lg"></i></div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle active">3</div>
+      </div>
+      <div class="wz-body left">
+        <h2 class="wz-title" style="text-align:center;">Verifying connection</h2>
+        <p class="wz-subtitle" style="margin:0 auto;">Writing to the vault, spawning the broker, and probing the upstream services.</p>
+
+        <div class="wz-content">
+          <div class="check-list">
+            <div class="check-row">
+              <div class="check-icon done"><i class="bi bi-check-circle-fill"></i></div>
+              <div class="check-label">Vault write · AES-256-GCM</div>
+              <div class="check-meta">142 ms</div>
+            </div>
+            <div class="check-row">
+              <div class="check-icon done"><i class="bi bi-check-circle-fill"></i></div>
+              <div class="check-label">Broker spawned · UID 1001</div>
+              <div class="check-meta">PID 2147 · 88 ms</div>
+            </div>
+            <div class="check-row">
+              <div class="check-icon running"><span class="spinner"></span></div>
+              <div class="check-label">IMAP login · imap.gmail.com:993</div>
+              <div class="check-meta">…</div>
+            </div>
+            <div class="check-row">
+              <div class="check-icon pending"><i class="bi bi-circle"></i></div>
+              <div class="check-label">CalDAV PROPFIND · principal URL</div>
+              <div class="check-meta dim">queued</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wz-footer">
+        <button class="btn btn-outline" disabled style="opacity:0.5;"><i class="bi bi-arrow-left"></i> Back</button>
+        <div class="right">
+          <button class="btn btn-ghost" disabled style="opacity:0.5;">Cancel</button>
+          <button class="btn btn-filled" disabled style="opacity:0.5;">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 07 · step 3 success ─── -->
+  <div class="section" id="gmail-4">
+    <div class="section-title">07 · Step 3 · Success</div>
+    <div class="section-desc">Two useful pieces of information live here: the <span class="inline-code">integration_id</span> (so the user can reference it in chat / API) and a mini manifest of what just got wired up.</div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle done"><i class="bi bi-check-lg"></i></div>
+        <div class="wz-step-line done"></div>
+        <div class="wz-step-circle done"><i class="bi bi-check-lg"></i></div>
+        <div class="wz-step-line done"></div>
+        <div class="wz-step-circle done"><i class="bi bi-check-lg"></i></div>
+      </div>
+      <div class="wz-body left">
+        <div style="display:flex; justify-content:center; margin-bottom:8px;">
+          <div style="width:48px; height:48px; border-radius:50%; background:var(--success-muted); color:var(--success); display:flex; align-items:center; justify-content:center; font-size:24px;">
+            <i class="bi bi-check-circle-fill"></i>
+          </div>
+        </div>
+        <h2 class="wz-title" style="text-align:center;">Gmail connected</h2>
+        <p class="wz-subtitle" style="margin:0 auto;">4 checks passed in 1.8 s. Your agent can now search email and read/write calendar events.</p>
+
+        <div class="wz-content">
+          <table class="kv-table">
+            <tr>
+              <td>integration_id</td>
+              <td>gmail_personal</td>
+            </tr>
+            <tr>
+              <td>kind</td>
+              <td>app_password</td>
+            </tr>
+            <tr>
+              <td>account</td>
+              <td>larry@gmail.com</td>
+            </tr>
+            <tr>
+              <td>services</td>
+              <td>imap · caldav</td>
+            </tr>
+            <tr>
+              <td>broker</td>
+              <td class="val-ok">running · PID 2147 · UID 1001</td>
+            </tr>
+            <tr>
+              <td>vault record</td>
+              <td class="val-ok">/app/data/credentials.enc · 0600 root</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <div class="wz-footer">
+        <div class="right">
+          <button class="btn btn-outline"><i class="bi bi-plus-lg"></i> Add another</button>
+          <button class="btn btn-filled">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PART IV — MCP subprocess flows
+       ═══════════════════════════════════════════════════════ -->
+  <div class="part-label" id="ha">
+    <div class="part-eyebrow">Part IV</div>
+    <div class="part-title">MCP subprocess flows</div>
+    <div class="part-desc">
+      MCP plugins are brokers too. Same UID (<span class="inline-code">1001</span>), same vault socket,
+      same verification pattern. The wizard collects the config the server needs, vault-seals it,
+      and spawns <span class="inline-code">uvx</span> or <span class="inline-code">npx</span> under systemd-style supervision.
+    </div>
+  </div>
+
+  <!-- ─── 08 · Home Assistant MCP ─── -->
+  <div class="section">
+    <div class="section-title">08 · Home Assistant · MCP</div>
+    <div class="section-desc">Two inputs and the wizard writes everything else. The “subprocess config” block on the right is read-only; it’s the artifact that will be stored in the vault next to the secret.</div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle active">1</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">2</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">3</div>
+      </div>
+      <div class="wz-body left">
+        <h2 class="wz-title" style="text-align:center;">Home Assistant</h2>
+        <p class="wz-subtitle" style="margin:0 auto;">Create a long-lived access token in Home Assistant (<em>Profile → Security → Create Token</em>) and paste it below.</p>
+
+        <div class="wz-content">
+          <div class="field">
+            <label class="field-label">Home Assistant URL</label>
+            <input class="input input-mono" value="http://homeassistant.local:8123" placeholder="http://homeassistant.local:8123">
+          </div>
+          <div class="field">
+            <label class="field-label">Long-lived access token</label>
+            <input class="input input-mono" value="eyJhbGciOiJIUzI1NiIs…" placeholder="eyJhbGci…">
+          </div>
+
+          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Subprocess configuration</div>
+          <table class="kv-table">
+            <tr>
+              <td>launcher</td>
+              <td>uvx</td>
+            </tr>
+            <tr>
+              <td>package</td>
+              <td>homeassistant-mcp</td>
+            </tr>
+            <tr>
+              <td>transport</td>
+              <td>stdio</td>
+            </tr>
+            <tr>
+              <td>runs as</td>
+              <td>UID 1001 · broker</td>
+            </tr>
+            <tr>
+              <td>env from vault</td>
+              <td>HA_URL=&lt;url&gt;, HA_TOKEN=&lt;token&gt;</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <div class="wz-footer">
+        <button class="btn btn-outline"><i class="bi bi-arrow-left"></i> Back</button>
+        <div class="right">
+          <button class="btn btn-ghost">Cancel</button>
+          <button class="btn btn-filled">Verify &amp; save <i class="bi bi-shield-check"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 09 · Custom MCP (advanced) ─── -->
+  <div class="section" id="custom">
+    <div class="section-title">09 · Custom MCP · advanced</div>
+    <div class="section-desc">The escape hatch — run any MCP server the user can reach with <span class="inline-code">uvx</span> / <span class="inline-code">npx</span>. Args come in as a JSON array; env-from-vault lets the user mark specific keys as secret without typing them into plaintext fields.</div>
+
+    <div class="wz-card">
+      <div class="wz-stepper">
+        <div class="wz-step-circle active">1</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">2</div>
+        <div class="wz-step-line"></div>
+        <div class="wz-step-circle">3</div>
+      </div>
+      <div class="wz-body left">
+        <h2 class="wz-title" style="text-align:center;">Custom MCP server</h2>
+        <p class="wz-subtitle" style="margin:0 auto;">You’re on your own here — but anything that speaks MCP-stdio is fair game.</p>
+
+        <div class="wz-content">
+
+          <div class="field">
+            <label class="field-label">Display name</label>
+            <input class="input" value="Notion" placeholder="Shown in the integrations list">
+          </div>
+
+          <div class="field">
+            <label class="field-label">Launcher</label>
+            <input class="input input-mono" value="npx" placeholder="uvx · npx · node · python">
+          </div>
+
+          <div class="field">
+            <label class="field-label">Args (JSON array)</label>
+            <input class="input input-mono" value='["-y","@modelcontextprotocol/server-notion"]'>
+          </div>
+
+          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Secret env vars (vault-sealed)</div>
+
+          <div class="fs-row">
+            <div class="fs-row-icon"><i class="bi bi-key"></i></div>
+            <div class="fs-row-info">
+              <div class="fs-row-title">NOTION_API_KEY <span class="badge badge-info">secret</span></div>
+              <div class="fs-row-desc">secret_xxxxxx… · stored encrypted</div>
+            </div>
+            <div class="fs-row-control">
+              <button class="btn-icon"><i class="bi bi-pencil"></i></button>
+              <button class="btn-icon"><i class="bi bi-x-lg"></i></button>
+            </div>
+          </div>
+          <button class="btn btn-outline" style="align-self:flex-start;"><i class="bi bi-plus-lg"></i> Add env var</button>
+
+          <div class="fs-note warn">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>
+              <strong>You’re installing third-party code.</strong>
+              Computron will fetch and run this package under a non-privileged user,
+              but it will still have network access and whatever capabilities the
+              server itself implements. Only install servers you trust.
+            </span>
+          </div>
+
+          <div class="codeblock">
+            <div class="codeblock-header">
+              <span class="codeblock-lang">JSON · what gets written to vault</span>
+            </div>
+            <div class="codeblock-body">{
+  "id": "notion_custom",
+  "kind": "mcp_subprocess",
+  "label": "Notion",
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-notion"],
+    "transport": "stdio",
+    "env_from_vault": { "NOTION_API_KEY": "secret" }
+  },
+  "auth": { "type": "bundle", "fields": { "secret": "secret_xxxxxx..." } }
+}</div>
+          </div>
+
+        </div>
+      </div>
+      <div class="wz-footer">
+        <button class="btn btn-outline"><i class="bi bi-arrow-left"></i> Back</button>
+        <div class="right">
+          <button class="btn btn-ghost">Cancel</button>
+          <button class="btn btn-filled">Verify &amp; save <i class="bi bi-shield-check"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleTheme() {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+</script>
+</body>
+</html>
