@@ -92,15 +92,17 @@ async def inspect_page(
 
     encoded_image = _encode_image(screenshot_bytes)
 
-    client, model = _make_vision_client(tool_name=_SCREENSHOT_TOOL_NAME)
+    client, vision_model, vision_options, vision_think = _make_vision_client(
+        tool_name=_SCREENSHOT_TOOL_NAME
+    )
 
     try:
         response = await client.generate(
-            model=model.model,
+            model=vision_model,
             prompt=clean_prompt,
-            options=model.options,
+            options=vision_options,
             images=[Image(value=encoded_image)],
-            think=model.think,
+            think=vision_think,
         )
     except Exception as exc:
         logger.exception("Failed to generate answer for screenshot question")
@@ -116,7 +118,7 @@ async def inspect_page(
 
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
-        "inspect_page", model.model,
+        "inspect_page", vision_model,
         clean_prompt, answer, elapsed_ms,
         image_source="%s (%s)" % (view.url, normalized_mode),
     )
@@ -241,17 +243,41 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
     return await locator.screenshot(type="png")
 
 
-def _make_vision_client(*, tool_name: str) -> tuple[AsyncClient, Any]:
-    """Return a configured AsyncClient and model tuple for the shared vision model."""
+def _make_vision_client(
+    *, tool_name: str,
+) -> tuple[AsyncClient, str, dict[str, Any], bool]:
+    """Return ``(client, model_name, options, think)`` for a vision call.
+
+    All vision parameters are sourced from ``settings.json`` (UI-editable).
+    """
+    from settings import load_settings
+
     config = load_config()
-    if config.vision is None:
-        msg = "Vision model configuration missing."
+    settings = load_settings()
+
+    vision_model = settings.get("vision_model")
+    if not vision_model:
+        msg = "No vision model configured. Set one in Settings > System."
         raise BrowserToolError(msg, tool=tool_name)
+
+    if "vision_options" not in settings:
+        logger.warning(
+            "vision_options missing from settings.json — using empty dict. "
+            "Migration 003 may not have run."
+        )
+    if "vision_think" not in settings:
+        logger.warning(
+            "vision_think missing from settings.json — defaulting to False. "
+            "Migration 003 may not have run."
+        )
+
+    vision_options = dict(settings.get("vision_options") or {})
+    vision_think = bool(settings.get("vision_think") or False)
 
     host = getattr(getattr(config, "llm", None), "host", None)
     client = AsyncClient(host=host) if host else AsyncClient()
 
-    return client, config.vision
+    return client, vision_model, vision_options, vision_think
 
 
 def _encode_image(image_bytes: bytes) -> str:

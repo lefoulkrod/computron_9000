@@ -70,18 +70,35 @@ async def describe_image(
     encoded = base64.b64encode(raw).decode("ascii")
 
     from settings import load_settings
-    vision_model = load_settings().get("vision_model")
+    settings = load_settings()
+    vision_model = settings.get("vision_model")
     if not vision_model:
         return "Error: No vision model configured. Set one in Settings > System."
 
     host = cfg.llm.host if getattr(cfg, "llm", None) else None
     client = AsyncClient(host=host) if host else AsyncClient()
 
+    if "vision_options" not in settings:
+        logger.warning(
+            "vision_options missing from settings.json — using empty dict. "
+            "Migration 003 may not have run."
+        )
+    if "vision_think" not in settings:
+        logger.warning(
+            "vision_think missing from settings.json — defaulting to False. "
+            "Migration 003 may not have run."
+        )
+
+    vision_options = dict(settings.get("vision_options") or {})
+    vision_think = bool(settings.get("vision_think") or False)
+
     try:
         response = await client.generate(
             model=vision_model,
             prompt=prompt,
             images=[Image(value=encoded)],
+            options=vision_options,
+            think=vision_think,
         )
     except Exception as exc:
         logger.exception("Vision model failed for image %s", path)

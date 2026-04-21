@@ -220,8 +220,11 @@ async def describe_screen() -> str:
     t0 = asyncio.get_event_loop().time()
 
     cfg = load_config()
-    if cfg.desktop.vision_model is None:
-        return "Error: No desktop vision model configured (desktop.vision_model)."
+    from settings import load_settings
+    settings = load_settings()
+    vision_model = settings.get("vision_model")
+    if not vision_model:
+        return "Error: No vision model configured. Set one in Settings > System."
 
     try:
         screenshot_bytes = await capture_screenshot()
@@ -233,16 +236,30 @@ async def describe_screen() -> str:
     host = getattr(getattr(cfg, "llm", None), "host", None)
     client = AsyncClient(host=host) if host else AsyncClient()
 
+    if "vision_options" not in settings:
+        logger.warning(
+            "vision_options missing from settings.json — using empty dict. "
+            "Migration 003 may not have run."
+        )
+    if "vision_think" not in settings:
+        logger.warning(
+            "vision_think missing from settings.json — defaulting to False. "
+            "Migration 003 may not have run."
+        )
+
+    vision_options = dict(settings.get("vision_options") or {})
+    vision_think = bool(settings.get("vision_think") or False)
+
     try:
         response = await client.chat(
-            model=cfg.desktop.vision_model,
+            model=vision_model,
             messages=[{
                 "role": "user",
                 "content": _DESCRIBE_PROMPT,
                 "images": [Image(value=encoded)],
             }],
-            options={"temperature": 0.1, "num_predict": 512},
-            think=False,
+            options=vision_options,
+            think=vision_think,
         )
     except Exception as exc:
         logger.exception("Vision model failed for describe_screen")
@@ -261,7 +278,7 @@ async def describe_screen() -> str:
 
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
-        "describe_screen", cfg.desktop.vision_model,
+        "describe_screen", vision_model,
         _DESCRIBE_PROMPT, answer, elapsed_ms,
     )
 

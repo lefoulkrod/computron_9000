@@ -36,16 +36,6 @@ tools:
 desktop:
   resolution: "1280x720"
   websocket_port: 6080
-  vision_model: qwen3.5:4b
-
-vision:
-  model: qwen3.5:4b
-  think: false
-  options:
-    num_ctx: 60000
-    num_predict: 512
-    temperature: 0.3
-    top_k: 20
 
 summary:
   model: kimi-k2.5:cloud

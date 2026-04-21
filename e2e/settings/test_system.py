@@ -76,3 +76,69 @@ def test_change_compaction_model(page: Page):
     if original:
         compaction_select.select_option(original)
         page.wait_for_timeout(500)
+
+
+def test_vision_advanced_defaults_load(page: Page):
+    """Advanced inference panel shows the migrated defaults on first open."""
+    _open_system_settings(page)
+
+    settings = page.request.get("/api/settings").json()
+    assert "vision_think" in settings, "vision_think missing — migration 003 did not run"
+    assert "vision_options" in settings, "vision_options missing — migration 003 did not run"
+
+    # Expand the panel — it's collapsed by default.
+    page.get_by_test_id("vision-advanced-toggle").click()
+    page.get_by_test_id("vision-advanced-panel").wait_for(state="visible")
+
+    opts = settings["vision_options"]
+    for key, expected in opts.items():
+        field = page.get_by_test_id(f"vision-option-{key}")
+        assert field.input_value() == str(expected), (
+            f"Field {key} showed {field.input_value()!r}, expected {expected!r}"
+        )
+
+
+def test_change_vision_advanced_settings(page: Page):
+    """Every advanced field (Thinking + all four options) persists."""
+    _open_system_settings(page)
+
+    original = page.request.get("/api/settings").json()
+    original_think = bool(original.get("vision_think"))
+    original_opts = dict(original["vision_options"])
+
+    # Pick a new value for each numeric option that's guaranteed different.
+    new_values = {
+        "temperature": 0.9 if original_opts.get("temperature") != 0.9 else 0.1,
+        "top_k": 99 if original_opts.get("top_k") != 99 else 42,
+        "num_ctx": 12345 if original_opts.get("num_ctx") != 12345 else 16384,
+        "num_predict": 777 if original_opts.get("num_predict") != 777 else 256,
+    }
+
+    page.get_by_test_id("vision-advanced-toggle").click()
+    page.get_by_test_id("vision-advanced-panel").wait_for(state="visible")
+
+    # Toggle thinking.
+    page.get_by_test_id("vision-think-toggle").click()
+    page.wait_for_timeout(300)
+
+    # Change every option.
+    for key, value in new_values.items():
+        field = page.get_by_test_id(f"vision-option-{key}")
+        field.fill(str(value))
+        field.blur()
+        page.wait_for_timeout(300)
+
+    saved = page.request.get("/api/settings").json()
+    assert saved["vision_think"] == (not original_think), "vision_think did not persist"
+    for key, expected in new_values.items():
+        actual = saved["vision_options"][key]
+        assert actual == expected, f"{key} did not persist: got {actual!r}, expected {expected!r}"
+
+    # Restore.
+    page.get_by_test_id("vision-think-toggle").click()
+    page.wait_for_timeout(200)
+    for key, value in original_opts.items():
+        field = page.get_by_test_id(f"vision-option-{key}")
+        field.fill(str(value))
+        field.blur()
+        page.wait_for_timeout(200)
