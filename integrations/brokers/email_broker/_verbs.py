@@ -2,7 +2,7 @@
 
 Bridges two layers with different vocabularies:
 
-- The RPC layer (``brokers._common._rpc``) speaks frames: ``(verb_name, args_dict)
+- The RPC layer (``integrations._rpc``) speaks frames: ``(verb_name, args_dict)
   -> result_dict``. It has no idea what verbs exist or what they do.
 - The client layer (``_imap_client``, ``_smtp_client``) speaks email: typed
   method calls, typed returns.
@@ -27,8 +27,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
-from brokers._common._rpc import RpcError
-from brokers.email_broker._imap_client import ImapClient
+from integrations._rpc import RpcError
+from integrations.brokers.email_broker._imap_client import ImapClient
 
 # Authoritative read/write classification for email-broker verbs.
 # Must stay in lockstep with ``broker_client._verb_types._VERB_TYPES`` on the

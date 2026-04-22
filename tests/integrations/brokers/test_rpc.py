@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from brokers._common import _rpc as rpc_module
-from brokers._common._rpc import RpcError, serve_rpc
+from integrations import _rpc as rpc_module
+from integrations._rpc import RpcError, serve_rpc
 
 
 async def _send_frame(writer: asyncio.StreamWriter, obj: dict[str, Any]) -> None:

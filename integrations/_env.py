@@ -4,7 +4,7 @@ Every concrete broker reads its config from the environment the supervisor
 passes at spawn time. The two primitives below keep each broker's ``__main__``
 tiny and ensure a consistent contract with the supervisor:
 
-- Missing required env var exits with :data:`brokers._common._exit_codes.GENERIC_ERROR`
+- Missing required env var exits with :data:`integrations.brokers._common._exit_codes.GENERIC_ERROR`
   and a clear message — the supervisor turns non-auth-fail exits into the
   ``error`` state with backoff restart.
 - Boolean flags are parsed fail-closed. Only the literal string ``"true"``
@@ -18,7 +18,7 @@ import logging
 import os
 import sys
 
-from brokers._common._exit_codes import GENERIC_ERROR
+from integrations.brokers._common._exit_codes import GENERIC_ERROR
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,10 @@
-"""Email broker entry point: ``python -m brokers.email_broker``.
+"""Email broker entry point: ``python -m integrations.brokers.email_broker``.
 
 The supervisor spawns this with credentials and policy in the environment,
 reads ``READY\\n`` from stdout as the signal the broker is serving, and later
 sends SIGTERM to shut it down.
 
-Exit codes the supervisor reacts to (see ``brokers._common._exit_codes``):
+Exit codes the supervisor reacts to (see ``integrations.brokers._common._exit_codes``):
 
 - 0: clean shutdown.
 - 77: IMAP LOGIN was rejected by the server. The supervisor flips the
@@ -27,12 +27,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from brokers._common._env import env_required, parse_bool
-from brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
-from brokers._common._ready import print_ready
-from brokers._common._rpc import serve_rpc
-from brokers.email_broker._imap_client import ImapAuthError, ImapClient
-from brokers.email_broker._verbs import VerbDispatcher
+from integrations._env import env_required, parse_bool
+from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
+from integrations.brokers._common._ready import print_ready
+from integrations._rpc import serve_rpc
+from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapClient
+from integrations.brokers.email_broker._verbs import VerbDispatcher
 
 logger = logging.getLogger("email_broker")
 

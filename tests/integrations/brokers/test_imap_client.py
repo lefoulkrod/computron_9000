@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from brokers.email_broker._imap_client import ImapAuthError, ImapClient
-from tests.fixtures.fake_email import FakeEmail
+from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapClient
+from tests.integrations.fixtures.fake_email import FakeEmail
 
 
 @pytest.mark.asyncio

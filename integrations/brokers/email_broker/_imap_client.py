@@ -23,7 +23,7 @@ import asyncio
 import imaplib
 import logging
 
-from brokers.email_broker.types import Mailbox
+from integrations.brokers.email_broker.types import Mailbox
 
 logger = logging.getLogger(__name__)
 

@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-from brokers._common._rpc import RpcError
-from brokers.email_broker._verbs import VerbDispatcher
-from brokers.email_broker.types import Mailbox
+from integrations._rpc import RpcError
+from integrations.brokers.email_broker._verbs import VerbDispatcher
+from integrations.brokers.email_broker.types import Mailbox
 
 
 class _StubImap:
