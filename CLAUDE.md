@@ -52,7 +52,11 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - Handle exceptions with context-aware logging; use module-level logger (`logger = logging.getLogger(__name__)`)
 - Use custom exceptions where appropriate
 - Use Pydantic for data validation; ensure JSON-serializable API responses
-- Private and internal fields, methods, functions, constants, types and modules should all be named with a single leading underscore
+- Leading-underscore naming follows the **"private module, public-within-package"** split. The underscore on a module filename is the "internal to this project" signal; symbols inside that module use the underscore only when they're *also* module-local:
+  - **Modules (files) and packages (directories)** that are internal to their parent package: leading underscore on the name (`_rpc.py`, `_common/`).
+  - **Symbols inside an internal module** (functions, classes, constants, type aliases): leading underscore only when they're used solely inside the module that defines them. Symbols imported by other modules in the same package do not carry the underscore — the containing module's underscore is the "internal" signal. Example: `brokers/_common/_env.py` exports `env_required` (no underscore) because `brokers/email_broker/__main__.py` imports it; `brokers/_common/_rpc.py` keeps `_encode_frame` underscored because it's only used inside `_rpc.py`.
+  - **Class members** (methods, instance attributes): leading underscore for anything not part of the class's public surface.
+  - This matches PEP 8's "weak internal-use indicator" reading and avoids false-positive "unused private name" warnings from Pylance / Pyright on cross-module imports inside a private package.
 - Include new deps in pyproject.toml (managed with `uv`)
 - No backward compatible refactors unless prompted
 - Write python code compatible with Python 3.12.10
