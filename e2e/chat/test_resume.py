@@ -55,8 +55,12 @@ def resumed(browser, browser_context_args):
     flyout.resume_top()
     flyout.close()  # so per-test assertions can't false-match list rows
 
-    # Wait until at least one restored marker is visible before yielding.
-    expect(page.get_by_text(cw1).first).to_be_visible(timeout=10_000)
+    # Wait until the first restored user message bubble is visible
+    # before yielding. Scoped to message-user so we don't false-match
+    # any stray text on the page.
+    expect(
+        page.get_by_test_id("message-user").first.get_by_text(cw1),
+    ).to_be_visible(timeout=10_000)
 
     yield {"page": page, "cw1": cw1, "cw2": cw2}
 
@@ -69,12 +73,17 @@ def resumed(browser, browser_context_args):
 
 def test_turn_one_user_message_restored(resumed):
     """Turn 1's user message reappears with its codeword."""
-    expect(resumed["page"].get_by_text(resumed["cw1"]).first).to_be_visible()
+    user_msgs = resumed["page"].get_by_test_id("message-user")
+    expect(user_msgs.first.get_by_text(resumed["cw1"])).to_be_visible()
 
 
 def test_turn_one_tool_call_badge_restored(resumed):
     """Turn 1's assistant tool_call entry renders as a ToolCallBlock badge."""
-    expect(resumed["page"].get_by_text("run_bash_cmd").first).to_be_visible()
+    assistant_msgs = resumed["page"].get_by_test_id("message-assistant")
+    # `.first` on the inner locator: the tool name often appears both in
+    # the rendered text (e.g. inside markdown <code>) and the badge <span>.
+    # We just need at least one occurrence inside the scoped bubble.
+    expect(assistant_msgs.first.get_by_text("run_bash_cmd").first).to_be_visible()
 
 
 # ── Turn 2 — assistant message with content-only entries ────────────
@@ -82,20 +91,17 @@ def test_turn_one_tool_call_badge_restored(resumed):
 
 def test_turn_two_user_message_restored(resumed):
     """Turn 2's user message reappears with its codeword."""
-    expect(resumed["page"].get_by_text(resumed["cw2"]).first).to_be_visible()
+    user_msgs = resumed["page"].get_by_test_id("message-user")
+    expect(user_msgs.last.get_by_text(resumed["cw2"])).to_be_visible()
 
 
 def test_turn_two_assistant_content_restored(resumed):
-    """Turn 2's assistant plain-content reply is restored alongside the user msg.
+    """Turn 2's assistant plain-content reply is restored.
 
-    The codeword appears in both the user message and the assistant's echo —
-    count >= 2 proves the assistant content entry rendered, not just the
-    user message. This is the only test that exercises the
-    content-only assistant message shape (no tool_calls field).
+    Scoped to the latest assistant bubble — exercises the content-only
+    assistant message shape (no tool_calls field) that turn 1 didn't.
     """
-    page = resumed["page"]
-    cw2 = resumed["cw2"]
-    count = page.get_by_text(cw2).count()
-    assert count >= 2, (
-        f"Expected codeword in both user msg and assistant reply, got {count}"
-    )
+    assistant_msgs = resumed["page"].get_by_test_id("message-assistant")
+    # `.first` on the inner locator: the codeword can appear in both the
+    # assistant's reasoning text and its final reply paragraph.
+    expect(assistant_msgs.last.get_by_text(resumed["cw2"]).first).to_be_visible()

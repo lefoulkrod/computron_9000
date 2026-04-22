@@ -1,5 +1,13 @@
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { highlightCode } from '../utils/highlight.js';
+import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
+
+const _markdownComponents = {
+    pre: (props) => <PreCodeBlock {...props} />,
+    code: (props) => <InlineCode {...props} />,
+};
 
 export default function FileContentRenderer({
     item,
@@ -15,6 +23,11 @@ export default function FileContentRenderer({
 }) {
     const { filename, content_type, content } = item;
 
+    const highlightedSource = useMemo(() => {
+        if (!text || isPdf || isImageFile) return null;
+        return highlightCode(text, { filename, contentType: content_type });
+    }, [text, isPdf, isImageFile, filename, content_type]);
+
     return (
         <>
             {isPdf && pdfSrc && (
@@ -27,12 +40,26 @@ export default function FileContentRenderer({
             {isPdf && !pdfSrc && (
                 <div className={styles.statusText}>Loading...</div>
             )}
-            {!isPdf && viewMode === 'source' && (
-                <pre className={styles.sourceCode}>{text || 'Loading...'}</pre>
+            {!isPdf && !isImageFile && viewMode === 'source' && (
+                highlightedSource ? (
+                    <pre className={styles.sourceCode}>
+                        <code
+                            className="hljs"
+                            dangerouslySetInnerHTML={{ __html: highlightedSource.html }}
+                        />
+                    </pre>
+                ) : (
+                    <pre className={styles.sourceCode}>Loading...</pre>
+                )
             )}
             {!isPdf && viewMode === 'preview' && isMarkdown && text && (
                 <div className={styles.markdownContent}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={_markdownComponents}
+                    >
+                        {text}
+                    </ReactMarkdown>
                 </div>
             )}
             {!isPdf && viewMode === 'preview' && isMarkdown && !text && (
@@ -49,7 +76,7 @@ export default function FileContentRenderer({
             {!isPdf && viewMode === 'preview' && isHtml && !iframeSrc && (
                 <div className={styles.statusText}>Loading...</div>
             )}
-            {!isPdf && viewMode === 'preview' && isImageFile && (
+            {!isPdf && isImageFile && (
                 <div className={styles.imageContainer}>
                     {content && (
                         <img

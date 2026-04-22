@@ -20,6 +20,13 @@ _DEFAULTS: dict[str, Any] = {
     "setup_complete": False,
     "default_agent": "computron",
     "vision_model": "",
+    "vision_think": False,
+    "vision_options": {
+        "num_ctx": 60000,
+        "num_predict": 512,
+        "temperature": 0.3,
+        "top_k": 20,
+    },
     "compaction_model": "",
 }
 

@@ -1,9 +1,10 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import styles from './FullscreenPreview.module.css';
 import ArrowLeftIcon from './icons/ArrowLeftIcon.jsx';
 import DownloadIcon from './icons/DownloadIcon.jsx';
 import SourceIcon from './icons/SourceIcon.jsx';
 import EyeIcon from './icons/EyeIcon.jsx';
+import CopyIcon from './icons/CopyIcon.jsx';
 import FileContentRenderer from './FileContentRenderer.jsx';
 import useFileContent from '../hooks/useFileContent.js';
 
@@ -20,7 +21,17 @@ export default function FullscreenPreview({ item, onClose }) {
         pdfSrc,
         iframeSrc,
         handleDownload,
+        handleCopy,
+        canCopy,
     } = useFileContent(item);
+
+    const [copied, setCopied] = useState(false);
+    const onCopyClick = async () => {
+        const ok = await handleCopy();
+        if (!ok) return;
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     const { filename } = item;
 
@@ -76,6 +87,16 @@ export default function FullscreenPreview({ item, onClose }) {
                                 Preview
                             </button>
                         </div>
+                    )}
+                    {canCopy && (
+                        <button
+                            className={styles.headerBtn}
+                            onClick={onCopyClick}
+                            title={copied ? 'Copied!' : 'Copy to clipboard'}
+                            aria-label="Copy file contents to clipboard"
+                        >
+                            <CopyIcon size={14} />
+                        </button>
                     )}
                     <button
                         className={styles.headerBtn}

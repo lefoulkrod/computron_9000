@@ -81,11 +81,17 @@ async def test_read_screen_empty_a11y(_mock_desktop_deps):
 def _mock_vision_deps():
     """Mock vision model deps for describe_screen tests."""
     mock_config = MagicMock()
-    mock_config.desktop.vision_model = "qwen3.5:4b"
     mock_config.llm.host = None
+
+    fake_settings = {
+        "vision_model": "qwen3.5:4b",
+        "vision_options": {"temperature": 0.1, "num_predict": 512},
+        "vision_think": False,
+    }
 
     with (
         patch("tools.desktop._tools.load_config", return_value=mock_config),
+        patch("settings.load_settings", return_value=fake_settings),
         patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
         patch("tools.desktop._tools.AsyncClient") as mock_client_cls,
     ):
@@ -119,10 +125,11 @@ async def test_describe_screen_returns_vision_response(_mock_vision_deps):
 async def test_describe_screen_no_vision_model():
     """describe_screen() returns error when no vision model configured."""
     mock_config = MagicMock()
-    mock_config.desktop.vision_model = None
+    fake_settings = {"vision_model": "", "vision_options": {}, "vision_think": False}
     with (
         patch("tools.desktop._tools.ensure_desktop_running", new_callable=AsyncMock),
         patch("tools.desktop._tools.load_config", return_value=mock_config),
+        patch("settings.load_settings", return_value=fake_settings),
     ):
         result = await describe_screen()
         assert "error" in result.lower()

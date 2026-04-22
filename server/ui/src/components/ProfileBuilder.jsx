@@ -244,7 +244,6 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                             value={draft.model || ''}
                             onChange={(e) => update('model', e.target.value)}
                         >
-                            <option value="">Inherit from default agent</option>
                             {(models || []).map((m) => (
                                 <option key={m.name} value={m.name}>{m.name}</option>
                             ))}

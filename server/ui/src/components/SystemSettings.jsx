@@ -4,25 +4,24 @@ import PackageIcon from './icons/PackageIcon';
 import EyeIcon from './icons/EyeIcon';
 import CompactionIcon from './icons/CompactionIcon';
 import WrenchIcon from './icons/WrenchIcon';
+import ToggleSwitch from './ToggleSwitch.jsx';
+import ChevronRightIcon from './icons/ChevronRightIcon';
 
 export default function SystemSettings({ onRunWizard }) {
     const [allModels, setAllModels] = useState([]);
-    const [visionModels, setVisionModels] = useState([]);
     const [profiles, setProfiles] = useState([]);
     const [settings, setSettings] = useState({ default_agent: 'computron', vision_model: '' });
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [visionAdvancedOpen, setVisionAdvancedOpen] = useState(false);
+
+    const visionModels = allModels.filter((m) => (m.capabilities || []).includes('vision'));
 
     const fetchModels = useCallback(async () => {
         try {
-            const [allRes, visionRes] = await Promise.all([
-                fetch('/api/models'),
-                fetch('/api/models?capability=vision'),
-            ]);
-            const allData = await allRes.json();
-            const visionData = await visionRes.json();
-            setAllModels(allData.models || []);
-            setVisionModels(visionData.models || []);
+            const res = await fetch('/api/models');
+            const data = await res.json();
+            setAllModels(data.models || []);
         } catch {
             // keep existing state on error
         }
@@ -31,18 +30,15 @@ export default function SystemSettings({ onRunWizard }) {
     useEffect(() => {
         async function init() {
             try {
-                const [allRes, visionRes, settingsRes, profilesRes] = await Promise.all([
+                const [modelsRes, settingsRes, profilesRes] = await Promise.all([
                     fetch('/api/models'),
-                    fetch('/api/models?capability=vision'),
                     fetch('/api/settings'),
                     fetch('/api/profiles'),
                 ]);
-                const allData = await allRes.json();
-                const visionData = await visionRes.json();
+                const modelsData = await modelsRes.json();
                 const settingsData = await settingsRes.json();
                 const profilesData = await profilesRes.json();
-                setAllModels(allData.models || []);
-                setVisionModels(visionData.models || []);
+                setAllModels(modelsData.models || []);
                 setSettings(settingsData);
                 setProfiles(profilesData);
             } catch {
@@ -112,28 +108,87 @@ export default function SystemSettings({ onRunWizard }) {
             </div>
 
 
-            {/* Vision Model */}
+            {/* Vision */}
             <div className={styles.sectionLabel}>Vision</div>
 
-            <div className={styles.settingRow}>
-                <div className={styles.settingIcon}>
-                    <EyeIcon size={16} />
+            <div className={styles.groupCard}>
+                <div className={styles.settingRow}>
+                    <div className={styles.settingIcon}>
+                        <EyeIcon size={16} />
+                    </div>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Vision Model</span>
+                        <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Only models with vision capability are shown.</span>
+                    </div>
+                    <select
+                        className={styles.select}
+                        value={settings.vision_model}
+                        onChange={(e) => updateSetting('vision_model', e.target.value)}
+                        data-testid="vision-model-select"
+                    >
+                        <option value="">Select a model</option>
+                        {visionModels.map((m) => (
+                            <option key={m.name} value={m.name}>{m.name}</option>
+                        ))}
+                    </select>
                 </div>
-                <div className={styles.settingInfo}>
-                    <span className={styles.settingTitle}>Vision Model</span>
-                    <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Only models with vision capability are shown.</span>
-                </div>
-                <select
-                    className={styles.select}
-                    value={settings.vision_model}
-                    onChange={(e) => updateSetting('vision_model', e.target.value)}
+
+                <button
+                    type="button"
+                    className={`${styles.groupDisclosure} ${visionAdvancedOpen ? styles.groupDisclosureOpen : ''}`}
+                    onClick={() => setVisionAdvancedOpen((v) => !v)}
+                    aria-expanded={visionAdvancedOpen}
+                    data-testid="vision-advanced-toggle"
                 >
-                    <option value="">Select a model</option>
-                    {visionModels.map((m) => (
-                        <option key={m.name} value={m.name}>{m.name}</option>
-                    ))}
-                </select>
+                    <ChevronRightIcon className={styles.chev} />
+                    Advanced inference
+                </button>
+
+                {visionAdvancedOpen && (
+                    <div className={styles.groupBody} data-testid="vision-advanced-panel">
+                        <label className={styles.groupRow} data-testid="vision-think-toggle">
+                            <div className={styles.settingInfo}>
+                                <span className={styles.settingTitle}>Thinking</span>
+                                <span className={styles.settingDesc}>Step-by-step reasoning before answering. Slower but more accurate.</span>
+                            </div>
+                            <ToggleSwitch
+                                checked={!!settings.vision_think}
+                                onChange={(e) => updateSetting('vision_think', e.target.checked)}
+                                aria-label="Thinking"
+                            />
+                        </label>
+                        {[
+                            { key: 'temperature', label: 'Temperature', desc: '0.0 = deterministic, 0.7 = general, 1.0+ = creative.', step: 0.1 },
+                            { key: 'top_k', label: 'Top K', desc: '10 = factual, 40 = general, 100+ = creative.' },
+                            { key: 'num_ctx', label: 'Context (num_ctx)', desc: 'Maximum context window in tokens.' },
+                            { key: 'num_predict', label: 'Max Output (num_predict)', desc: 'Tokens the model can generate per call.' },
+                        ].map(({ key, label, desc, step }) => (
+                            <div key={key} className={styles.groupRow}>
+                                <div className={styles.settingInfo}>
+                                    <span className={styles.settingTitle}>{label}</span>
+                                    <span className={styles.settingDesc}>{desc}</span>
+                                </div>
+                                <input
+                                    className={styles.numberInput}
+                                    type="number"
+                                    step={step ?? 1}
+                                    value={settings.vision_options?.[key] ?? ''}
+                                    data-testid={`vision-option-${key}`}
+                                    onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const num = raw === '' ? null : Number(raw);
+                                        updateSetting('vision_options', {
+                                            ...(settings.vision_options || {}),
+                                            [key]: num,
+                                        });
+                                    }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
+
             <div className={styles.note}>
                 Vision was tested with Qwen3.5.
             </div>

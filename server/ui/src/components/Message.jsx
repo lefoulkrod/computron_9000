@@ -12,7 +12,7 @@ import ThinkingPlaceholder from './ThinkingPlaceholder.jsx';
 function AssistantMessage({ entries, onPreview, streaming }) {
     const hasEntries = entries && entries.length > 0;
     return (
-        <div className={`${styles.message} ${styles.assistant}`}>
+        <div className={`${styles.message} ${styles.assistant}`} data-testid="message-assistant">
             <div className={styles.bubble}>
                 {!hasEntries && <ThinkingPlaceholder />}
                 {hasEntries && (
@@ -29,7 +29,7 @@ function AssistantMessage({ entries, onPreview, streaming }) {
 
 function UserMessage({ content, images, files }) {
     return (
-        <div className={`${styles.message} ${styles.user}`}>
+        <div className={`${styles.message} ${styles.user}`} data-testid="message-user">
             <div className={styles.bubble}>
                 <MarkdownContent>{content}</MarkdownContent>
                 {Array.isArray(files) && files.length > 0 && (

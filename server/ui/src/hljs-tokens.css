@@ -1,0 +1,78 @@
+/*
+ * Maps highlight.js token classes onto the design-system --code-* variables
+ * defined in global.css. Both light and dark themes inherit through the
+ * same vars, so no theme branching is needed here.
+ */
+
+.hljs {
+    background: transparent;
+    color: var(--text-primary);
+}
+
+.hljs-comment,
+.hljs-quote {
+    color: var(--code-comment);
+    font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-built_in,
+.hljs-meta-keyword,
+.hljs-doctag {
+    color: var(--code-keyword);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+    color: var(--code-function);
+}
+
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attr,
+.hljs-attribute {
+    color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-meta .hljs-number {
+    color: var(--code-number);
+}
+
+.hljs-operator,
+.hljs-punctuation,
+.hljs-tag,
+.hljs-subst {
+    color: var(--code-operator);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-params,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-meta,
+.hljs-link {
+    color: var(--code-type);
+}
+
+.hljs-deletion {
+    color: var(--danger);
+}
+
+.hljs-emphasis {
+    font-style: italic;
+}
+
+.hljs-strong {
+    font-weight: 600;
+}

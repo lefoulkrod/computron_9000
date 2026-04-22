@@ -100,18 +100,18 @@ class _FakeBrowser:
         )
 
 
-class _FakeModel:
-    model = "vision-model"
-    options = {"temperature": 0.0}
-    think = False
-
-
 class _FakeConfig:
     class _LLM:
         host = "http://fake-host"
 
     llm = _LLM()
-    vision = _FakeModel()
+
+
+_FAKE_SETTINGS = {
+    "vision_model": "vision-model",
+    "vision_options": {"temperature": 0.0},
+    "vision_think": False,
+}
 
 
 class _ScreenshotClient:
@@ -141,19 +141,19 @@ async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_get_browser() -> _FakeBrowser:
         return browser
 
-    fake_model = _FakeModel()
-
     _ScreenshotClient.called = False
     _ScreenshotClient.last_kwargs = {}
     _ScreenshotClient.last_host = None
 
     module = importlib.import_module("tools.browser.vision")
+    import settings as settings_module
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
 
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
+    monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
     answer = await inspect_page("What is in the header?")
 
@@ -163,7 +163,9 @@ async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
     kwargs = _ScreenshotClient.last_kwargs
     assert kwargs["prompt"] == "What is in the header?"
-    assert kwargs["model"] == fake_model.model
+    assert kwargs["model"] == "vision-model"
+    assert kwargs["options"] == {"temperature": 0.0}
+    assert kwargs["think"] is False
     images = kwargs["images"]
     assert isinstance(images, list)
     assert len(images) == 1
@@ -214,12 +216,14 @@ async def test_inspect_page_selector_mode(monkeypatch: pytest.MonkeyPatch) -> No
     _ScreenshotClient.last_host = None
 
     module = importlib.import_module("tools.browser.vision")
+    import settings as settings_module
 
     monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
 
     monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
+    monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
     answer = await inspect_page("Describe the hero", mode="selector", selector="#hero")
 

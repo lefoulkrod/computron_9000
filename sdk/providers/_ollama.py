@@ -52,7 +52,6 @@ class OllamaProvider:
 
     def __init__(self, host: str | None = None) -> None:
         self._client = AsyncClient(host=host, timeout=_DEFAULT_TIMEOUT)
-        self._model_cache: list[dict[str, Any]] | None = None
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
@@ -188,28 +187,28 @@ class OllamaProvider:
     async def list_models_detailed(self) -> list[dict[str, Any]]:
         """Return models with metadata from the Ollama server.
 
-        For each model, calls ``show`` to retrieve capabilities. Results
-        are cached in memory — call ``invalidate_model_cache()`` to refresh.
+        For each model, calls ``show`` to retrieve capabilities. ``show`` is
+        dispatched concurrently for all models.
         """
-        if self._model_cache is not None:
-            return self._model_cache
-
         response = await self._client.list()
-        results: list[dict[str, Any]] = []
-        for m in response.models:
-            if m.model is None:
-                continue
-            name = m.model
-            details = getattr(m, "details", None)
+        models = [m for m in response.models if m.model is not None]
 
-            # Fetch capabilities via show()
-            capabilities: list[str] = []
+        async def _capabilities(name: str) -> list[str]:
             try:
                 show_resp = await self._client.show(name)
-                capabilities = list(getattr(show_resp, "capabilities", None) or [])
+                return list(getattr(show_resp, "capabilities", None) or [])
             except Exception:
                 logger.debug("Failed to fetch capabilities for model '%s'", name)
+                return []
 
+        capability_lists = await asyncio.gather(
+            *(_capabilities(m.model) for m in models)
+        )
+
+        results: list[dict[str, Any]] = []
+        for m, capabilities in zip(models, capability_lists, strict=True):
+            name = m.model
+            details = getattr(m, "details", None)
             results.append({
                 "name": name,
                 "parameter_size": getattr(details, "parameter_size", None) if details else None,
@@ -219,12 +218,10 @@ class OllamaProvider:
                 "is_cloud": name.endswith(":cloud"),
             })
 
-        self._model_cache = results
         return results
 
     def invalidate_model_cache(self) -> None:
-        """Clear the cached model metadata so the next call re-fetches."""
-        self._model_cache = None
+        """No-op kept for protocol compatibility; model list is never cached."""
 
 
 # ---------------------------------------------------------------------------
