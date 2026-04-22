@@ -556,8 +556,6 @@ body {
     <a href="#gmail-2">05 · Gmail · Credentials</a>
     <a href="#gmail-3">06 · Gmail · Verifying</a>
     <a href="#gmail-4">07 · Gmail · Success</a>
-    <a href="#ha">08 · Home Assistant · MCP</a>
-    <a href="#custom">09 · Custom MCP</a>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════
@@ -568,8 +566,8 @@ body {
     <div class="part-title">Settings › Integrations</div>
     <div class="part-desc">
       Where the user lives once set-up is done. Each row is one integration — a connected
-      service (Gmail, Fastmail, iCloud) or an MCP subprocess (Home Assistant, GitHub, Linear…).
-      Status, tools, and lifecycle actions in one place.
+      email/calendar account or a dev-tools MCP server. Status, tools, and lifecycle
+      actions in one place.
     </div>
   </div>
 
@@ -592,7 +590,7 @@ body {
   <!-- ─── 02 · populated list ─── -->
   <div class="section" id="list">
     <div class="section-title">02 · Integrations list — populated</div>
-    <div class="section-desc">Four connected integrations. Status dots show live health. GitHub shows a degraded state (token expired) with an inline Reconnect action.</div>
+    <div class="section-desc">Two connected integrations. Status dots show live health. GitHub shows a degraded state (token expired) with an inline Reconnect action.</div>
 
     <div class="fs-page">
 
@@ -604,41 +602,9 @@ body {
         <div class="fs-row-info">
           <div class="fs-row-title">Gmail — personal
             <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
+            <span class="badge">Read only</span>
           </div>
-          <div class="fs-row-desc">larry@gmail.com · imap · caldav</div>
-        </div>
-        <div class="fs-row-control">
-          <button class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></button>
-          <button class="btn-icon" title="Disconnect"><i class="bi bi-trash3"></i></button>
-        </div>
-      </div>
-
-      <!-- Fastmail -->
-      <div class="fs-row">
-        <div class="fs-row-icon"><i class="bi bi-envelope"></i></div>
-        <div class="fs-row-info">
-          <div class="fs-row-title">Fastmail
-            <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
-          </div>
-          <div class="fs-row-desc">larry@fastmail.com · imap · caldav · carddav</div>
-        </div>
-        <div class="fs-row-control">
-          <button class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></button>
-          <button class="btn-icon" title="Disconnect"><i class="bi bi-trash3"></i></button>
-        </div>
-      </div>
-
-      <div class="fs-section-label">Smart Home</div>
-
-      <!-- Home Assistant -->
-      <div class="fs-row">
-        <div class="fs-row-icon"><i class="bi bi-house-gear"></i></div>
-        <div class="fs-row-info">
-          <div class="fs-row-title">Home Assistant
-            <span class="badge badge-info">MCP</span>
-            <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
-          </div>
-          <div class="fs-row-desc">homeassistant-mcp · stdio · 24 tools exposed</div>
+          <div class="fs-row-desc">larry@gmail.com</div>
         </div>
         <div class="fs-row-control">
           <button class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></button>
@@ -653,10 +619,10 @@ body {
         <div class="fs-row-icon"><i class="bi bi-github"></i></div>
         <div class="fs-row-info">
           <div class="fs-row-title">GitHub
-            <span class="badge badge-info">MCP</span>
             <span class="badge badge-danger"><span class="status-dot dot-error"></span>auth failed</span>
+            <span class="badge">Read only</span>
           </div>
-          <div class="fs-row-desc">github-mcp · PAT expired 2026-04-14 · reconnect to restore</div>
+          <div class="fs-row-desc">Token expired 2026-04-14 · reconnect to restore</div>
         </div>
         <div class="fs-row-control">
           <button class="btn btn-outline"><i class="bi bi-plug"></i> Reconnect</button>
@@ -673,7 +639,7 @@ body {
   <!-- ─── 02a · edit integration ─── -->
   <div class="section" id="edit">
     <div class="section-title">02a · Edit integration · Gmail personal</div>
-    <div class="section-desc">Opened from the pencil icon on a row. Read-only identifiers on top, editable fields below. <strong>Test connection</strong> reruns the real login + PROPFIND probe and shows the result inline.</div>
+    <div class="section-desc">Opened from the pencil icon on a row. Read-only identifiers on top, editable fields below. <strong>Test connection</strong> re-checks sign-in and shows the result inline.</div>
 
     <div class="fs-page" style="max-width:720px;">
 
@@ -683,7 +649,7 @@ body {
           <div class="fs-row-icon" style="width:40px; height:40px; font-size:20px;"><i class="bi bi-envelope-at"></i></div>
           <div>
             <div style="font-size:14px; font-weight:600; color:var(--text-primary);">Gmail · personal</div>
-            <div style="font-size:11px; color:var(--text-tertiary); font-family:var(--font-code);">larry@gmail.com · imap · caldav</div>
+            <div style="font-size:11px; color:var(--text-tertiary); font-family:var(--font-code);">larry@gmail.com</div>
           </div>
         </div>
         <span class="badge badge-success"><span class="status-dot dot-running"></span>connected</span>
@@ -712,21 +678,21 @@ body {
         <input class="input" value="Gmail · personal">
       </div>
 
-      <!-- services -->
-      <div class="fs-section-label">Services</div>
+      <!-- permissions -->
+      <div class="fs-section-label">Permissions</div>
       <div class="stack-sm">
         <label class="radio-card selected">
           <div class="radio-indicator"></div>
           <div class="radio-card-info">
-            <div class="radio-card-title">IMAP</div>
-            <div class="radio-card-desc">imap.gmail.com:993 · search &amp; read messages</div>
+            <div class="radio-card-title">Read only <span class="badge badge-success">recommended</span></div>
+            <div class="radio-card-desc">Search email, read messages, view your calendar.</div>
           </div>
         </label>
-        <label class="radio-card selected">
+        <label class="radio-card">
           <div class="radio-indicator"></div>
           <div class="radio-card-info">
-            <div class="radio-card-title">CalDAV</div>
-            <div class="radio-card-desc">apidata.googleusercontent.com/caldav · read &amp; write events</div>
+            <div class="radio-card-title">Read and write</div>
+            <div class="radio-card-desc">All of the above, plus send and move email, and create or delete calendar events.</div>
           </div>
         </label>
       </div>
@@ -737,7 +703,7 @@ body {
         <div class="fs-row-icon" style="color:var(--danger); background:var(--danger-muted); border-color:var(--danger-muted);"><i class="bi bi-trash3"></i></div>
         <div class="fs-row-info">
           <div class="fs-row-title">Disconnect Gmail</div>
-          <div class="fs-row-desc">Removes the vault record, stops the broker, purges cached message ids. Reversible via re-add.</div>
+          <div class="fs-row-desc">Removes saved credentials and signs out of your account. Reversible by re-adding.</div>
         </div>
         <div class="fs-row-control">
           <button class="btn btn-danger">Disconnect</button>
@@ -764,15 +730,14 @@ body {
     <div class="part-title">Add Integration</div>
     <div class="part-desc">
       A modal opens from “Add integration.” Step one: pick a provider. Everything downstream
-      is provider-specific: app-password wizards for IMAP+CalDAV, token forms for MCP servers,
-      and a free-form command runner for any uvx / npx server the user wants to try.
+      is provider-specific: an app-password wizard for Gmail, a token form for GitHub.
     </div>
   </div>
 
   <!-- ─── 03 · provider picker (as a modal) ─── -->
   <div class="section">
     <div class="section-title">03 · Choose a provider</div>
-    <div class="section-desc">Grouped by category, with an escape hatch at the bottom for Custom MCP. Accounts that require OAuth-verified apps (Google Workspace, M365) show an advisory note rather than a disabled state.</div>
+    <div class="section-desc">Grouped by category.</div>
 
     <div class="dl-modal-stage">
       <div class="dl-modal">
@@ -788,91 +753,19 @@ body {
               <div class="provider-card-icon"><i class="bi bi-envelope-at"></i></div>
               <div class="provider-card-info">
                 <div class="provider-card-title">Gmail · personal</div>
-                <div class="provider-card-desc">IMAP + CalDAV · app password</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-envelope"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Fastmail</div>
-                <div class="provider-card-desc">IMAP + CalDAV + CardDAV</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-apple"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">iCloud Mail</div>
-                <div class="provider-card-desc">IMAP + CalDAV · app password</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-envelope-paper"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Outlook.com (consumer)</div>
-                <div class="provider-card-desc">IMAP + CalDAV · app password</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-gear-wide"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Custom IMAP + CalDAV</div>
-                <div class="provider-card-desc">Any RFC-compliant host</div>
+                <div class="provider-card-desc">Email and calendar · app password</div>
               </div>
               <i class="bi bi-chevron-right provider-card-chev"></i>
             </button>
           </div>
 
-          <div class="fs-note warn">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <span>
-              <strong>Workspace &amp; Microsoft 365</strong> disabled IMAP/SMTP basic-auth in 2024.
-              Those accounts require OAuth and aren’t supported here — use a consumer account.
-            </span>
-          </div>
-
-          <div class="subsection-label" style="margin-bottom:0;">Smart Home · Dev · Notes (MCP)</div>
+          <div class="subsection-label" style="margin-bottom:0;">Dev Tools</div>
           <div class="provider-grid">
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-house-gear"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Home Assistant</div>
-                <div class="provider-card-desc">homeassistant-mcp · long-lived token</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
             <button class="provider-card">
               <div class="provider-card-icon"><i class="bi bi-github"></i></div>
               <div class="provider-card-info">
                 <div class="provider-card-title">GitHub</div>
-                <div class="provider-card-desc">github-mcp · personal access token</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-kanban"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Linear</div>
-                <div class="provider-card-desc">linear-mcp · API key</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-journal-text"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Obsidian</div>
-                <div class="provider-card-desc">obsidian-mcp · vault path</div>
-              </div>
-              <i class="bi bi-chevron-right provider-card-chev"></i>
-            </button>
-            <button class="provider-card">
-              <div class="provider-card-icon"><i class="bi bi-terminal"></i></div>
-              <div class="provider-card-info">
-                <div class="provider-card-title">Custom MCP server</div>
-                <div class="provider-card-desc">Any uvx / npx launcher</div>
+                <div class="provider-card-desc">Issues, PRs, and code search · personal access token</div>
               </div>
               <i class="bi bi-chevron-right provider-card-chev"></i>
             </button>
@@ -926,7 +819,7 @@ body {
             </span>
           </div>
           <div class="stack-sm">
-            <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Encrypted at rest (AES-256-GCM)</span></div>
+            <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Encrypted at rest</span></div>
             <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Agent never reads the password</span></div>
             <div class="row-gap"><span class="chip chip-success active"><i class="bi bi-check2"></i> Revocable from Google at any time</span></div>
           </div>
@@ -981,22 +874,26 @@ body {
             <input class="input" value="Gmail · personal" placeholder="What to call this integration">
           </div>
 
-          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Enable services</div>
+          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Permissions</div>
           <div class="stack-sm">
             <label class="radio-card selected">
               <div class="radio-indicator"></div>
               <div class="radio-card-info">
-                <div class="radio-card-title">IMAP</div>
-                <div class="radio-card-desc">imap.gmail.com:993 · search &amp; read messages</div>
+                <div class="radio-card-title">Read only <span class="badge badge-success">recommended</span></div>
+                <div class="radio-card-desc">Search email, read messages, view your calendar.</div>
               </div>
             </label>
-            <label class="radio-card selected">
+            <label class="radio-card">
               <div class="radio-indicator"></div>
               <div class="radio-card-info">
-                <div class="radio-card-title">CalDAV</div>
-                <div class="radio-card-desc">apidata.googleusercontent.com/caldav · read &amp; write events</div>
+                <div class="radio-card-title">Read and write</div>
+                <div class="radio-card-desc">All of the above, plus send and move email, and create or delete calendar events.</div>
               </div>
             </label>
+          </div>
+          <div class="fs-note">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>You can change this later from the integration’s edit screen — no need to reconnect.</span>
           </div>
 
         </div>
@@ -1025,29 +922,24 @@ body {
         <div class="wz-step-circle active">3</div>
       </div>
       <div class="wz-body left">
-        <h2 class="wz-title" style="text-align:center;">Verifying connection</h2>
-        <p class="wz-subtitle" style="margin:0 auto;">Writing to the vault, spawning the broker, and probing the upstream services.</p>
+        <h2 class="wz-title" style="text-align:center;">Connecting to Gmail</h2>
+        <p class="wz-subtitle" style="margin:0 auto;">This usually takes a few seconds.</p>
 
         <div class="wz-content">
           <div class="check-list">
             <div class="check-row">
               <div class="check-icon done"><i class="bi bi-check-circle-fill"></i></div>
-              <div class="check-label">Vault write · AES-256-GCM</div>
-              <div class="check-meta">142 ms</div>
-            </div>
-            <div class="check-row">
-              <div class="check-icon done"><i class="bi bi-check-circle-fill"></i></div>
-              <div class="check-label">Broker spawned · UID 1001</div>
-              <div class="check-meta">PID 2147 · 88 ms</div>
+              <div class="check-label">Securing your credentials</div>
+              <div class="check-meta">done</div>
             </div>
             <div class="check-row">
               <div class="check-icon running"><span class="spinner"></span></div>
-              <div class="check-label">IMAP login · imap.gmail.com:993</div>
+              <div class="check-label">Signing in to your email</div>
               <div class="check-meta">…</div>
             </div>
             <div class="check-row">
               <div class="check-icon pending"><i class="bi bi-circle"></i></div>
-              <div class="check-label">CalDAV PROPFIND · principal URL</div>
+              <div class="check-label">Connecting your calendar</div>
               <div class="check-meta dim">queued</div>
             </div>
           </div>
@@ -1083,33 +975,21 @@ body {
           </div>
         </div>
         <h2 class="wz-title" style="text-align:center;">Gmail connected</h2>
-        <p class="wz-subtitle" style="margin:0 auto;">4 checks passed in 1.8 s. Your agent can now search email and read/write calendar events.</p>
+        <p class="wz-subtitle" style="margin:0 auto;">Your agent can now read your email and calendar.</p>
 
         <div class="wz-content">
           <table class="kv-table">
             <tr>
-              <td>integration_id</td>
-              <td>gmail_personal</td>
-            </tr>
-            <tr>
-              <td>kind</td>
-              <td>app_password</td>
-            </tr>
-            <tr>
-              <td>account</td>
+              <td>Account</td>
               <td>larry@gmail.com</td>
             </tr>
             <tr>
-              <td>services</td>
-              <td>imap · caldav</td>
+              <td>Label</td>
+              <td>Gmail · personal</td>
             </tr>
             <tr>
-              <td>broker</td>
-              <td class="val-ok">running · PID 2147 · UID 1001</td>
-            </tr>
-            <tr>
-              <td>vault record</td>
-              <td class="val-ok">/app/data/credentials.enc · 0600 root</td>
+              <td>Permissions</td>
+              <td>Read only</td>
             </tr>
           </table>
         </div>
@@ -1118,170 +998,6 @@ body {
         <div class="right">
           <button class="btn btn-outline"><i class="bi bi-plus-lg"></i> Add another</button>
           <button class="btn btn-filled">Done</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       PART IV — MCP subprocess flows
-       ═══════════════════════════════════════════════════════ -->
-  <div class="part-label" id="ha">
-    <div class="part-eyebrow">Part IV</div>
-    <div class="part-title">MCP subprocess flows</div>
-    <div class="part-desc">
-      MCP plugins are brokers too. Same UID (<span class="inline-code">1001</span>), same vault socket,
-      same verification pattern. The wizard collects the config the server needs, vault-seals it,
-      and spawns <span class="inline-code">uvx</span> or <span class="inline-code">npx</span> under systemd-style supervision.
-    </div>
-  </div>
-
-  <!-- ─── 08 · Home Assistant MCP ─── -->
-  <div class="section">
-    <div class="section-title">08 · Home Assistant · MCP</div>
-    <div class="section-desc">Two inputs and the wizard writes everything else. The “subprocess config” block on the right is read-only; it’s the artifact that will be stored in the vault next to the secret.</div>
-
-    <div class="wz-card">
-      <div class="wz-stepper">
-        <div class="wz-step-circle active">1</div>
-        <div class="wz-step-line"></div>
-        <div class="wz-step-circle">2</div>
-        <div class="wz-step-line"></div>
-        <div class="wz-step-circle">3</div>
-      </div>
-      <div class="wz-body left">
-        <h2 class="wz-title" style="text-align:center;">Home Assistant</h2>
-        <p class="wz-subtitle" style="margin:0 auto;">Create a long-lived access token in Home Assistant (<em>Profile → Security → Create Token</em>) and paste it below.</p>
-
-        <div class="wz-content">
-          <div class="field">
-            <label class="field-label">Home Assistant URL</label>
-            <input class="input input-mono" value="http://homeassistant.local:8123" placeholder="http://homeassistant.local:8123">
-          </div>
-          <div class="field">
-            <label class="field-label">Long-lived access token</label>
-            <input class="input input-mono" value="eyJhbGciOiJIUzI1NiIs…" placeholder="eyJhbGci…">
-          </div>
-
-          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Subprocess configuration</div>
-          <table class="kv-table">
-            <tr>
-              <td>launcher</td>
-              <td>uvx</td>
-            </tr>
-            <tr>
-              <td>package</td>
-              <td>homeassistant-mcp</td>
-            </tr>
-            <tr>
-              <td>transport</td>
-              <td>stdio</td>
-            </tr>
-            <tr>
-              <td>runs as</td>
-              <td>UID 1001 · broker</td>
-            </tr>
-            <tr>
-              <td>env from vault</td>
-              <td>HA_URL=&lt;url&gt;, HA_TOKEN=&lt;token&gt;</td>
-            </tr>
-          </table>
-        </div>
-      </div>
-      <div class="wz-footer">
-        <button class="btn btn-outline"><i class="bi bi-arrow-left"></i> Back</button>
-        <div class="right">
-          <button class="btn btn-ghost">Cancel</button>
-          <button class="btn btn-filled">Verify &amp; save <i class="bi bi-shield-check"></i></button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ─── 09 · Custom MCP (advanced) ─── -->
-  <div class="section" id="custom">
-    <div class="section-title">09 · Custom MCP · advanced</div>
-    <div class="section-desc">The escape hatch — run any MCP server the user can reach with <span class="inline-code">uvx</span> / <span class="inline-code">npx</span>. Args come in as a JSON array; env-from-vault lets the user mark specific keys as secret without typing them into plaintext fields.</div>
-
-    <div class="wz-card">
-      <div class="wz-stepper">
-        <div class="wz-step-circle active">1</div>
-        <div class="wz-step-line"></div>
-        <div class="wz-step-circle">2</div>
-        <div class="wz-step-line"></div>
-        <div class="wz-step-circle">3</div>
-      </div>
-      <div class="wz-body left">
-        <h2 class="wz-title" style="text-align:center;">Custom MCP server</h2>
-        <p class="wz-subtitle" style="margin:0 auto;">You’re on your own here — but anything that speaks MCP-stdio is fair game.</p>
-
-        <div class="wz-content">
-
-          <div class="field">
-            <label class="field-label">Display name</label>
-            <input class="input" value="Notion" placeholder="Shown in the integrations list">
-          </div>
-
-          <div class="field">
-            <label class="field-label">Launcher</label>
-            <input class="input input-mono" value="npx" placeholder="uvx · npx · node · python">
-          </div>
-
-          <div class="field">
-            <label class="field-label">Args (JSON array)</label>
-            <input class="input input-mono" value='["-y","@modelcontextprotocol/server-notion"]'>
-          </div>
-
-          <div class="subsection-label" style="margin-top:8px; margin-bottom:0;">Secret env vars (vault-sealed)</div>
-
-          <div class="fs-row">
-            <div class="fs-row-icon"><i class="bi bi-key"></i></div>
-            <div class="fs-row-info">
-              <div class="fs-row-title">NOTION_API_KEY <span class="badge badge-info">secret</span></div>
-              <div class="fs-row-desc">secret_xxxxxx… · stored encrypted</div>
-            </div>
-            <div class="fs-row-control">
-              <button class="btn-icon"><i class="bi bi-pencil"></i></button>
-              <button class="btn-icon"><i class="bi bi-x-lg"></i></button>
-            </div>
-          </div>
-          <button class="btn btn-outline" style="align-self:flex-start;"><i class="bi bi-plus-lg"></i> Add env var</button>
-
-          <div class="fs-note warn">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <span>
-              <strong>You’re installing third-party code.</strong>
-              Computron will fetch and run this package under a non-privileged user,
-              but it will still have network access and whatever capabilities the
-              server itself implements. Only install servers you trust.
-            </span>
-          </div>
-
-          <div class="codeblock">
-            <div class="codeblock-header">
-              <span class="codeblock-lang">JSON · what gets written to vault</span>
-            </div>
-            <div class="codeblock-body">{
-  "id": "notion_custom",
-  "kind": "mcp_subprocess",
-  "label": "Notion",
-  "server": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-notion"],
-    "transport": "stdio",
-    "env_from_vault": { "NOTION_API_KEY": "secret" }
-  },
-  "auth": { "type": "bundle", "fields": { "secret": "secret_xxxxxx..." } }
-}</div>
-          </div>
-
-        </div>
-      </div>
-      <div class="wz-footer">
-        <button class="btn btn-outline"><i class="bi bi-arrow-left"></i> Back</button>
-        <div class="right">
-          <button class="btn btn-ghost">Cancel</button>
-          <button class="btn btn-filled">Verify &amp; save <i class="bi bi-shield-check"></i></button>
         </div>
       </div>
     </div>

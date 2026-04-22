@@ -5,13 +5,14 @@ The overall design is in [`plan.md`](plan.md). The UI mockup (onboarding flow) i
 Each P0 deliverable is specified in its own sub-plan:
 
 - [`01-supervisor.md`](01-supervisor.md) — crypto, master key, spawn + lifecycle, `app.sock` RPC
-- [`02-broker-imap-caldav.md`](02-broker-imap-caldav.md) — built-in IMAP + CalDAV brokers
+- [`02-broker-email-calendar.md`](02-broker-email-calendar.md) — email broker (IMAP + SMTP) and calendar broker (CalDAV)
 - [`03-broker-mcp.md`](03-broker-mcp.md) — generic stdio MCP subprocess host
 - [`04-auth-plugins.md`](04-auth-plugins.md) — declarative `FIELDS` + `ENV_INJECTION` contract
 - [`05-api-and-client.md`](05-api-and-client.md) — `/api/integrations/*` routes + `broker_client`
 - [`06-ui.md`](06-ui.md) — React Integrations tab
 - [`07-catalog.md`](07-catalog.md) — catalog JSON schema + v1 provider entries
 - [`08-container.md`](08-container.md) — Dockerfile, entrypoint, volume layout
+- [`09-testing.md`](09-testing.md) — testing strategy + the three test doubles
 
 ## Build order suggestion
 
@@ -27,7 +28,7 @@ The sub-plans are numbered roughly in dependency order, but the critical path lo
 
 1. Drop a file in `config/integrations_catalog/<slug>.json`.
 2. Reference an existing `auth_plugin` (`app_password`, `api_key`, `mcp_subprocess`).
-3. Point at an existing broker command (`imap_broker`, `caldav_broker`, `mcp_broker`).
+3. Point at an existing broker command (`email_broker`, `calendar_broker`, `mcp_broker`).
 4. Ship.
 
 No new Python. No new broker code. That's the whole point of the decomposition.

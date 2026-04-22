@@ -42,6 +42,7 @@ Supervisor provides:
 ```
 INTEGRATION_ID=github_main
 BROKER_SOCKET=/run/cvault/brokers/github_main.sock
+WRITE_ALLOWED=false                          # "true" or "false"; broker refuses non-read-only tools/call when false
 MCP_COMMAND=uvx
 MCP_ARGS=["github-mcp"]                      # JSON-encoded array
 MCP_CWD=/home/computron                      # working dir for the subprocess
@@ -56,30 +57,65 @@ Catalog entry supplies `MCP_COMMAND`, `MCP_ARGS`, `MCP_CWD`, and the list of env
 ## Startup sequence
 
 ```
-1. Parse env; JSON-decode MCP_ARGS and MCP_ENV_OVERRIDES
+1. Parse env; JSON-decode MCP_ARGS and MCP_ENV_OVERRIDES; parse WRITE_ALLOWED
 2. Spawn MCP subprocess with:
    - stdin/stdout as pipes (MCP frames)
    - stderr captured and forwarded to the broker's stderr
    - env = clean minimal env + MCP_ENV_OVERRIDES
 3. Send MCP initialize request, read response, verify protocol version compat
 4. Send tools/list; require len(tools) >= 1 else exit 77 (treat missing tools as auth failure)
-5. Create UDS server at $BROKER_SOCKET
-6. print("READY", flush=True)
-7. Enter relay loop
+5. Build self._tool_is_read_only map from the returned tool annotations
+6. Create UDS server at $BROKER_SOCKET
+7. print("READY", flush=True)
+8. Enter relay loop (with tools/call write-enforcement hook)
 ```
 
 ---
 
 ## Relay semantics
 
-The MCP broker is deliberately thin:
+The MCP broker is mostly-thin — pure passthrough, with one policy hook for write-permission enforcement (see below):
 
-- Every frame from the UDS client is forwarded to the MCP subprocess's stdin.
+- Every frame from the UDS client is forwarded to the MCP subprocess's stdin, **except** `tools/call` for a tool that's been classified as write, when `WRITE_ALLOWED=false` — those are refused locally.
 - Every frame from the subprocess's stdout is forwarded back to the UDS client.
 - JSON-RPC request IDs are rewritten only enough to prevent collisions (we own a namespace; clients own theirs) and reversed on the way back.
 - **Notifications** (MCP "progress" frames, log messages) are forwarded without response tracking.
+- On `notifications/tools/list_changed` from upstream, the broker re-runs `tools/list`, updates its read-only map (below), then forwards the notification.
 
 The broker does NOT translate MCP verbs to domain verbs. The app-server's MCP bridge code is responsible for turning an MCP tool into an agent-visible tool. That bridge lives outside the broker — see `05-api-and-client.md`.
+
+---
+
+## Tool-level write enforcement
+
+The broker enforces `WRITE_ALLOWED` at the `tools/call` frame, mirroring how the email/calendar brokers enforce at verb dispatch. This makes the permission gate real — an agent with `bash-run` connecting directly to the broker's UDS cannot bypass it.
+
+**At startup** (right after `initialize`, right after `tools/list` during the verify step), the broker builds an internal map of each tool's `readOnlyHint`:
+
+```python
+self._tool_is_read_only = {
+    t["name"]: bool(t.get("annotations", {}).get("readOnlyHint", False))
+    for t in tools_list_response["tools"]
+}
+```
+
+Missing annotations are treated as write (fail-closed).
+
+**On every `tools/call` frame** from the UDS client:
+
+```python
+if not self._write_allowed and not self._tool_is_read_only.get(tool_name, False):
+    return jsonrpc_error(id, code=-32000,
+                         message=f"tool '{tool_name}' requires write permission")
+```
+
+Rejected locally — the subprocess never sees the call.
+
+**On `notifications/tools/list_changed`** from the subprocess, the broker re-runs `tools/list` and rebuilds the read-only map before forwarding the notification to the app server. New tools added upstream inherit the same read-only-hint logic.
+
+**Permission toggle = broker respawn** (same as email/calendar brokers). The broker reads `WRITE_ALLOWED` from env at startup; flipping requires a fresh process. Supervisor's `set_permissions` RPC handles the restart.
+
+The app-server MCP bridge (see `05-api-and-client.md`) additionally skips non-read-only tools at *registration* time — those tools don't appear in the agent's tool list at all when writes are disabled. That's UX + short-circuit, not security; the broker's dispatch-time check is what actually defends.
 
 ---
 
@@ -159,8 +195,19 @@ The standing accepted risk: an MCP server can exfiltrate creds it was given, or 
 
 ## Testing notes
 
-- Unit tests use a stub MCP server written in Python that speaks the protocol in-process (no subprocess). Keeps tests fast and deterministic.
-- Per project memory: **no integration tests**. The `uvx github-mcp` smoke test is manual, not in CI.
+Strategy in [`09-testing.md`](09-testing.md). Component-specific scope:
+
+- Tests spawn the real MCP broker subprocess, which in turn spawns `tests/fixtures/stub_mcp_server.py` (also a real subprocess). Two levels of process, real UDS between test and broker, real stdio pipes between broker and stub. The only thing not real is what's behind the stub (no actual GitHub API, etc.).
+- Behaviors:
+  - Happy path: stub returns two tools from `tools/list` (one with `readOnlyHint: true`, one without) → broker prints READY → tests invoke `tools/call` through the broker → responses round-trip.
+  - Auth failure: stub configured with `STUB_MCP_AUTH_FAIL=1` → empty `tools/list` → broker exits 77.
+  - Initialize timeout: `STUB_MCP_HANG=60` with `MCP_INITIALIZE_TIMEOUT=2` → broker exits with a timeout error.
+  - Shutdown: SIGTERM to broker → broker sends JSON-RPC `shutdown`, closes stub's stdin, stub exits; broker exits 0 within the 5 s + 2 s grace window.
+  - Request-ID rewriting: concurrent test calls with overlapping IDs from different clients → broker namespaces them and restores on response.
+  - **Write enforcement**: broker spawned with `WRITE_ALLOWED=false` and stub returning one read-only + one write-capable tool. `tools/call` for the read-only tool succeeds; `tools/call` for the write tool returns a JSON-RPC error locally and the stub observes zero matching calls on stdin. Respawn with `WRITE_ALLOWED=true` → both tools succeed.
+  - **Tools-list-changed refresh**: initial `tools/list` has one read-only tool. Stub sends `notifications/tools/list_changed`; next `tools/list` response contains a new write tool. With `WRITE_ALLOWED=false` the new tool is still refused. With `WRITE_ALLOWED=true` it succeeds. (Stub configurable via a control verb over a side channel, or by restarting the stub subprocess mid-test.)
+- `uvx github-mcp` against real GitHub is a manual PR-checklist smoke test, not CI.
+- Pure-unit coverage (`@pytest.mark.unit`): LSP framing (Content-Length headers, multi-byte UTF-8 lengths) and JSON-RPC ID rewriting — both pure byte-manipulation worth isolating.
 
 ---
 

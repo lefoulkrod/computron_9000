@@ -22,14 +22,22 @@ RUN useradd --uid 1001 --no-create-home --shell /usr/sbin/nologin broker
 
 Pinned at UID 1001 to align with host-side file ownership on volume mounts. Keep as a comment flagging this is load-bearing for persistence across image pulls.
 
-### Ensure `gosu` (or `setpriv`) is installed
+### Ensure `gosu` and `tini` are installed
 
-The entrypoint drops privilege for each long-running service:
+The entrypoint drops privilege for each long-running service (`gosu`) and runs under `tini` as PID 1 for zombie reaping and signal forwarding:
 
 ```dockerfile
-RUN apt-get update && apt-get install -y --no-install-recommends gosu \
+RUN apt-get update && apt-get install -y --no-install-recommends gosu tini \
  && rm -rf /var/lib/apt/lists/*
 ```
+
+### ENTRYPOINT under `tini`
+
+```dockerfile
+ENTRYPOINT ["tini", "--", "/app/container/entrypoint.sh"]
+```
+
+`tini` sits at PID 1, forwards signals (so `docker stop` flows a clean SIGTERM through), and reaps any stragglers the entrypoint script doesn't catch.
 
 ### Install MCP launchers
 
@@ -47,66 +55,98 @@ Keeps the image single-stage; added size ~70 MB compressed. Worth it — many hi
 
 Existing Dockerfile already handles `/app` — nothing new to do structurally. The new Python packages (`broker_supervisor/`, `brokers/`, `auth_plugins/`, `broker_client/`, `config/integrations_catalog/`) are in the repo and copied alongside existing code.
 
-### Drop capabilities
+### Required container security flags
 
-```dockerfile
-# Container should not need these at runtime
-# Add to entrypoint: capsh --drop=... before dropping UID
+These flags are **not optional** — the supervisor asserts them at startup and refuses to boot if they aren't honored (see `01-supervisor.md` "Runtime hardening assertions"). Without them, a `run_bash_cmd` subprocess under the agent could in principle read the app-server's memory during the ~10 ms window where a user's fresh credential is being parsed from an HTTP POST body.
+
+Required `docker run` flags:
+
+```
+docker run \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  ... \
+  computron_9000:latest
 ```
 
-Or rely on Docker's default `--cap-drop=ALL --cap-add=NET_BIND_SERVICE` guidance in the README. Runtime-level concern.
+Plain-English explanation of what each does:
+
+- **`--cap-drop=ALL`** — Linux splits root's special privileges into individually grantable "capabilities" (bind-low-ports, change-UID, send-arbitrary-signals, ptrace-any-process, etc.). A container by default inherits a handful of them. `--cap-drop=ALL` removes them all; the container runs with the bare minimum a normal user gets. We don't need any of them — the UID split happens at entrypoint time via `gosu` (which uses `setuid`, already available to root *during* the brief root phase of the entrypoint, so it doesn't need runtime capabilities to drop privilege). The critical one we're dropping is **`CAP_SYS_PTRACE`**, which would otherwise let any process in the container attach to and read any other process's memory regardless of UID.
+- **`--security-opt=no-new-privileges`** — A process flag that stops the process (and every descendant) from ever *gaining* new privileges. Normally a process can escalate by exec'ing a setuid binary (like `sudo`), which would grab root. With this flag, exec'ing such a binary silently loses the setuid effect — the capability set can only shrink across exec, never grow. Belt-and-braces against a future misconfiguration that accidentally installs a setuid binary; with this flag, the agent still can't use it to reacquire dropped caps.
+
+Combined with the kernel's default `kernel.yama.ptrace_scope=1` (which prevents a child process from attaching to its parent regardless of UID), these flags make it impossible for `run_bash_cmd` to snapshot the app-server's memory.
+
+`CAP_NET_BIND_SERVICE` is sometimes listed as "needed" for apps that bind ports below 1024. We don't — the app server binds port 8080, brokers use UDS paths, and the supervisor binds a UDS. Drop everything.
+
+### Runtime check
+
+The supervisor reads `/proc/sys/kernel/yama/ptrace_scope` and `/proc/self/status` at startup and exits with a clear error if either check fails. See `01-supervisor.md` "Runtime hardening assertions" for the assertion bodies.
 
 ---
 
 ## Entrypoint script
 
-New or updated `container/entrypoint.sh`:
+`container/entrypoint.sh` — launched by `tini` as PID 1, runs briefly as root, then backgrounds both services and fails-fast on either exit.
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 1. First-time volume prep. Runs as root.
+# 1. First-time volume prep (root).
 VAULT=/var/lib/computron/vault
 mkdir -p "$VAULT/creds"
 chown -R broker:broker "$VAULT"
-chmod 0700 "$VAULT"
-chmod 0700 "$VAULT/creds"
+chmod 0700 "$VAULT" "$VAULT/creds"
 
-# 2. Tmpfs for UDS sockets. Container already has /run writable; ensure cvault/ dir.
+# 2. Tmpfs for UDS sockets + attachment handoff.
 RUN=/run/cvault
-mkdir -p "$RUN/brokers"
-chown broker:broker "$RUN" "$RUN/brokers"
-chmod 0750 "$RUN"                # readable by broker; supervisor chmods sockets individually
-chmod 0750 "$RUN/brokers"
+mkdir -p "$RUN/brokers" "$RUN/attachments"
+chown broker:broker    "$RUN" "$RUN/brokers"
+chown broker:computron "$RUN/attachments"   # shared handoff; computron group lets the app server read
+chmod 0750 "$RUN" "$RUN/brokers"
+chmod 0770 "$RUN/attachments"               # broker + computron both rwx; world 0
 
-# 3. Start broker supervisor as UID broker (1001) in the background.
+# 3. Start the broker supervisor as UID broker (1001) in the background.
 gosu broker python -m broker_supervisor &
 SUPERVISOR_PID=$!
 
-# 4. Wait for app.sock to appear so app server doesn't race the supervisor.
+# 4. Wait for app.sock to appear so the app server doesn't race the supervisor.
 for i in {1..50}; do
   [ -S /run/cvault/app.sock ] && break
   sleep 0.1
 done
 if [ ! -S /run/cvault/app.sock ]; then
-  echo "supervisor failed to bind app.sock" >&2
+  echo "[entrypoint] supervisor failed to bind app.sock" >&2
+  kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
   exit 1
 fi
 
-# 5. Start app server as UID computron (1000). Existing behavior.
-exec gosu computron python -m main
+# 5. Start the app server as UID computron (1000) in the background.
+gosu computron python -m main &
+APP_PID=$!
+
+# 6. Fail-fast: whichever service exits first brings the container down.
+#    Docker's restart policy handles recovery (one supervisor crash = one
+#    container restart = fresh state for everything).
+wait -n "$SUPERVISOR_PID" "$APP_PID"
+exit_code=$?
+
+echo "[entrypoint] a service exited with code $exit_code; shutting down container" >&2
+kill -TERM "$SUPERVISOR_PID" "$APP_PID" 2>/dev/null || true
+sleep 2   # brief grace window before tini / the kernel take over
+exit "$exit_code"
 ```
 
-Key properties:
+### Recovery posture
 
-- Entrypoint runs as root, drops per-service after initial setup.
+**Chosen for v1: container-level fail-fast.** Either service dying → entrypoint exits → Docker's restart policy brings the whole container back with fresh state.
+
 - Supervisor binds `app.sock` before the app server starts → no race.
-- Exec'ing the app server means PID 1 is the app server. If it dies, container dies (good). Supervisor is a child; if supervisor crashes, entrypoint doesn't currently notice — see open items.
-
-### Alternate: s6-overlay / tini
-
-For proper multi-service supervision (restart the supervisor if it crashes without taking down the whole container), we'd adopt `s6-overlay` or similar. Probably overkill for v1 — if the supervisor crashes we want to notice anyway, and container restart is a reasonable recovery. But worth flagging.
+- Neither process is PID 1 (tini is). Both run as siblings of the entrypoint script, which waits on both.
+- Bounce cost: ~2–5 s. In-flight HTTP requests drop; chat reconnects via the existing reconnect path.
+- Explicitly rejected alternatives for v1:
+  - **In-place supervisor restart (watchdog).** Keeps the app server alive across a supervisor crash but requires kill-and-respawn logic on the next supervisor's side to reclaim orphaned brokers. Revisit if supervisor crashes turn out to be frequent enough that app-server restarts hurt.
+  - **s6-overlay or similar multi-service init.** Proper per-service supervision with restart policies. Overkill for two processes where a container restart is acceptable recovery.
 
 ---
 
@@ -187,25 +227,34 @@ def _assert_vault_perms():
 
 ## Logging
 
-Supervisor + brokers log to stderr → captured by the container runtime. Prefix with the integration ID where applicable so `docker logs computron` is navigable:
+Everything ends up on the container's stderr, which Docker captures. There is no per-producer tagging at the container-runtime layer — **Docker does not prefix log lines**. Any `[component]` marker has to come from the producer's own `logging` formatter.
+
+- **Supervisor.** Stdlib `logging` configured with a `[supervisor]` prefix.
+- **Brokers.** Stdlib `logging` configured with a `[broker:<integration_id>.<kind>]` prefix. Broker stderr is inherited by the supervisor, which forwards it unchanged (no extra wrapping).
+- **App server.** Uses the project's existing `logging` config. Lines appear as-is; no `[app]` prefix unless we add one there. Not scoped in this plan — outside the integrations surface.
+
+Result in `docker logs computron` (or `just logs`):
 
 ```
-[supervisor] starting, loaded 2 integrations
-[broker:gmail_personal.imap] connecting to imap.gmail.com:993
-[broker:gmail_personal.imap] READY
-[broker:github_main.mcp] spawned uvx github-mcp (pid=2341)
-[broker:github_main.mcp] tools/list returned 12 tools
-[broker:github_main.mcp] READY
+2026-04-21 09:14:22 INFO aiohttp.access POST /api/integrations 201 1823ms    ← app server (no prefix)
+[supervisor] 2026-04-21 09:14:22 add gmail_personal: encrypt ok, spawning broker
+[broker:gmail_personal.imap] 2026-04-21 09:14:23 IMAP LOGIN ok, READY
+[supervisor] 2026-04-21 09:14:23 state gmail_personal: pending -> active
 ```
 
-Keep logs boring. No structured logging in v1 (no `structlog`) — plain stdlib `logging` with the per-component formatter.
+Filter patterns (for later reference):
+
+- Supervisor + brokers only: `docker logs -f computron 2>&1 | grep -E '^\[(supervisor|broker:)'`
+- One broker: `grep '^\[broker:gmail_personal'`
+
+No structured logging (no `structlog`) in v1 — plain stdlib `logging` with per-component formatters.
 
 ---
 
 ## Implementation milestones
 
-1. Dockerfile: add `broker` user, install `gosu` and Node.js.
-2. `entrypoint.sh`: vault setup + dual-process launch.
+1. Dockerfile: add `broker` user, install `gosu`, `tini`, and Node.js; set `ENTRYPOINT ["tini", "--", "/app/container/entrypoint.sh"]`.
+2. `entrypoint.sh`: vault setup + dual-process launch with `wait -n` fail-fast.
 3. Dev smoke test: `just dev` → supervisor starts → app server starts → `/api/integrations` returns `[]`.
 4. Startup assertion + its failure modes (wrong ownership simulated by a test container).
 5. README + justfile doc updates.
@@ -222,7 +271,6 @@ Keep logs boring. No structured logging in v1 (no `structlog`) — plain stdlib 
 
 ## Component-local open items
 
-- **Supervisor crash recovery.** Current entrypoint doesn't restart the supervisor if it dies. Short-term: container restarts (Docker policy). Long-term: s6-overlay or a tiny supervisor-of-supervisors in the entrypoint.
 - **Image size.** Adding Node.js is ~70 MB compressed. Consider a separate `computron:slim` image without Node for users who only use built-in integrations (no MCP). Probably not worth the maintenance burden.
 - **Non-root rootless Podman mode.** The current setup assumes root inside the container (to `chown` at startup). In rootless Podman, UID 0 is mapped to a subordinate UID on the host; the entrypoint still runs as "root" from the container's POV and `chown` works fine. Verify during testing.
-- **Capability hardening.** Drop all caps except what's truly needed. Neither supervisor nor brokers need `CAP_NET_BIND_SERVICE` (using high ports), `CAP_SETUID`, or anything else. Default `--cap-drop=ALL` should work. Test.
+- **Capability hardening** — resolved. `--cap-drop=ALL` + `--security-opt=no-new-privileges` are required (see "Required container security flags" above) and asserted by the supervisor at startup.

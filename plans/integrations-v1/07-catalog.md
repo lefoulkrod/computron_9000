@@ -32,7 +32,7 @@ Bundled with the app image at `/app/config/integrations_catalog/`. Read by the s
   "label_default": "Gmail",               // pre-fills the wizard label field
   "category": "email_calendar",           // email_calendar | dev_tools | smart_home | productivity | custom
   "icon": "bi-envelope-at",               // bootstrap-icons name
-  "kinds": ["imap", "caldav"],            // list of broker kinds to spawn (one for MCP, one/two for email-calendar)
+  "kinds": ["email", "calendar"],         // list of broker kinds to spawn (one for MCP, one/two for email-calendar)
   "auth_plugin": "app_password",          // references auth_plugins/<name>.py
   "field_overrides": {                    // optional: tweak the auth plugin FIELDS for this provider
     "password": {
@@ -43,16 +43,18 @@ Bundled with the app image at `/app/config/integrations_catalog/`. Read by the s
   },
   "brokers": [
     {
-      "kind": "imap",
-      "command": ["python", "-m", "brokers.imap_broker"],
+      "kind": "email",
+      "command": ["python", "-m", "brokers.email_broker"],
       "env": {
         "IMAP_HOST": "imap.gmail.com",
-        "IMAP_PORT": "993"
+        "IMAP_PORT": "993",
+        "SMTP_HOST": "smtp.gmail.com",
+        "SMTP_PORT": "587"
       }
     },
     {
-      "kind": "caldav",
-      "command": ["python", "-m", "brokers.caldav_broker"],
+      "kind": "calendar",
+      "command": ["python", "-m", "brokers.calendar_broker"],
       "env": {
         "CALDAV_URL": "https://apidata.googleusercontent.com/caldav/v2"
       }
@@ -61,6 +63,7 @@ Bundled with the app image at `/app/config/integrations_catalog/`. Read by the s
   "tools_exposed": [                      // for UI display; also used by dynamic tool descriptions
     "search_email",
     "fetch_message",
+    "send_message",
     "list_events",
     "create_event",
     "delete_event"

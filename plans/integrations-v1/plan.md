@@ -32,12 +32,12 @@
 │                                 │                                       │
 │       ┌─────────────────────────┼─────────────────────────┐            │
 │       │                         │                         │            │
-│  ┌────▼────────┐       ┌────────▼────────┐       ┌────────▼────────┐  │
-│  │ imap-broker │       │ caldav-broker   │       │ github-mcp      │  │
-│  │ (broker)    │       │ (broker)        │       │ (broker)        │  │
-│  │ stdlib      │       │ stdlib requests │       │ stdio MCP       │  │
-│  │ imaplib     │       │ caldav          │       │ subprocess      │  │
-│  └─────┬───────┘       └────────┬────────┘       └────────┬────────┘  │
+│  ┌──────────────┐      ┌─────────────────┐       ┌─────────────────┐  │
+│  │ email-broker │      │ calendar-broker │       │ github-mcp      │  │
+│  │ (broker)     │      │ (broker)        │       │ (broker)        │  │
+│  │ imaplib +    │      │ caldav          │       │ stdio MCP       │  │
+│  │ smtplib      │      │ (HTTP)          │       │ subprocess      │  │
+│  └─────┬────────┘      └────────┬────────┘       └────────┬────────┘  │
 │        │                        │                          │           │
 │        └────── plain TLS to the internet (no proxy) ───────┘           │
 │                                                                         │
@@ -81,7 +81,11 @@ Deliberately minimal. One master key, one AEAD, per-integration ciphertext files
 
 - **Master key:** 32 random bytes generated on first container boot. Stored at `/var/lib/computron/vault/.master-key`, `0600 broker:broker`.
 - **Cipher:** AES-256-GCM via `cryptography.hazmat.primitives.ciphers.aead.AESGCM`. Nonce stored with ciphertext. Integration ID used as AAD.
-- **Per-integration files:** `/var/lib/computron/vault/creds/<id>.enc`, `0600 broker:broker`. Adding or removing one integration never rewrites another.
+- **Two files per integration**, both `0600 broker:broker`:
+  - `<id>.enc` — encrypted blob containing only the **secret bundle** (the auth-plugin field values the user submitted).
+  - `<id>.meta` — plaintext JSON containing **non-secret metadata** (label, slug, kind, `write_allowed`, timestamps). Encrypting this buys nothing; knowing the label or that writes are on doesn't help an attacker.
+- Splitting lets `GET /api/integrations`, state-cache rebuild on supervisor restart, and permission toggles all avoid crypto — the master key is only touched when a broker spawns or credentials change.
+- Adding or removing one integration never rewrites another.
 - **No HKDF, no KEK/DEK split, no tmpfs copy of the key, no rotation command.** If rotation is needed later, it's additive — the on-disk format reserves a 1-byte version header so future schemes can coexist.
 
 ### Storage location
@@ -97,8 +101,10 @@ Carve a subdirectory out of the existing `computron_state` volume rather than in
 └── vault/                           (broker:broker 0700)   ← agent gets EACCES
     ├── .master-key
     └── creds/
-        ├── gmail_personal.enc
-        └── github_main.enc
+        ├── gmail_personal.enc        (secrets only, AES-256-GCM)
+        ├── gmail_personal.meta       (plaintext JSON — label, write_allowed, …)
+        ├── github_main.enc
+        └── github_main.meta
 ```
 
 The entrypoint (root, at boot only) ensures `vault/` ownership and mode. **Startup assertion:** if `vault/` is not owned by `broker:broker` at mode `0700`, the supervisor refuses to start. This catches future image regressions before they silently expose creds.
@@ -113,41 +119,41 @@ The entrypoint (root, at boot only) ensures `vault/` ownership and mode. **Start
 
 Backup safety. The master key and ciphertext live in the same volume; anyone with `docker volume export computron_state` gets both. This is **explicit non-goal** for v1 — see the Settings UI copy in the UX walk-through. A future Go CLI wrapper is the likely home for a smarter key-storage scheme.
 
-### Stored blob shape
+### Stored shapes
 
-Decrypted payload (one file per integration):
+**`<id>.meta`** — plaintext, one per integration:
 
 ```json
 {
   "version": 1,
   "id": "gmail_personal",
-  "kind": "imap_caldav",
+  "slug": "gmail",
+  "kind": "email_calendar",
   "label": "Gmail — personal",
-  "email": "larry@gmail.com",
-  "auth": { "type": "app_password", "value": "abcd efgh ijkl mnop" },
-  "hosts": { "imap": "imap.gmail.com:993", "caldav": "apidata.googleusercontent.com" },
-  "added_at": "2026-04-20T12:00:00Z"
+  "write_allowed": false,
+  "added_at": "2026-04-20T12:00:00Z",
+  "updated_at": "2026-04-20T12:00:00Z"
 }
 ```
 
-For MCP subprocesses the shape adds a `server` block alongside `auth`:
+**`<id>.enc`** — decrypted payload, secret bundle only. Shape mirrors whatever the auth plugin's `FIELDS` collected from the user:
 
 ```json
 {
-  "version": 1,
-  "id": "github_main",
-  "kind": "mcp_subprocess",
-  "label": "GitHub",
-  "server": {
-    "command": "uvx",
-    "args": ["github-mcp"],
-    "transport": "stdio",
-    "env_from_vault": { "GITHUB_PERSONAL_ACCESS_TOKEN": "token" }
-  },
-  "auth": { "type": "bundle", "fields": { "token": "ghp_xxx" } },
-  "added_at": "2026-04-20T12:05:00Z"
+  "email": "larry@gmail.com",
+  "password": "abcd efgh ijkl mnop"
 }
 ```
+
+MCP example (`github_main.enc`):
+
+```json
+{
+  "token": "ghp_xxx"
+}
+```
+
+The catalog entry supplies non-user-specific broker config (IMAP host, MCP command/args) at spawn time; it never needs to live in the vault. Anything user-specific and non-secret goes in `.meta`; anything user-specific and secret goes in `.enc`.
 
 ---
 
@@ -252,9 +258,10 @@ The broker client resolves integration IDs through the supervisor, which owns th
 |---|---|---|
 | Master key | `/var/lib/computron/vault/.master-key` | `broker` only (0600) |
 | Credential ciphertext | `/var/lib/computron/vault/creds/<id>.enc` | `broker` only (0600), AES-256-GCM |
+| Integration metadata | `/var/lib/computron/vault/creds/<id>.meta` | `broker` only (0600), plaintext JSON (non-secret) |
 | Decrypted creds (transient) | supervisor memory, only during spawn | `broker` UID only |
 | Active integration creds | broker process memory + env | `broker` UID only; `/proc/<pid>/environ` is 0400 owner |
-| Non-secret integration metadata | app server state (labels, statuses, IDs) | world-readable within container |
+| Non-secret integration metadata exposed to UI | app server state (labels, statuses, IDs) | world-readable within container |
 
 ### Threat matrix
 
@@ -267,6 +274,8 @@ The broker client resolves integration IDs through the supervisor, which owns th
 | Agent: `cat /proc/<broker-pid>/environ` | EACCES; different UID |
 | Agent: `ptrace` or `/proc/<pid>/mem` on a broker | EACCES; different UID, no `CAP_SYS_PTRACE` |
 | Agent spawns its own broker with a tampered command | Supervisor is the only spawner; app server has no exec path to `broker` UID |
+| Agent with `bash-run` connects directly to a broker's UDS to bypass the app-server write gate | Broker enforces `WRITE_ALLOWED` locally at dispatch; refuses write-tagged verbs when the flag is false. App-server gate is belt-and-braces, not the load-bearing check. |
+| Agent with `bash-run` spawns a subprocess and `ptrace`s the app-server to read the user's credential during the brief HTTP→`app.sock` transit window | Kernel-level: `kernel.yama.ptrace_scope >= 1` (Linux default) blocks a child from attaching to its parent at the same UID. Container-level: `--cap-drop=ALL` + `--security-opt=no-new-privileges` ensure no process can acquire `CAP_SYS_PTRACE` to override the scope check. Supervisor asserts both at startup and refuses to run if either is misconfigured (see `01-supervisor.md`, `08-container.md`). |
 | Broker crash core dump leaks creds | Broker processes run with `ulimit -c 0` |
 | MCP server exfiltrates creds to its author's server | **Accepted risk.** User consented by installing. Mitigation: per-integration iptables egress allowlist (P2). |
 | Host access to the Docker volume | Out of scope. Same as every local-first design. |
@@ -287,7 +296,7 @@ The broker client resolves integration IDs through the supervisor, which owns th
 | Phase | Deliverable | Priority |
 |---|---|---|
 | 1 | Broker supervisor — AES-256-GCM crypto, master-key lifecycle, spawn/monitor/restart, `app.sock` RPC | P0 |
-| 2 | IMAP broker + CalDAV broker (built-in modules) | P0 |
+| 2 | Email broker (IMAP + SMTP) + calendar broker (CalDAV) | P0 |
 | 3 | `app_password` auth plugin + verify | P0 |
 | 4 | `mcp_subprocess` auth plugin + stdio MCP host | P0 |
 | 5 | Integrations API routes on the app server | P0 |
@@ -314,7 +323,7 @@ The broker client resolves integration IDs through the supervisor, which owns th
 
 - **No separate vault daemon.** Merged into the broker supervisor. One long-running process owns crypto and supervision. Root only used at entrypoint-time to set `vault/` ownership, then drops out via `gosu`.
 - **One broker process per integration** (not per kind). Long-lived, UID 1001. Holds creds in env + memory; restarted by supervisor on crash.
-- **Three broker implementations only.** `imap_broker`, `caldav_broker`, `mcp_broker`. Adding a provider = catalog entry + auth plugin, **not new broker code**.
+- **Three broker implementations only.** `email_broker` (IMAP + SMTP), `calendar_broker` (CalDAV), `mcp_broker` (stdio MCP subprocess). Adding a provider = catalog entry + auth plugin, **not new broker code**. Built-in brokers are capability-oriented — one process per user capability (email, calendar), even when the capability uses multiple protocols. `mcp_broker` is the exception: it's a protocol adapter because MCP *is* the boundary it exposes.
 
 ### Supervisor ↔ broker interface
 
@@ -333,7 +342,7 @@ The broker client resolves integration IDs through the supervisor, which owns th
 | `error` | broker crash / network / upstream down; auto-retry with backoff | amber |
 | `disabled` | user toggled off; broker not running | grey |
 
-Transitions fired by: **supervisor** (from process events), **broker** (via RPC error codes + exit codes), **user** (Retry/Reconnect/Toggle/Remove).
+Transitions fired by: **process events** (supervisor's `proc.wait()` → state transitions keyed on exit codes: `77 → auth_failed`, other nonzero → `error`) and **user actions via `app.sock`** (Retry / Reconnect / Toggle / Remove / set_permissions). The supervisor does not observe RPC traffic — broker-observed errors only influence state when the broker gives up and exits. See `01-supervisor.md` "Lifecycle" for the full mapping.
 Auto-retry: exponential backoff (1s → 5s → 30s → 5m) for `error`; never for `auth_failed`; stop after ~30 min and wait for manual Retry.
 
 ### Tool ↔ integration binding
@@ -341,6 +350,19 @@ Auto-retry: exponential backoff (1s → 5s → 30s → 5m) for `error`; never fo
 - **Explicit `integration_id` parameter** on every tool. `search_email(integration_id, query)`, `list_events(integration_id, range)`, etc.
 - **Dynamic tool descriptions.** The tool's description is regenerated whenever integrations change; the list of available IDs appears in-line so the agent can pick based on user intent.
 - No implicit auto-routing, no per-integration tool registration.
+
+### Permissions: read-only by default
+
+- Integrations default to **read-only**. Writes (send email, move messages, create/update/delete calendar events, destructive MCP tools) are opt-in per integration.
+- **Rationale.** Agent tool chains have a high blast radius. A misinterpreted request that reads wrongly is recoverable; one that deletes events or sends email is not. Users flip the toggle per-integration when they're ready.
+- **Storage.** `write_allowed: bool` (default `false`) lives in `<id>.meta` — plaintext, not in the encrypted blob.
+- **Toggling.** `PATCH /api/integrations/:id { write_allowed }` → supervisor's `set_permissions` RPC → rewrite `.meta` + SIGTERM the broker + respawn it with the new `WRITE_ALLOWED` env flag. Integration goes `active → pending → active` for ~1–3 s while the new broker reconnects upstream. No reconnection of the user's credentials; the same app password is re-used.
+- **Classification.**
+  - Built-in brokers (email/calendar): static `read` / `write` tag per verb, declared in each broker's verb table and mirrored in a client-side const.
+  - MCP tools: parsed from each tool's annotations (`readOnlyHint`, `destructiveHint`). Missing or ambiguous annotations are treated as write (fail-closed).
+- **Dual-layer enforcement — the broker is the real gate.** Consciously layered; both layers are always on.
+  - **Broker (primary, security-load-bearing).** Supervisor passes `WRITE_ALLOWED=true|false` in the broker's env at spawn. During verb dispatch the broker refuses write-tagged verbs locally (`{"error":{"code":"WRITE_DENIED"}}`) when the flag is false — the request never reaches upstream. For MCP, the broker caches `readOnlyHint` from `tools/list` and refuses `tools/call` for non-read-only tools. **This layer defeats the direct-UDS bypass**: an agent with `bash-run` that connects straight to a broker's socket (bypassing `broker_client` and the app-server tool registry) still gets refused by the broker itself.
+  - **App server (belt-and-braces, UX-oriented).** Write-capable tools are hidden from the agent's registry when `write_allowed=false`; `broker_client.call()` short-circuits denied writes before a wire round-trip and raises `IntegrationWriteDenied`. These save a round-trip and give the agent a crisp error message. They are **not load-bearing for security** — if the broker respawn ever fails or `WRITE_ALLOWED` is somehow wrong, the broker still enforces.
 
 ### Integration ID naming
 
@@ -370,19 +392,19 @@ Auto-retry: exponential backoff (1s → 5s → 30s → 5m) for `error`; never fo
 This plan is decomposed into one file per P0 deliverable. See:
 
 - `01-supervisor.md` — crypto, master key, spawn, lifecycle, `app.sock` RPC
-- `02-broker-imap-caldav.md` — built-in IMAP + CalDAV brokers
+- `02-broker-email-calendar.md` — email broker (IMAP + SMTP) and calendar broker (CalDAV)
 - `03-broker-mcp.md` — MCP stdio subprocess host
 - `04-auth-plugins.md` — `FIELDS` + `ENV_INJECTION` contract; v1 plugins
 - `05-api-and-client.md` — `/api/integrations/*` routes + `broker_client` for tool handlers
 - `06-ui.md` — React Integrations tab
 - `07-catalog.md` — catalog JSON schema + v1 entries
 - `08-container.md` — Dockerfile, entrypoint, runtime layout
+- `09-testing.md` — testing strategy and shared test doubles
 
 ---
 
 ## Out of scope for v1
 
-- SMTP / sending email. Read-only for now.
 - OAuth-based Gmail or Workspace. Revisit when user base justifies Google verification spend.
 - MCP servers over streamable HTTP.
 - Hosted-relay MCPs (Nylas, Composio, Zapier MCP). Shipping them would break the "creds stay local" property; explicit non-goal.
