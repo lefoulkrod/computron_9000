@@ -30,7 +30,9 @@ dev = [
     "ruff",
     "mypy",
     "types-cachetools",
-    "types-PyYAML"
+    "types-PyYAML",
+    "watchfiles",
+    "pre-commit",
 ]
 
 [tool.uv]

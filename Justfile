@@ -51,6 +51,12 @@ setup home_dir=`echo "$HOME/.computron_9000"`:
     mkdir -p "{{home_dir}}/home" "{{home_dir}}/state"
 
     uv run python -c "import agents, tools, utils; print('✅ Imports OK')"
+
+    if command -v pre-commit >/dev/null || uv run pre-commit --version >/dev/null 2>&1; then
+        echo "🪝 Installing pre-commit hooks..."
+        uv run pre-commit install
+    fi
+
     echo ""
     echo "🎉 Ready. Build the image:  just build"
     echo "   Then start developing:   just dev"
@@ -153,6 +159,24 @@ rebuild-ui:
     just _sync-src {{_ctr}}
     just _ui-build {{_ctr}}
     echo "✅ UI rebuilt — refresh browser"
+
+# Watch Python source and auto-restart the app on changes (requires running dev container)
+watch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-running
+    echo "👁️  Watching Python source — saves trigger restart (Ctrl-C to stop)..."
+    uv run watchfiles --filter python "just restart-app" .
+
+# Start Vite dev server with HMR on :5173 (requires running dev container on :8080)
+dev-ui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _require-running
+    echo "🎨 Starting Vite dev server on http://localhost:5173 (proxying /api to :8080)"
+    cd {{UI_DIR}}
+    [ -d node_modules ] || ([ -f package-lock.json ] && npm ci || npm install)
+    npm run dev
 
 # Stop the dev container (keeps state in ~/.computron_9000/)
 stop:
