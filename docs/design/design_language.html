@@ -2451,7 +2451,6 @@ body {
 .dl-fpreview-content.image { display: flex; align-items: center; justify-content: center; padding: 20px; background: #000; }
 .dl-fpreview-content.image .placeholder { width: 100%; height: 220px; }
 
-</style>
 .file-pill-btn {
   display: inline-flex; align-items: center; gap: 4px;
   font-family: var(--font-brand);
@@ -2775,6 +2774,12 @@ body {
         Use <code>--sp-1</code> for tight gaps (badge padding, icon margins). <code>--sp-2</code> for
         button-y/inline spacing. <code>--sp-3</code> for panel/card padding and form gaps.
         <code>--sp-4</code> for section spacing. <code>--sp-6</code>+ for major layout gaps.
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+        <strong style="color:var(--text-secondary)">Sub-scale exception.</strong>
+        A small set of tight inline elements &mdash; inline code, badges, chips, micro-buttons (the
+        copy-code button, codeblock header) &mdash; legitimately sit below the 4px base. These may use
+        raw px values (commonly 1px, 2px, 5px, 6px, 10px) for internal padding.
       </div>
     </div>
 
