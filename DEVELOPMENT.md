@@ -36,11 +36,14 @@ just build
 # Start the dev container, sync source into it, build UI, launch the app:
 just dev
 
-# After editing Python files, sync the new source and bounce the app:
+# Auto-restart on Python file saves (recommended over manual restart-app):
+just watch
+
+# After editing Python files manually, sync and bounce:
 just restart-app
 
-# After editing UI source, re-sync and rebuild dist/:
-just rebuild-ui
+# Start Vite dev server with HMR on :5173 (open this instead of :8080 for UI work):
+just dev-ui
 
 # After editing .env (feature flags, tokens), restart the container:
 just stop && just dev
@@ -53,6 +56,8 @@ just shell
 ```
 
 `just dev` **copies** your repo into the container via a tar-pipe — it does not bind-mount. Source changes on the host don't appear inside the running container until you run `just restart-app` or `just rebuild-ui`, which re-syncs and bounces the relevant process. This keeps the container unable to write back into your repo (an agent running inside can't pollute the tree) and matches production behavior.
+
+**Recommended dev loop:** run `just watch` in one terminal and `just dev-ui` in another. `watch` automatically syncs and restarts the backend on every `.py` save; `dev-ui` gives instant HMR for frontend changes via Vite on `:5173`.
 
 **Note:** `just restart-app` only restarts the Python process. Environment variable changes (`.env`) require a full container restart since they're baked in at `docker run` time.
 
@@ -125,13 +130,21 @@ just e2e
 
 ## Code Quality
 
-Only run these when asked:
+Pre-commit hooks run ruff check + format automatically on every commit. Install them once after cloning:
+
+```sh
+uv run pre-commit install
+# (just setup does this automatically)
+```
+
+Manual checks (only run when asked):
 
 ```sh
 just lint       # ruff check
 just typecheck  # mypy
 just format     # ruff fix + format
 just check      # all three (non-mutating)
+just ci         # check + tests (what CI runs)
 ```
 
 ## Python Conventions
@@ -161,9 +174,9 @@ See `CLAUDE.md` for the full rules. Short version:
 - Function components with hooks
 
 ```sh
-just ui-dev    # Vite dev server
-just ui-build  # Production build
-just ui-test   # Vitest
+just dev-ui    # Vite dev server with HMR on :5173 (proxies /api to :8080)
+just rebuild-ui  # Re-sync source and rebuild dist/ inside the container
+just test-ui   # Vitest
 ```
 
 ## Container Build & Publish
@@ -181,7 +194,9 @@ Run `just` (no args) to see all available recipes. Key ones:
 |---------|---------|
 | `just build` | Build the container image (only when container/Dockerfile changes) |
 | `just dev` | Start dev container, sync source, build UI, launch app on :8080 |
-| `just restart-app` | Sync latest Python source and bounce the app |
+| `just watch` | Watch Python source, auto-sync and restart on every save |
+| `just dev-ui` | Vite dev server with HMR on :5173 (proxies /api to :8080) |
+| `just restart-app` | Sync latest Python source and bounce the app (manual) |
 | `just rebuild-ui` | Sync latest UI source and rebuild dist/ |
 | `just stop` | Stop the dev container (state at `~/.computron_9000/` persists) |
 | `just reset` | Stop and wipe state |
@@ -196,3 +211,4 @@ Run `just` (no args) to see all available recipes. Key ones:
 | `just typecheck` | Type check with mypy |
 | `just format` | Auto-format with ruff |
 | `just check` | All non-mutating checks (lint + typecheck + format-check) |
+| `just ci` | check + tests (mirrors what CI runs) |
