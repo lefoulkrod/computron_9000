@@ -1,12 +1,12 @@
 """Pydantic models for the email broker's domain types.
 
 These represent the email-domain data (mailboxes, messages, headers) the
-broker's sessions exchange internally and that the dispatcher serializes into
+broker's clients exchange internally and that the dispatcher serializes into
 JSON frames at the wire boundary.
 
-Per CLAUDE.md "Module Structure" rule 5 this file imports only stdlib and
-pydantic — no internal dependencies — so it can be imported from anywhere in
-the email broker (sessions, verbs, dispatcher, tests) without cycle risk.
+Imports only stdlib and pydantic — no internal dependencies — so this module
+can be imported from anywhere in the email broker (clients, verbs, dispatcher,
+tests) without introducing a cycle.
 """
 
 from __future__ import annotations

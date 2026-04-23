@@ -14,7 +14,7 @@ The dispatcher:
    permission gate — an agent bypassing the app server by connecting straight
    to the broker's UDS still hits this check.
 3. Finds the handler for the verb and calls it with the args dict; the handler
-   in turn calls the session's typed method and packages the result.
+   in turn calls the client's typed method and packages the result.
 
 Verbs present in ``_VERB_TYPE`` but absent from ``_handlers`` are "declared but
 not implemented" — they return ``BAD_REQUEST`` until we wire them up. That lets
@@ -50,7 +50,7 @@ _Handler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
 class VerbDispatcher:
-    """Route one RPC verb call to the right session method."""
+    """Route one RPC verb call to the right client method."""
 
     def __init__(
         self,
@@ -108,7 +108,7 @@ class VerbDispatcher:
     async def _handle_list_mailboxes(self, _args: dict[str, Any]) -> dict[str, Any]:
         """``list_mailboxes`` takes no args; returns ``{"mailboxes": [...]}``.
 
-        The session returns typed :class:`Mailbox` instances; we serialize via
+        The client returns typed :class:`Mailbox` instances; we serialize via
         ``.model_dump()`` here because this is the wire boundary — the dict
         returned from this handler goes straight into the JSON RPC frame.
         """

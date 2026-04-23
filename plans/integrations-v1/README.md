@@ -32,3 +32,26 @@ The sub-plans are numbered roughly in dependency order, but the critical path lo
 4. Ship.
 
 No new Python. No new broker code. That's the whole point of the decomposition.
+
+## Pre-merge cleanup checklist
+
+Things to sweep out of the code before these plan docs are deleted — they were
+written during the walking-skeleton phase and need to be either removed or
+re-grounded against the finished code.
+
+- [ ] **Remove "walking skeleton" references from code.** Grep:
+      `grep -rn "walking skeleton" integrations/ tests/integrations/`.
+      Docstrings in `integrations/supervisor/_catalog.py` and
+      `integrations/brokers/email_broker/_verbs.py` refer to this as the
+      walking skeleton; rewrite them to describe the final shape once every
+      verb and the JSON catalog loader are in place.
+- [ ] **Expand `integrations/supervisor/_catalog.py` from its hardcoded
+      Python dict to loading `config/integrations_catalog/*.json` at supervisor
+      startup.** The current ``DEFAULT_CATALOG`` with just an iCloud entry is a
+      stand-in.
+- [ ] **Sweep "not yet implemented" / "TBD" / "lands when we build one"
+      comments** — anywhere a plan-stage TODO survives in the code, either
+      resolve it or convert it to a concrete issue.
+- [ ] **Remove any remaining "Phase N" or "v1 slate" language** that refers to
+      these plan docs. The code should stand on its own without the plan as
+      context.

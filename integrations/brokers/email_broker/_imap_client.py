@@ -110,7 +110,7 @@ class ImapClient:
             # Capture the narrowed reference into a local. The inner ``_blocking_list``
             # closes over ``conn`` rather than ``self._imap``; that keeps the type
             # checker happy without a runtime ``assert`` (which ``python -O`` would
-            # strip) and documents that only the IMAP handle — not the whole session —
+            # strip) and documents that only the IMAP handle — not the whole client —
             # crosses into the worker thread.
             conn = self._imap
 

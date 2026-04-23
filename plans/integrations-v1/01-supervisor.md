@@ -373,3 +373,4 @@ Places where this design knowingly departs from the textbook answer, and why.
 - **Logging.** Supervisor logs to stderr (container captures). Broker stderr forwarded as-is. Structured (JSON) vs unstructured — defer to `08-container.md`.
 - **Metrics / diagnostics endpoint.** Nice-to-have; deferred past v1.
 - **Graceful master-key rotation.** Schema has a version byte; rotation command is P2.
+- **Broker-spawn env: curated allow-list.** Today the supervisor copies its own `os.environ` wholesale when building the broker's env, then overlays protocol config + secret-bundle injections. That inherits whatever random vars happened to be set on the supervisor (and by extension, whatever the entrypoint set before `gosu broker`). When we harden the container, replace the wholesale copy with a curated allow-list (`PATH`, `HOME`, `SSL_CERT_FILE`, locale vars, and anything we specifically know a broker needs). Narrows the implicit surface and makes the spawn env auditable.

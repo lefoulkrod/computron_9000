@@ -6,9 +6,10 @@ Wire format::
     success : <4-byte BE length><JSON: {"id": n, "result": ...}>
     error   : <4-byte BE length><JSON: {"id": n, "error": {"code": "...", "message": "..."}}>
 
-All brokers use this. Access control lives at the filesystem level (socket mode
-0660, group ``computron``) — callers get connect/read/write through group
-membership; other UIDs get ``EACCES`` on connect.
+All brokers use this. Access control lives at the filesystem level. The socket
+is created with Unix mode ``0660`` (owner rw, group rw, other nothing) and its
+group is set to ``computron`` so the app server — which runs under that group
+— can connect while any other UID sees ``EACCES`` at the kernel.
 """
 
 from __future__ import annotations
@@ -191,8 +192,10 @@ async def serve_rpc(
         handler: Async callable invoked once per request frame. Return the ``result``
             dict or raise ``RpcError`` for a structured error. Any other exception
             becomes an ``INTERNAL`` error frame.
-        socket_mode: chmod applied to the socket file after bind. Default ``0660``
-            so the ``computron`` group (app server) can connect; other UIDs can't.
+        socket_mode: chmod applied to the socket file after bind. Default
+            ``0o660`` (owner rw, group rw, other nothing) so the ``computron``
+            group — i.e. the app server — can connect; other UIDs hit
+            ``EACCES`` at the kernel before reaching our code.
 
     Returns:
         The asyncio Server. Typical use::
@@ -216,8 +219,8 @@ async def serve_rpc(
 
     server = await asyncio.start_unix_server(_connection_cb, path=str(path))
     # chmod AFTER bind — asyncio.start_unix_server creates the file with the
-    # process umask which may be tighter than we want. Setting 0660 explicitly
-    # after the fact is the simplest way to guarantee the app server's group
-    # can connect.
+    # process umask, which may be tighter than we want. Setting the mode
+    # explicitly afterwards guarantees the app server's group (``computron``)
+    # can connect. Default mode is 0o660: owner rw, group rw, other nothing.
     path.chmod(socket_mode)
     return server
