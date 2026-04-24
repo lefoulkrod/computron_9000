@@ -169,6 +169,17 @@ class GoalsConfig(BaseModel):
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
 
 
+class IntegrationsConfig(BaseModel):
+    """Configuration for the integrations subsystem.
+
+    The app server talks to the integrations supervisor over a Unix Domain
+    Socket at ``app_sock_path``. Route handlers and tool handlers both
+    read this path from config rather than being passed it explicitly.
+    """
+
+    app_sock_path: str = "/run/cvault/app.sock"
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -181,6 +192,7 @@ class AppConfig(BaseModel):
     summary: SummaryConfig | None = None
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
     goals: GoalsConfig = Field(default_factory=GoalsConfig)
+    integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
 
 
 logger = logging.getLogger(__name__)

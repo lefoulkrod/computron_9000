@@ -25,24 +25,28 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
+from agents.types import Data
+from config import load_config
+from conversations import (
+    delete_conversation as _delete_conversation,
+)
+from conversations import (
+    list_conversations as _list_conversations,
+)
+from sdk.turn import is_turn_active, queue_nudge, request_stop
 from server._feature_routes import register_feature_routes
+from server._integrations_routes import register_integrations_routes
 from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
 from server._settings_routes import register_settings_routes
 from server._task_routes import register_task_routes
 from server.message_handler import handle_user_message, reset_message_history, resume_conversation
-from sdk.turn import is_turn_active, queue_nudge, request_stop
-from agents.types import Data
-from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
+from tools.desktop._exec import DesktopExecError
+from tools.desktop._lifecycle import start_desktop
+from tools.integrations import refresh_registered_integrations
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
-from conversations import (
-    delete_conversation as _delete_conversation,
-    list_conversations as _list_conversations,
-)
-from tools.desktop._lifecycle import start_desktop
-from tools.desktop._exec import DesktopExecError
 
 logger = logging.getLogger(__name__)
 
@@ -181,13 +185,13 @@ async def chat_handler(request: Request) -> StreamResponse:
     data_objs: list[Data] | None = None
     if payload.data:
         data_objs = [
-            Data(base64_encoded=a.base64, content_type=a.content_type, filename=a.filename)
-            for a in payload.data
+            Data(base64_encoded=a.base64, content_type=a.content_type, filename=a.filename) for a in payload.data
         ]
     return await stream_events(
         request,
         handle_user_message(
-            user_query, data_objs,
+            user_query,
+            data_objs,
             profile_id=payload.profile_id,
             conversation_id=payload.conversation_id,
         ),
@@ -259,15 +263,15 @@ async def delete_custom_tool_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-
-
 async def list_memory_handler(_request: Request) -> Response:
     """Return all stored memories and the set of hidden keys."""
     entries = load_memory()
-    return web.json_response({
-        "entries": {k: e.value for k, e in entries.items()},
-        "hidden": sorted(k for k, e in entries.items() if e.hidden),
-    })
+    return web.json_response(
+        {
+            "entries": {k: e.value for k, e in entries.items()},
+            "hidden": sorted(k for k, e in entries.items() if e.hidden),
+        }
+    )
 
 
 async def delete_memory_handler(request: Request) -> Response:
@@ -324,7 +328,8 @@ async def desktop_start_handler(_request: Request) -> Response:
         return web.json_response({"running": True})
     except DesktopExecError as exc:
         return web.json_response(
-            {"running": False, "error": str(exc)}, status=503,
+            {"running": False, "error": str(exc)},
+            status=503,
         )
 
 
@@ -377,6 +382,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Task engine routes
     register_task_routes(app)
 
+    # Integrations (supervisor / brokers)
+    register_integrations_routes(app)
+
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.
     cfg = load_config()
@@ -389,6 +397,10 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
         app.router.add_static("/assets", UI_DIST_DIR / "assets", show_index=False)
     if STATIC_DIR.exists():
         app.router.add_static("/static", STATIC_DIR, show_index=False)
+
+    # Refresh cache of enabled integrations. This is what makes tools available
+    # for the agents to interact with the integrations.
+    app.on_startup.append(lambda _app: refresh_registered_integrations())
 
     # Phase 1: Data migrations — synchronous, must complete before anything
     # else reads state.  No user interaction needed.

@@ -32,4 +32,13 @@ def get_core_tools() -> list[Callable[..., Any]]:
     if load_config().features.custom_tools:
         from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
         tools.extend([create_custom_tool, lookup_custom_tools, run_custom_tool])
+
+    # Each integration-bound tool is gated on the slugs it supports. Extend
+    # the per-tool slug set as more backends land (gmail, fastmail, ...).
+    from tools.integrations import registered_integrations
+    slugs = registered_integrations()
+    if slugs & {"icloud"}:
+        from tools.integrations.list_email_folders import list_email_folders
+        tools.append(list_email_folders)
+
     return tools
