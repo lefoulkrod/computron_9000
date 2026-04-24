@@ -383,6 +383,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
 
     tag_name = ""
     input_type = ""
+    is_contenteditable = False
     try:
         handle = await locator.element_handle(timeout=5000)
         if handle is not None:
@@ -390,11 +391,14 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
             if tag_name == "input":
                 raw_type = await handle.get_attribute("type")
                 input_type = (raw_type or "text").lower()
+            is_contenteditable = await handle.evaluate(
+                "el => el.getAttribute('contenteditable') === 'true'"
+            )
     except PlaywrightError as exc:  # pragma: no cover - defensive introspection aid
         logger.debug("Failed to introspect element for fill_field: %s", exc)
 
-    if tag_name not in {"input", "textarea"}:
-        msg = "fill_field only supports input and textarea elements"
+    if tag_name not in {"input", "textarea"} and not is_contenteditable:
+        msg = "fill_field only supports input, textarea, and contenteditable elements"
         raise BrowserToolError(msg, tool="fill_field", details=details)
 
     unsupported_inputs = {"checkbox", "radio", "submit", "button", "image", "file", "hidden"}
