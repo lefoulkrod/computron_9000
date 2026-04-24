@@ -129,6 +129,12 @@ _STRUCTURED_SNAPSHOT_JS = """
     'option','treeitem'
   ]);
 
+  // Roles that are meaningless without an accessible name (ARIA "name from content").
+  // All other INTERACTIVE roles carry value/state and are actionable even nameless.
+  const NAME_REQUIRED = new Set([
+    'link', 'button', 'tab', 'menuitem', 'option', 'treeitem'
+  ]);
+
   // ---- Accessible name ----
   function getName(el) {
     const al = el.getAttribute('aria-label');
@@ -363,7 +369,7 @@ _STRUCTURED_SNAPSHOT_JS = """
     // Interactive elements: stamp with ref, emit node data
     if (role && INTERACTIVE.has(role)) {
       let name = getName(el);
-      if (!name && role !== 'combobox' && el.tagName !== 'SELECT') return;
+      if (!name && NAME_REQUIRED.has(role)) return;
 
       refCounter++;
       el.setAttribute('data-ct-ref', String(refCounter));
