@@ -391,9 +391,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
             if tag_name == "input":
                 raw_type = await handle.get_attribute("type")
                 input_type = (raw_type or "text").lower()
-            is_contenteditable = await handle.evaluate(
-                "el => el.getAttribute('contenteditable') === 'true'"
-            )
+            is_contenteditable = await handle.evaluate("el => el.isContentEditable")
     except PlaywrightError as exc:  # pragma: no cover - defensive introspection aid
         logger.debug("Failed to introspect element for fill_field: %s", exc)
 
