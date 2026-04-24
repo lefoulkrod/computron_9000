@@ -21,6 +21,12 @@ from tools.browser.core._dom_nodes import (
 )
 from tools.browser.core.site_filters import filter_for_site
 
+# Roles that are meaningless without an accessible name (ARIA "name from content").
+# All other interactive roles carry value/state and are actionable even nameless.
+NAME_REQUIRED_ROLES = frozenset({
+    "link", "button", "tab", "menuitem", "option", "treeitem"
+})
+
 __all__ = ["process_snapshot"]
 
 
@@ -182,8 +188,8 @@ def _render_node(node: DomNode, *, name_limit: int) -> str | None:
         name = (node.name or "").strip()
         value = (node.value or "").strip()
 
-        # Nameless comboboxes are allowed, others require a name
-        if not name and role not in ("combobox",):
+        # Roles that are meaningless without an accessible name are skipped
+        if not name and role in NAME_REQUIRED_ROLES:
             return None
 
         name_display = _truncate(name, name_limit) if name else ""
