@@ -53,7 +53,7 @@ class RpcError(Exception):
         self.message = message
 
 
-def _encode_frame(obj: dict[str, Any]) -> bytes:
+def encode_frame(obj: dict[str, Any]) -> bytes:
     """Serialize ``obj`` into ``<4-byte BE length><JSON body>``.
 
     Raises ``RpcError("BAD_REQUEST", ...)`` if the encoded body exceeds the
@@ -71,7 +71,7 @@ def _encode_frame(obj: dict[str, Any]) -> bytes:
     return len(body).to_bytes(_LEN_PREFIX_BYTES, "big") + body
 
 
-async def _read_frame(reader: asyncio.StreamReader) -> dict[str, Any]:
+async def read_frame(reader: asyncio.StreamReader) -> dict[str, Any]:
     """Read one frame: the length header, then exactly that many body bytes.
 
     Uses ``readexactly`` so a truncated header or body becomes an
@@ -92,9 +92,9 @@ async def _read_frame(reader: asyncio.StreamReader) -> dict[str, Any]:
         raise RpcError("BAD_REQUEST", msg) from exc
 
 
-async def _write_frame(writer: asyncio.StreamWriter, obj: dict[str, Any]) -> None:
+async def write_frame(writer: asyncio.StreamWriter, obj: dict[str, Any]) -> None:
     """Encode ``obj`` and push it on the writer. Propagates ``RpcError`` on oversize."""
-    writer.write(_encode_frame(obj))
+    writer.write(encode_frame(obj))
     # drain() applies backpressure: if the peer is slow to read, wait until the
     # send buffer has room rather than queuing unbounded bytes in memory.
     await writer.drain()
@@ -110,7 +110,7 @@ async def _serve_connection(
         while True:
             # --- read + parse the next request frame ---
             try:
-                frame = await _read_frame(reader)
+                frame = await read_frame(reader)
             except asyncio.IncompleteReadError:
                 # Clean peer close: half-way through the next frame at EOF.
                 return
@@ -118,7 +118,7 @@ async def _serve_connection(
                 # Frame-level decode failure (bad length, non-UTF-8, bad JSON).
                 # We haven't read a request id yet, so we send an unkeyed error
                 # frame and close — the stream is desynced and can't recover.
-                await _write_frame(writer, {"error": {"code": exc.code, "message": exc.message}})
+                await write_frame(writer, {"error": {"code": exc.code, "message": exc.message}})
                 return
 
             req_id = frame.get("id")
@@ -127,7 +127,7 @@ async def _serve_connection(
             # The handler contract requires these shapes; reject early so the handler
             # doesn't have to defensively check every call.
             if not isinstance(verb, str) or not isinstance(args, dict):
-                await _write_frame(
+                await write_frame(
                     writer,
                     {
                         "id": req_id,
@@ -157,15 +157,15 @@ async def _serve_connection(
 
             # --- send the response, with a fallback for oversized results ---
             try:
-                await _write_frame(writer, response)
+                await write_frame(writer, response)
             except RpcError as exc:
-                # _encode_frame tripped the size guard. The handler produced a payload
+                # encode_frame tripped the size guard. The handler produced a payload
                 # we can't transmit; replace with a structured error so the client
                 # knows why rather than seeing the connection drop. The fallback frame
                 # is tiny (just the error code + message) so its encode is safe.
                 logger.error("failed to encode response for verb %s: %s", verb, exc)
                 fallback = {"id": req_id, "error": {"code": exc.code, "message": exc.message}}
-                await _write_frame(writer, fallback)
+                await write_frame(writer, fallback)
     finally:
         # Always close the socket — even on cancellation or a surprise exception
         # from the exception-handling paths above. Leaking the writer leaves the
