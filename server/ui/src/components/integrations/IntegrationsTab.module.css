@@ -130,6 +130,22 @@
     font-family: var(--font-code);
 }
 
+.rowError {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--danger);
+    margin-top: var(--sp-1);
+}
+
+.rowControl {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    flex-shrink: 0;
+}
+
 /* ── Badges + status dot ─────────────────────────────────── */
 .badge {
     display: inline-flex;
@@ -218,6 +234,7 @@
     background: var(--surface);
     border-color: var(--border-strong);
 }
+
 
 /* ── Loading + error ─────────────────────────────────────── */
 .loading {

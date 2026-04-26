@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import ConfirmButton from '../primitives/ConfirmButton.jsx';
 import AddIntegrationModal from './AddIntegrationModal.jsx';
 import styles from './IntegrationsTab.module.css';
 
@@ -16,6 +17,7 @@ export default function IntegrationsTab() {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
+    const [removeError, setRemoveError] = useState(null);
 
     const fetchIntegrations = useCallback(async () => {
         setLoading(true);
@@ -53,6 +55,26 @@ export default function IntegrationsTab() {
         fetchIntegrations();
     };
 
+    const handleRemove = useCallback(async (id) => {
+        setRemoveError(null);
+        try {
+            const resp = await fetch(`/api/integrations/${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+            });
+            if (!resp.ok && resp.status !== 204) {
+                const body = await resp.json().catch(() => ({}));
+                setRemoveError({
+                    id,
+                    message: body?.error?.message || `HTTP ${resp.status}`,
+                });
+                return;
+            }
+            await fetchIntegrations();
+        } catch (err) {
+            setRemoveError({ id, message: err?.message || 'Request failed' });
+        }
+    }, [fetchIntegrations]);
+
     const grouped = groupByCategory(integrations);
 
     return (
@@ -71,7 +93,12 @@ export default function IntegrationsTab() {
             ) : integrations.length === 0 ? (
                 <EmptyState onAdd={() => setModalOpen(true)} />
             ) : (
-                <PopulatedList grouped={grouped} onAdd={() => setModalOpen(true)} />
+                <PopulatedList
+                    grouped={grouped}
+                    onAdd={() => setModalOpen(true)}
+                    onRemove={handleRemove}
+                    removeError={removeError}
+                />
             )}
 
             {modalOpen && (
@@ -136,13 +163,20 @@ function EmptyState({ onAdd }) {
     );
 }
 
-function PopulatedList({ grouped, onAdd }) {
+function PopulatedList({ grouped, onAdd, onRemove, removeError }) {
     return (
         <div className={styles.list}>
             {grouped.map(([category, rows]) => (
                 <section key={category} className={styles.group}>
                     <div className={styles.groupLabel}>{category}</div>
-                    {rows.map(row => <Row key={row.id} row={row} />)}
+                    {rows.map(row => (
+                        <Row
+                            key={row.id}
+                            row={row}
+                            error={removeError?.id === row.id ? removeError.message : null}
+                            onRemove={() => onRemove(row.id)}
+                        />
+                    ))}
                 </section>
             ))}
             <div className={styles.listFooter}>
@@ -158,7 +192,7 @@ function PopulatedList({ grouped, onAdd }) {
     );
 }
 
-function Row({ row }) {
+function Row({ row, error, onRemove }) {
     return (
         <div className={styles.row}>
             <div className={styles.rowIcon}><i className={`bi ${row.meta.icon}`} /></div>
@@ -174,6 +208,21 @@ function Row({ row }) {
                     </span>
                 </div>
                 <div className={styles.rowDesc}>{row.id}</div>
+                {error && (
+                    <div className={styles.rowError}>
+                        <i className="bi bi-exclamation-triangle" /> {error}
+                    </div>
+                )}
+            </div>
+            <div className={styles.rowControl}>
+                <ConfirmButton
+                    icon="bi-trash3"
+                    confirmLabel="Confirm?"
+                    busyLabel="Removing…"
+                    title="Disconnect"
+                    onConfirm={onRemove}
+                    data-testid={`integrations-remove-${row.id}`}
+                />
             </div>
         </div>
     );

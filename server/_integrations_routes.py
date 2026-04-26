@@ -1,4 +1,4 @@
-"""HTTP routes under ``/api/integrations`` — add + list.
+"""HTTP routes under ``/api/integrations`` — list + add + remove.
 
 Handlers talk to the supervisor directly over its Unix Domain Socket using
 the same length-prefixed JSON framing the supervisor serves. The supervisor
@@ -22,7 +22,7 @@ from typing import Any
 from aiohttp import web
 
 from config import load_config
-from tools.integrations import mark_added
+from tools.integrations import mark_added, mark_removed
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,41 @@ async def handle_add_integration(request: web.Request) -> web.Response:
     return web.json_response(result, status=201)
 
 
+async def handle_remove_integration(request: web.Request) -> web.Response:
+    """``DELETE /api/integrations/{id}`` — tear down a registered integration.
+
+    Calls the supervisor's ``remove`` verb, which SIGTERMs the broker and
+    deletes the vault files. On success the app server clears its tool-
+    visibility cache entry so the agent's next turn no longer sees tools
+    bound to this integration.
+
+    On success: ``204 No Content``. On unknown id: ``404``.
+    """
+    integration_id = request.match_info.get("id", "")
+    if not integration_id:
+        return _error_response(
+            {"code": "BAD_REQUEST", "message": "integration id is required"}
+        )
+
+    try:
+        resp = await _supervisor_rpc("remove", {"id": integration_id})
+    except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
+        logger.warning("supervisor unreachable for remove: %s", exc)
+        return web.json_response(
+            {"error": {"code": "UNAVAILABLE", "message": "Integrations service isn't running."}},
+            status=503,
+        )
+    if "error" in resp:
+        return _error_response(resp["error"])
+
+    mark_removed(integration_id)
+    return web.Response(status=204)
+
+
 def register_integrations_routes(app: web.Application) -> None:
     """Register ``/api/integrations`` routes on the application."""
     app.router.add_route("GET", "/api/integrations", handle_list_integrations)
     app.router.add_route("POST", "/api/integrations", handle_add_integration)
+    app.router.add_route(
+        "DELETE", "/api/integrations/{id}", handle_remove_integration,
+    )
