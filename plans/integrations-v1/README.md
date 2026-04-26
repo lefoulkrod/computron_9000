@@ -55,3 +55,13 @@ re-grounded against the finished code.
 - [ ] **Remove any remaining "Phase N" or "v1 slate" language** that refers to
       these plan docs. The code should stand on its own without the plan as
       context.
+- [ ] **Terminology reconciliation pass.** Several near-synonymous terms
+      have piled up — `integration`, `provider`, `catalog entry`, `slug`,
+      `user_suffix`, `integration_id`; and three record types
+      (`CatalogEntry`, `IntegrationMeta` / `IntegrationRecord`,
+      `RegisteredIntegration`) each justified individually but unobvious
+      collectively. Before merge, write a short glossary (in `README.md`
+      or a new `glossary.md`) and audit docstrings + comments + UI copy
+      for the canonical names. Specifically pin down: is "provider" the
+      same as "catalog entry"? Is "integration" the user-facing concept,
+      the persisted record, or both? Decide and rename inconsistencies.
