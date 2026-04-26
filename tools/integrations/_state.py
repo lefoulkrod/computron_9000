@@ -37,7 +37,12 @@ def cache_loaded() -> bool:
     return _load_future is not None and _load_future.done()
 
 
-def mark_added(integration_id: str, slug: str, capabilities: Iterable[str]) -> None:
+def mark_added(
+    integration_id: str,
+    slug: str,
+    capabilities: Iterable[str],
+    state: str = "running",
+) -> None:
     """Record that an integration has been successfully added.
 
     Filters non-string entries out of ``capabilities`` so a malformed RPC
@@ -48,6 +53,7 @@ def mark_added(integration_id: str, slug: str, capabilities: Iterable[str]) -> N
         id=integration_id,
         slug=slug,
         capabilities=frozenset(c for c in (capabilities or ()) if isinstance(c, str)),
+        state=state if isinstance(state, str) else "running",
     )
 
 
@@ -130,6 +136,11 @@ async def refresh_registered_integrations() -> None:
         slug = entry.get("slug")
         if not (isinstance(integration_id, str) and isinstance(slug, str)):
             continue
-        mark_added(integration_id, slug, entry.get("capabilities") or ())
+        mark_added(
+            integration_id,
+            slug,
+            entry.get("capabilities") or (),
+            entry.get("state") or "running",
+        )
 
     logger.info("loaded %d registered integration(s)", len(_registered))

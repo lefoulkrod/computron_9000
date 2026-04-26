@@ -13,8 +13,16 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class RegisteredIntegration:
-    """Snapshot of one integration as the app sees it."""
+    """Snapshot of one integration as the app sees it.
+
+    ``state`` mirrors the supervisor's runtime view: ``"running"`` for the
+    happy path, ``"auth_failed"`` when the broker exited 77 (upstream
+    rejected creds; user has to remove + re-add), ``"broken"`` after three
+    consecutive failed respawns. Tool gating skips anything not in
+    ``"running"`` so the agent doesn't call into a dead broker.
+    """
 
     id: str
     slug: str
     capabilities: frozenset[str]
+    state: str = "running"

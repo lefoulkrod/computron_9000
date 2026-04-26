@@ -43,8 +43,12 @@ async def get_core_tools() -> list[Callable[..., Any]]:
     # guessing.
     from tools.integrations import registered_integrations
     records = await registered_integrations()
+    # Only running integrations get their tools surfaced — auth_failed /
+    # broken integrations would just produce errors when the agent calls
+    # them, so hide them until the user re-adds.
     email_ids = frozenset(
-        i for i, rec in records.items() if "email" in rec.capabilities
+        i for i, rec in records.items()
+        if "email" in rec.capabilities and rec.state == "running"
     )
     if email_ids:
         from tools.integrations.list_email_folders import build_list_email_folders_tool

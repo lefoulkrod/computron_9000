@@ -166,7 +166,12 @@ async def handle_add_integration(request: web.Request) -> web.Response:
         return _error_response(
             {"code": "UPSTREAM", "message": "malformed add response"}
         )
-    mark_added(integration_id, slug, result.get("capabilities") or ())
+    mark_added(
+        integration_id,
+        slug,
+        result.get("capabilities") or (),
+        result.get("state") or "running",
+    )
 
     return web.json_response(result, status=201)
 
