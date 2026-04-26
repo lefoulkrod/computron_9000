@@ -28,6 +28,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from integrations._rpc import RpcError
+from integrations.brokers.email_broker._caldav_client import CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapClient
 
 # Authoritative read/write classification for email-broker verbs.
@@ -35,6 +36,7 @@ from integrations.brokers.email_broker._imap_client import ImapClient
 # app-server side — a drift-check unit test will eventually assert they agree.
 # Until that test lands, keep this the single on-broker source of truth.
 _VERB_TYPE: dict[str, Literal["read", "write"]] = {
+    # Email
     "list_mailboxes": "read",
     "search_messages": "read",
     "fetch_message": "read",
@@ -43,6 +45,11 @@ _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     "flag_message": "write",
     "move_message": "write",
     "send_message": "write",
+    # Calendar (CalDAV)
+    "list_calendars": "read",
+    "list_events": "read",
+    "create_event": "write",
+    "delete_event": "write",
 }
 
 
@@ -55,13 +62,17 @@ class VerbDispatcher:
     def __init__(
         self,
         imap: ImapClient,
-        # smtp will be wired in a follow-up; walking skeleton only covers read verbs.
+        # smtp wires in with the email write verbs; not used yet.
         smtp: Any | None,
+        # caldav is None for catalog entries that don't declare the
+        # calendar capability; calendar verbs return "not implemented" then.
+        caldav: CalDavClient | None = None,
         *,
         write_allowed: bool,
     ) -> None:
         self._imap = imap
         self._smtp = smtp
+        self._caldav = caldav
         self._write_allowed = write_allowed
 
         # Handler registry — grows as verbs land. Everything in ``_VERB_TYPE``
@@ -72,6 +83,9 @@ class VerbDispatcher:
             "search_messages": self._handle_search_messages,
             "fetch_message": self._handle_fetch_message,
         }
+        if caldav is not None:
+            self._handlers["list_calendars"] = self._handle_list_calendars
+            self._handlers["list_events"] = self._handle_list_events
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
@@ -142,6 +156,29 @@ class VerbDispatcher:
         except LookupError as exc:
             raise RpcError("NOT_FOUND", str(exc)) from exc
         return {"message": message.model_dump()}
+
+    async def _handle_list_calendars(self, _args: dict[str, Any]) -> dict[str, Any]:
+        """``list_calendars`` takes no args; returns ``{"calendars": [...]}``."""
+        if self._caldav is None:
+            raise RpcError("BAD_REQUEST", "calendar not configured for this integration")
+        calendars = await self._caldav.list_calendars()
+        return {"calendars": [c.model_dump() for c in calendars]}
+
+    async def _handle_list_events(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``list_events {calendar_url, days_forward, days_back, limit}`` → ``{calendar_name, events: [...]}``."""
+        if self._caldav is None:
+            raise RpcError("BAD_REQUEST", "calendar not configured for this integration")
+        calendar_url = _require_str(args, "calendar_url")
+        days_forward = _require_int(args, "days_forward", default=30)
+        days_back = _require_int(args, "days_back", default=0)
+        limit = _require_int(args, "limit", default=50)
+        name, events = await self._caldav.list_events(
+            calendar_url, days_forward, days_back, limit,
+        )
+        return {
+            "calendar_name": name,
+            "events": [e.model_dump() for e in events],
+        }
 
 
 def _require_str(args: dict[str, Any], key: str) -> str:

@@ -56,3 +56,41 @@ class Message(BaseModel):
 
     header: MessageHeader
     body_text: str = ""
+
+
+class Calendar(BaseModel):
+    """One CalDAV calendar (collection)."""
+
+    name: str
+    """Display name of the calendar (e.g. ``"Home"``, ``"Work"``)."""
+
+    url: str
+    """Server URL for the collection — opaque identifier the agent passes
+    back into ``list_events`` to scope a query."""
+
+
+class Event(BaseModel):
+    """One occurrence of a calendar event.
+
+    Recurring events are *expanded* into per-occurrence ``Event`` records
+    over the queried date range, so the caller doesn't need to interpret
+    RRULEs themselves.
+    """
+
+    uid: str
+    """iCalendar UID — globally stable identifier for this event series."""
+
+    summary: str = ""
+    """Event title."""
+
+    start: str = ""
+    """ISO-8601 start datetime, or ``YYYY-MM-DD`` for all-day events."""
+
+    end: str = ""
+    """ISO-8601 end datetime, or ``YYYY-MM-DD`` for all-day events."""
+
+    location: str = ""
+    """Free-form location string from the iCalendar record (often empty)."""
+
+    description: str = ""
+    """Free-form description / body."""

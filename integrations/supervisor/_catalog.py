@@ -49,12 +49,15 @@ class CatalogEntry:
 _ICLOUD = CatalogEntry(
     slug="icloud",
     command=["python", "-m", "integrations.brokers.email_broker"],
-    capabilities=frozenset({"email"}),
+    capabilities=frozenset({"email", "calendar"}),
     static_env={
         "IMAP_HOST": "imap.mail.me.com",
         "IMAP_PORT": "993",
         "SMTP_HOST": "smtp.mail.me.com",
         "SMTP_PORT": "587",
+        # CalDAV root — broker resolves the user's principal from here.
+        # Same app-specific password authenticates IMAP and CalDAV.
+        "CALDAV_URL": "https://caldav.icloud.com",
     },
     env_injection={
         "email": "EMAIL_USER",

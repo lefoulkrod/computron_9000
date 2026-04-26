@@ -60,4 +60,14 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_read_email_message_tool(email_ids))
         tools.append(build_search_email_tool(email_ids))
 
+    calendar_ids = frozenset(
+        i for i, rec in records.items()
+        if "calendar" in rec.capabilities and rec.state == "running"
+    )
+    if calendar_ids:
+        from tools.integrations.list_calendars import build_list_calendars_tool
+        from tools.integrations.list_events import build_list_events_tool
+        tools.append(build_list_calendars_tool(calendar_ids))
+        tools.append(build_list_events_tool(calendar_ids))
+
     return tools

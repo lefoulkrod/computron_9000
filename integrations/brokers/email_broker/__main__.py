@@ -32,6 +32,7 @@ from integrations._perms import PROCESS_UMASK
 from integrations._rpc import serve_rpc
 from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
 from integrations.brokers._common._ready import print_ready
+from integrations.brokers.email_broker._caldav_client import CalDavAuthError, CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapClient
 from integrations.brokers.email_broker._verbs import VerbDispatcher
 
@@ -84,7 +85,25 @@ async def _run() -> int:
         log.error("IMAP connect failed: %s", exc)
         return GENERIC_ERROR
 
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=write_allowed)
+    # CalDAV is optional — the catalog entry sets ``CALDAV_URL`` only for
+    # providers that support it. Brokers spawned for an email-only catalog
+    # entry (or a future MCP-only one) skip CalDAV bring-up entirely.
+    caldav_client: CalDavClient | None = None
+    caldav_url = os.environ.get("CALDAV_URL")
+    if caldav_url:
+        caldav_client = CalDavClient(url=caldav_url, username=user, password=password)
+        try:
+            await caldav_client.connect()
+        except CalDavAuthError as exc:
+            log.error("CalDAV auth rejected: %s", exc)
+            return AUTH_FAIL
+        except OSError as exc:
+            log.error("CalDAV connect failed: %s", exc)
+            return GENERIC_ERROR
+
+    dispatcher = VerbDispatcher(
+        imap=imap, smtp=None, caldav=caldav_client, write_allowed=write_allowed,
+    )
 
     async def handler(verb: str, args: dict[str, Any]) -> dict[str, Any]:
         return await dispatcher.dispatch(verb, args)
