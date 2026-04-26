@@ -49,6 +49,7 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
                 "SMTP_HOST": fake.smtp_host,
                 "SMTP_PORT": str(fake.smtp_port),
                 "IMAP_TLS": "false",
+                "SMTP_STARTTLS": "false",
             },
             env_injection={
                 "email": "EMAIL_USER",

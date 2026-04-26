@@ -16,8 +16,10 @@ import pytest
 from integrations import broker_client
 from tools.integrations.list_email_folders import list_email_folders
 from tools.integrations.list_email_messages import list_email_messages
+from tools.integrations.move_email import move_email
 from tools.integrations.read_email_message import read_email_message
 from tools.integrations.search_email import search_email
+from tools.integrations.send_email import send_email
 
 
 def _patch_call(monkeypatch: pytest.MonkeyPatch, *, result: Any = None, exc: Exception | None = None) -> None:
@@ -298,3 +300,133 @@ async def test_search_email_reports_generic_error_naming_folder(monkeypatch: pyt
     _patch_call(monkeypatch, exc=broker_client.IntegrationError("upstream boom"))
     out = await search_email("icloud_personal", "anything", folder="Archive")
     assert out == "Failed to search 'Archive': upstream boom"
+
+
+# ── send_email ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_confirms_with_message_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path: the broker returns a Message-ID; the tool surfaces it so
+    the agent can quote the assigned ID back to the user.
+    """
+    _patch_call(
+        monkeypatch,
+        result={"sent": True, "message_id": "<abc@me.com>"},
+    )
+    out = await send_email(
+        "icloud_personal", to=["a@b.com"], subject="hi", body="hello",
+    )
+    assert out == (
+        "Sent via 'icloud_personal' to a@b.com (Message-ID: <abc@me.com>)."
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_lists_multiple_recipients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multiple ``to`` addresses are joined with ", " in the confirmation."""
+    _patch_call(monkeypatch, result={"sent": True, "message_id": "<x@y>"})
+    out = await send_email(
+        "icloud_personal", to=["a@b.com", "c@d.com"], subject="s", body="b",
+    )
+    assert "to a@b.com, c@d.com" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_falls_back_when_message_id_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If the broker omits ``message_id`` (older broker / unparsed response),
+    the confirmation drops the parenthetical instead of showing an empty
+    Message-ID parenthesis.
+    """
+    _patch_call(monkeypatch, result={"sent": True})
+    out = await send_email(
+        "icloud_personal", to=["a@b.com"], subject="s", body="b",
+    )
+    assert out == "Sent via 'icloud_personal' to a@b.com."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_reports_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
+    out = await send_email(
+        "icloud_unknown", to=["a@b.com"], subject="s", body="b",
+    )
+    assert out == "Integration 'icloud_unknown' is not connected."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_reports_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If the broker rejects under WRITE_DENIED (writes off for this
+    integration), the agent gets a specific message — different from a
+    generic upstream failure so the caller knows the fix is to flip the
+    write_allowed bit, not to retry.
+    """
+    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
+    out = await send_email(
+        "icloud_personal", to=["a@b.com"], subject="s", body="b",
+    )
+    assert out == "Writes are disabled for 'icloud_personal'."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_reports_generic_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationError("smtp down"))
+    out = await send_email(
+        "icloud_personal", to=["a@b.com"], subject="s", body="b",
+    )
+    assert out == "Failed to send via 'icloud_personal': smtp down"
+
+
+# ── move_email ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_confirms_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={"moved": True})
+    out = await move_email("icloud_personal", "INBOX", "42", "Archive")
+    assert out == "Moved '42' from 'INBOX' to 'Archive'."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_passes_args_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def _capture(integration_id: str, verb: str, args: dict, *, app_sock_path: str) -> Any:
+        captured["args"] = args
+        return {"moved": True}
+
+    monkeypatch.setattr(broker_client, "call", _capture)
+    await move_email("icloud_personal", "INBOX", "42", "Trash")
+    assert captured["args"] == {"folder": "INBOX", "uid": "42", "dest_folder": "Trash"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_reports_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
+    out = await move_email("icloud_unknown", "INBOX", "42", "Archive")
+    assert out == "Integration 'icloud_unknown' is not connected."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_reports_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
+    out = await move_email("icloud_personal", "INBOX", "42", "Archive")
+    assert out == "Writes are disabled for 'icloud_personal'."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_reports_generic_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationError("no such mailbox"))
+    out = await move_email("icloud_personal", "INBOX", "42", "Nowhere")
+    assert out == "Failed to move '42' from 'INBOX' to 'Nowhere': no such mailbox"

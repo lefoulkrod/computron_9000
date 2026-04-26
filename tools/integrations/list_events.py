@@ -99,7 +99,7 @@ def build_list_events_tool(integration_ids: Iterable[str]) -> Callable[..., Any]
         "calendar's display name; the agent passes the URL in to scope "
         f"the query. Valid integration IDs: {ids_line}.\n\n"
         "Args:\n"
-        f"    integration_id: One of the registered calendar integration IDs: {ids_line}.\n"
+        "    integration_id: Which integration the calendar belongs to.\n"
         "    calendar_url: URL of the calendar — call list_calendars first to discover.\n"
         "    days_forward: Days into the future to include (1-365, default 30).\n"
         "    days_back: Days into the past to include (0-365, default 0).\n"

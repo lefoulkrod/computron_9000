@@ -171,6 +171,7 @@ async def handle_add_integration(request: web.Request) -> web.Response:
         slug,
         result.get("capabilities") or (),
         result.get("state") or "running",
+        bool(result.get("write_allowed", False)),
     )
 
     return web.json_response(result, status=201)

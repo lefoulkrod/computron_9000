@@ -39,6 +39,7 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
                 "SMTP_HOST": fake.smtp_host,
                 "SMTP_PORT": str(fake.smtp_port),
                 "IMAP_TLS": "false",
+                "SMTP_STARTTLS": "false",
             },
             env_injection={
                 "email": "EMAIL_USER",
@@ -226,5 +227,109 @@ async def test_call_raises_write_denied_when_write_allowed_is_false(
     finally:
         await sup.stop()
         await fake.stop()
+
+
+@pytest.mark.asyncio
+async def test_call_send_message_lands_in_outbox_through_real_broker(
+    tmp_path: Path,
+) -> None:
+    """End-to-end send: broker_client.call → supervisor.resolve → broker.send_message
+    → SMTP AUTH + DATA against the fake → the message shows up in the outbox.
+
+    Proves the full vertical: the SMTP client wired into a real broker
+    subprocess actually sends. If this works against the fake with real TCP
+    and a real Python subprocess, it'll work against iCloud / Gmail.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        catalog=_test_catalog(fake),
+    )
+    await sup.start()
+    try:
+        await _rpc_add(
+            sup.app_sock_path,
+            user_suffix="personal",
+            label="iCloud test",
+            fake=fake,
+            write_allowed=True,
+        )
+
+        result = await broker_client.call(
+            "icloud_personal",
+            "send_message",
+            {
+                "to": ["alice@example.com"],
+                "subject": "hi",
+                "body": "this is the body",
+            },
+            app_sock_path=sup.app_sock_path,
+        )
+    finally:
+        await sup.stop()
+        await fake.stop()
+
+    assert result["sent"] is True
+    assert result["message_id"]
+    assert len(fake.outbox) == 1
+    captured = fake.outbox[0]
+    assert captured.rcpt_to == ["alice@example.com"]
+    assert b"Subject: hi" in captured.raw
+    assert b"this is the body" in captured.raw
+
+
+@pytest.mark.asyncio
+async def test_call_move_message_relocates_through_real_broker(
+    tmp_path: Path,
+) -> None:
+    """End-to-end move: broker_client.call → broker → UID MOVE on the fake's
+    IMAP server → the source mailbox loses the message and the destination
+    gains it.
+
+    Same vertical-slice rationale as the send test — exercises the full
+    stack including the broker's mode-aware SELECT switching for write verbs.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    uid = fake.add_message(
+        "INBOX",
+        from_="alice@example.com",
+        to=fake.user,
+        subject="archive me",
+        body="bye",
+    )
+
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        catalog=_test_catalog(fake),
+    )
+    await sup.start()
+    try:
+        await _rpc_add(
+            sup.app_sock_path,
+            user_suffix="personal",
+            label="iCloud test",
+            fake=fake,
+            write_allowed=True,
+        )
+
+        result = await broker_client.call(
+            "icloud_personal",
+            "move_message",
+            {"folder": "INBOX", "uid": str(uid), "dest_folder": "Trash"},
+            app_sock_path=sup.app_sock_path,
+        )
+    finally:
+        await sup.stop()
+        await fake.stop()
+
+    assert result == {"moved": True}
+    assert fake.mailboxes["INBOX"].messages == []
+    assert len(fake.mailboxes["Trash"].messages) == 1
 
 

@@ -23,6 +23,19 @@ from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapCl
 from tests.integrations.fixtures.fake_email import FakeEmail
 
 
+async def _connected_client(fake: FakeEmail) -> ImapClient:
+    """Build + connect an ImapClient pointed at ``fake``. Plain TCP, no TLS."""
+    client = ImapClient(
+        host=fake.imap_host,
+        port=fake.imap_port,
+        user=fake.user,
+        password=fake.password,
+        use_tls=False,
+    )
+    await client.connect()
+    return client
+
+
 @pytest.mark.asyncio
 async def test_connect_and_list_mailboxes_returns_default_set() -> None:
     """Happy path: LOGIN ok, LIST returns INBOX / Sent / Trash.
@@ -86,3 +99,57 @@ async def test_connect_raises_imap_auth_error_when_login_rejected() -> None:
             await client.connect()
     finally:
         await fake.stop()
+
+
+@pytest.mark.asyncio
+async def test_move_message_relocates_message_between_mailboxes() -> None:
+    """Happy path: ``move_message`` moves a real seeded message from INBOX
+    to Trash. After the move, INBOX is empty and Trash has the message —
+    proves UID MOVE worked, not just COPY (which would leave a duplicate).
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="bye",
+            body="going to trash",
+        )
+        client = await _connected_client(fake)
+        await client.move_message("INBOX", str(uid), "Trash")
+    finally:
+        await fake.stop()
+
+    assert fake.mailboxes["INBOX"].messages == []
+    assert len(fake.mailboxes["Trash"].messages) == 1
+    moved = fake.mailboxes["Trash"].messages[0]
+    assert b"Subject: bye" in moved.raw
+
+
+@pytest.mark.asyncio
+async def test_move_message_creates_destination_mailbox_on_fly() -> None:
+    """The fake's UID MOVE creates the destination on demand — same shape
+    as Gmail/iCloud auto-creating labels. Verifies our client doesn't
+    require the dest to exist before the call.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="archive me",
+        )
+        client = await _connected_client(fake)
+        await client.move_message("INBOX", str(uid), "Archive/2026")
+    finally:
+        await fake.stop()
+
+    assert fake.mailboxes["INBOX"].messages == []
+    assert "Archive/2026" in fake.mailboxes
+    assert len(fake.mailboxes["Archive/2026"].messages) == 1
+
+

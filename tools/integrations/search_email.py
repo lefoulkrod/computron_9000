@@ -82,7 +82,7 @@ def build_search_email_tool(integration_ids: Iterable[str]) -> Callable[..., Any
         'folder, call this tool once per folder. Default folder is "INBOX". '
         f"Valid integration IDs: {ids_line}.\n\n"
         "Args:\n"
-        f"    integration_id: One of the registered email integration IDs: {ids_line}.\n"
+        "    integration_id: Which integration to search.\n"
         "    query: Text to match (headers or body).\n"
         '    folder: Mailbox to search (default "INBOX").\n'
         "    limit: Maximum matches to return (1-200, default 20).\n\n"

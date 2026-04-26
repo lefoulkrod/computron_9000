@@ -128,10 +128,7 @@ class ImapClient:
             return conn
 
         def _blocking_select() -> None:
-            # IMAP SELECT — the protocol is stateful, you can only operate on
-            # one mailbox at a time and must SELECT it first. ``readonly=True``
-            # uses EXAMINE so reads don't accidentally mark messages \Seen.
-            typ, data = conn.select(folder, readonly=True)
+            typ, data = conn.select(folder)
             if typ != "OK":
                 msg = f"SELECT {folder!r} failed: {typ} {data!r}"
                 raise RuntimeError(msg)
@@ -173,7 +170,7 @@ class ImapClient:
 
         return [_parse_list_line(line) for line in raw_lines]
 
-    async def fetch_headers(self, folder: str, limit: int) -> list[MessageHeader]:
+    async def list_messages(self, folder: str, limit: int) -> list[MessageHeader]:
         """Return the most recent ``limit`` message headers in ``folder``.
 
         Ordering is newest-first (highest sequence number = most recently
@@ -250,7 +247,7 @@ class ImapClient:
                     return []
                 tail = seq_ids[-limit:]
                 seq_set = b",".join(tail).decode("ascii")
-                # Same FETCH shape as fetch_headers — UID + selected
+                # Same FETCH shape as list_messages — UID + selected
                 # header fields, PEEK to avoid marking \Seen.
                 typ, hdr_data = conn.fetch(
                     seq_set,
@@ -300,6 +297,42 @@ class ImapClient:
             date=_normalize_date(msg.get("Date", "")),
         )
         return Message(header=header, body_text=_extract_body_text(msg))
+
+    async def move_message(self, folder: str, uid: str, dest_folder: str) -> None:
+        """Move one message by UID from ``folder`` to ``dest_folder``.
+
+        Uses IMAP UID MOVE (RFC 6851), which iCloud and Gmail both support.
+        Atomic on the server: on success the message is gone from the source
+        and present in the destination, with a fresh UID assigned by the
+        destination mailbox. We don't surface that new UID — the agent
+        operates on the move as a one-shot action.
+
+        Raises ``LookupError`` if the UID isn't in the source mailbox or if
+        the destination doesn't exist.
+        """
+        async with self._lock:
+            conn = await self._ensure_selected(folder)
+
+            def _blocking_move() -> None:
+                # imaplib doesn't expose a typed ``move`` helper, so we drive
+                # the raw UID MOVE command. The reply shape is the same as
+                # any other UID-prefixed command: ``("OK", [b"MOVE completed"])``
+                # on success, ``("NO", [reason])`` if the destination is
+                # missing or the UID isn't in the source.
+                typ, data = conn.uid("MOVE", uid, dest_folder)
+                if typ != "OK":
+                    detail = b" ".join(d for d in data if isinstance(d, bytes))
+                    text = detail.decode("utf-8", errors="replace")
+                    # Many servers return NO for "no such uid" and "no such
+                    # mailbox" alike; LookupError is the closest match for
+                    # both — the broker maps it to NOT_FOUND on the wire.
+                    msg = (
+                        f"UID MOVE uid={uid} -> {dest_folder!r} "
+                        f"failed: {typ} {text!r}"
+                    )
+                    raise LookupError(msg)
+
+            await asyncio.to_thread(_blocking_move)
 
 
 def _parse_list_line(line: bytes) -> Mailbox:

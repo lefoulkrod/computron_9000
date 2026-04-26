@@ -62,7 +62,7 @@ def build_list_email_folders_tool(integration_ids: Iterable[str]) -> Callable[..
         "List the folders (mailboxes) available on a connected email "
         f"integration. Valid integration IDs: {ids_line}.\n\n"
         "Args:\n"
-        f"    integration_id: One of the registered email integration IDs: {ids_line}.\n\n"
+        "    integration_id: Which integration to list folders for.\n\n"
         "Returns:\n"
         "    A plain-text message — either a bulleted folder list, a "
         '"not connected" notice, or an error description suitable to surface '

@@ -12,10 +12,10 @@ Exit codes the supervisor reacts to (see ``integrations.brokers._common._exit_co
 - 1: anything else (env-parse failure, network unreachable, internal error).
   The supervisor transitions to ``error`` and restarts on backoff.
 
-Walking-skeleton scope: only the IMAP read-side is wired. SMTP and write verbs
-are declared in the verb table but respond with ``BAD_REQUEST`` until we add
-their handlers. This is deliberate — it lets us smoke-test the full plumbing
-against a real IMAP server before the surface area grows.
+Each upstream — IMAP, SMTP, CalDAV — is brought up in turn. SMTP and CalDAV
+are optional (a catalog entry without ``SMTP_HOST`` or ``CALDAV_URL`` skips
+the corresponding bring-up). An auth rejection from any of them maps to exit
+77 so the supervisor flips state to ``auth_failed`` and stops respawning.
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, 
 from integrations.brokers._common._ready import print_ready
 from integrations.brokers.email_broker._caldav_client import CalDavAuthError, CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapClient
+from integrations.brokers.email_broker._smtp_client import SmtpAuthError, SmtpClient
 from integrations.brokers.email_broker._verbs import VerbDispatcher
 
 logger = logging.getLogger("email_broker")
@@ -85,6 +86,33 @@ async def _run() -> int:
         log.error("IMAP connect failed: %s", exc)
         return GENERIC_ERROR
 
+    # SMTP is optional — present only when the catalog entry provides
+    # ``SMTP_HOST`` / ``SMTP_PORT``. Brokers without it can still serve all
+    # read verbs and IMAP-side writes (move, future flag); send_message
+    # responds with "not implemented" until a host is configured.
+    smtp_client: SmtpClient | None = None
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port_raw = os.environ.get("SMTP_PORT")
+    if smtp_host and smtp_port_raw:
+        smtp_client = SmtpClient(
+            host=smtp_host,
+            port=int(smtp_port_raw),
+            user=user,
+            password=password,
+            # Production iCloud / Gmail use port 587 STARTTLS. The fake fixture
+            # speaks plaintext SMTP and sets ``SMTP_STARTTLS=false`` to exercise
+            # the broker without a TLS terminator.
+            starttls=parse_bool(os.environ.get("SMTP_STARTTLS", "true")),
+        )
+        try:
+            await smtp_client.connect()
+        except SmtpAuthError as exc:
+            log.error("SMTP AUTH rejected: %s", exc)
+            return AUTH_FAIL
+        except OSError as exc:
+            log.error("SMTP connect failed: %s", exc)
+            return GENERIC_ERROR
+
     # CalDAV is optional — the catalog entry sets ``CALDAV_URL`` only for
     # providers that support it. Brokers spawned for an email-only catalog
     # entry (or a future MCP-only one) skip CalDAV bring-up entirely.
@@ -102,7 +130,7 @@ async def _run() -> int:
             return GENERIC_ERROR
 
     dispatcher = VerbDispatcher(
-        imap=imap, smtp=None, caldav=caldav_client, write_allowed=write_allowed,
+        imap=imap, smtp=smtp_client, caldav=caldav_client, write_allowed=write_allowed,
     )
 
     async def handler(verb: str, args: dict[str, Any]) -> dict[str, Any]:

@@ -76,11 +76,14 @@ async def spawn_broker(
 
     logger.info("spawning broker for %s at %s", integration_id, socket_path)
 
+    # stderr inherits the supervisor's fd — broker logs land directly in the
+    # host's stderr (docker logs, journald, etc.) without a forwarding hop.
+    # The broker's own log format already prefixes ``[email_broker[<id>]]``
+    # so per-integration filtering still works.
     proc = await asyncio.create_subprocess_exec(
         *entry.command,
         env=env,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.DEVNULL,
     )
 

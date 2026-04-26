@@ -57,7 +57,7 @@ def build_list_calendars_tool(integration_ids: Iterable[str]) -> Callable[..., A
         "carries the calendar's URL, which is the value to pass to "
         f"``list_events``. Valid integration IDs: {ids_line}.\n\n"
         "Args:\n"
-        f"    integration_id: One of the registered calendar integration IDs: {ids_line}.\n\n"
+        "    integration_id: Which integration to list calendars on.\n\n"
         "Returns:\n"
         "    Plain text — one calendar per line as "
         '"- name  —  <url>", or a short empty/error notice.\n'

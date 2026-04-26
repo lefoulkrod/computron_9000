@@ -29,7 +29,7 @@ async def list_email_messages(integration_id: str, folder: str, limit: int = 20)
     try:
         result = await broker_client.call(
             integration_id,
-            "fetch_headers",
+            "list_messages",
             {"folder": folder, "limit": limit},
             app_sock_path=app_sock,
         )
@@ -67,7 +67,7 @@ def build_list_email_messages_tool(integration_ids: Iterable[str]) -> Callable[.
         "List the most recent messages in a mailbox. Returns an envelope per "
         f"line with the UID in brackets. Valid integration IDs: {ids_line}.\n\n"
         "Args:\n"
-        f"    integration_id: One of the registered email integration IDs: {ids_line}.\n"
+        "    integration_id: Which integration to read from.\n"
         "    folder: Mailbox name. Call list_email_folders first if unsure.\n"
         "    limit: Maximum messages to return (1-200, default 20).\n\n"
         "Returns:\n"

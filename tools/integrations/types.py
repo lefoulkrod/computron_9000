@@ -20,9 +20,14 @@ class RegisteredIntegration:
     rejected creds; user has to remove + re-add), ``"broken"`` after three
     consecutive failed respawns. Tool gating skips anything not in
     ``"running"`` so the agent doesn't call into a dead broker.
+
+    ``write_allowed`` is the per-integration policy bit. The agent is
+    only offered write tools (send, move) when this is true; read-only
+    integrations get the read tools and nothing else.
     """
 
     id: str
     slug: str
     capabilities: frozenset[str]
     state: str = "running"
+    write_allowed: bool = False

@@ -42,6 +42,7 @@ def mark_added(
     slug: str,
     capabilities: Iterable[str],
     state: str = "running",
+    write_allowed: bool = False,
 ) -> None:
     """Record that an integration has been successfully added.
 
@@ -54,6 +55,7 @@ def mark_added(
         slug=slug,
         capabilities=frozenset(c for c in (capabilities or ()) if isinstance(c, str)),
         state=state if isinstance(state, str) else "running",
+        write_allowed=bool(write_allowed),
     )
 
 
@@ -141,6 +143,7 @@ async def refresh_registered_integrations() -> None:
             slug,
             entry.get("capabilities") or (),
             entry.get("state") or "running",
+            bool(entry.get("write_allowed", False)),
         )
 
     logger.info("loaded %d registered integration(s)", len(_registered))

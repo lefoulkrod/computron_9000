@@ -30,19 +30,18 @@ from typing import Any, Literal
 from integrations._rpc import RpcError
 from integrations.brokers.email_broker._caldav_client import CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapClient
+from integrations.brokers.email_broker._smtp_client import SmtpClient
 
-# Authoritative read/write classification for email-broker verbs.
-# Must stay in lockstep with ``broker_client._verb_types._VERB_TYPES`` on the
-# app-server side — a drift-check unit test will eventually assert they agree.
-# Until that test lands, keep this the single on-broker source of truth.
+# Authoritative read/write classification for email-broker verbs. The
+# app-server side keeps a parallel table at ``broker_client._verb_types``;
+# ``tests/integrations/test_verb_types_drift.py`` asserts the two agree.
 _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     # Email
     "list_mailboxes": "read",
+    "list_messages": "read",
     "search_messages": "read",
     "fetch_message": "read",
-    "fetch_headers": "read",
     "fetch_attachment": "read",
-    "flag_message": "write",
     "move_message": "write",
     "send_message": "write",
     # Calendar (CalDAV)
@@ -62,8 +61,11 @@ class VerbDispatcher:
     def __init__(
         self,
         imap: ImapClient,
-        # smtp wires in with the email write verbs; not used yet.
-        smtp: Any | None,
+        # SMTP is None when the catalog entry doesn't set SMTP_HOST (no
+        # outbound path configured); send_message then returns "not
+        # implemented" so the gate decision and the missing-config decision
+        # are visibly distinct.
+        smtp: SmtpClient | None,
         # caldav is None for catalog entries that don't declare the
         # calendar capability; calendar verbs return "not implemented" then.
         caldav: CalDavClient | None = None,
@@ -79,10 +81,13 @@ class VerbDispatcher:
         # that lacks a handler here falls through to "not implemented."
         self._handlers: dict[str, _Handler] = {
             "list_mailboxes": self._handle_list_mailboxes,
-            "fetch_headers": self._handle_fetch_headers,
+            "list_messages": self._handle_list_messages,
             "search_messages": self._handle_search_messages,
             "fetch_message": self._handle_fetch_message,
+            "move_message": self._handle_move_message,
         }
+        if smtp is not None:
+            self._handlers["send_message"] = self._handle_send_message
         if caldav is not None:
             self._handlers["list_calendars"] = self._handle_list_calendars
             self._handlers["list_events"] = self._handle_list_events
@@ -132,11 +137,11 @@ class VerbDispatcher:
         mailboxes = await self._imap.list_mailboxes()
         return {"mailboxes": [m.model_dump() for m in mailboxes]}
 
-    async def _handle_fetch_headers(self, args: dict[str, Any]) -> dict[str, Any]:
-        """``fetch_headers {folder, limit}`` → ``{headers: [...]}``."""
+    async def _handle_list_messages(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``list_messages {folder, limit}`` → ``{headers: [...]}``."""
         folder = _require_str(args, "folder")
         limit = _require_int(args, "limit", default=20)
-        headers = await self._imap.fetch_headers(folder, limit)
+        headers = await self._imap.list_messages(folder, limit)
         return {"headers": [h.model_dump() for h in headers]}
 
     async def _handle_search_messages(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -156,6 +161,39 @@ class VerbDispatcher:
         except LookupError as exc:
             raise RpcError("NOT_FOUND", str(exc)) from exc
         return {"message": message.model_dump()}
+
+    async def _handle_move_message(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``move_message {folder, uid, dest_folder}`` → ``{moved: true}``.
+
+        The verb returns a thin acknowledgment because UID MOVE assigns a
+        new UID at the destination that the caller didn't ask for; if a
+        future verb needs the new UID we can extend the response then.
+        """
+        folder = _require_str(args, "folder")
+        uid = _require_str(args, "uid")
+        dest_folder = _require_str(args, "dest_folder")
+        try:
+            await self._imap.move_message(folder, uid, dest_folder)
+        except LookupError as exc:
+            raise RpcError("NOT_FOUND", str(exc)) from exc
+        return {"moved": True}
+
+    async def _handle_send_message(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``send_message {to, subject, body}`` → ``{sent: true, message_id}``.
+
+        ``to`` is a JSON array of bare addresses. The broker does not validate
+        addresses; the upstream MTA does, and we surface its rejection
+        unchanged.
+        """
+        if self._smtp is None:
+            raise RpcError("BAD_REQUEST", "smtp not configured for this integration")
+        to = _require_str_list(args, "to")
+        subject = _require_str(args, "subject")
+        body = _require_str(args, "body")
+        message_id = await self._smtp.send_message(
+            to=to, subject=subject, body=body,
+        )
+        return {"sent": True, "message_id": message_id}
 
     async def _handle_list_calendars(self, _args: dict[str, Any]) -> dict[str, Any]:
         """``list_calendars`` takes no args; returns ``{"calendars": [...]}``."""
@@ -193,3 +231,13 @@ def _require_int(args: dict[str, Any], key: str, *, default: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise RpcError("BAD_REQUEST", f"{key!r} must be an integer")
     return value
+
+
+def _require_str_list(args: dict[str, Any], key: str) -> list[str]:
+    """Require ``key`` to be a non-empty JSON array of non-empty strings."""
+    value = args.get(key)
+    if not isinstance(value, list) or not value:
+        raise RpcError("BAD_REQUEST", f"{key!r} required (non-empty array of strings)")
+    if not all(isinstance(v, str) and v for v in value):
+        raise RpcError("BAD_REQUEST", f"{key!r} must contain non-empty strings")
+    return list(value)

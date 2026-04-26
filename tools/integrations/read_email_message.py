@@ -66,7 +66,7 @@ def build_read_email_message_tool(integration_ids: Iterable[str]) -> Callable[..
         "Read one message's envelope + plain-text body. Valid integration IDs: "
         f"{ids_line}.\n\n"
         "Args:\n"
-        f"    integration_id: One of the registered email integration IDs: {ids_line}.\n"
+        "    integration_id: Which integration to read from.\n"
         "    folder: Mailbox the message lives in (same value used in list_email_messages).\n"
         "    uid: IMAP UID of the message — the value shown in [brackets] by list_email_messages or search_email.\n\n"
         "Returns:\n"
