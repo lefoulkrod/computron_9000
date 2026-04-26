@@ -20,12 +20,31 @@ attribute on this class is the only live reference for the rest of the process.
 from __future__ import annotations
 
 import asyncio
+import email as _email
+import email.header
+import email.utils
 import imaplib
 import logging
+import re
 
-from integrations.brokers.email_broker.types import Mailbox
+import html2text
+
+from integrations.brokers.email_broker.types import Mailbox, Message, MessageHeader
 
 logger = logging.getLogger(__name__)
+
+# Header fields we ask the IMAP server for when listing or searching.
+_HEADER_FIELDS = "FROM TO SUBJECT DATE"
+
+# Email-specific HTML→Markdown rendering. Tuned for what the agent wants out
+# of an email body: real paragraphs, real links, no image data-URIs, no
+# fragment anchors.
+_html2md = html2text.HTML2Text()
+_html2md.body_width = 0  # no hard-wrap; let paragraphs flow
+_html2md.ignore_images = True  # alt text only, never [![...](data:...)]
+_html2md.unicode_snob = True  # real unicode chars, not &amp; / &nbsp;
+_html2md.protect_links = True  # don't auto-shorten or rewrap link URLs
+_html2md.skip_internal_links = True  # in-page anchors are noise in email
 
 
 class ImapAuthError(Exception):
@@ -68,6 +87,7 @@ class ImapClient:
         entry code translates that into ``sys.exit(77)`` so the supervisor
         flips state to ``auth_failed``.
         """
+
         def _blocking_connect() -> imaplib.IMAP4:
             # IMAP4_SSL for implicit TLS (port 993); IMAP4 for plaintext (test fakes
             # on random ports, or legacy StartTLS setups which we don't support in v1).
@@ -93,6 +113,32 @@ class ImapClient:
             msg = f"IMAP LOGIN rejected: {exc}"
             raise ImapAuthError(msg) from exc
         logger.info("IMAP LOGIN ok (%s@%s:%d)", self._user, self._host, self._port)
+
+    async def _ensure_selected(self, folder: str) -> imaplib.IMAP4:
+        """Select ``folder`` if not already selected; return the IMAP handle.
+
+        Caller must hold ``self._lock``. Caches the selection so consecutive
+        ops on the same folder skip a round-trip.
+        """
+        if self._imap is None:
+            msg = "ImapClient used before connect()"
+            raise RuntimeError(msg)
+        conn = self._imap
+        if self._current_mailbox == folder:
+            return conn
+
+        def _blocking_select() -> None:
+            # IMAP SELECT — the protocol is stateful, you can only operate on
+            # one mailbox at a time and must SELECT it first. ``readonly=True``
+            # uses EXAMINE so reads don't accidentally mark messages \Seen.
+            typ, data = conn.select(folder, readonly=True)
+            if typ != "OK":
+                msg = f"SELECT {folder!r} failed: {typ} {data!r}"
+                raise RuntimeError(msg)
+
+        await asyncio.to_thread(_blocking_select)
+        self._current_mailbox = folder
+        return conn
 
     async def list_mailboxes(self) -> list[Mailbox]:
         """Return every mailbox on the server.
@@ -127,6 +173,134 @@ class ImapClient:
 
         return [_parse_list_line(line) for line in raw_lines]
 
+    async def fetch_headers(self, folder: str, limit: int) -> list[MessageHeader]:
+        """Return the most recent ``limit`` message headers in ``folder``.
+
+        Ordering is newest-first (highest sequence number = most recently
+        appended). The caller sees a list small enough to display directly.
+        """
+        limit = max(1, min(limit, 200))  # hard cap — protect context budget
+        async with self._lock:
+            conn = await self._ensure_selected(folder)
+
+            def _blocking_fetch() -> list[tuple[str, bytes]]:
+                # SEARCH ALL — return every message's *sequence number* in the
+                # selected mailbox. Sequence numbers are 1..N positions that
+                # change as messages get added/deleted; the FETCH below also
+                # asks for UID so the caller gets a stable id back.
+                typ, data = conn.search(None, "ALL")
+                if typ != "OK":
+                    msg = f"SEARCH ALL failed: {typ} {data!r}"
+                    raise RuntimeError(msg)
+                seq_ids = data[0].split()
+                if not seq_ids:
+                    return []
+                # Highest sequence numbers are the most recently appended,
+                # so the tail is the newest N messages.
+                tail = seq_ids[-limit:]
+                seq_set = b",".join(tail).decode("ascii")
+                # FETCH — pull message parts for the given sequence range.
+                #   UID                                   → include the stable id
+                #   BODY.PEEK[HEADER.FIELDS (FROM TO ..)] → just those headers,
+                #     PEEK so the message isn't marked \Seen as a side effect.
+                typ, uid_data = conn.fetch(
+                    seq_set,
+                    f"(UID BODY.PEEK[HEADER.FIELDS ({_HEADER_FIELDS})])",
+                )
+                if typ != "OK":
+                    msg = f"FETCH headers failed: {typ} {uid_data!r}"
+                    raise RuntimeError(msg)
+                return _collect_fetch_pairs(uid_data)
+
+            raw = await asyncio.to_thread(_blocking_fetch)
+
+        return [_parse_header_hit(uid, blob, folder) for uid, blob in reversed(raw)]
+
+    async def search_messages(
+        self,
+        folder: str,
+        query: str,
+        limit: int,
+    ) -> list[MessageHeader]:
+        """Run IMAP ``SEARCH TEXT`` in ``folder``, return matched headers.
+
+        IMAP's ``TEXT`` criterion matches both headers and body. Single-folder
+        only — there's no standard cross-folder search in IMAP.
+        """
+        limit = max(1, min(limit, 200))
+        # Quote for the IMAP wire. The quoted form can't hold embedded
+        # double-quotes or backslashes, so we strip them — good enough for
+        # natural-language search and avoids building a literal command.
+        safe_query = query.replace("\\", "").replace('"', "")
+        async with self._lock:
+            conn = await self._ensure_selected(folder)
+
+            def _blocking_search() -> list[tuple[str, bytes]]:
+                # SEARCH TEXT "query" — match the query against headers and
+                # body in the selected mailbox. IMAP has no cross-mailbox
+                # search; callers iterate folders client-side if they need
+                # broader coverage. Returns sequence numbers, same as
+                # SEARCH ALL above.
+                typ, data = conn.search(None, "TEXT", f'"{safe_query}"')
+                if typ != "OK":
+                    msg = f"SEARCH TEXT failed: {typ} {data!r}"
+                    raise RuntimeError(msg)
+                seq_ids = data[0].split()
+                if not seq_ids:
+                    return []
+                tail = seq_ids[-limit:]
+                seq_set = b",".join(tail).decode("ascii")
+                # Same FETCH shape as fetch_headers — UID + selected
+                # header fields, PEEK to avoid marking \Seen.
+                typ, hdr_data = conn.fetch(
+                    seq_set,
+                    f"(UID BODY.PEEK[HEADER.FIELDS ({_HEADER_FIELDS})])",
+                )
+                if typ != "OK":
+                    msg = f"FETCH headers failed: {typ} {hdr_data!r}"
+                    raise RuntimeError(msg)
+                return _collect_fetch_pairs(hdr_data)
+
+            raw = await asyncio.to_thread(_blocking_search)
+
+        return [_parse_header_hit(uid, blob, folder) for uid, blob in reversed(raw)]
+
+    async def fetch_message(self, folder: str, uid: str) -> Message:
+        """Fetch one full message by ``uid`` in ``folder``.
+
+        Raises ``LookupError`` if the UID is unknown in the current mailbox.
+        """
+        async with self._lock:
+            conn = await self._ensure_selected(folder)
+
+            def _blocking_fetch() -> bytes:
+                # UID FETCH — like FETCH but the id is the stable UID instead
+                # of the volatile sequence number. ``BODY.PEEK[]`` (no section
+                # path) means "the whole RFC 822 message, raw" — headers and
+                # body together, as one byte blob the email parser can chew on.
+                # PEEK keeps the \Seen flag untouched.
+                typ, data = conn.uid("FETCH", uid, "(BODY.PEEK[])")
+                if typ != "OK":
+                    msg = f"UID FETCH failed: {typ} {data!r}"
+                    raise RuntimeError(msg)
+                for part in data:
+                    if isinstance(part, tuple) and len(part) >= 2:
+                        return part[1]
+                raise LookupError(f"no such message: uid={uid}")
+
+            raw = await asyncio.to_thread(_blocking_fetch)
+
+        msg = _email.message_from_bytes(raw)
+        header = MessageHeader(
+            uid=uid,
+            folder=folder,
+            from_=_decode_header(msg.get("From", "")),
+            to=_decode_header(msg.get("To", "")),
+            subject=_decode_header(msg.get("Subject", "")),
+            date=_normalize_date(msg.get("Date", "")),
+        )
+        return Message(header=header, body_text=_extract_body_text(msg))
+
 
 def _parse_list_line(line: bytes) -> Mailbox:
     r"""Parse one line of ``IMAP LIST`` output into a :class:`Mailbox`.
@@ -153,3 +327,126 @@ def _parse_list_line(line: bytes) -> Mailbox:
             name = text[prev_quote + 1 : last_quote]
 
     return Mailbox(name=name, attrs=attrs)
+
+
+_UID_RE = re.compile(rb"UID (\d+)")
+
+
+def _collect_fetch_pairs(data: list) -> list[tuple[str, bytes]]:
+    """Extract ``(uid, raw_bytes)`` pairs from an ``imaplib.IMAP4.fetch`` response.
+
+    imaplib returns a list where each FETCH hit is a 2-tuple
+    ``(b"N (UID X BODY[HEADER.FIELDS ...] {len}", b"<raw>")`` optionally
+    followed by a closing ``b")"`` bytestring. We pull the UID out of the
+    preamble and pair it with the raw bytes.
+    """
+    pairs: list[tuple[str, bytes]] = []
+    for item in data:
+        if not isinstance(item, tuple) or len(item) < 2:
+            continue
+        preamble, raw = item[0], item[1]
+        if not isinstance(preamble, bytes) or not isinstance(raw, bytes):
+            continue
+        m = _UID_RE.search(preamble)
+        if m is None:
+            continue
+        pairs.append((m.group(1).decode("ascii"), raw))
+    return pairs
+
+
+def _parse_header_hit(uid: str, raw: bytes, folder: str) -> MessageHeader:
+    """Parse a raw RFC 822 header blob into a :class:`MessageHeader`."""
+    msg = _email.message_from_bytes(raw)
+    return MessageHeader(
+        uid=uid,
+        folder=folder,
+        from_=_decode_header(msg.get("From", "")),
+        to=_decode_header(msg.get("To", "")),
+        subject=_decode_header(msg.get("Subject", "")),
+        date=_normalize_date(msg.get("Date", "")),
+    )
+
+
+def _decode_header(value: str) -> str:
+    """Decode an RFC 2047 encoded-word header into a plain unicode string."""
+    if not value:
+        return ""
+    parts = email.header.decode_header(value)
+    out: list[str] = []
+    for text, charset in parts:
+        if isinstance(text, bytes):
+            try:
+                out.append(text.decode(charset or "utf-8", errors="replace"))
+            except LookupError:
+                out.append(text.decode("utf-8", errors="replace"))
+        else:
+            out.append(text)
+    return "".join(out).strip()
+
+
+def _normalize_date(value: str) -> str:
+    """Return an ISO-8601 timestamp, or the original string if unparseable.
+
+    ``parsedate_to_datetime`` raises ``ValueError`` (3.10+) on garbage input
+    and ``TypeError`` on the empty 9-tuple some servers return — in both
+    cases we'd rather show the agent the raw header than drop the field.
+    """
+    if not value:
+        return ""
+    try:
+        dt = email.utils.parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return value
+    if dt is None:
+        return value
+    return dt.isoformat()
+
+
+def _extract_body_text(msg: _email.message.Message) -> str:
+    """Best-effort text rendering of a possibly-multipart message.
+
+    Prefers ``text/plain`` parts; falls back to a Markdown rendering of
+    ``text/html`` when the message is HTML-only. Never raises — on exotic
+    encodings it returns whatever decodes, or an empty string.
+    """
+    if msg.is_multipart():
+        plain = _find_part(msg, "text/plain")
+        if plain is not None:
+            return _decode_part_payload(plain)
+        html = _find_part(msg, "text/html")
+        if html is not None:
+            return _html_to_markdown(_decode_part_payload(html))
+        return ""
+    content_type = msg.get_content_type()
+    payload = _decode_part_payload(msg)
+    if content_type == "text/html":
+        return _html_to_markdown(payload)
+    return payload
+
+
+def _find_part(msg: _email.message.Message, content_type: str) -> _email.message.Message | None:
+    for part in msg.walk():
+        if part.get_content_type() == content_type and not part.is_multipart():
+            return part
+    return None
+
+
+def _decode_part_payload(part: _email.message.Message) -> str:
+    raw = part.get_payload(decode=True) or b""
+    if not isinstance(raw, bytes):
+        return ""
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return raw.decode(charset, errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
+
+
+def _html_to_markdown(text: str) -> str:
+    """Render an HTML email body to Markdown via :mod:`html2text`.
+
+    Tuned for the agent's reading needs: links survive (``[text](url)``),
+    paragraphs/lists/headings retain structure, ``<style>`` and ``<script>``
+    contents are dropped, and HTML entities are unescaped.
+    """
+    return _html2md.handle(text).strip()

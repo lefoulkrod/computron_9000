@@ -27,6 +27,14 @@ class CatalogEntry:
     """The argv to exec for the broker subprocess
     (e.g. ``["python", "-m", "integrations.brokers.email_broker"]``)."""
 
+    capabilities: frozenset[str] = frozenset()
+    """Tags the app server uses to decide which agent tools to expose for this
+    integration. Each capability corresponds to a family of tools — e.g.
+    ``"email"`` unlocks the IMAP-backed email tools; ``"calendar"`` unlocks
+    CalDAV tools when those land. The supervisor surfaces these in ``list``
+    and ``add`` RPC responses so the app server doesn't need to know which
+    slug supports which tools."""
+
     static_env: dict[str, str] = field(default_factory=dict)
     """Env vars the supervisor provides directly — protocol hosts, ports, etc.
     Not derived from the user's credential blob."""
@@ -41,6 +49,7 @@ class CatalogEntry:
 _ICLOUD = CatalogEntry(
     slug="icloud",
     command=["python", "-m", "integrations.brokers.email_broker"],
+    capabilities=frozenset({"email"}),
     static_env={
         "IMAP_HOST": "imap.mail.me.com",
         "IMAP_PORT": "993",

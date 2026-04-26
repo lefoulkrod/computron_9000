@@ -28,13 +28,18 @@ from pathlib import Path
 from typing import Any
 
 from integrations._env import env_required, parse_bool
+from integrations._perms import PROCESS_UMASK
+from integrations._rpc import serve_rpc
 from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
 from integrations.brokers._common._ready import print_ready
-from integrations._rpc import serve_rpc
 from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapClient
 from integrations.brokers.email_broker._verbs import VerbDispatcher
 
 logger = logging.getLogger("email_broker")
+
+# Owner-only by default for everything this process creates. Specific call
+# sites still set explicit modes (e.g. 0o660 sockets) — see integrations/_perms.py.
+os.umask(PROCESS_UMASK)
 
 
 async def _run() -> int:

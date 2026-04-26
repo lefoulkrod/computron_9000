@@ -134,7 +134,14 @@ class AppSockHandler:
         record = IntegrationRecord(meta=meta, broker=handle)
         self._registry.add(record)
         logger.info("added integration %s (slug=%s)", integration_id, slug)
-        return {"id": integration_id, "socket": str(handle.socket_path)}
+        return {
+            "id": integration_id,
+            "slug": slug,
+            "label": label,
+            "write_allowed": write_allowed,
+            "capabilities": sorted(entry.capabilities),
+            "socket": str(handle.socket_path),
+        }
 
     def _list(self) -> dict[str, Any]:
         return {
@@ -144,6 +151,7 @@ class AppSockHandler:
                     "slug": r.meta.slug,
                     "label": r.meta.label,
                     "write_allowed": r.meta.write_allowed,
+                    "capabilities": sorted(self._catalog[r.meta.slug].capabilities),
                     "socket": str(r.broker.socket_path),
                 }
                 for r in self._registry.list()

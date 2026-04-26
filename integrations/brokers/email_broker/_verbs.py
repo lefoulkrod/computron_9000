@@ -68,6 +68,9 @@ class VerbDispatcher:
         # that lacks a handler here falls through to "not implemented."
         self._handlers: dict[str, _Handler] = {
             "list_mailboxes": self._handle_list_mailboxes,
+            "fetch_headers": self._handle_fetch_headers,
+            "search_messages": self._handle_search_messages,
+            "fetch_message": self._handle_fetch_message,
         }
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -114,3 +117,42 @@ class VerbDispatcher:
         """
         mailboxes = await self._imap.list_mailboxes()
         return {"mailboxes": [m.model_dump() for m in mailboxes]}
+
+    async def _handle_fetch_headers(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``fetch_headers {folder, limit}`` → ``{headers: [...]}``."""
+        folder = _require_str(args, "folder")
+        limit = _require_int(args, "limit", default=20)
+        headers = await self._imap.fetch_headers(folder, limit)
+        return {"headers": [h.model_dump() for h in headers]}
+
+    async def _handle_search_messages(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``search_messages {folder, query, limit}`` → ``{headers: [...]}``."""
+        folder = _require_str(args, "folder")
+        query = _require_str(args, "query")
+        limit = _require_int(args, "limit", default=20)
+        headers = await self._imap.search_messages(folder, query, limit)
+        return {"headers": [h.model_dump() for h in headers]}
+
+    async def _handle_fetch_message(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``fetch_message {folder, uid}`` → ``{message: {header, body_text}}``."""
+        folder = _require_str(args, "folder")
+        uid = _require_str(args, "uid")
+        try:
+            message = await self._imap.fetch_message(folder, uid)
+        except LookupError as exc:
+            raise RpcError("NOT_FOUND", str(exc)) from exc
+        return {"message": message.model_dump()}
+
+
+def _require_str(args: dict[str, Any], key: str) -> str:
+    value = args.get(key)
+    if not isinstance(value, str) or not value:
+        raise RpcError("BAD_REQUEST", f"{key!r} required (non-empty string)")
+    return value
+
+
+def _require_int(args: dict[str, Any], key: str, *, default: int) -> int:
+    value = args.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RpcError("BAD_REQUEST", f"{key!r} must be an integer")
+    return value

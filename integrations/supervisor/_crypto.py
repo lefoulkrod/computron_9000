@@ -26,6 +26,8 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from integrations._perms import VAULT_FILE_MODE
+
 _KEY_BYTES = 32
 _NONCE_BYTES = 12
 _GCM_TAG_BYTES = 16
@@ -55,9 +57,9 @@ def load_or_init_master_key(vault_dir: Path) -> bytes:
     vault_dir.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_bytes(key)
-    # 0o600 = owner rw, group nothing, other nothing. Only the supervisor's UID
-    # can read the master key; every other UID gets EACCES at the kernel.
-    tmp.chmod(0o600)
+    # See integrations/_perms.py — only the supervisor's UID can read the
+    # master key; every other UID gets EACCES at the kernel.
+    tmp.chmod(VAULT_FILE_MODE)
     tmp.rename(path)
     return key
 

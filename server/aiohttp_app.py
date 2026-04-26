@@ -44,7 +44,6 @@ from server.message_handler import handle_user_message, reset_message_history, r
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.desktop._exec import DesktopExecError
 from tools.desktop._lifecycle import start_desktop
-from tools.integrations import refresh_registered_integrations
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
 
@@ -398,22 +397,28 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     if STATIC_DIR.exists():
         app.router.add_static("/static", STATIC_DIR, show_index=False)
 
-    # Refresh cache of enabled integrations. This is what makes tools available
-    # for the agents to interact with the integrations.
-    app.on_startup.append(lambda _app: refresh_registered_integrations())
-
     # Phase 1: Data migrations — synchronous, must complete before anything
     # else reads state.  No user interaction needed.
     app.on_startup.append(_run_data_migrations)
 
-    # Phase 2: Setup readiness — an asyncio.Event that subsystems wait on.
-    # If the setup wizard has already been completed, the event is set
-    # immediately.  Otherwise it fires when the wizard finishes (via
-    # setup.mark_ready).
+    # Phase 2: Readiness signals — each contributor hook calls
+    # ``register_ready_contributor`` and signals its event when its
+    # prerequisite is met. ``_init_ready_signal`` aggregates them all into
+    # ``app["ready"]``; it MUST run after every contributor hook so the
+    # contributor list is fully populated before the aggregator inspects it.
+    # Adding a new gating signal: a new ``_init_*_signal`` hook above the
+    # aggregator. The deferred init in Phase 3 stays unchanged.
+    #   * setup readiness — fires when the setup wizard completes (or
+    #     immediately if it already did on a previous boot).
+    #   * integrations readiness — fires when the supervisor cache load
+    #     finishes, which transitively means every registered broker has
+    #     completed its READY handshake.
+    app.on_startup.append(_init_setup_signal)
+    app.on_startup.append(_init_integrations_signal)
     app.on_startup.append(_init_ready_signal)
 
-    # Phase 3: Deferred subsystems — a single background task awaits the
-    # ready event, then initializes all subsystems that need setup first.
+    # Phase 3: Deferred subsystems — a single background task awaits
+    # ``app["ready"]`` and then initializes everything that needed to wait.
     app.on_startup.append(_start_deferred_subsystems)
     app.on_cleanup.append(_stop_deferred_subsystems)
 
@@ -429,27 +434,92 @@ async def _run_data_migrations(_app: web.Application) -> None:
     run_migrations(state_dir)
 
 
-async def _init_ready_signal(app: web.Application) -> None:
-    """Create the ready event and set it immediately if setup is already done."""
+def register_ready_contributor(app: web.Application, name: str) -> asyncio.Event:
+    """Register a contributor to the aggregate ``app["ready"]`` event.
+
+    Returns the ``asyncio.Event`` the caller signals when its prerequisite
+    is met. ``_init_ready_signal`` collects every registered contributor and
+    sets ``app["ready"]`` once they're all signalled.
+
+    Must be called from an on-startup hook registered before
+    ``_init_ready_signal`` so the aggregator sees the contributor.
+    """
+    event = asyncio.Event()
+    app.setdefault("_ready_contributors", []).append((name, event))
+    return event
+
+
+async def _init_setup_signal(app: web.Application) -> None:
+    """Register the setup-readiness contributor."""
     import setup
 
-    app["ready"] = asyncio.Event()
+    app["setup_ready"] = register_ready_contributor(app, "setup")
     if setup.is_ready():
-        app["ready"].set()
-        logger.info("Setup already complete — ready signal set")
+        app["setup_ready"].set()
+        logger.info("Setup already complete — setup-ready signal set")
     else:
-        logger.info("Setup not complete — subsystems will wait for ready signal")
+        logger.info("Setup not complete — waiting for wizard to finish")
+
+
+async def _init_integrations_signal(app: web.Application) -> None:
+    """Register the integrations-readiness contributor and kick off the cache load.
+
+    The contributor's event fires once the supervisor's list response has
+    been received — at that point every listed broker has completed its
+    READY handshake (the supervisor's add flow gates on it). The event
+    fires on load timeout too so deferred subsystems aren't blocked
+    indefinitely by an unreachable supervisor.
+    """
+    from tools.integrations import registered_integrations
+
+    app["integrations_ready"] = register_ready_contributor(app, "integrations")
+
+    async def _set_when_loaded() -> None:
+        try:
+            await registered_integrations()
+        finally:
+            app["integrations_ready"].set()
+            logger.info("Integrations cache loaded — integrations-ready signal set")
+
+    # Store the task on the app so the GC doesn't drop it before it completes.
+    app["_integrations_load"] = asyncio.create_task(
+        _set_when_loaded(), name="integrations-load-gate",
+    )
+
+
+async def _init_ready_signal(app: web.Application) -> None:
+    """Aggregate every registered contributor into ``app["ready"]``.
+
+    Spawns a watcher task that awaits each contributor's event in turn and
+    sets ``app["ready"]`` once they're all signalled. Runs after every
+    ``_init_*_signal`` hook so the contributor list is complete.
+    """
+    app["ready"] = asyncio.Event()
+    contributors = app.get("_ready_contributors", [])
+    if not contributors:
+        app["ready"].set()
+        return
+
+    async def _watch() -> None:
+        for name, event in contributors:
+            if not event.is_set():
+                logger.info("Waiting on readiness signal: %s", name)
+            await event.wait()
+        app["ready"].set()
+        logger.info("All readiness signals set")
+
+    app["_ready_watcher"] = asyncio.create_task(_watch(), name="ready-watcher")
 
 
 async def _start_deferred_subsystems(app: web.Application) -> None:
-    """Wait for setup to complete, then initialize all deferred subsystems."""
+    """Wait for ``app["ready"]``, then initialize all deferred subsystems."""
 
     async def _deferred() -> None:
         try:
             if not app["ready"].is_set():
-                logger.info("Deferred subsystems waiting for setup to complete")
+                logger.info("Deferred subsystems waiting for readiness")
             await app["ready"].wait()
-            logger.info("Setup ready — starting deferred subsystems")
+            logger.info("Ready — starting deferred subsystems")
             await _init_task_runner(app)
         except asyncio.CancelledError:
             raise

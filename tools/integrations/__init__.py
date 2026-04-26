@@ -6,19 +6,15 @@ registered. Shared state lives in the ``_state`` submodule.
 """
 
 from tools.integrations._state import (
-    has_any_integration,
     mark_added,
     mark_removed,
-    refresh_registered_integrations,
-    registered_ids,
     registered_integrations,
 )
+from tools.integrations.types import RegisteredIntegration
 
 __all__ = [
-    "has_any_integration",
+    "RegisteredIntegration",
     "mark_added",
     "mark_removed",
-    "refresh_registered_integrations",
-    "registered_ids",
     "registered_integrations",
 ]

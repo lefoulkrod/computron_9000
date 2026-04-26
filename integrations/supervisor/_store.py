@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from integrations._perms import VAULT_FILE_MODE
 from integrations.supervisor._crypto import decrypt_secrets, encrypt_secrets
 from integrations.supervisor.types import IntegrationMeta
 
@@ -39,12 +40,11 @@ def enc_path(vault_dir: Path, integration_id: str) -> Path:
     return creds_dir(vault_dir) / f"{integration_id}.enc"
 
 
-def _atomic_write(path: Path, data: bytes, *, mode: int = 0o600) -> None:
+def _atomic_write(path: Path, data: bytes, *, mode: int = VAULT_FILE_MODE) -> None:
     """Write ``data`` to ``path`` atomically, then apply ``mode``.
 
-    Default ``mode`` is ``0o600`` (owner read/write only; group and other get
-    no permissions) — both ``.meta`` and ``.enc`` are owner-only since they
-    live in the supervisor's vault dir.
+    Default ``mode`` is :data:`integrations._perms.VAULT_FILE_MODE`
+    (``0o600``) — both ``.meta`` and ``.enc`` are owner-only.
 
     Writes to a ``.tmp`` sibling, fsyncs, chmods, then renames. ``rename``
     inside a single filesystem is atomic, so readers never observe a

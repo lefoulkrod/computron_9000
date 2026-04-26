@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 from aiohttp import web
@@ -33,6 +34,29 @@ _ERROR_STATUS = {
     "UPSTREAM": 502,
     "INTERNAL": 500,
 }
+
+# Sanitize-only — turn arbitrary characters into the [a-z0-9_-] set the
+# supervisor's regex demands. The supervisor still validates the result.
+_SUFFIX_NON_ALLOWED = re.compile(r"[^a-z0-9_-]")
+_SUFFIX_DASH_RUNS = re.compile(r"-+")
+
+
+def _derive_suffix_from_email(auth_blob: dict[str, Any] | None) -> str | None:
+    """Sanitize ``auth_blob['email']``'s local-part into a usable user suffix.
+
+    Returns ``None`` if there's no email or the cleaned local-part is empty.
+    The supervisor enforces the actual format invariant — this is just here
+    so the frontend can submit credentials without thinking up an ID.
+    """
+    if not isinstance(auth_blob, dict):
+        return None
+    email = auth_blob.get("email")
+    if not isinstance(email, str):
+        return None
+    local = email.split("@", 1)[0].lower()
+    cleaned = _SUFFIX_DASH_RUNS.sub("-", _SUFFIX_NON_ALLOWED.sub("-", local)).strip("-")
+    cleaned = cleaned[:48]
+    return cleaned or None
 
 
 async def _supervisor_rpc(verb: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -63,14 +87,13 @@ def _error_response(error: dict[str, Any]) -> web.Response:
 
 
 async def handle_list_integrations(_request: web.Request) -> web.Response:
-    """``GET /api/integrations`` — returns non-secret metadata for every
-    currently registered integration."""
+    """``GET /api/integrations`` — non-secret metadata for every active integration."""
     try:
         resp = await _supervisor_rpc("list", {})
     except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
         logger.warning("supervisor unreachable for list: %s", exc)
         return web.json_response(
-            {"error": {"code": "UNAVAILABLE", "message": "supervisor not reachable"}},
+            {"error": {"code": "UNAVAILABLE", "message": "Integrations service isn't running."}},
             status=503,
         )
     if "error" in resp:
@@ -85,11 +108,14 @@ async def handle_add_integration(request: web.Request) -> web.Response:
 
         {
           "slug": "icloud",
-          "user_suffix": "personal",
           "label": "iCloud — Larry",
           "auth_blob": {"email": "...", "password": "..."},
           "write_allowed": false
         }
+
+    The integration ID's user-suffix is derived from ``auth_blob['email']``
+    by this handler before forwarding to the supervisor; clients don't
+    pick it.
 
     On success: ``201 Created`` with ``{id, socket}`` (the broker's UDS path,
     for debugging — callers normally don't touch it directly).
@@ -107,12 +133,21 @@ async def handle_add_integration(request: web.Request) -> web.Response:
             status=400,
         )
 
+    # user_suffix is derived from auth_blob.email — clients never set it.
+    # Keeps integration IDs deterministic and out of the user's mental model.
+    derived = _derive_suffix_from_email(body.get("auth_blob"))
+    if not derived:
+        return _error_response(
+            {"code": "BAD_REQUEST", "message": "auth_blob.email is required"}
+        )
+    body["user_suffix"] = derived
+
     try:
         resp = await _supervisor_rpc("add", body)
     except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
         logger.warning("supervisor unreachable for add: %s", exc)
         return web.json_response(
-            {"error": {"code": "UNAVAILABLE", "message": "supervisor not reachable"}},
+            {"error": {"code": "UNAVAILABLE", "message": "Integrations service isn't running."}},
             status=503,
         )
     if "error" in resp:
@@ -120,12 +155,18 @@ async def handle_add_integration(request: web.Request) -> web.Response:
 
     # Update the app-server's tool-visibility cache so the agent sees the new
     # integration's tools on the next turn without a supervisor round-trip.
-    # The slug comes from the original request (the supervisor already
-    # validated it).
+    # The supervisor's add response carries everything the cache needs (id,
+    # slug, capabilities). Missing id/slug is a supervisor bug — surface it
+    # as 502 rather than returning 201 with a corrupted cache.
     result = resp["result"]
-    slug = body.get("slug")
-    if isinstance(slug, str) and isinstance(result.get("id"), str):
-        mark_added(result["id"], slug)
+    integration_id = result.get("id")
+    slug = result.get("slug")
+    if not (isinstance(integration_id, str) and isinstance(slug, str)):
+        logger.error("supervisor add response missing id/slug: %r", result)
+        return _error_response(
+            {"code": "UPSTREAM", "message": "malformed add response"}
+        )
+    mark_added(integration_id, slug, result.get("capabilities") or ())
 
     return web.json_response(result, status=201)
 

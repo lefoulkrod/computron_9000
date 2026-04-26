@@ -4,8 +4,11 @@ from collections.abc import Callable
 from typing import Any
 
 
-def get_core_tools() -> list[Callable[..., Any]]:
+async def get_core_tools() -> list[Callable[..., Any]]:
     """Return tools that every agent gets regardless of skill configuration.
+
+    Async because the integration tool gating awaits the integrations cache,
+    which loads lazily on first use after app startup.
 
     Lazy imports to avoid circular dependencies.
     """
@@ -33,12 +36,24 @@ def get_core_tools() -> list[Callable[..., Any]]:
         from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
         tools.extend([create_custom_tool, lookup_custom_tools, run_custom_tool])
 
-    # Each integration-bound tool is gated on the slugs it supports. Extend
-    # the per-tool slug set as more backends land (gmail, fastmail, ...).
+    # Integration-bound tools are gated by capability — the supervisor's
+    # catalog declares which capabilities each provider offers, surfaced in
+    # the list/add RPC responses. The tool's dynamic docstring lists the
+    # currently-registered IDs so the model picks a real one instead of
+    # guessing.
     from tools.integrations import registered_integrations
-    slugs = registered_integrations()
-    if slugs & {"icloud"}:
-        from tools.integrations.list_email_folders import list_email_folders
-        tools.append(list_email_folders)
+    records = await registered_integrations()
+    email_ids = frozenset(
+        i for i, rec in records.items() if "email" in rec.capabilities
+    )
+    if email_ids:
+        from tools.integrations.list_email_folders import build_list_email_folders_tool
+        from tools.integrations.list_email_messages import build_list_email_messages_tool
+        from tools.integrations.read_email_message import build_read_email_message_tool
+        from tools.integrations.search_email import build_search_email_tool
+        tools.append(build_list_email_folders_tool(email_ids))
+        tools.append(build_list_email_messages_tool(email_ids))
+        tools.append(build_read_email_message_tool(email_ids))
+        tools.append(build_search_email_tool(email_ids))
 
     return tools

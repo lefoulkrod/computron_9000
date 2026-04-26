@@ -1,14 +1,14 @@
 """``python -m integrations.supervisor`` entry point.
 
-Reads the vault / socket locations from env, starts the :class:`Supervisor`,
-and blocks until SIGTERM or SIGINT. Intended for manual testing and eventually
-for the container entrypoint.
+Starts the :class:`Supervisor` and blocks until SIGTERM or SIGINT. Paths default
+to the container-native layout and can be overridden via env vars for local
+development or alternative deployments.
 
-Required env::
+Env overrides (all optional)::
 
-    SUPERVISOR_VAULT_DIR=/path/to/vault        # .master-key + creds/ live here
-    SUPERVISOR_APP_SOCK=/path/to/app.sock       # where the app server connects
-    SUPERVISOR_SOCKETS_DIR=/path/to/sockets     # per-broker UDS sockets
+    SUPERVISOR_VAULT_DIR     default /var/lib/computron/vault   (persistent)
+    SUPERVISOR_APP_SOCK      default /run/cvault/app.sock       (tmpfs)
+    SUPERVISOR_SOCKETS_DIR   default /run/cvault                (tmpfs)
 
 Exit codes: 0 on clean shutdown, 1 on startup failure.
 """
@@ -17,21 +17,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
 
-from integrations._env import env_required
+from integrations._perms import PROCESS_UMASK
 from integrations.supervisor._catalog import DEFAULT_CATALOG
 from integrations.supervisor._lifecycle import Supervisor
 
+# Owner-only by default for everything this process creates. Specific call
+# sites still set explicit modes (e.g. 0o660 sockets), but anything created
+# without an explicit mode lands at 0o700 / 0o600 — see integrations/_perms.py.
+os.umask(PROCESS_UMASK)
+
 logger = logging.getLogger("supervisor")
+
+_DEFAULT_VAULT_DIR = "/var/lib/computron/vault"
+_DEFAULT_APP_SOCK = "/run/cvault/app.sock"
+_DEFAULT_SOCKETS_DIR = "/run/cvault"
 
 
 async def _run() -> int:
-    vault_dir = Path(env_required("SUPERVISOR_VAULT_DIR"))
-    app_sock_path = Path(env_required("SUPERVISOR_APP_SOCK"))
-    sockets_dir = Path(env_required("SUPERVISOR_SOCKETS_DIR"))
+    vault_dir = Path(os.environ.get("SUPERVISOR_VAULT_DIR", _DEFAULT_VAULT_DIR))
+    app_sock_path = Path(os.environ.get("SUPERVISOR_APP_SOCK", _DEFAULT_APP_SOCK))
+    sockets_dir = Path(os.environ.get("SUPERVISOR_SOCKETS_DIR", _DEFAULT_SOCKETS_DIR))
 
     sup = Supervisor(
         vault_dir=vault_dir,

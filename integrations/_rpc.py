@@ -21,6 +21,8 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from integrations._perms import SOCKET_MODE
+
 logger = logging.getLogger(__name__)
 
 # Every frame starts with a 4-byte big-endian length header so the receiver can
@@ -183,7 +185,7 @@ async def serve_rpc(
     socket_path: Path | str,
     handler: VerbHandler,
     *,
-    socket_mode: int = 0o660,
+    socket_mode: int = SOCKET_MODE,
 ) -> asyncio.AbstractServer:
     """Bind a UDS listener at ``socket_path`` and serve RPC frames.
 
@@ -193,9 +195,10 @@ async def serve_rpc(
             dict or raise ``RpcError`` for a structured error. Any other exception
             becomes an ``INTERNAL`` error frame.
         socket_mode: chmod applied to the socket file after bind. Default
-            ``0o660`` (owner rw, group rw, other nothing) so the ``computron``
-            group — i.e. the app server — can connect; other UIDs hit
-            ``EACCES`` at the kernel before reaching our code.
+            comes from :data:`integrations._perms.SOCKET_MODE` (``0o660``)
+            so the ``broker`` group — including ``computron`` via group
+            membership — can connect; other UIDs hit ``EACCES`` at the
+            kernel before reaching our code.
 
     Returns:
         The asyncio Server. Typical use::
@@ -219,8 +222,8 @@ async def serve_rpc(
 
     server = await asyncio.start_unix_server(_connection_cb, path=str(path))
     # chmod AFTER bind — asyncio.start_unix_server creates the file with the
-    # process umask, which may be tighter than we want. Setting the mode
-    # explicitly afterwards guarantees the app server's group (``computron``)
-    # can connect. Default mode is 0o660: owner rw, group rw, other nothing.
+    # process umask (0o077 in our broker processes), which is tighter than
+    # we want for sockets. Setting the mode explicitly opens group access so
+    # the app server can connect.
     path.chmod(socket_mode)
     return server

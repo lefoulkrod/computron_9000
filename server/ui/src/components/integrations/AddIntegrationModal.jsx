@@ -1,0 +1,460 @@
+import { useEffect, useState } from 'react';
+
+import styles from './AddIntegrationModal.module.css';
+
+const PROVIDERS = [
+    {
+        slug: 'icloud',
+        category: 'Email & Calendar',
+        title: 'iCloud',
+        description: 'Email and calendar · app-specific password',
+        icon: 'bi-envelope-at',
+        appPasswordUrl: 'https://account.apple.com/account/manage',
+    },
+];
+
+export default function AddIntegrationModal({ onClose, onAdded }) {
+    const [provider, setProvider] = useState(null);
+    const [step, setStep] = useState(1);
+    const [form, setForm] = useState({
+        email: '',
+        password: '',
+        label: '',
+        writeAllowed: false,
+    });
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState(null);
+    const [result, setResult] = useState(null);
+
+    useEffect(() => {
+        const onEsc = (e) => {
+            if (e.key === 'Escape' && !submitting) onClose();
+        };
+        document.addEventListener('keydown', onEsc);
+        return () => document.removeEventListener('keydown', onEsc);
+    }, [onClose, submitting]);
+
+    const handleBackdrop = (e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+    };
+
+    const handleSubmit = async () => {
+        setSubmitting(true);
+        setError(null);
+        setStep(3);
+        const email = form.email.trim();
+        const label = form.label.trim() || `${provider.title} · ${email}`;
+        try {
+            const resp = await fetch('/api/integrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    slug: provider.slug,
+                    label,
+                    auth_blob: {
+                        email,
+                        password: form.password.replace(/\s+/g, ''),
+                    },
+                    write_allowed: form.writeAllowed,
+                }),
+            });
+            const body = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                setError(body?.error?.message || `HTTP ${resp.status}`);
+                setSubmitting(false);
+                setStep(2);
+                return;
+            }
+            setResult(body);
+            setSubmitting(false);
+        } catch (err) {
+            setError(err?.message || 'Request failed');
+            setSubmitting(false);
+            setStep(2);
+        }
+    };
+
+    return (
+        <div className={styles.backdrop} onClick={handleBackdrop}>
+            <div className={styles.modal} role="dialog" aria-modal="true">
+                <div className={styles.header}>
+                    <div className={styles.title}>ADD INTEGRATION</div>
+                    <button
+                        className={styles.closeBtn}
+                        onClick={onClose}
+                        disabled={submitting}
+                        aria-label="Close"
+                    >
+                        <i className="bi bi-x-lg" />
+                    </button>
+                </div>
+
+                {!provider ? (
+                    <ProviderPicker
+                        onPick={(p) => {
+                            setProvider(p);
+                            setStep(1);
+                        }}
+                        onCancel={onClose}
+                    />
+                ) : result ? (
+                    <SuccessScreen
+                        provider={provider}
+                        form={form}
+                        result={result}
+                        onAddAnother={() => {
+                            setProvider(null);
+                            setResult(null);
+                            setStep(1);
+                            setForm({
+                                email: '', password: '', label: '', writeAllowed: false,
+                            });
+                        }}
+                        onDone={() => { onAdded?.(); }}
+                    />
+                ) : step === 1 ? (
+                    <ExplainerStep
+                        provider={provider}
+                        onBack={() => setProvider(null)}
+                        onNext={() => setStep(2)}
+                    />
+                ) : step === 2 ? (
+                    <CredentialsStep
+                        provider={provider}
+                        form={form}
+                        setForm={setForm}
+                        error={error}
+                        onBack={() => setStep(1)}
+                        onCancel={onClose}
+                        onSubmit={handleSubmit}
+                    />
+                ) : (
+                    <VerifyingStep />
+                )}
+            </div>
+        </div>
+    );
+}
+
+function ProviderPicker({ onPick, onCancel }) {
+    const categories = PROVIDERS.reduce((acc, p) => {
+        acc[p.category] = acc[p.category] || [];
+        acc[p.category].push(p);
+        return acc;
+    }, {});
+
+    return (
+        <>
+            <div className={styles.body}>
+                {Object.entries(categories).map(([category, items]) => (
+                    <div key={category} className={styles.pickerGroup}>
+                        <div className={styles.groupLabel}>{category}</div>
+                        <div className={styles.providerGrid}>
+                            {items.map(p => (
+                                <button
+                                    key={p.slug}
+                                    className={styles.providerCard}
+                                    onClick={() => onPick(p)}
+                                    data-testid={`provider-${p.slug}`}
+                                >
+                                    <div className={styles.providerIcon}>
+                                        <i className={`bi ${p.icon}`} />
+                                    </div>
+                                    <div className={styles.providerInfo}>
+                                        <div className={styles.providerTitle}>{p.title}</div>
+                                        <div className={styles.providerDesc}>{p.description}</div>
+                                    </div>
+                                    <i className={`bi bi-chevron-right ${styles.providerChev}`} />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className={styles.footer}>
+                <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
+            </div>
+        </>
+    );
+}
+
+function Stepper({ step }) {
+    const circleClass = (n) => {
+        if (step > n) return styles.done;
+        if (step === n) return styles.active;
+        return '';
+    };
+    const lineClass = (n) => (step > n ? styles.done : '');
+    const circleContent = (n) => (step > n ? <i className="bi bi-check-lg" /> : n);
+    return (
+        <div className={styles.stepper}>
+            <div className={`${styles.stepCircle} ${circleClass(1)}`}>{circleContent(1)}</div>
+            <div className={`${styles.stepLine} ${lineClass(1)}`} />
+            <div className={`${styles.stepCircle} ${circleClass(2)}`}>{circleContent(2)}</div>
+            <div className={`${styles.stepLine} ${lineClass(2)}`} />
+            <div className={`${styles.stepCircle} ${circleClass(3)}`}>{circleContent(3)}</div>
+        </div>
+    );
+}
+
+function ExplainerStep({ provider, onBack, onNext }) {
+    return (
+        <>
+            <Stepper step={1} />
+            <div className={styles.wzBody}>
+                <h2 className={styles.wzTitle}>Connect {provider.title}</h2>
+                <p className={styles.wzSubtitle}>
+                    You'll generate an <strong>app-specific password</strong> — a credential
+                    Apple issues specifically for third-party apps, separate from your main
+                    Apple ID password.
+                </p>
+                <div className={styles.wzContent}>
+                    <div className={styles.note}>
+                        <i className="bi bi-info-circle-fill" />
+                        <span>
+                            Requires an Apple ID with two-factor authentication enabled.
+                        </span>
+                    </div>
+                    <div className={styles.chipStack}>
+                        <span className={styles.chip}><i className="bi bi-check2" /> Encrypted at rest</span>
+                        <span className={styles.chip}><i className="bi bi-check2" /> Agent never reads the password</span>
+                        <span className={styles.chip}><i className="bi bi-check2" /> Revocable from Apple at any time</span>
+                    </div>
+                </div>
+            </div>
+            <div className={styles.footer}>
+                <button className={styles.btnOutline} onClick={onBack}>
+                    <i className="bi bi-arrow-left" /> Back
+                </button>
+                <div className={styles.footerRight}>
+                    <button
+                        className={styles.btnFilled}
+                        onClick={onNext}
+                        data-testid="wizard-next"
+                    >
+                        Next <i className="bi bi-arrow-right" />
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+}
+
+function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onSubmit }) {
+    const canSubmit = form.email.trim() && form.password.trim();
+    return (
+        <>
+            <Stepper step={2} />
+            <div className={styles.wzBodyLeft}>
+                <h2 className={styles.wzTitle}>Generate &amp; paste</h2>
+                <p className={styles.wzSubtitle}>
+                    Create an app-specific password at Apple ID settings, name it
+                    "Computron," and paste it below.
+                </p>
+                <div className={styles.wzContent}>
+                    <a
+                        className={styles.linkBtn}
+                        href={provider.appPasswordUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <span>
+                            <i className="bi bi-box-arrow-up-right" /> Open Apple ID app-passwords page
+                        </span>
+                        <span className={styles.linkBtnHint}>account.apple.com</span>
+                    </a>
+
+                    <div className={styles.field}>
+                        <label className={styles.fieldLabel}>Apple ID email</label>
+                        <input
+                            className={styles.input}
+                            type="email"
+                            placeholder="you@icloud.com"
+                            value={form.email}
+                            onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
+                            data-testid="wizard-email"
+                        />
+                    </div>
+
+                    <div className={styles.field}>
+                        <label className={styles.fieldLabel}>App-specific password</label>
+                        <input
+                            className={`${styles.input} ${styles.inputMono}`}
+                            type="password"
+                            placeholder="xxxx-xxxx-xxxx-xxxx"
+                            value={form.password}
+                            onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
+                            data-testid="wizard-password"
+                        />
+                        <span className={styles.fieldHint}>
+                            Pasted verbatim from Apple — spaces are trimmed automatically.
+                        </span>
+                    </div>
+
+                    <div className={styles.field}>
+                        <label className={styles.fieldLabel}>Label (optional)</label>
+                        <input
+                            className={styles.input}
+                            placeholder={`${provider.title} · ${form.email || 'your email'}`}
+                            value={form.label}
+                            onChange={(e) => setForm(f => ({ ...f, label: e.target.value }))}
+                        />
+                        <span className={styles.fieldHint}>
+                            How this integration appears in your list.
+                        </span>
+                    </div>
+
+                    <div className={styles.subsectionLabel}>Permissions</div>
+                    <div className={styles.radioStack}>
+                        <label className={`${styles.radioCard} ${!form.writeAllowed ? styles.selected : ''}`}>
+                            <input
+                                type="radio"
+                                className={styles.radioInput}
+                                checked={!form.writeAllowed}
+                                onChange={() => setForm(f => ({ ...f, writeAllowed: false }))}
+                            />
+                            <div className={styles.radioIndicator} />
+                            <div className={styles.radioInfo}>
+                                <div className={styles.radioTitle}>Read only</div>
+                                <div className={styles.radioDesc}>
+                                    Search email, read messages, view your calendar.
+                                </div>
+                            </div>
+                        </label>
+                        <label className={`${styles.radioCard} ${form.writeAllowed ? styles.selected : ''}`}>
+                            <input
+                                type="radio"
+                                className={styles.radioInput}
+                                checked={form.writeAllowed}
+                                onChange={() => setForm(f => ({ ...f, writeAllowed: true }))}
+                            />
+                            <div className={styles.radioIndicator} />
+                            <div className={styles.radioInfo}>
+                                <div className={styles.radioTitle}>Read and write</div>
+                                <div className={styles.radioDesc}>
+                                    All of the above, plus send and move email, and create or
+                                    delete calendar events.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    <div className={styles.note}>
+                        <i className="bi bi-info-circle-fill" />
+                        <span>You can change this later — no need to reconnect.</span>
+                    </div>
+
+                    {error && (
+                        <div className={styles.errorBox}>
+                            <i className="bi bi-exclamation-triangle-fill" /> {error}
+                        </div>
+                    )}
+                </div>
+            </div>
+            <div className={styles.footer}>
+                <button className={styles.btnOutline} onClick={onBack}>
+                    <i className="bi bi-arrow-left" /> Back
+                </button>
+                <div className={styles.footerRight}>
+                    <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
+                    <button
+                        className={styles.btnFilled}
+                        disabled={!canSubmit}
+                        onClick={onSubmit}
+                        data-testid="wizard-submit"
+                    >
+                        Verify &amp; save <i className="bi bi-shield-check" />
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+}
+
+function VerifyingStep() {
+    return (
+        <>
+            <Stepper step={3} />
+            <div className={styles.wzBodyLeft}>
+                <h2 className={styles.wzTitle}>Connecting…</h2>
+                <p className={styles.wzSubtitle}>This usually takes a few seconds.</p>
+                <div className={styles.wzContent}>
+                    <div className={styles.checkList}>
+                        <div className={styles.checkRow}>
+                            <div className={`${styles.checkIcon} ${styles.done}`}>
+                                <i className="bi bi-check-circle-fill" />
+                            </div>
+                            <div className={styles.checkLabel}>Securing your credentials</div>
+                            <div className={styles.checkMeta}>done</div>
+                        </div>
+                        <div className={styles.checkRow}>
+                            <div className={`${styles.checkIcon} ${styles.running}`}>
+                                <span className={styles.spinner} />
+                            </div>
+                            <div className={styles.checkLabel}>Signing in to your email</div>
+                            <div className={styles.checkMeta}>…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div className={styles.footer}>
+                <button className={styles.btnOutline} disabled>
+                    <i className="bi bi-arrow-left" /> Back
+                </button>
+                <div className={styles.footerRight}>
+                    <button className={styles.btnGhost} disabled>Cancel</button>
+                    <button className={styles.btnFilled} disabled>Continue</button>
+                </div>
+            </div>
+        </>
+    );
+}
+
+function SuccessScreen({ provider, form, result, onAddAnother, onDone }) {
+    return (
+        <>
+            <Stepper step={4} />
+            <div className={styles.wzBodyLeft}>
+                <h2 className={styles.wzTitle}>{provider.title} connected</h2>
+                <p className={styles.wzSubtitle}>
+                    Your agent can now read your email.
+                </p>
+                <div className={styles.wzContent}>
+                    <table className={styles.kvTable}>
+                        <tbody>
+                            <tr>
+                                <td>ID</td>
+                                <td>{result.id}</td>
+                            </tr>
+                            <tr>
+                                <td>Account</td>
+                                <td>{form.email}</td>
+                            </tr>
+                            <tr>
+                                <td>Label</td>
+                                <td>{form.label || `${provider.title} · ${form.email}`}</td>
+                            </tr>
+                            <tr>
+                                <td>Permissions</td>
+                                <td>{form.writeAllowed ? 'Read and write' : 'Read only'}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div className={styles.footer}>
+                <div className={styles.footerRight}>
+                    <button className={styles.btnOutline} onClick={onAddAnother}>
+                        <i className="bi bi-plus-lg" /> Add another
+                    </button>
+                    <button
+                        className={styles.btnFilled}
+                        onClick={onDone}
+                        data-testid="wizard-done"
+                    >
+                        Done
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+}

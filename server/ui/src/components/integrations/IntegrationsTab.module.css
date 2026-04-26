@@ -1,0 +1,239 @@
+.container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px;
+    text-align: center;
+    background: var(--canvas);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 540px;
+    gap: var(--sp-3);
+}
+
+.emptyIcon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent-muted);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: var(--sp-1);
+}
+
+.emptyIconMuted {
+    background: var(--border-subtle);
+    color: var(--text-tertiary);
+}
+
+.emptyHeading {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.emptyDesc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 420px;
+}
+
+/* ── List ────────────────────────────────────────────────── */
+.list {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+
+.groupLabel {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-1);
+}
+
+.listFooter {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--sp-2);
+}
+
+/* ── Row (one integration) ───────────────────────────────── */
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.rowIcon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
+.rowInfo {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rowTitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+
+.rowDesc {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.3;
+    font-family: var(--font-code);
+}
+
+/* ── Badges + status dot ─────────────────────────────────── */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--border-subtle);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.badgeSuccess {
+    background: var(--success-muted);
+    color: var(--success);
+    border-color: var(--success-muted);
+}
+
+.statusDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.dotRunning {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success-muted);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btnFilled,
+.btnFilledLg,
+.btnOutline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-family: var(--font-body);
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 150ms var(--ease);
+    white-space: nowrap;
+}
+
+.btnFilled,
+.btnFilledLg {
+    background: var(--accent);
+    color: #fff;
+}
+
+.btnFilled:hover,
+.btnFilledLg:hover {
+    background: var(--accent-hover);
+}
+
+.btnFilledLg {
+    height: 38px;
+    padding: 0 18px;
+    font-size: 14px;
+}
+
+.btnOutline {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+.btnOutline:hover {
+    background: var(--surface);
+    border-color: var(--border-strong);
+}
+
+/* ── Loading + error ─────────────────────────────────────── */
+.loading {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    padding: 32px;
+}
+
+.error {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--danger-muted);
+    border: 1px solid var(--danger-muted);
+    border-radius: var(--radius-md);
+    color: var(--danger);
+    font-size: 13px;
+}

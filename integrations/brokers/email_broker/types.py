@@ -28,3 +28,31 @@ class Mailbox(BaseModel):
 
     name: str
     attrs: list[str]
+
+
+class MessageHeader(BaseModel):
+    """Lightweight message envelope — enough to show a list/search hit.
+
+    ``uid`` is the IMAP UID (stable across the session's lifetime of the
+    mailbox), not the sequence number. Callers round-trip the ``(folder, uid)``
+    pair back to :meth:`ImapClient.fetch_message` to read the body.
+    """
+
+    uid: str
+    folder: str
+    from_: str = ""
+    to: str = ""
+    subject: str = ""
+    date: str = ""
+
+
+class Message(BaseModel):
+    """Full message body + envelope.
+
+    ``body_text`` is the best-effort plain-text rendering (MIME multipart
+    falls back to the ``text/plain`` part, or to a stripped ``text/html``
+    part when no plain alternative exists).
+    """
+
+    header: MessageHeader
+    body_text: str = ""

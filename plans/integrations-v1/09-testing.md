@@ -134,3 +134,10 @@ The project's historical stance is "all tests must be unit tests; no Ollama / no
 - **Radicale version pin.** Upstream has occasionally broken CalDAV conformance; pin a known-good major version in dev deps.
 - **IMAP fake completeness.** Our fake implements the commands we use. If a broker enhancement later needs `APPEND` or IDLE, extend the fake — don't reach for `imaplib.IMAP4` stubbing.
 - **Parallel test runs.** `pytest-xdist` works for the pure-unit tier as-is. Subprocess-tier tests already isolate via `tmp_path` + port-0 binding; verify during implementation.
+- **Security-model E2E tests against the live container.** Add a small suite that runs against a freshly-built `just dev` container and asserts the UID-split invariants the plan claims:
+  - As `computron`, attempting to read `/var/lib/computron/vault/.master-key` and any `creds/*.enc` fails with `EACCES` (mode 0700, broker-only).
+  - As `computron`, `connect()` to `/run/cvault/app.sock` succeeds (group is `broker`, mode 0660, `computron` is in the `broker` group).
+  - The supervisor process (`pgrep -u broker -f integrations.supervisor`) and any spawned broker process run as UID 1001; the app server runs as UID 1000.
+  - `/run/cvault/` exists on tmpfs (assert `findmnt -no FSTYPE /run/cvault` is `tmpfs`) so stale sockets vanish on restart.
+  - End-to-end: `POST /api/integrations` adds a fake-email integration; the broker's UDS appears under `/run/cvault/<id>.sock` owned `broker:broker 0660`; calling `list_email_folders` from a chat turn returns the fake's mailboxes.
+  These shouldn't run on every CI invocation — gate behind a marker (`@pytest.mark.security_e2e`) and run on PRs that touch `container/`, `integrations/supervisor/`, `integrations/brokers/`, or the entrypoint. The point is to catch regressions in the trust split, not to gate every push.
