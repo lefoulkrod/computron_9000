@@ -55,6 +55,7 @@ re-grounded against the finished code.
 - [ ] **Remove any remaining "Phase N" or "v1 slate" language** that refers to
       these plan docs. The code should stand on its own without the plan as
       context.
+- [ ] **Factor out the readiness-signal infrastructure.** `server/aiohttp_app.py` now owns `register_ready_contributor`, `_init_setup_signal`, `_init_integrations_signal`, the aggregator `_init_ready_signal`, and the deferred-subsystems gate. As more contributors land (broker-crash recovery, calendar provider, etc.) this is going to keep growing inside `aiohttp_app.py`. After the full integrations work settles, move the gate primitives into their own package (e.g. `server/_readiness.py`) and have each subsystem own its own `_init_*_signal` next to its code, importing the helper. Keeps `aiohttp_app.py` to wiring + middleware.
 - [ ] **Terminology reconciliation pass.** Several near-synonymous terms
       have piled up — `integration`, `provider`, `catalog entry`, `slug`,
       `user_suffix`, `integration_id`; and three record types

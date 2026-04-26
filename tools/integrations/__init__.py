@@ -6,6 +6,7 @@ registered. Shared state lives in the ``_state`` submodule.
 """
 
 from tools.integrations._state import (
+    cache_loaded,
     mark_added,
     mark_removed,
     registered_integrations,
@@ -14,6 +15,7 @@ from tools.integrations.types import RegisteredIntegration
 
 __all__ = [
     "RegisteredIntegration",
+    "cache_loaded",
     "mark_added",
     "mark_removed",
     "registered_integrations",

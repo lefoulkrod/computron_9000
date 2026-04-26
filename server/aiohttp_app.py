@@ -461,29 +461,50 @@ async def _init_setup_signal(app: web.Application) -> None:
         logger.info("Setup not complete — waiting for wizard to finish")
 
 
-async def _init_integrations_signal(app: web.Application) -> None:
-    """Register the integrations-readiness contributor and kick off the cache load.
+_INTEGRATIONS_LOAD_DEADLINE_SECONDS = 30.0
+_INTEGRATIONS_LOAD_RETRY_INTERVAL_SECONDS = 1.0
 
-    The contributor's event fires once the supervisor's list response has
-    been received — at that point every listed broker has completed its
-    READY handshake (the supervisor's add flow gates on it). The event
-    fires on load timeout too so deferred subsystems aren't blocked
-    indefinitely by an unreachable supervisor.
+
+async def _init_integrations_signal(app: web.Application) -> None:
+    """Register the integrations-readiness contributor and load the cache.
+
+    The supervisor binds ``app.sock`` after reconciling stored brokers
+    (an upstream IMAP/CalDAV login per integration), which can take a
+    couple of seconds during a cold container start. We retry the cache
+    load until it succeeds or a generous deadline elapses, so the chat
+    agent's first turn finds the cache already warm. If the deadline
+    fires (supervisor permanently unreachable), the readiness event
+    still fires so deferred subsystems aren't held up forever — chat
+    keeps working without integration tools and the UI surfaces the
+    "Integrations unavailable" state.
     """
-    from tools.integrations import registered_integrations
+    from tools.integrations import cache_loaded, registered_integrations
 
     app["integrations_ready"] = register_ready_contributor(app, "integrations")
 
-    async def _set_when_loaded() -> None:
+    async def _load_with_retry() -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _INTEGRATIONS_LOAD_DEADLINE_SECONDS
         try:
-            await registered_integrations()
+            while True:
+                await registered_integrations()
+                if cache_loaded():
+                    logger.info("Integrations cache loaded")
+                    return
+                if loop.time() >= deadline:
+                    logger.warning(
+                        "Integrations cache failed to load within %.0fs; "
+                        "deferred subsystems starting without integrations",
+                        _INTEGRATIONS_LOAD_DEADLINE_SECONDS,
+                    )
+                    return
+                await asyncio.sleep(_INTEGRATIONS_LOAD_RETRY_INTERVAL_SECONDS)
         finally:
             app["integrations_ready"].set()
-            logger.info("Integrations cache loaded — integrations-ready signal set")
 
     # Store the task on the app so the GC doesn't drop it before it completes.
     app["_integrations_load"] = asyncio.create_task(
-        _set_when_loaded(), name="integrations-load-gate",
+        _load_with_retry(), name="integrations-load-gate",
     )
 
 

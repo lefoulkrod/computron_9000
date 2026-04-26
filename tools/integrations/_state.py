@@ -26,6 +26,17 @@ _registered: dict[str, RegisteredIntegration] = {}
 _load_future: asyncio.Future[None] | None = None
 
 
+def cache_loaded() -> bool:
+    """True iff the most recent load attempt succeeded.
+
+    Failure paths in :func:`refresh_registered_integrations` clear the
+    in-flight future, so this only returns True after the cache reflects
+    the supervisor's state at least once. An empty cache after a successful
+    load (no integrations registered) still counts as loaded.
+    """
+    return _load_future is not None and _load_future.done()
+
+
 def mark_added(integration_id: str, slug: str, capabilities: Iterable[str]) -> None:
     """Record that an integration has been successfully added.
 
@@ -70,7 +81,7 @@ async def _ensure_loaded() -> None:
         return
     try:
         await asyncio.wait_for(asyncio.shield(_load_future), timeout=_LOAD_WAIT_SECONDS)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning(
             "integrations cache still loading after %.1fs; tools may be hidden this turn",
             _LOAD_WAIT_SECONDS,
@@ -80,9 +91,12 @@ async def _ensure_loaded() -> None:
 async def refresh_registered_integrations() -> None:
     """Resync the in-memory list of integrations from the source of truth.
 
-    Logs and returns silently on transport errors; the cache stays as-is
-    until the next successful call.
+    On transport failure or a supervisor-side error, clears the in-flight
+    load future so the *next* caller re-triggers — protects against the
+    startup race where the app's first load fires before the supervisor
+    has bound its socket.
     """
+    global _load_future
     sock_path = load_config().integrations.app_sock_path
     try:
         reader, writer = await asyncio.open_unix_connection(sock_path)
@@ -92,6 +106,7 @@ async def refresh_registered_integrations() -> None:
             "integration tools hidden until next successful refresh",
             sock_path, exc,
         )
+        _load_future = None
         return
 
     try:
@@ -106,6 +121,7 @@ async def refresh_registered_integrations() -> None:
 
     if "error" in resp:
         logger.warning("list error from integrations source: %s", resp["error"])
+        _load_future = None
         return
 
     _registered.clear()
