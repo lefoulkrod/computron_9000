@@ -139,6 +139,15 @@
     margin-top: var(--sp-1);
 }
 
+.rowHelper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: var(--sp-1);
+}
+
 .rowControl {
     display: inline-flex;
     align-items: center;
@@ -168,6 +177,12 @@
     border-color: var(--success-muted);
 }
 
+.badgeDanger {
+    background: var(--danger-muted);
+    color: var(--danger);
+    border-color: var(--danger-muted);
+}
+
 .statusDot {
     width: 6px;
     height: 6px;
@@ -180,6 +195,10 @@
     background: var(--success);
     box-shadow: 0 0 6px var(--success-muted);
     animation: pulse 2s infinite;
+}
+
+.dotError {
+    background: var(--danger);
 }
 
 @keyframes pulse {

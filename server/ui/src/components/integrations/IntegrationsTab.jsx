@@ -10,6 +10,34 @@ const SLUG_META = {
         icon: 'bi-envelope-at',
         category: 'Email & Calendar',
     },
+    gmail: {
+        label: 'Gmail',
+        icon: 'bi-envelope-at',
+        category: 'Email & Calendar',
+    },
+};
+
+// Per-state visuals + helper copy. The supervisor reports the state on
+// every list/add response — we just translate it into the row chrome.
+const STATE_VIEW = {
+    running: {
+        dotClass: 'dotRunning',
+        badgeClass: 'badgeSuccess',
+        label: 'connected',
+        helper: null,
+    },
+    auth_failed: {
+        dotClass: 'dotError',
+        badgeClass: 'badgeDanger',
+        label: 'auth failed',
+        helper: 'Credentials were rejected. Disconnect and re-add to refresh.',
+    },
+    broken: {
+        dotClass: 'dotError',
+        badgeClass: 'badgeDanger',
+        label: 'not running',
+        helper: 'Couldn\'t reach this integration. Disconnect and re-add.',
+    },
 };
 
 export default function IntegrationsTab() {
@@ -193,21 +221,27 @@ function PopulatedList({ grouped, onAdd, onRemove, removeError }) {
 }
 
 function Row({ row, error, onRemove }) {
+    const view = STATE_VIEW[row.state] ?? STATE_VIEW.running;
     return (
         <div className={styles.row}>
             <div className={styles.rowIcon}><i className={`bi ${row.meta.icon}`} /></div>
             <div className={styles.rowInfo}>
                 <div className={styles.rowTitle}>
                     {row.label}
-                    <span className={`${styles.badge} ${styles.badgeSuccess}`}>
-                        <span className={`${styles.statusDot} ${styles.dotRunning}`} />
-                        connected
+                    <span className={`${styles.badge} ${styles[view.badgeClass]}`}>
+                        <span className={`${styles.statusDot} ${styles[view.dotClass]}`} />
+                        {view.label}
                     </span>
                     <span className={styles.badge}>
                         {row.write_allowed ? 'Read and write' : 'Read only'}
                     </span>
                 </div>
                 <div className={styles.rowDesc}>{row.id}</div>
+                {view.helper && (
+                    <div className={styles.rowHelper}>
+                        <i className="bi bi-exclamation-triangle" /> {view.helper}
+                    </div>
+                )}
                 {error && (
                     <div className={styles.rowError}>
                         <i className="bi bi-exclamation-triangle" /> {error}

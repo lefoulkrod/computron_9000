@@ -63,6 +63,24 @@ _ICLOUD = CatalogEntry(
 )
 
 
+_GMAIL = CatalogEntry(
+    slug="gmail",
+    command=["python", "-m", "integrations.brokers.email_broker"],
+    capabilities=frozenset({"email"}),
+    static_env={
+        "IMAP_HOST": "imap.gmail.com",
+        "IMAP_PORT": "993",
+        "SMTP_HOST": "smtp.gmail.com",
+        "SMTP_PORT": "587",
+    },
+    env_injection={
+        "email": "EMAIL_USER",
+        "password": "EMAIL_PASS",
+    },
+)
+
+
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
+    "gmail": _GMAIL,
 }

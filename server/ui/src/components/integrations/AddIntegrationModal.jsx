@@ -9,7 +9,21 @@ const PROVIDERS = [
         title: 'iCloud',
         description: 'Email and calendar · app-specific password',
         icon: 'bi-envelope-at',
+        vendor: 'Apple',
         appPasswordUrl: 'https://account.apple.com/account/manage',
+        appPasswordHost: 'account.apple.com',
+        emailPlaceholder: 'you@icloud.com',
+    },
+    {
+        slug: 'gmail',
+        category: 'Email & Calendar',
+        title: 'Gmail',
+        description: 'Email · Google app password',
+        icon: 'bi-envelope-at',
+        vendor: 'Google',
+        appPasswordUrl: 'https://myaccount.google.com/apppasswords',
+        appPasswordHost: 'myaccount.google.com',
+        emailPlaceholder: 'you@gmail.com',
     },
 ];
 
@@ -205,20 +219,20 @@ function ExplainerStep({ provider, onBack, onNext }) {
                 <h2 className={styles.wzTitle}>Connect {provider.title}</h2>
                 <p className={styles.wzSubtitle}>
                     You'll generate an <strong>app-specific password</strong> — a credential
-                    Apple issues specifically for third-party apps, separate from your main
-                    Apple ID password.
+                    {' '}{provider.vendor} issues specifically for third-party apps, separate
+                    from your main account password.
                 </p>
                 <div className={styles.wzContent}>
                     <div className={styles.note}>
                         <i className="bi bi-info-circle-fill" />
                         <span>
-                            Requires an Apple ID with two-factor authentication enabled.
+                            Requires a {provider.vendor} account with two-factor authentication enabled.
                         </span>
                     </div>
                     <div className={styles.chipStack}>
                         <span className={styles.chip}><i className="bi bi-check2" /> Encrypted at rest</span>
                         <span className={styles.chip}><i className="bi bi-check2" /> Agent never reads the password</span>
-                        <span className={styles.chip}><i className="bi bi-check2" /> Revocable from Apple at any time</span>
+                        <span className={styles.chip}><i className="bi bi-check2" /> Revocable from {provider.vendor} at any time</span>
                     </div>
                 </div>
             </div>
@@ -248,8 +262,8 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
             <div className={styles.wzBodyLeft}>
                 <h2 className={styles.wzTitle}>Generate &amp; paste</h2>
                 <p className={styles.wzSubtitle}>
-                    Create an app-specific password at Apple ID settings, name it
-                    "Computron," and paste it below.
+                    Create an app-specific password in your {provider.vendor} account
+                    settings, name it "Computron," and paste it below.
                 </p>
                 <div className={styles.wzContent}>
                     <a
@@ -259,17 +273,17 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                         rel="noopener noreferrer"
                     >
                         <span>
-                            <i className="bi bi-box-arrow-up-right" /> Open Apple ID app-passwords page
+                            <i className="bi bi-box-arrow-up-right" /> Open {provider.vendor} app-passwords page
                         </span>
-                        <span className={styles.linkBtnHint}>account.apple.com</span>
+                        <span className={styles.linkBtnHint}>{provider.appPasswordHost}</span>
                     </a>
 
                     <div className={styles.field}>
-                        <label className={styles.fieldLabel}>Apple ID email</label>
+                        <label className={styles.fieldLabel}>{provider.vendor} email</label>
                         <input
                             className={styles.input}
                             type="email"
-                            placeholder="you@icloud.com"
+                            placeholder={provider.emailPlaceholder}
                             value={form.email}
                             onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
                             data-testid="wizard-email"
@@ -287,7 +301,7 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                             data-testid="wizard-password"
                         />
                         <span className={styles.fieldHint}>
-                            Pasted verbatim from Apple — spaces are trimmed automatically.
+                            Pasted verbatim from {provider.vendor} — spaces are trimmed automatically.
                         </span>
                     </div>
 
