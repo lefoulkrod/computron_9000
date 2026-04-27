@@ -51,6 +51,7 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         if "email" in rec.capabilities and rec.state == "running"
     )
     if email_ids:
+        from tools.integrations.download_email_attachment import build_download_email_attachment_tool
         from tools.integrations.list_email_folders import build_list_email_folders_tool
         from tools.integrations.list_email_messages import build_list_email_messages_tool
         from tools.integrations.read_email_message import build_read_email_message_tool
@@ -59,6 +60,7 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_list_email_messages_tool(email_ids))
         tools.append(build_read_email_message_tool(email_ids))
         tools.append(build_search_email_tool(email_ids))
+        tools.append(build_download_email_attachment_tool(email_ids))
 
     email_write_ids = frozenset(
         i for i in email_ids if records[i].write_allowed

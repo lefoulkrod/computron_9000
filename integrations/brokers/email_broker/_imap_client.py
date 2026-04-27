@@ -29,7 +29,7 @@ import re
 
 import html2text
 
-from integrations.brokers.email_broker.types import Mailbox, Message, MessageHeader
+from integrations.brokers.email_broker.types import Attachment, Mailbox, Message, MessageHeader
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +311,57 @@ class ImapClient:
             subject=_decode_header(msg.get("Subject", "")),
             date=_normalize_date(msg.get("Date", "")),
         )
-        return Message(header=header, body_text=_extract_body_text(msg))
+        return Message(
+            header=header,
+            body_text=_extract_body_text(msg),
+            attachments=_extract_attachments(msg),
+        )
+
+    async def fetch_attachment(
+        self, folder: str, uid: str, attachment_id: str,
+    ) -> tuple[bytes, str, str]:
+        """Fetch one attachment's bytes by IMAP part path.
+
+        Returns ``(payload_bytes, filename, mime_type)``. The bytes are
+        already decoded from any Content-Transfer-Encoding (base64, qp,
+        etc.) so callers can write them straight to disk.
+
+        For walking-skeleton scope this re-fetches the full message and
+        extracts the named part client-side. A future optimization could
+        use IMAP partial fetch (``BODY.PEEK[N]``) to pull just the part —
+        worth doing once we hit attachments large enough that the full-
+        message round-trip is the bottleneck.
+
+        Raises ``LookupError`` if the UID isn't in the mailbox or the
+        ``attachment_id`` doesn't match any part in the message.
+        """
+        async with self._lock:
+            conn = await self._ensure_selected(folder)
+
+            def _blocking_fetch() -> bytes:
+                typ, data = conn.uid("FETCH", uid, "(BODY.PEEK[])")
+                if typ != "OK":
+                    msg = f"UID FETCH failed: {typ} {data!r}"
+                    raise RuntimeError(msg)
+                for part in data:
+                    if isinstance(part, tuple) and len(part) >= 2:
+                        return part[1]
+                raise LookupError(f"no such message: uid={uid}")
+
+            raw = await asyncio.to_thread(_blocking_fetch)
+
+        msg = _email.message_from_bytes(raw)
+        for part_path, part in _walk_with_paths(msg):
+            if part_path != attachment_id:
+                continue
+            payload = part.get_payload(decode=True) or b""
+            if not isinstance(payload, bytes):
+                payload = b""
+            filename = part.get_filename() or ""
+            return payload, filename, part.get_content_type()
+        raise LookupError(
+            f"no attachment {attachment_id!r} in uid={uid}",
+        )
 
     async def move_message(self, folder: str, uid: str, dest_folder: str) -> None:
         """Move one message by UID from ``folder`` to ``dest_folder``.
@@ -468,6 +518,61 @@ def _normalize_date(value: str) -> str:
     if dt is None:
         return value
     return dt.isoformat()
+
+
+def _walk_with_paths(
+    msg: _email.message.Message, prefix: str = "",
+) -> list[tuple[str, _email.message.Message]]:
+    """Yield ``(imap_part_path, part)`` for every leaf part in ``msg``.
+
+    Numbering matches RFC 3501 BODYSTRUCTURE: a non-multipart message is
+    a single part numbered ``"1"``; a top-level multipart's children are
+    ``"1"``, ``"2"``, …; nested multiparts dot-extend (``"2.1"``,
+    ``"2.2"``). Only leaves are yielded — multipart container nodes
+    aren't addressable as content on their own.
+    """
+    out: list[tuple[str, _email.message.Message]] = []
+    if not msg.is_multipart():
+        # Non-multipart top-level message: addressable as part "1".
+        out.append((prefix or "1", msg))
+        return out
+    children = msg.get_payload()
+    if not isinstance(children, list):
+        return out
+    for index, child in enumerate(children, start=1):
+        child_path = f"{prefix}.{index}" if prefix else str(index)
+        if child.is_multipart():
+            out.extend(_walk_with_paths(child, prefix=child_path))
+        else:
+            out.append((child_path, child))
+    return out
+
+
+def _extract_attachments(msg: _email.message.Message) -> list[Attachment]:
+    """Return :class:`Attachment` records for every part with a filename.
+
+    A "filename" comes from either ``Content-Disposition: attachment;
+    filename=...`` or the ``name=`` parameter of ``Content-Type`` —
+    Python's ``email.Message.get_filename`` covers both. Parts without a
+    filename (the body's text/plain or text/html alternatives, inline
+    images that aren't given names) are not surfaced as attachments.
+    """
+    out: list[Attachment] = []
+    for part_path, part in _walk_with_paths(msg):
+        filename = part.get_filename()
+        if not filename:
+            continue
+        payload = part.get_payload(decode=True)
+        size = len(payload) if isinstance(payload, bytes) else 0
+        out.append(
+            Attachment(
+                id=part_path,
+                filename=filename,
+                mime_type=part.get_content_type(),
+                size=size,
+            ),
+        )
+    return out
 
 
 def _extract_body_text(msg: _email.message.Message) -> str:

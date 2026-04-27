@@ -249,3 +249,87 @@ async def test_search_messages_returns_empty_when_no_match() -> None:
     assert headers == []
 
 
+@pytest.mark.asyncio
+async def test_fetch_message_surfaces_attachment_metadata() -> None:
+    """A multipart message with one PDF attachment shows up in the
+    ``attachments`` list with the right id, filename, mime, and decoded
+    size — not the base64-encoded size on the wire.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    payload = b"%PDF-1.4 not really a pdf, but the bytes don't matter here"
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="See attached",
+            body="Here it is.",
+            attachments=[("resume.pdf", "application/pdf", payload)],
+        )
+        client = await _connected_client(fake)
+        message = await client.fetch_message("INBOX", str(uid))
+    finally:
+        await fake.stop()
+    # The body part comes through unchanged.
+    assert "Here it is." in message.body_text
+    # One attachment with decoded metadata.
+    assert len(message.attachments) == 1
+    att = message.attachments[0]
+    assert att.filename == "resume.pdf"
+    assert att.mime_type == "application/pdf"
+    assert att.size == len(payload)
+    # Attachment id is the IMAP part path — for a multipart with body
+    # part (1) and one attachment (2), the attachment is at "2".
+    assert att.id == "2"
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_returns_bytes_and_filename() -> None:
+    """``fetch_attachment`` pulls the named part's bytes back, decoded
+    from any Content-Transfer-Encoding (base64 here)."""
+    fake = FakeEmail()
+    await fake.start()
+    payload = b"\x89PNG fake png bytes"
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="photo",
+            body="see attached",
+            attachments=[("photo.png", "image/png", payload)],
+        )
+        client = await _connected_client(fake)
+        bytes_out, filename, mime_type = await client.fetch_attachment(
+            "INBOX", str(uid), "2",
+        )
+    finally:
+        await fake.stop()
+    assert bytes_out == payload
+    assert filename == "photo.png"
+    assert mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_unknown_id_raises_lookup_error() -> None:
+    """An attachment_id that doesn't match any part raises
+    ``LookupError`` so the broker maps it to ``NOT_FOUND`` on the wire.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="hi",
+            body="no attachments here",
+        )
+        client = await _connected_client(fake)
+        with pytest.raises(LookupError, match="no attachment"):
+            await client.fetch_attachment("INBOX", str(uid), "99")
+    finally:
+        await fake.stop()
+
+

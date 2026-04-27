@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from integrations import broker_client
+from tools.integrations.download_email_attachment import download_email_attachment
 from tools.integrations.list_email_folders import list_email_folders
 from tools.integrations.list_email_messages import list_email_messages
 from tools.integrations.move_email import move_email
@@ -430,3 +431,119 @@ async def test_move_email_reports_generic_error(monkeypatch: pytest.MonkeyPatch)
     _patch_call(monkeypatch, exc=broker_client.IntegrationError("no such mailbox"))
     out = await move_email("icloud_personal", "INBOX", "42", "Nowhere")
     assert out == "Failed to move '42' from 'INBOX' to 'Nowhere': no such mailbox"
+
+
+# ── read_email_message attachments rendering ─────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_email_message_lists_attachments_with_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a message carries attachments the header block grows an
+    ``Attachments:`` section with one line per attachment — id, filename,
+    mime, and a human-readable size — so the agent can quote the id back
+    to ``download_email_attachment``.
+    """
+    _patch_call(
+        monkeypatch,
+        result={"message": {
+            "header": {
+                "from_": "alice@x", "to": "bob@y",
+                "date": "2026-04-26T09:00:00+00:00", "subject": "files",
+            },
+            "body_text": "see attached",
+            "attachments": [
+                {"id": "2", "filename": "resume.pdf",
+                 "mime_type": "application/pdf", "size": 245_120},
+                {"id": "3", "filename": "photo.jpg",
+                 "mime_type": "image/jpeg", "size": 1_258_291},
+            ],
+        }},
+    )
+    out = await read_email_message("icloud_personal", "INBOX", "100")
+    assert "Attachments:" in out
+    assert "id=2  resume.pdf  (application/pdf, 239.4KB)" in out
+    assert "id=3  photo.jpg  (image/jpeg, 1.2MB)" in out
+    assert "see attached" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_read_email_message_omits_attachments_section_when_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A message with no attachments doesn't render an empty
+    ``Attachments:`` line — the section disappears entirely."""
+    _patch_call(
+        monkeypatch,
+        result={"message": {
+            "header": {
+                "from_": "alice@x", "to": "bob@y",
+                "date": "2026-04-26T09:00:00+00:00", "subject": "hi",
+            },
+            "body_text": "no files here",
+            "attachments": [],
+        }},
+    )
+    out = await read_email_message("icloud_personal", "INBOX", "100")
+    assert "Attachments" not in out
+
+
+# ── download_email_attachment ────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_download_email_attachment_returns_path_and_filename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Happy path: confirmation includes the original filename, the saved
+    path the agent passes to downstream tools, and a human-readable size.
+    """
+    _patch_call(
+        monkeypatch,
+        result={
+            "path": "/home/computron/uploads/resume.pdf",
+            "filename": "resume.pdf",
+            "mime_type": "application/pdf",
+            "size": 245_120,
+        },
+    )
+    out = await download_email_attachment(
+        "icloud_personal", "INBOX", "100", "2",
+    )
+    assert out == (
+        "Saved 'resume.pdf' to /home/computron/uploads/resume.pdf (239.4KB)."
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_download_email_attachment_reports_not_connected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
+    out = await download_email_attachment(
+        "icloud_unknown", "INBOX", "100", "2",
+    )
+    assert out == "Integration 'icloud_unknown' is not connected."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_download_email_attachment_reports_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_call(
+        monkeypatch,
+        exc=broker_client.IntegrationError("no attachment '99' in uid=100"),
+    )
+    out = await download_email_attachment(
+        "icloud_personal", "INBOX", "100", "99",
+    )
+    assert out == (
+        "Failed to download attachment '99' from '100': "
+        "no attachment '99' in uid=100"
+    )

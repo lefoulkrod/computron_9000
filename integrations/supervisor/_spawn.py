@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor.types import HostPath
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,15 @@ async def spawn_broker(
     secret_bundle: dict,
     write_allowed: bool,
     sockets_dir: Path,
+    host_paths: dict[str, HostPath],
 ) -> BrokerHandle:
     """Spawn the broker for ``integration_id`` from its catalog entry.
 
-    Combines the entry's static env, the credential-to-env mapping, and the
-    per-spawn ``INTEGRATION_ID`` / ``BROKER_SOCKET`` / ``WRITE_ALLOWED`` vars.
-    Awaits ``READY\\n`` on the subprocess's stdout before returning.
+    Combines the entry's static env, the credential-to-env mapping, the
+    per-spawn ``INTEGRATION_ID`` / ``BROKER_SOCKET`` / ``WRITE_ALLOWED`` vars,
+    and any host-path bindings the entry declares (each role looked up in
+    ``host_paths`` and injected as the binding's env_var). Awaits ``READY\\n``
+    on the subprocess's stdout before returning.
     """
     sockets_dir.mkdir(parents=True, exist_ok=True)
     socket_path = sockets_dir / f"{integration_id}.sock"
@@ -70,6 +74,15 @@ async def spawn_broker(
             msg = f"env_injection references missing auth field: {blob_key!r}"
             raise BrokerSpawnError(msg)
         env[env_name] = secret_bundle[blob_key]
+    for binding in entry.host_paths:
+        spec = host_paths.get(binding.role)
+        if spec is None:
+            # Catalog references a role the supervisor doesn't know about.
+            # Startup validation should have caught this; the defensive check
+            # here keeps a misconfigured spawn from racing past.
+            msg = f"host_paths references unknown role: {binding.role!r}"
+            raise BrokerSpawnError(msg)
+        env[binding.env_var] = str(spec.path)
     env["INTEGRATION_ID"] = integration_id
     env["BROKER_SOCKET"] = str(socket_path)
     env["WRITE_ALLOWED"] = "true" if write_allowed else "false"

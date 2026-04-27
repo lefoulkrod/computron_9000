@@ -24,9 +24,13 @@ subset works.
 
 from __future__ import annotations
 
+import mimetypes
+import secrets
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, Literal
 
+from integrations._perms import ATTACHMENT_FILE_MODE
 from integrations._rpc import RpcError
 from integrations.brokers.email_broker._caldav_client import CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapClient
@@ -71,11 +75,13 @@ class VerbDispatcher:
         caldav: CalDavClient | None = None,
         *,
         write_allowed: bool,
+        attachments_dir: Path,
     ) -> None:
         self._imap = imap
         self._smtp = smtp
         self._caldav = caldav
         self._write_allowed = write_allowed
+        self._attachments_dir = attachments_dir
 
         # Handler registry — grows as verbs land. Everything in ``_VERB_TYPE``
         # that lacks a handler here falls through to "not implemented."
@@ -84,6 +90,7 @@ class VerbDispatcher:
             "list_messages": self._handle_list_messages,
             "search_messages": self._handle_search_messages,
             "fetch_message": self._handle_fetch_message,
+            "fetch_attachment": self._handle_fetch_attachment,
             "move_message": self._handle_move_message,
         }
         if smtp is not None:
@@ -161,6 +168,33 @@ class VerbDispatcher:
         except LookupError as exc:
             raise RpcError("NOT_FOUND", str(exc)) from exc
         return {"message": message.model_dump()}
+
+    async def _handle_fetch_attachment(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``fetch_attachment {folder, uid, attachment_id}`` → ``{path, filename, mime_type, size}``.
+
+        Writes the attachment bytes to the configured attachments dir and
+        returns the on-disk path. Original filename is preserved when
+        possible; collisions get an 8-char hex suffix on the stem.
+        """
+        folder = _require_str(args, "folder")
+        uid = _require_str(args, "uid")
+        attachment_id = _require_str(args, "attachment_id")
+        try:
+            payload, filename, mime_type = await self._imap.fetch_attachment(
+                folder, uid, attachment_id,
+            )
+        except LookupError as exc:
+            raise RpcError("NOT_FOUND", str(exc)) from exc
+
+        path = _write_attachment(
+            self._attachments_dir, payload, filename, mime_type,
+        )
+        return {
+            "path": str(path),
+            "filename": filename,
+            "mime_type": mime_type,
+            "size": len(payload),
+        }
 
     async def _handle_move_message(self, args: dict[str, Any]) -> dict[str, Any]:
         """``move_message {folder, uid, dest_folder}`` → ``{moved: true}``.
@@ -241,3 +275,27 @@ def _require_str_list(args: dict[str, Any], key: str) -> list[str]:
     if not all(isinstance(v, str) and v for v in value):
         raise RpcError("BAD_REQUEST", f"{key!r} must contain non-empty strings")
     return list(value)
+
+
+def _write_attachment(
+    dir_path: Path, payload: bytes, filename: str, mime_type: str,
+) -> Path:
+    """Write ``payload`` to ``dir_path/<filename>``; dedupe collisions.
+
+    Naming rules: keep the original filename when one was provided;
+    append an 8-char hex suffix to the stem if a same-named file
+    already exists; fall back to a uuid + mime extension when no
+    filename was given.
+    """
+    dir_path.mkdir(parents=True, exist_ok=True)
+    if not filename:
+        ext = mimetypes.guess_extension(mime_type) or ""
+        filename = f"{secrets.token_hex(16)}{ext}"
+    dest = dir_path / filename
+    if dest.exists():
+        stem = dest.stem
+        suffix = dest.suffix
+        dest = dir_path / f"{stem}_{secrets.token_hex(4)}{suffix}"
+    dest.write_bytes(payload)
+    dest.chmod(ATTACHMENT_FILE_MODE)
+    return dest

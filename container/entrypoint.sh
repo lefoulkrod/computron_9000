@@ -28,7 +28,7 @@ export LLM_HOST="${LLM_HOST:-http://localhost:11434}"
 # anything mkdir'd later (e.g. .config) root-owned, which silently breaks
 # Chrome: its crashpad handler can't write to ~/.config/google-chrome and the
 # launcher pipe closes with "recvmsg: Connection reset by peer".
-mkdir -p /home/computron/Desktop /home/computron/downloads
+mkdir -p /home/computron/Desktop /home/computron/downloads /home/computron/uploads
 
 # Copy default Xfce config on first run (named volume starts empty)
 if [ ! -d /home/computron/.config/xfce4/panel ]; then
@@ -38,6 +38,27 @@ fi
 
 chown -R computron:computron /home/computron /var/lib/computron
 chmod 755 /home/computron /var/lib/computron
+
+# ── Shared downloads dir (computron + broker) ────────────────────────────────
+# /home/computron/downloads is the landing place for files the agent
+# retrieves from external sources: browser saves (written by computron via
+# the browser tool) and email attachments (written by broker). Both UIDs
+# need to drop files here, but only computron should have full control of
+# the directory.
+#
+# Mode 3770 = setgid (2) + sticky (1) + 770:
+#  - 770: owner rwx, group rwx, others none
+#  - setgid (2): new files inherit group=broker so a file computron writes
+#    is still readable by broker via group membership and vice-versa
+#  - sticky (1): a process can only delete/rename files it owns. Broker
+#    creates email attachments and can clean those up; broker CANNOT delete
+#    or rename a file computron wrote. computron, as the directory owner,
+#    can still do anything to anything (sticky exempts the dir owner).
+#
+# Net: broker gets enough access to drop attachments and tidy its own GC;
+# computron retains full authority over the folder.
+chown computron:broker /home/computron/downloads
+chmod 3770 /home/computron/downloads
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
 Xvfb ":${_DISPLAY_NUM}" -screen 0 1280x720x24 -ac &

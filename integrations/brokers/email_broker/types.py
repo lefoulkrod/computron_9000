@@ -46,16 +46,45 @@ class MessageHeader(BaseModel):
     date: str = ""
 
 
+class Attachment(BaseModel):
+    """One attachment surfaced from a message's MIME structure.
+
+    Attachments are listed alongside ``body_text`` so the agent can decide
+    whether to download a specific one. The bytes themselves are NOT in
+    this record — the agent calls ``fetch_attachment`` with the ``id`` to
+    receive a path on disk.
+    """
+
+    id: str
+    """IMAP part path (``"2"``, ``"1.2"``, etc.) — opaque to the agent,
+    passed back verbatim to ``fetch_attachment``."""
+
+    filename: str = ""
+    """Original filename from ``Content-Disposition`` / ``Content-Type``
+    ``name=`` param. Empty if neither was set, which usually also means
+    the part wouldn't be classified as an attachment in the first place."""
+
+    mime_type: str = ""
+    """The part's MIME type (``application/pdf``, ``image/jpeg``, etc.)."""
+
+    size: int = 0
+    """Decoded size in bytes — what the file on disk would weigh after
+    base64 / quoted-printable decoding."""
+
+
 class Message(BaseModel):
     """Full message body + envelope.
 
     ``body_text`` is the best-effort plain-text rendering (MIME multipart
     falls back to the ``text/plain`` part, or to a stripped ``text/html``
-    part when no plain alternative exists).
+    part when no plain alternative exists). ``attachments`` lists every
+    MIME part that carries a filename — agents pull the bytes out via the
+    separate ``fetch_attachment`` verb.
     """
 
     header: MessageHeader
     body_text: str = ""
+    attachments: list[Attachment] = []
 
 
 class Calendar(BaseModel):

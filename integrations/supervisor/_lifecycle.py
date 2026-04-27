@@ -20,11 +20,12 @@ from pathlib import Path
 
 from integrations._rpc import serve_rpc
 from integrations.supervisor._app_sock import AppSockHandler
-from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor._catalog import CatalogEntry, validate_host_path_bindings
 from integrations.supervisor._crypto import load_or_init_master_key
 from integrations.supervisor._manager import BrokerManager, ReconcileError
 from integrations.supervisor._registry import Registry
 from integrations.supervisor._store import list_integration_ids
+from integrations.supervisor.types import HostPath
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +56,13 @@ class Supervisor:
         vault_dir: Path,
         app_sock_path: Path,
         sockets_dir: Path,
+        host_paths: dict[str, HostPath],
         catalog: dict[str, CatalogEntry],
     ) -> None:
         self.vault_dir = vault_dir
         self.app_sock_path = app_sock_path
         self.sockets_dir = sockets_dir
+        self.host_paths = host_paths
         self.catalog = catalog
 
         self._master_key: bytes | None = None
@@ -75,6 +78,11 @@ class Supervisor:
         doesn't serve ``list`` / ``resolve`` requests while brokers are
         still mid-respawn — first reader sees a fully-warmed registry.
         """
+        # Catalog/registry agreement is checked up front so a typo in a
+        # catalog entry's host_paths fails the boot rather than the first
+        # spawn for that slug.
+        validate_host_path_bindings(self.catalog, self.host_paths)
+
         self.vault_dir.mkdir(parents=True, exist_ok=True)
         self.sockets_dir.mkdir(parents=True, exist_ok=True)
 
@@ -83,6 +91,7 @@ class Supervisor:
         self._manager = BrokerManager(
             vault_dir=self.vault_dir,
             sockets_dir=self.sockets_dir,
+            host_paths=self.host_paths,
             master_key=self._master_key,
             catalog=self.catalog,
             registry=self._registry,

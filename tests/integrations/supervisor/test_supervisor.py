@@ -29,6 +29,10 @@ import pytest
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from integrations.supervisor._store import enc_path, meta_path
+from tests.integrations.fixtures._host_paths import (
+    EMAIL_BROKER_HOST_PATHS,
+    make_host_paths,
+)
 from tests.integrations.fixtures.fake_email import FakeEmail
 
 
@@ -74,6 +78,7 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
                 "email": "EMAIL_USER",
                 "password": "EMAIL_PASS",
             },
+            host_paths=EMAIL_BROKER_HOST_PATHS,
         ),
     }
 
@@ -87,6 +92,7 @@ async def test_add_then_call_broker_then_resolve_then_remove(tmp_path: Path) -> 
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -166,6 +172,7 @@ async def test_add_with_bad_credentials_returns_auth_error(tmp_path: Path) -> No
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -202,6 +209,7 @@ async def test_add_with_unknown_slug_returns_bad_request(tmp_path: Path) -> None
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -230,6 +238,7 @@ async def test_resolve_unknown_id_returns_not_found(tmp_path: Path) -> None:
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog={},  # empty catalog is fine; resolve doesn't touch it
     )
     await sup.start()
@@ -259,6 +268,7 @@ async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) ->
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -329,6 +339,7 @@ async def test_update_unknown_id_returns_not_found(tmp_path: Path) -> None:
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog={},
     )
     await sup.start()
@@ -355,6 +366,7 @@ async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()

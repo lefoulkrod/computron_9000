@@ -42,6 +42,11 @@ SOCKET_MODE = 0o660
 # (computron) traverse to reach the sockets — write is broker-only.
 RUNTIME_DIR_MODE = 0o750
 
+# Email-attachment files written by the broker into the shared downloads dir.
+# Owner (broker) rw, group (broker — which computron is in) r, others none.
+# Group read is what lets the computron-UID side open these files.
+ATTACHMENT_FILE_MODE = 0o640
+
 # Process-wide umask the supervisor and brokers install at startup. ``0o077``
 # masks every group/other bit, so any subsequent ``mkdir`` / ``open`` /
 # ``write`` produces an owner-only result by default. Explicit chmod calls

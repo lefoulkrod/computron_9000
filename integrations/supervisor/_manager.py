@@ -38,6 +38,7 @@ from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._crypto import DecryptError
 from integrations.supervisor._registry import IntegrationRecord, Registry
 from integrations.supervisor._spawn import BrokerHandle, BrokerSpawnError, spawn_broker
+from integrations.supervisor.types import HostPath
 from integrations.supervisor._store import (
     delete_integration,
     read_meta,
@@ -75,12 +76,14 @@ class BrokerManager:
         *,
         vault_dir: Path,
         sockets_dir: Path,
+        host_paths: dict[str, HostPath],
         master_key: bytes,
         catalog: dict[str, CatalogEntry],
         registry: Registry,
     ) -> None:
         self._vault_dir = vault_dir
         self._sockets_dir = sockets_dir
+        self._host_paths = host_paths
         self._master_key = master_key
         self._catalog = catalog
         self._registry = registry
@@ -140,6 +143,7 @@ class BrokerManager:
                 secret_bundle=auth_blob,
                 write_allowed=write_allowed,
                 sockets_dir=self._sockets_dir,
+                host_paths=self._host_paths,
             )
         except BrokerSpawnError as exc:
             # Roll back — no broker subprocess is running at this point.
@@ -184,6 +188,7 @@ class BrokerManager:
                 secret_bundle=secret_bundle,
                 write_allowed=meta.write_allowed,
                 sockets_dir=self._sockets_dir,
+                host_paths=self._host_paths,
             )
         except BrokerSpawnError as exc:
             kind = "auth rejected" if exc.exit_code == _AUTH_FAIL_EXIT_CODE else "spawn failed"
@@ -287,6 +292,7 @@ class BrokerManager:
                 secret_bundle=secret_bundle,
                 write_allowed=write_allowed,
                 sockets_dir=self._sockets_dir,
+                host_paths=self._host_paths,
             )
         except BrokerSpawnError as exc:
             # New meta is on disk, but we have no live broker. Mark broken
@@ -438,6 +444,7 @@ class BrokerManager:
                 secret_bundle=secret_bundle,
                 write_allowed=record.meta.write_allowed,
                 sockets_dir=self._sockets_dir,
+                host_paths=self._host_paths,
             )
         except BrokerSpawnError as exc:
             raise _RespawnError(str(exc), exit_code=exc.exit_code) from exc

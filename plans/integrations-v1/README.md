@@ -66,3 +66,25 @@ re-grounded against the finished code.
       for the canonical names. Specifically pin down: is "provider" the
       same as "catalog entry"? Is "integration" the user-facing concept,
       the persisted record, or both? Decide and rename inconsistencies.
+- [ ] **Write the integrations write-up in `/docs/`.** The plan docs in
+      this folder describe intent; we still owe a piece in `/docs/` that
+      describes the *finished shape* of the system so future readers
+      don't have to reverse-engineer it from the source. Required
+      sections:
+      - **Architecture overview** — supervisor + per-integration broker
+        subprocesses, the `app.sock` admin RPC vs. the per-broker UDS
+        verbs, where each piece lives.
+      - **Permissions.** The two-UID split inside the container
+        (`computron` 1000, `broker` 1001), the `broker` group with
+        `computron` as a member, and what surfaces it gates: the vault
+        (`/var/lib/computron/vault` mode 0700 broker-only), the runtime
+        sockets dir (`/run/cvault` mode 0750), the admin socket
+        (`/run/cvault/app.sock` mode 0660 broker-group), and the shared
+        downloads dir (`/home/computron/downloads` mode 3770 owned
+        `computron:broker` — setgid + sticky so broker can drop email
+        attachments and clean up its own files but cannot delete files
+        computron wrote).
+      - **Verb inventory** — every verb the broker exposes, args,
+        result shapes, error codes.
+      - **Adding a new integration** — the path from a JSON catalog
+        entry to a working integration, and what stays out of Python.

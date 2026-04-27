@@ -42,15 +42,33 @@ async def read_email_message(integration_id: str, folder: str, uid: str) -> str:
     message = result.get("message", {})
     header = message.get("header", {})
     body = message.get("body_text", "").strip()
+    attachments = message.get("attachments", []) or []
     head_block = (
         f"From: {header.get('from_', '')}\n"
         f"To: {header.get('to', '')}\n"
         f"Date: {header.get('date', '')}\n"
         f"Subject: {header.get('subject', '')}\n"
     )
+    if attachments:
+        head_block += "Attachments:\n"
+        for att in attachments:
+            head_block += (
+                f"  - id={att.get('id', '')}  {att.get('filename', '(unnamed)')}"
+                f"  ({att.get('mime_type', 'application/octet-stream')},"
+                f" {_format_size(att.get('size', 0))})\n"
+            )
     if not body:
         return head_block + "\n(no text body)"
     return head_block + "\n" + body
+
+
+def _format_size(size: int) -> str:
+    """Compact human-readable byte count: ``1.2KB`` / ``245KB`` / ``3.4MB``."""
+    if size < 1024:
+        return f"{size}B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f}KB"
+    return f"{size / (1024 * 1024):.1f}MB"
 
 
 def build_read_email_message_tool(integration_ids: Iterable[str]) -> Callable[..., Any]:
@@ -63,14 +81,16 @@ def build_read_email_message_tool(integration_ids: Iterable[str]) -> Callable[..
 
     _read_email_message.__name__ = read_email_message.__name__
     _read_email_message.__doc__ = (
-        "Read one message's envelope + plain-text body. Valid integration IDs: "
-        f"{ids_line}.\n\n"
+        "Read one message's envelope + plain-text body. If the message has "
+        "attachments, the header block lists them with an id you pass to "
+        "``download_email_attachment`` to pull the bytes onto disk. Valid "
+        f"integration IDs: {ids_line}.\n\n"
         "Args:\n"
         "    integration_id: Which integration to read from.\n"
         "    folder: Mailbox the message lives in (same value used in list_email_messages).\n"
         "    uid: IMAP UID of the message — the value shown in [brackets] by list_email_messages or search_email.\n\n"
         "Returns:\n"
-        "    Plain text — a header block (From/To/Date/Subject) followed by "
-        "the body.\n"
+        "    Plain text — a header block (From/To/Date/Subject, plus an "
+        "Attachments list when present) followed by the body.\n"
     )
     return _read_email_message

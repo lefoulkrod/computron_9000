@@ -52,6 +52,7 @@ async def _run() -> int:
     user = env_required("EMAIL_USER")
     password = env_required("EMAIL_PASS")
     write_allowed = parse_bool(env_required("WRITE_ALLOWED"))
+    attachments_dir = Path(env_required("ATTACHMENTS_DIR"))
 
     # Wipe the password from the process environ once we've captured it into
     # local state. Best-effort hygiene: narrows in-process exposure (debuggers,
@@ -130,7 +131,11 @@ async def _run() -> int:
             return GENERIC_ERROR
 
     dispatcher = VerbDispatcher(
-        imap=imap, smtp=smtp_client, caldav=caldav_client, write_allowed=write_allowed,
+        imap=imap,
+        smtp=smtp_client,
+        caldav=caldav_client,
+        write_allowed=write_allowed,
+        attachments_dir=attachments_dir,
     )
 
     async def handler(verb: str, args: dict[str, Any]) -> dict[str, Any]:

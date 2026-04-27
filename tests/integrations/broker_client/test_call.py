@@ -25,6 +25,10 @@ from integrations import broker_client
 from integrations._rpc import RpcError, serve_rpc
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
+from tests.integrations.fixtures._host_paths import (
+    EMAIL_BROKER_HOST_PATHS,
+    make_host_paths,
+)
 from tests.integrations.fixtures.fake_email import FakeEmail
 
 
@@ -45,6 +49,7 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
                 "email": "EMAIL_USER",
                 "password": "EMAIL_PASS",
             },
+            host_paths=EMAIL_BROKER_HOST_PATHS,
         ),
     }
 
@@ -100,6 +105,7 @@ async def test_call_list_mailboxes_against_real_broker(tmp_path: Path) -> None:
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -130,6 +136,7 @@ async def test_call_raises_not_connected_for_unknown_integration(tmp_path: Path)
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog={},
     )
     await sup.start()
@@ -202,6 +209,7 @@ async def test_call_raises_write_denied_when_write_allowed_is_false(
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -246,6 +254,7 @@ async def test_call_send_message_lands_in_outbox_through_real_broker(
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()
@@ -306,6 +315,7 @@ async def test_call_move_message_relocates_through_real_broker(
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=_test_catalog(fake),
     )
     await sup.start()

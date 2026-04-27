@@ -19,6 +19,10 @@ import pytest
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from integrations.supervisor._store import enc_path, meta_path
+from tests.integrations.fixtures._host_paths import (
+    EMAIL_BROKER_HOST_PATHS,
+    make_host_paths,
+)
 from tests.integrations.fixtures.fake_email import FakeEmail
 
 
@@ -55,6 +59,7 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
                 "email": "EMAIL_USER",
                 "password": "EMAIL_PASS",
             },
+            host_paths=EMAIL_BROKER_HOST_PATHS,
         ),
     }
 
@@ -70,6 +75,7 @@ def _make_supervisor(tmp_path: Path, catalog: dict[str, CatalogEntry]) -> Superv
         vault_dir=tmp_path / "vault",
         app_sock_path=tmp_path / "app.sock",
         sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
         catalog=catalog,
     )
 

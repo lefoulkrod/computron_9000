@@ -129,17 +129,33 @@ class FakeEmail:
         to: str,
         subject: str,
         body: str = "",
+        attachments: list[tuple[str, str, bytes]] | None = None,
         flags: set[str] | None = None,
     ) -> int:
-        """Build a minimal RFC 2822 message and append it. Returns the UID."""
-        raw = (
-            f"From: {from_}\r\n"
-            f"To: {to}\r\n"
-            f"Subject: {subject}\r\n"
-            f"Message-ID: <{uuid.uuid4().hex}@test.local>\r\n"
-            f"\r\n"
-            f"{body}"
-        ).encode("utf-8")
+        """Build an RFC 2822 message and append it. Returns the UID.
+
+        Without attachments this builds a flat ``text/plain`` message.
+        With attachments it builds a ``multipart/mixed`` envelope where
+        the first part is the body and each attachment is a separate
+        part with ``Content-Disposition: attachment; filename=...``.
+        ``attachments`` is a list of ``(filename, mime_type, payload)``
+        tuples — the broker is expected to base64-decode the payload, so
+        we base64-encode it here.
+        """
+        if attachments:
+            raw = _build_multipart(
+                from_=from_, to=to, subject=subject, body=body,
+                attachments=attachments,
+            )
+        else:
+            raw = (
+                f"From: {from_}\r\n"
+                f"To: {to}\r\n"
+                f"Subject: {subject}\r\n"
+                f"Message-ID: <{uuid.uuid4().hex}@test.local>\r\n"
+                f"\r\n"
+                f"{body}"
+            ).encode("utf-8")
         mbox = self.mailboxes.setdefault(mailbox, _Mailbox(mailbox))
         return mbox.append(raw, flags).uid
 
@@ -592,6 +608,55 @@ def _parse_imap_line(line: bytes) -> tuple[str, str]:
     text = line.decode("utf-8", errors="replace").rstrip("\r\n")
     tag, _, rest = text.partition(" ")
     return tag, rest
+
+
+def _build_multipart(
+    *,
+    from_: str,
+    to: str,
+    subject: str,
+    body: str,
+    attachments: list[tuple[str, str, bytes]],
+) -> bytes:
+    """Construct a ``multipart/mixed`` RFC 2822 byte blob.
+
+    Used by :meth:`FakeEmail.add_message` when attachments are present.
+    Each attachment becomes a leaf part with ``Content-Disposition:
+    attachment; filename="..."`` and base64-encoded body, which is the
+    shape Python's ``email`` parser expects to decode back to bytes.
+    """
+    boundary = f"=={uuid.uuid4().hex[:24]}=="
+    lines: list[str] = [
+        f"From: {from_}",
+        f"To: {to}",
+        f"Subject: {subject}",
+        f"Message-ID: <{uuid.uuid4().hex}@test.local>",
+        "MIME-Version: 1.0",
+        f'Content-Type: multipart/mixed; boundary="{boundary}"',
+        "",
+        "This is a multipart message in MIME format.",
+        f"--{boundary}",
+        'Content-Type: text/plain; charset="utf-8"',
+        "Content-Transfer-Encoding: 7bit",
+        "",
+        body,
+    ]
+    for filename, mime_type, payload in attachments:
+        encoded = base64.b64encode(payload).decode("ascii")
+        # Wrap base64 to 76-char lines per RFC 2045.
+        wrapped = "\r\n".join(
+            encoded[i:i + 76] for i in range(0, len(encoded), 76)
+        )
+        lines.extend([
+            f"--{boundary}",
+            f"Content-Type: {mime_type}",
+            "Content-Transfer-Encoding: base64",
+            f'Content-Disposition: attachment; filename="{filename}"',
+            "",
+            wrapped,
+        ])
+    lines.append(f"--{boundary}--")
+    return "\r\n".join(lines).encode("utf-8")
 
 
 _HEADER_FIELDS_RE = re.compile(r"BODY(?:\.PEEK)?\[HEADER\.FIELDS \(([^)]+)\)\]")

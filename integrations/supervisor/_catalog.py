@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from integrations.supervisor.types import HostPath, HostPathBinding
+
 
 @dataclass(frozen=True)
 class CatalogEntry:
@@ -45,6 +47,20 @@ class CatalogEntry:
     reads ``email`` and ``password`` from the decrypted bundle and sets the
     corresponding env vars when it spawns the broker for this slug."""
 
+    host_paths: tuple[HostPathBinding, ...] = ()
+    """Shared directories on the container filesystem this integration's broker
+    consumes. Each binding names a role in the supervisor's host-path registry,
+    the env var the broker subprocess expects, and the access mode (read or
+    write). Empty for integrations that don't touch shared state — the MCP
+    broker, for example."""
+
+
+_EMAIL_HOST_PATHS = (
+    # Email attachments land in the shared "downloads" role alongside browser
+    # saves: both are agent-initiated retrievals from outside the container.
+    HostPathBinding(role="downloads", env_var="ATTACHMENTS_DIR", mode="write"),
+)
+
 
 _ICLOUD = CatalogEntry(
     slug="icloud",
@@ -63,6 +79,7 @@ _ICLOUD = CatalogEntry(
         "email": "EMAIL_USER",
         "password": "EMAIL_PASS",
     },
+    host_paths=_EMAIL_HOST_PATHS,
 )
 
 
@@ -80,6 +97,7 @@ _GMAIL = CatalogEntry(
         "email": "EMAIL_USER",
         "password": "EMAIL_PASS",
     },
+    host_paths=_EMAIL_HOST_PATHS,
 )
 
 
@@ -87,3 +105,24 @@ DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
     "gmail": _GMAIL,
 }
+
+
+def validate_host_path_bindings(
+    catalog: dict[str, CatalogEntry],
+    host_paths: dict[str, HostPath],
+) -> None:
+    """Fail fast if any catalog entry references a role the registry doesn't define.
+
+    Run once at supervisor startup so a typo in a catalog entry's
+    ``host_paths`` trips the boot rather than the first user trying to add
+    an integration. The spawn path checks the same condition defensively —
+    this is just for clearer failure timing.
+    """
+    for slug, entry in catalog.items():
+        for binding in entry.host_paths:
+            if binding.role not in host_paths:
+                msg = (
+                    f"catalog entry {slug!r} binds host-path role "
+                    f"{binding.role!r} which is not in the registry"
+                )
+                raise ValueError(msg)

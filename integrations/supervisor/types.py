@@ -6,9 +6,45 @@ can be imported from anywhere in the supervisor without introducing a cycle.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
+
+
+@dataclass(frozen=True)
+class HostPath:
+    """A directory the supervisor will hand out to brokers that bind its role.
+
+    The fields together record both the location and the permission posture
+    the directory is supposed to have. ``container/entrypoint.sh`` is what
+    actually enforces the posture (it runs as root before any process drops
+    privilege); the values here are the canonical record of what the
+    entrypoint should set, so changes happen in lockstep.
+    """
+
+    path: Path
+    description: str
+    owner: str
+    group: str
+    mode: int
+
+
+@dataclass(frozen=True)
+class HostPathBinding:
+    """Catalog-side opt-in: this integration's broker wants ``role`` at ``env_var``.
+
+    ``role`` names a key in the supervisor's host-path registry (validated at
+    boot). ``env_var`` is the env-var name the broker subprocess expects the
+    resolved path under. ``mode`` records whether the broker reads or writes
+    — informational today, a hook for future enforcement.
+    """
+
+    role: str
+    env_var: str
+    mode: Literal["read", "write"]
 
 
 class IntegrationMeta(BaseModel):
