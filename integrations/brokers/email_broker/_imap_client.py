@@ -128,7 +128,13 @@ class ImapClient:
             return conn
 
         def _blocking_select() -> None:
-            typ, data = conn.select(folder)
+            # Quote the folder name on the wire — Python 3.12's imaplib
+            # does not auto-quote command args, so a name containing a
+            # space (``Sent Messages``, ``[Gmail]/All Mail``) gets parsed
+            # by the server as separate tokens and rejected with
+            # ``BAD: Could not parse command``. iCloud and Gmail both hit
+            # this for any non-INBOX folder with whitespace.
+            typ, data = conn.select(_imap_quote(folder))
             if typ != "OK":
                 msg = f"SELECT {folder!r} failed: {typ} {data!r}"
                 raise RuntimeError(msg)
@@ -189,6 +195,11 @@ class ImapClient:
                 if typ != "OK":
                     msg = f"SEARCH ALL failed: {typ} {data!r}"
                     raise RuntimeError(msg)
+                # An empty mailbox can come back as ``data == [None]``
+                # rather than ``[b""]`` on some servers (notably iCloud);
+                # treat both shapes as zero hits.
+                if not data or data[0] is None:
+                    return []
                 seq_ids = data[0].split()
                 if not seq_ids:
                     return []
@@ -242,6 +253,10 @@ class ImapClient:
                 if typ != "OK":
                     msg = f"SEARCH TEXT failed: {typ} {data!r}"
                     raise RuntimeError(msg)
+                # Same iCloud-style ``[None]`` no-match shape as in
+                # ``list_messages`` — defend against it here too.
+                if not data or data[0] is None:
+                    return []
                 seq_ids = data[0].split()
                 if not seq_ids:
                     return []
@@ -319,7 +334,10 @@ class ImapClient:
                 # any other UID-prefixed command: ``("OK", [b"MOVE completed"])``
                 # on success, ``("NO", [reason])`` if the destination is
                 # missing or the UID isn't in the source.
-                typ, data = conn.uid("MOVE", uid, dest_folder)
+                # Quote the destination — same Python-3.12-imaplib reason as
+                # in ``_ensure_selected``: a name with a space gets parsed as
+                # extra args otherwise.
+                typ, data = conn.uid("MOVE", uid, _imap_quote(dest_folder))
                 if typ != "OK":
                     detail = b" ".join(d for d in data if isinstance(d, bytes))
                     text = detail.decode("utf-8", errors="replace")
@@ -333,6 +351,23 @@ class ImapClient:
                     raise LookupError(msg)
 
             await asyncio.to_thread(_blocking_move)
+
+
+def _imap_quote(name: str) -> str:
+    r"""Wrap an IMAP command argument in a quoted string for the wire.
+
+    Python 3.12's ``imaplib`` does not auto-quote command arguments — it
+    just concatenates them with spaces. A folder name like ``Sent Messages``
+    therefore reaches the server as two tokens, and the server replies
+    ``BAD: Could not parse command``. We quote ourselves: ``Sent Messages``
+    becomes ``"Sent Messages"`` on the wire.
+
+    Embedded ``\`` and ``"`` are backslash-escaped per RFC 3501 quoted
+    strings. Names with non-ASCII codepoints would technically need IMAP
+    modified UTF-7 (RFC 3501 § 5.1.3), but every catalog provider we
+    support today exposes only ASCII folder names, so we don't transcode.
+    """
+    return '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _parse_list_line(line: bytes) -> Mailbox:

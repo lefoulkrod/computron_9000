@@ -28,6 +28,7 @@ import asyncio
 import base64
 import email
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from email.message import Message
@@ -239,7 +240,19 @@ class FakeEmail:
                     writer.write(f"{tag} OK LIST completed\r\n".encode())
 
                 elif cmd_upper == "SELECT":
-                    name = rest.strip().strip('"')
+                    try:
+                        name, leftover = _parse_imap_arg(rest)
+                    except _ImapParseError as exc:
+                        writer.write(f"{tag} BAD {exc}\r\n".encode())
+                        await writer.drain()
+                        continue
+                    if leftover:
+                        # Same shape real iCloud/Gmail return when an
+                        # unquoted folder name with a space is sent: an
+                        # extra token shows up after the mailbox arg.
+                        writer.write(f"{tag} BAD Could not parse command\r\n".encode())
+                        await writer.drain()
+                        continue
                     mbox = self.mailboxes.get(name)
                     if mbox is None:
                         writer.write(f"{tag} NO No such mailbox\r\n".encode())
@@ -250,6 +263,79 @@ class FakeEmail:
                         writer.write(f"* OK [UIDVALIDITY {mbox.uid_validity}] ok\r\n".encode())
                         writer.write(f"* OK [UIDNEXT {mbox.next_uid}] ok\r\n".encode())
                         writer.write(f"{tag} OK [READ-WRITE] SELECT completed\r\n".encode())
+
+                elif cmd_upper == "SEARCH":
+                    # Plain SEARCH — returns sequence numbers (1..N positions).
+                    # Honors ``ALL`` and ``TEXT "query"``; the latter does a
+                    # naive substring match against each message's full bytes,
+                    # which is enough to exercise the broker's match/no-match
+                    # paths against the fake.
+                    if selected is None:
+                        writer.write(f"{tag} BAD Must SELECT first\r\n".encode())
+                    else:
+                        seqs = _eval_search_criteria(rest, selected.messages)
+                        if seqs is None:
+                            writer.write(f"{tag} BAD Could not parse SEARCH\r\n".encode())
+                        else:
+                            line = " ".join(str(s) for s in seqs)
+                            writer.write(f"* SEARCH {line}\r\n".encode())
+                            writer.write(f"{tag} OK SEARCH completed\r\n".encode())
+
+                elif cmd_upper == "FETCH":
+                    # Plain FETCH — same shape as UID FETCH but the id-set is
+                    # sequence numbers, not UIDs. Translates each seq to its
+                    # message by 1-based position in the mailbox list.
+                    if selected is None:
+                        writer.write(f"{tag} BAD Must SELECT first\r\n".encode())
+                        continue
+                    seq_set, _, items = rest.partition(" ")
+                    items = items.strip()
+                    target_msgs: list[_Message] = []
+                    for piece in seq_set.strip().split(","):
+                        piece = piece.strip()
+                        if not piece:
+                            continue
+                        try:
+                            n = int(piece)
+                        except ValueError:
+                            continue
+                        if 1 <= n <= len(selected.messages):
+                            target_msgs.append(selected.messages[n - 1])
+                    items_upper = items.upper()
+                    header_fields = _parse_header_fields(items_upper)
+                    want_body = (
+                        "BODY[]" in items_upper
+                        or "BODY.PEEK[]" in items_upper
+                        or "RFC822" in items_upper
+                    )
+                    want_header = (
+                        "BODY.PEEK[HEADER]" in items_upper
+                        or "BODY[HEADER]" in items_upper
+                    )
+                    for msg in target_msgs:
+                        parts: list[str] = [f"UID {msg.uid}"]
+                        payload_bytes = b""
+                        if want_body:
+                            payload_bytes = msg.raw
+                            parts.append(f"BODY[] {{{len(payload_bytes)}}}")
+                        elif header_fields is not None:
+                            payload_bytes = _extract_header_fields(msg.raw, header_fields)
+                            field_list = " ".join(header_fields)
+                            parts.append(
+                                f"BODY[HEADER.FIELDS ({field_list})] {{{len(payload_bytes)}}}",
+                            )
+                        elif want_header:
+                            payload_bytes = msg.header_bytes()
+                            parts.append(f"BODY[HEADER] {{{len(payload_bytes)}}}")
+                        seq = selected.messages.index(msg) + 1
+                        writer.write(f"* {seq} FETCH ({' '.join(parts)}".encode())
+                        if payload_bytes:
+                            writer.write(b"\r\n")
+                            writer.write(payload_bytes)
+                            writer.write(b")\r\n")
+                        else:
+                            writer.write(b")\r\n")
+                    writer.write(f"{tag} OK FETCH completed\r\n".encode())
 
                 elif cmd_upper == "UID" and rest.upper().startswith("SEARCH"):
                     # UID SEARCH ALL — return all UIDs in the selected mailbox.
@@ -270,13 +356,19 @@ class FakeEmail:
                     uid_set, _, items = fetch_args.partition(" ")
                     items = items.strip()
                     target_uids = _parse_uid_set(uid_set.strip(), selected)
-                    want_header = "BODY.PEEK[HEADER]" in items.upper() or "BODY[HEADER]" in items.upper()
+                    items_upper = items.upper()
+                    want_header = "BODY.PEEK[HEADER]" in items_upper or "BODY[HEADER]" in items_upper
                     want_body = (
-                        "BODY[]" in items.upper()
-                        or "BODY.PEEK[]" in items.upper()
-                        or "RFC822" in items.upper()
+                        "BODY[]" in items_upper
+                        or "BODY.PEEK[]" in items_upper
+                        or "RFC822" in items_upper
                     )
-                    want_flags = "FLAGS" in items.upper()
+                    want_flags = "FLAGS" in items_upper
+                    # Partial-header request: ``BODY.PEEK[HEADER.FIELDS (FROM TO ..)]``.
+                    # Real servers return only the named header lines; we
+                    # extract them out of the message's full header block so
+                    # the wire shape matches.
+                    header_fields = _parse_header_fields(items_upper)
                     for uid in target_uids:
                         msg = next((m for m in selected.messages if m.uid == uid), None)
                         if msg is None:
@@ -288,6 +380,12 @@ class FakeEmail:
                         if want_body:
                             payload_bytes = msg.raw
                             parts.append(f"BODY[] {{{len(payload_bytes)}}}")
+                        elif header_fields is not None:
+                            payload_bytes = _extract_header_fields(msg.raw, header_fields)
+                            field_list = " ".join(header_fields)
+                            parts.append(
+                                f"BODY[HEADER.FIELDS ({field_list})] {{{len(payload_bytes)}}}",
+                            )
                         elif want_header:
                             payload_bytes = msg.header_bytes()
                             parts.append(f"BODY[HEADER] {{{len(payload_bytes)}}}")
@@ -334,8 +432,17 @@ class FakeEmail:
                         writer.write(f"{tag} BAD Must SELECT first\r\n".encode())
                         continue
                     _, _, move_args = rest.partition(" ")
-                    uid_set, _, dest = move_args.partition(" ")
-                    dest = dest.strip().strip('"')
+                    uid_set, _, dest_rest = move_args.partition(" ")
+                    try:
+                        dest, leftover = _parse_imap_arg(dest_rest)
+                    except _ImapParseError as exc:
+                        writer.write(f"{tag} BAD {exc}\r\n".encode())
+                        await writer.drain()
+                        continue
+                    if leftover:
+                        writer.write(f"{tag} BAD Could not parse command\r\n".encode())
+                        await writer.drain()
+                        continue
                     target_uids = _parse_uid_set(uid_set.strip(), selected)
                     dest_mbox = self.mailboxes.setdefault(dest, _Mailbox(dest))
                     for uid in target_uids:
@@ -485,6 +592,107 @@ def _parse_imap_line(line: bytes) -> tuple[str, str]:
     text = line.decode("utf-8", errors="replace").rstrip("\r\n")
     tag, _, rest = text.partition(" ")
     return tag, rest
+
+
+_HEADER_FIELDS_RE = re.compile(r"BODY(?:\.PEEK)?\[HEADER\.FIELDS \(([^)]+)\)\]")
+
+
+def _eval_search_criteria(rest: str, messages: list[_Message]) -> list[int] | None:
+    """Evaluate a plain ``SEARCH`` criteria string; return sequence numbers.
+
+    Supports ``ALL`` (every message) and ``TEXT "query"`` (substring match
+    against the full raw bytes of each message). Anything else returns
+    ``None`` so the handler can respond ``BAD``. Sequence numbers are
+    1-based positions in ``messages``.
+    """
+    rest = rest.strip()
+    if rest.upper() == "ALL":
+        return list(range(1, len(messages) + 1))
+    if rest.upper().startswith("TEXT "):
+        try:
+            query, leftover = _parse_imap_arg(rest[5:])
+        except _ImapParseError:
+            return None
+        if leftover:
+            return None
+        needle = query.encode("utf-8", errors="replace").lower()
+        return [
+            i + 1 for i, m in enumerate(messages)
+            if needle in m.raw.lower()
+        ]
+    return None
+
+
+def _parse_header_fields(items_upper: str) -> list[str] | None:
+    """Extract the field list from ``BODY[.PEEK][HEADER.FIELDS (A B C)]``.
+
+    Returns ``None`` if the items spec doesn't include a HEADER.FIELDS
+    clause. Returns the field names (uppercased) otherwise.
+    """
+    match = _HEADER_FIELDS_RE.search(items_upper)
+    if not match:
+        return None
+    return match.group(1).split()
+
+
+def _extract_header_fields(raw: bytes, fields: list[str]) -> bytes:
+    """Return only the named header lines from a full RFC 822 message blob.
+
+    Mirrors what real IMAP servers do for ``BODY[HEADER.FIELDS (...)]``:
+    only the listed headers (case-insensitive) plus a trailing CRLF.
+    """
+    sep = b"\r\n\r\n"
+    end = raw.find(sep)
+    header_block = raw[:end] if end != -1 else raw
+    wanted = {f.upper() for f in fields}
+    out: list[bytes] = []
+    for line in header_block.split(b"\r\n"):
+        if not line:
+            continue
+        name, _, _ = line.partition(b":")
+        if name.strip().upper().decode("ascii", errors="replace") in wanted:
+            out.append(line)
+    if out:
+        return b"\r\n".join(out) + b"\r\n\r\n"
+    return b"\r\n"
+
+
+class _ImapParseError(Exception):
+    """Raised when an IMAP arg can't be parsed; the handler turns this into a BAD reply."""
+
+
+def _parse_imap_arg(rest: str) -> tuple[str, str]:
+    r"""Parse one IMAP arg (quoted string or atom) from ``rest``.
+
+    Returns ``(value, leftover)``. The leftover is the remaining text
+    after the arg with any leading whitespace stripped. A quoted form
+    like ``"Sent Messages" something`` returns ``("Sent Messages", "something")``;
+    an unquoted form like ``Sent Messages`` returns ``("Sent", "Messages")``
+    so the caller can detect the trailing-token-was-not-empty case and
+    respond ``BAD`` (mirrors what real iCloud/Gmail do for unquoted
+    multi-token folder names).
+
+    Raises :class:`_ImapParseError` on a quoted string that never closes.
+    """
+    rest = rest.lstrip()
+    if not rest:
+        raise _ImapParseError("missing argument")
+    if rest.startswith('"'):
+        out: list[str] = []
+        i = 1
+        while i < len(rest):
+            c = rest[i]
+            if c == "\\" and i + 1 < len(rest):
+                out.append(rest[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                return "".join(out), rest[i + 1:].lstrip()
+            out.append(c)
+            i += 1
+        raise _ImapParseError("unterminated quoted string")
+    head, _, tail = rest.partition(" ")
+    return head, tail.lstrip()
 
 
 def _split_imap_args(text: str) -> list[str]:

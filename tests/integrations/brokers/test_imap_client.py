@@ -153,3 +153,99 @@ async def test_move_message_creates_destination_mailbox_on_fly() -> None:
     assert len(fake.mailboxes["Archive/2026"].messages) == 1
 
 
+@pytest.mark.unit
+def test_imap_quote_wraps_and_escapes() -> None:
+    """The wire-quoting helper produces RFC-3501 quoted strings.
+
+    Plain ASCII names without special chars still get the surrounding
+    quotes (callers don't decide; quoting is unconditional). Embedded
+    backslash and double-quote get backslash-escaped so iCloud's parser
+    doesn't see an unbalanced string.
+    """
+    from integrations.brokers.email_broker._imap_client import _imap_quote
+
+    assert _imap_quote("INBOX") == '"INBOX"'
+    assert _imap_quote("Sent Messages") == '"Sent Messages"'
+    assert _imap_quote("[Gmail]/All Mail") == '"[Gmail]/All Mail"'
+    # Backslash → \\, double-quote → \"
+    assert _imap_quote('weird"name') == '"weird\\"name"'
+    assert _imap_quote("with\\backslash") == '"with\\\\backslash"'
+
+
+@pytest.mark.asyncio
+async def test_select_folder_with_space_in_name() -> None:
+    """Regression: iCloud / Gmail return ``BAD: Could not parse command``
+    when ``SELECT`` is sent with an unquoted multi-token mailbox name
+    (Python 3.12 ``imaplib`` does not auto-quote). The fake fixture now
+    enforces the same parse rules, so this test would fail without the
+    ``_imap_quote`` wrap in ``_ensure_selected``.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        # Seed a folder that exists on real iCloud and trips the bug.
+        fake.add_message(
+            "Sent Messages", from_=fake.user, to="x@y", subject="hello",
+        )
+        client = await _connected_client(fake)
+        headers = await client.list_messages("Sent Messages", limit=10)
+    finally:
+        await fake.stop()
+    assert len(headers) == 1
+    assert headers[0].subject == "hello"
+
+
+@pytest.mark.asyncio
+async def test_move_message_to_folder_with_space() -> None:
+    """Same quoting fix applies to ``UID MOVE``'s destination — moving to
+    ``Sent Messages`` (or any iCloud-style multi-word folder) needs the
+    destination quoted on the wire.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uid = fake.add_message(
+            "INBOX", from_="a@b.com", to=fake.user, subject="archive me",
+        )
+        client = await _connected_client(fake)
+        await client.move_message("INBOX", str(uid), "Sent Messages")
+    finally:
+        await fake.stop()
+    assert fake.mailboxes["INBOX"].messages == []
+    assert len(fake.mailboxes["Sent Messages"].messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_messages_returns_empty_for_empty_mailbox() -> None:
+    """Regression: iCloud's IMAP returns ``data == [None]`` (not ``[b""]``)
+    when ``SEARCH ALL`` matches zero messages, which crashed the parser
+    with ``AttributeError: 'NoneType' object has no attribute 'split'``.
+    An empty mailbox should return ``[]``, not raise.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        # INBOX is seeded empty by the fixture; no messages added.
+        client = await _connected_client(fake)
+        headers = await client.list_messages("INBOX", limit=10)
+    finally:
+        await fake.stop()
+    assert headers == []
+
+
+@pytest.mark.asyncio
+async def test_search_messages_returns_empty_when_no_match() -> None:
+    """Same ``[None]`` shape applies to ``SEARCH TEXT`` — a query with zero
+    matches shouldn't blow up the parser.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        fake.add_message("INBOX", from_="a@b.com", to=fake.user, subject="hi", body="world")
+        client = await _connected_client(fake)
+        headers = await client.search_messages("INBOX", "nonexistent_unique_token", limit=10)
+    finally:
+        await fake.stop()
+    assert headers == []
+
+
