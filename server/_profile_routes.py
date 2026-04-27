@@ -108,6 +108,10 @@ async def handle_delete_profile(request: web.Request) -> web.Response:
     # Check for task usage
     usage = _get_profile_usage(profile_id)
     if usage:
+        logger.warning(
+            "Refused delete of profile '%s': in use by %d task(s)",
+            profile_id, len(usage),
+        )
         return web.json_response({
             "error": "Profile is in use by tasks",
             "usage": usage,
