@@ -1,4 +1,4 @@
-import styles from './Message.module.css';
+import styles from './FileOutput.module.css';
 import { canPreviewFile } from '../utils/fileTypes.js';
 import FileIcon from './icons/FileIcon.jsx';
 import ImageIcon from './icons/ImageIcon.jsx';

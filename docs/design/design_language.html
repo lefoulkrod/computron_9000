@@ -1828,6 +1828,52 @@ body {
   line-height: 1.5;
 }
 
+/* ── Error State ─────────────────────────────────────────
+   Sad-path twin of Empty State. Use when a panel fails to
+   load (network/server error) &mdash; not for "no data yet"
+   (that's Empty State) and not for an action-triggered error
+   (that's Callout).
+   ─────────────────────────────────────────────────────── */
+.error-state {
+  display: flex; flex-direction: column; align-items: center;
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+  background: var(--canvas);
+  border: 1px dashed var(--danger-muted);
+  border-radius: var(--radius-lg);
+  max-width: 540px;
+}
+.error-state-icon {
+  font-size: 28px;
+  color: var(--danger);
+  margin-bottom: var(--sp-3);
+}
+.error-state-heading {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.error-state-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 400px;
+  margin-bottom: var(--sp-3);
+}
+.error-state-detail {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-bottom: var(--sp-3);
+  max-width: 480px;
+  word-break: break-word;
+}
+
 /* ── Toast ───────────────────────────────────────────── */
 .toast {
   display: flex; align-items: flex-start; gap: 12px;
@@ -1849,6 +1895,88 @@ body {
 .toast.error .toast-icon { color: var(--danger); }
 .toast.info { background: var(--accent-muted); border-color: var(--accent-muted); }
 .toast.info .toast-icon { color: var(--accent); }
+
+/* ── Callout ─────────────────────────────────────────────
+   Inline, panel-level status block. Differs from Toast:
+   Toast floats over the UI and auto-dismisses; Callout is
+   anchored in flow, persists until resolved or dismissed,
+   and may hold a structured body (lists, links, buttons).
+   ─────────────────────────────────────────────────────── */
+.callout {
+  display: flex; flex-direction: column;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  overflow: hidden;
+  animation: slideInDown 160ms var(--ease-out, cubic-bezier(0,0,0.2,1));
+}
+.callout-head {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 12px 16px;
+}
+.callout-icon { font-size: 16px; line-height: 1.2; flex-shrink: 0; margin-top: 1px; }
+.callout-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.callout-title {
+  font-family: var(--font-brand);
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+.callout-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.callout-close {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-tertiary); font-size: 14px; padding: 2px 4px;
+  flex-shrink: 0;
+}
+.callout-close:hover { color: var(--text-primary); }
+
+/* Optional structured body — list of related items */
+.callout-list {
+  list-style: none; margin: 0;
+  padding: 0 16px 12px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.callout-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.callout-item .callout-kind {
+  font-family: var(--font-code); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+.callout-item .callout-itemtext { color: var(--text-primary); }
+.callout-item .callout-itemtext .muted { color: var(--text-secondary); margin-right: 6px; }
+.callout-item .callout-itemtext .sep   { color: var(--text-tertiary); margin-right: 6px; }
+
+/* Optional footnote — overflow message under the list */
+.callout-footnote {
+  padding: 8px 16px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-top: 1px dashed var(--border);
+}
+
+/* Tone variants — only the icon carries the tone colour;
+   title stays neutral, matching Toast. */
+.callout.danger  { background: var(--danger-muted);  border-color: var(--danger-muted); }
+.callout.danger  .callout-icon { color: var(--danger); }
+.callout.warning { background: var(--warning-muted); border-color: var(--warning-muted); }
+.callout.warning .callout-icon { color: var(--warning); }
+.callout.info    { background: var(--accent-muted);  border-color: var(--accent-muted); }
+.callout.info    .callout-icon { color: var(--accent); }
+.callout.success { background: var(--success-muted); border-color: var(--success-muted); }
+.callout.success .callout-icon { color: var(--success); }
+
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* ── Info Tooltip ────────────────────────────────────── */
 .tooltip-trigger {
@@ -2451,7 +2579,6 @@ body {
 .dl-fpreview-content.image { display: flex; align-items: center; justify-content: center; padding: 20px; background: #000; }
 .dl-fpreview-content.image .placeholder { width: 100%; height: 220px; }
 
-</style>
 .file-pill-btn {
   display: inline-flex; align-items: center; gap: 4px;
   font-family: var(--font-brand);
@@ -2579,12 +2706,24 @@ body {
           <div class="swatch-info"><span class="swatch-name">Success</span><span class="swatch-value">--success</span></div>
         </div>
         <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--success-muted)"></div>
+          <div class="swatch-info"><span class="swatch-name">Success Muted</span><span class="swatch-value">--success-muted</span></div>
+        </div>
+        <div class="palette-swatch">
           <div class="swatch-color" style="background: var(--warning)"></div>
           <div class="swatch-info"><span class="swatch-name">Warning</span><span class="swatch-value">--warning</span></div>
         </div>
         <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--warning-muted)"></div>
+          <div class="swatch-info"><span class="swatch-name">Warning Muted</span><span class="swatch-value">--warning-muted</span></div>
+        </div>
+        <div class="palette-swatch">
           <div class="swatch-color" style="background: var(--danger)"></div>
           <div class="swatch-info"><span class="swatch-name">Danger</span><span class="swatch-value">--danger</span></div>
+        </div>
+        <div class="palette-swatch">
+          <div class="swatch-color" style="background: var(--danger-muted)"></div>
+          <div class="swatch-info"><span class="swatch-name">Danger Muted</span><span class="swatch-value">--danger-muted</span></div>
         </div>
       </div>
 
@@ -2775,6 +2914,12 @@ body {
         Use <code>--sp-1</code> for tight gaps (badge padding, icon margins). <code>--sp-2</code> for
         button-y/inline spacing. <code>--sp-3</code> for panel/card padding and form gaps.
         <code>--sp-4</code> for section spacing. <code>--sp-6</code>+ for major layout gaps.
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px;max-width:680px;line-height:1.5">
+        <strong style="color:var(--text-secondary)">Sub-scale exception.</strong>
+        A small set of tight inline elements &mdash; inline code, badges, chips, micro-buttons (the
+        copy-code button, codeblock header) &mdash; legitimately sit below the 4px base. These may use
+        raw px values (commonly 1px, 2px, 5px, 6px, 10px) for internal padding.
       </div>
     </div>
 
@@ -3572,6 +3717,33 @@ body {
       </div>
     </div>
 
+    <!-- Error State -->
+    <div class="subsection">
+      <div class="subsection-label">Error State</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;max-width:760px;margin-bottom:12px">
+        Panel-level failure to load. Pairs with Empty State: same shape, sad tone. Use when a panel
+        can&apos;t render its data (network failure, server 5xx, missing dependency).
+        Decision: <strong>Empty State</strong> for &ldquo;no data yet&rdquo;,
+        <strong>Error State</strong> for &ldquo;couldn&apos;t fetch the data&rdquo;,
+        <strong>Callout</strong> for &ldquo;your action didn&apos;t go through&rdquo;.
+      </div>
+
+      <div class="error-state" role="alert">
+        <i class="bi bi-exclamation-circle error-state-icon"></i>
+        <div class="error-state-heading">Couldn&apos;t load integrations</div>
+        <div class="error-state-desc">The supervisor isn&apos;t responding. Check that the integrations service is running, then retry.</div>
+        <div class="error-state-detail">NETWORK &middot; ECONNREFUSED /run/cvault/app.sock</div>
+        <button class="btn btn-outline"><i class="bi bi-arrow-clockwise"></i> Retry</button>
+      </div>
+
+      <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-code);margin-top:12px;line-height:1.6;max-width:760px">
+        // Anatomy: <code>.error-state-icon</code> + <code>.error-state-heading</code> are required.<br>
+        // <code>.error-state-desc</code>, <code>.error-state-detail</code>, and the retry button are optional &mdash; include the detail row only when it helps the user (or oncall) act.<br>
+        // Use <code>.btn-outline</code> for retry: the panel state is loud enough; the action shouldn&apos;t shout too.<br>
+        // Replaces the panel content entirely &mdash; do not stack with Empty State.
+      </div>
+    </div>
+
     <!-- Toasts -->
     <div class="subsection">
       <div class="subsection-label">Toasts</div>
@@ -3600,6 +3772,119 @@ body {
           </div>
           <button class="toast-close"><i class="bi bi-x-lg"></i></button>
         </div>
+      </div>
+    </div>
+
+    <!-- Callout -->
+    <div class="subsection">
+      <div class="subsection-label">Callout</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;max-width:760px;margin-bottom:12px">
+        Inline, panel-level status block. Anchored in flow under the action that triggered it &mdash;
+        persists until the user resolves or dismisses it. Use <strong>Callout</strong> when the message
+        carries actionable detail the user must read (validation errors, conflict lists, blocking warnings).
+        Use <strong>Toast</strong> for transient, glanceable confirmations (saved, scheduled, copied).
+        Tones: <code>danger</code>, <code>warning</code>, <code>info</code>, <code>success</code> &mdash;
+        all driven from the status tokens.
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;max-width:760px">
+
+        <!-- Danger callout with structured list (the canonical "blocked by references" case) -->
+        <div class="callout danger" role="alert">
+          <div class="callout-head">
+            <i class="bi bi-exclamation-circle callout-icon"></i>
+            <div class="callout-body">
+              <div class="callout-title">Can&apos;t delete &mdash; profile is in use</div>
+              <div class="callout-desc">Remove this profile from the 3 task(s) below, then try again.</div>
+            </div>
+            <button class="callout-close" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <ul class="callout-list">
+            <li class="callout-item">
+              <span class="callout-kind">task</span>
+              <span class="callout-itemtext">
+                <span class="muted">Weekly HF report</span>
+                <span class="sep">&rsaquo;</span>
+                Fetch popular new models from Hugging Face
+              </span>
+              <a href="#" style="font-family:var(--font-brand);font-size:10px;color:var(--accent);background:var(--accent-muted);border:1px solid var(--accent-muted);border-radius:var(--radius-sm);padding:3px 7px;text-decoration:none">Open</a>
+            </li>
+            <li class="callout-item">
+              <span class="callout-kind">task</span>
+              <span class="callout-itemtext">
+                <span class="muted">Weekly HF report</span>
+                <span class="sep">&rsaquo;</span>
+                Summarize trending repositories
+              </span>
+              <a href="#" style="font-family:var(--font-brand);font-size:10px;color:var(--accent);background:var(--accent-muted);border:1px solid var(--accent-muted);border-radius:var(--radius-sm);padding:3px 7px;text-decoration:none">Open</a>
+            </li>
+            <li class="callout-item">
+              <span class="callout-kind">task</span>
+              <span class="callout-itemtext">
+                <span class="muted">Daily news brief</span>
+                <span class="sep">&rsaquo;</span>
+                Browse top stories
+              </span>
+              <a href="#" style="font-family:var(--font-brand);font-size:10px;color:var(--accent);background:var(--accent-muted);border:1px solid var(--accent-muted);border-radius:var(--radius-sm);padding:3px 7px;text-decoration:none">Open</a>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Danger callout with footnote (overflow case: cap the list at 6, footnote shows the rest) -->
+        <div class="callout danger" role="alert">
+          <div class="callout-head">
+            <i class="bi bi-exclamation-circle callout-icon"></i>
+            <div class="callout-body">
+              <div class="callout-title">Can&apos;t delete &mdash; profile is in use</div>
+              <div class="callout-desc">Used by <strong>14 task(s)</strong> across 4 goals. Showing the first 6.</div>
+            </div>
+            <button class="callout-close" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <div class="callout-footnote">+ 8 more &mdash; <a href="#" style="color:var(--accent)">view all</a></div>
+        </div>
+
+        <!-- Warning callout, header-only (no list, no close) -->
+        <div class="callout warning" role="status">
+          <div class="callout-head">
+            <i class="bi bi-exclamation-triangle callout-icon"></i>
+            <div class="callout-body">
+              <div class="callout-title">Unsaved changes</div>
+              <div class="callout-desc">You have edits that haven&apos;t been saved. Save or revert before switching profiles.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info callout -->
+        <div class="callout info" role="status">
+          <div class="callout-head">
+            <i class="bi bi-info-circle callout-icon"></i>
+            <div class="callout-body">
+              <div class="callout-title">Default agent locked</div>
+              <div class="callout-desc">Computron is the default agent and can&apos;t be disabled. Set a different default in Settings to change this.</div>
+            </div>
+            <button class="callout-close" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </div>
+
+        <!-- Success callout -->
+        <div class="callout success" role="status">
+          <div class="callout-head">
+            <i class="bi bi-check-circle callout-icon"></i>
+            <div class="callout-body">
+              <div class="callout-title">Migration complete</div>
+              <div class="callout-desc">All 14 tasks reassigned to <code class="inline-code">computron</code>. You can now safely delete this profile.</div>
+            </div>
+            <button class="callout-close" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-code);margin-top:12px;line-height:1.6;max-width:760px">
+        // Anatomy: <code>.callout-head</code> (icon + title + optional desc + optional close) is required.<br>
+        // Optional <code>.callout-list</code> for related items (cap at 6, then a <code>.callout-footnote</code>).<br>
+        // Optional close button only when the message is dismissable without resolution.<br>
+        // Place inline under the trigger (e.g. action bar). Do not float; do not stack &mdash; one Callout per panel at a time.
       </div>
     </div>
 
@@ -4576,10 +4861,10 @@ body {
 
       <div class="icon-group-label">Status &amp; feedback</div>
       <div class="icon-grid">
-        <div class="icon-row"><span class="glyph" style="color:var(--success)"><i class="bi bi-check-circle"></i></span><div class="icon-info"><span class="icon-name">bi-check-circle</span><span class="icon-usage">Success toast, wizard complete</span></div></div>
-        <div class="icon-row"><span class="glyph" style="color:var(--danger)"><i class="bi bi-exclamation-circle"></i></span><div class="icon-info"><span class="icon-name">bi-exclamation-circle</span><span class="icon-usage">Error toast</span></div></div>
-        <div class="icon-row"><span class="glyph" style="color:var(--warning)"><i class="bi bi-exclamation-triangle"></i></span><div class="icon-info"><span class="icon-name">bi-exclamation-triangle</span><span class="icon-usage">Warning indicator</span></div></div>
-        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-info-circle"></i></span><div class="icon-info"><span class="icon-name">bi-info-circle</span><span class="icon-usage">Info toast, tooltip trigger</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--success)"><i class="bi bi-check-circle"></i></span><div class="icon-info"><span class="icon-name">bi-check-circle</span><span class="icon-usage">Success toast, success Callout, wizard complete</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--danger)"><i class="bi bi-exclamation-circle"></i></span><div class="icon-info"><span class="icon-name">bi-exclamation-circle</span><span class="icon-usage">Error toast, danger Callout, Error State</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--warning)"><i class="bi bi-exclamation-triangle"></i></span><div class="icon-info"><span class="icon-name">bi-exclamation-triangle</span><span class="icon-usage">Warning indicator, warning Callout</span></div></div>
+        <div class="icon-row"><span class="glyph" style="color:var(--accent)"><i class="bi bi-info-circle"></i></span><div class="icon-info"><span class="icon-name">bi-info-circle</span><span class="icon-usage">Info toast, info Callout, tooltip trigger</span></div></div>
         <div class="icon-row"><span class="glyph" style="color:var(--success)"><i class="bi bi-lightning-charge-fill"></i></span><div class="icon-info"><span class="icon-name">bi-lightning-charge-fill</span><span class="icon-usage">Runner active indicator</span></div></div>
       </div>
 

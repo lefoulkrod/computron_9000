@@ -76,6 +76,13 @@
     flex-shrink: 0;
 }
 
+/* Slot for the inline delete-conflict Callout. Matches form-body
+   horizontal padding so the block lines up with the actions bar. */
+.calloutSlot {
+    padding: 0.75rem 1.5rem 0;
+    flex-shrink: 0;
+}
+
 .actionsRight {
     display: flex;
     align-items: center;

@@ -6,12 +6,18 @@ import ProfileBuilder from './ProfileBuilder.jsx';
 export default function ProfilesTab({ profilesHook, features }) {
     const [allModels, setAllModels] = useState([]);
     const [draftProfile, setDraftProfile] = useState(null);
+    const [deleteConflict, setDeleteConflict] = useState(null);
 
     useEffect(() => {
         fetch('/api/models').then(r => r.json()).then(data => {
             setAllModels(data.models || []);
         }).catch(() => {});
     }, []);
+
+    // Drop any stale conflict when the user switches profiles.
+    useEffect(() => {
+        setDeleteConflict(null);
+    }, [profilesHook.selectedProfileId, draftProfile]);
 
     const availableSkills = [
         'coder', 'browser', 'goal_planner',
@@ -63,10 +69,14 @@ export default function ProfilesTab({ profilesHook, features }) {
                 onDelete={async (id) => {
                     if (draftProfile && draftProfile.id === id) {
                         setDraftProfile(null);
+                        setDeleteConflict(null);
                         return;
                     }
-                    await profilesHook.deleteProfile(id);
+                    const result = await profilesHook.deleteProfile(id);
+                    setDeleteConflict(result?.conflict ? result : null);
                 }}
+                deleteConflict={deleteConflict}
+                onDismissDeleteConflict={() => setDeleteConflict(null)}
                 onDuplicate={async (id) => {
                     if (draftProfile && draftProfile.id === id) return;
                     const result = await profilesHook.duplicateProfile(id);

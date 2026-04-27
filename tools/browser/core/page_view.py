@@ -96,6 +96,7 @@ _STRUCTURED_SNAPSHOT_JS = """
   function getRole(el) {
     const explicit = el.getAttribute('role');
     if (explicit) return explicit;
+    if (el.isContentEditable) return 'textbox';
     const tag = el.tagName;
     switch (tag) {
       case 'A': return el.hasAttribute('href') ? 'link' : null;

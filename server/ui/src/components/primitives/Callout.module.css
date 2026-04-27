@@ -1,0 +1,114 @@
+/* Callout — inline, panel-level status block.
+   See SIGNAL design language §11 Feedback for the spec. */
+
+.callout {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    overflow: hidden;
+    animation: slideInDown 160ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+}
+
+.icon {
+    font-size: 16px;
+    line-height: 1.2;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.title {
+    font-family: var(--font-brand);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+}
+
+.desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    padding: 2px 4px;
+    flex-shrink: 0;
+}
+.close:hover { color: var(--text-primary); }
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0 var(--sp-4) var(--sp-3) var(--sp-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+}
+
+.item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+}
+
+.kind {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+}
+
+.itemText {
+    color: var(--text-primary);
+}
+
+.footnote {
+    padding: var(--sp-2) var(--sp-4) var(--sp-3);
+    font-size: 11px;
+    color: var(--text-secondary);
+    border-top: 1px dashed var(--border);
+}
+
+/* Tone variants — only the icon carries the tone colour;
+   title stays neutral, matching Toast. */
+.danger  { background: var(--danger-muted);  border-color: var(--danger-muted); }
+.danger  .icon { color: var(--danger); }
+.warning { background: var(--warning-muted); border-color: var(--warning-muted); }
+.warning .icon { color: var(--warning); }
+.info    { background: var(--accent-muted);  border-color: var(--accent-muted); }
+.info    .icon { color: var(--accent); }
+.success { background: var(--success-muted); border-color: var(--success-muted); }
+.success .icon { color: var(--success); }
+
+@keyframes slideInDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+}
