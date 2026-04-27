@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
+import ToggleSwitch from '../ToggleSwitch.jsx';
 import AddIntegrationModal from './AddIntegrationModal.jsx';
 import styles from './IntegrationsTab.module.css';
 
@@ -46,6 +47,11 @@ export default function IntegrationsTab() {
     const [loadError, setLoadError] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [removeError, setRemoveError] = useState(null);
+    // Per-id transient state for the inline write_allowed toggle. Pending
+    // ids show a busy badge; errors are surfaced inline on the row so the
+    // user sees which integration's flip failed.
+    const [togglePending, setTogglePending] = useState(() => new Set());
+    const [toggleError, setToggleError] = useState(null);
 
     const fetchIntegrations = useCallback(async () => {
         setLoading(true);
@@ -103,6 +109,39 @@ export default function IntegrationsTab() {
         }
     }, [fetchIntegrations]);
 
+    const handleToggleWriteAllowed = useCallback(async (id, nextValue) => {
+        setToggleError(null);
+        setTogglePending(prev => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+        });
+        try {
+            const resp = await fetch(`/api/integrations/${encodeURIComponent(id)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ write_allowed: nextValue }),
+            });
+            if (!resp.ok) {
+                const body = await resp.json().catch(() => ({}));
+                setToggleError({
+                    id,
+                    message: body?.error?.message || `HTTP ${resp.status}`,
+                });
+                return;
+            }
+            await fetchIntegrations();
+        } catch (err) {
+            setToggleError({ id, message: err?.message || 'Request failed' });
+        } finally {
+            setTogglePending(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
+        }
+    }, [fetchIntegrations]);
+
     const grouped = groupByCategory(integrations);
 
     return (
@@ -126,6 +165,9 @@ export default function IntegrationsTab() {
                     onAdd={() => setModalOpen(true)}
                     onRemove={handleRemove}
                     removeError={removeError}
+                    onToggleWriteAllowed={handleToggleWriteAllowed}
+                    togglePending={togglePending}
+                    toggleError={toggleError}
                 />
             )}
 
@@ -191,7 +233,10 @@ function EmptyState({ onAdd }) {
     );
 }
 
-function PopulatedList({ grouped, onAdd, onRemove, removeError }) {
+function PopulatedList({
+    grouped, onAdd, onRemove, removeError,
+    onToggleWriteAllowed, togglePending, toggleError,
+}) {
     return (
         <div className={styles.list}>
             {grouped.map(([category, rows]) => (
@@ -201,8 +246,16 @@ function PopulatedList({ grouped, onAdd, onRemove, removeError }) {
                         <Row
                             key={row.id}
                             row={row}
-                            error={removeError?.id === row.id ? removeError.message : null}
+                            error={
+                                removeError?.id === row.id ? removeError.message
+                                    : toggleError?.id === row.id ? toggleError.message
+                                        : null
+                            }
+                            toggling={togglePending.has(row.id)}
                             onRemove={() => onRemove(row.id)}
+                            onToggleWriteAllowed={
+                                (nextValue) => onToggleWriteAllowed(row.id, nextValue)
+                            }
                         />
                     ))}
                 </section>
@@ -220,8 +273,17 @@ function PopulatedList({ grouped, onAdd, onRemove, removeError }) {
     );
 }
 
-function Row({ row, error, onRemove }) {
+function Row({ row, error, toggling, onRemove, onToggleWriteAllowed }) {
     const view = STATE_VIEW[row.state] ?? STATE_VIEW.running;
+    // Toggle is only useful when the broker is actually live — for a
+    // broken / auth_failed integration the user's path forward is
+    // remove + re-add, not a permission flip.
+    const canToggle = row.state === 'running' && !toggling;
+    const toggleTitle = toggling
+        ? 'Updating permissions…'
+        : (row.write_allowed
+            ? 'Writes enabled — click to disable'
+            : 'Read only — click to enable writes');
     return (
         <div className={styles.row}>
             <div className={styles.rowIcon}><i className={`bi ${row.meta.icon}`} /></div>
@@ -231,9 +293,6 @@ function Row({ row, error, onRemove }) {
                     <span className={`${styles.badge} ${styles[view.badgeClass]}`}>
                         <span className={`${styles.statusDot} ${styles[view.dotClass]}`} />
                         {view.label}
-                    </span>
-                    <span className={styles.badge}>
-                        {row.write_allowed ? 'Read and write' : 'Read only'}
                     </span>
                 </div>
                 <div className={styles.rowDesc}>{row.id}</div>
@@ -249,6 +308,19 @@ function Row({ row, error, onRemove }) {
                 )}
             </div>
             <div className={styles.rowControl}>
+                <label
+                    className={`${styles.writesToggle} ${row.write_allowed ? styles.active : ''}`}
+                    title={toggleTitle}
+                >
+                    <span>Writes</span>
+                    <ToggleSwitch
+                        checked={row.write_allowed}
+                        onChange={(e) => onToggleWriteAllowed(e.target.checked)}
+                        disabled={!canToggle}
+                        data-testid={`integrations-toggle-write-${row.id}`}
+                        aria-label={toggleTitle}
+                    />
+                </label>
                 <ConfirmButton
                     icon="bi-trash3"
                     confirmLabel="Confirm?"

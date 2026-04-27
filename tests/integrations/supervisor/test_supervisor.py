@@ -240,3 +240,145 @@ async def test_resolve_unknown_id_returns_not_found(tmp_path: Path) -> None:
         assert resp["error"]["code"] == "NOT_FOUND"
     finally:
         await sup.stop()
+
+
+@pytest.mark.asyncio
+async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) -> None:
+    """``update {id, write_allowed}`` rewrites meta on disk, replaces the
+    broker subprocess with a new one carrying the new ``WRITE_ALLOWED`` env,
+    and the broker's WRITE_DENIED gate now reflects the flip.
+
+    Strategy: add with write_allowed=False, observe send_message returns
+    WRITE_DENIED, flip to True via update, observe send_message no longer
+    returns WRITE_DENIED. Different broker PID before vs after proves the
+    respawn happened.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        catalog=_test_catalog(fake),
+    )
+    await sup.start()
+    try:
+        add_resp = await _rpc_call(
+            sup.app_sock_path,
+            "add",
+            {
+                "slug": "icloud",
+                "user_suffix": "personal",
+                "label": "iCloud test",
+                "auth_blob": {"email": fake.user, "password": fake.password},
+                "write_allowed": False,
+            },
+        )
+        assert "error" not in add_resp, add_resp
+        old_pid = sup._registry.get("icloud_personal").broker.proc.pid
+        broker_socket_old = Path(add_resp["result"]["socket"])
+
+        # Confirm the gate is currently active: send_message → WRITE_DENIED.
+        denied = await _rpc_call(
+            broker_socket_old,
+            "send_message",
+            {"to": ["a@b.com"], "subject": "x", "body": "y"},
+        )
+        assert denied["error"]["code"] == "WRITE_DENIED"
+
+        # Flip the policy.
+        upd_resp = await _rpc_call(
+            sup.app_sock_path,
+            "update",
+            {"id": "icloud_personal", "write_allowed": True},
+        )
+        assert "error" not in upd_resp, upd_resp
+        assert upd_resp["result"]["write_allowed"] is True
+
+        # New broker with a different PID is now serving.
+        new_record = sup._registry.get("icloud_personal")
+        assert new_record.broker.proc.pid != old_pid
+        assert new_record.state == "running"
+
+        # Old socket got rebound to the new broker — WRITE_DENIED is gone.
+        broker_socket_new = Path(upd_resp["result"]["socket"])
+        send_resp = await _rpc_call(
+            broker_socket_new,
+            "send_message",
+            {"to": ["a@b.com"], "subject": "x", "body": "y"},
+        )
+        assert "error" not in send_resp, send_resp
+        assert send_resp["result"]["sent"] is True
+
+        # On-disk meta reflects the new policy too — would survive restart.
+        list_resp = await _rpc_call(sup.app_sock_path, "list", {})
+        listed = next(
+            i for i in list_resp["result"]["integrations"]
+            if i["id"] == "icloud_personal"
+        )
+        assert listed["write_allowed"] is True
+    finally:
+        await sup.stop()
+        await fake.stop()
+
+
+@pytest.mark.asyncio
+async def test_update_unknown_id_returns_not_found(tmp_path: Path) -> None:
+    """``update`` against an integration that doesn't exist is NOT_FOUND."""
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        catalog={},
+    )
+    await sup.start()
+    try:
+        resp = await _rpc_call(
+            sup.app_sock_path,
+            "update",
+            {"id": "never_added", "write_allowed": True},
+        )
+        assert resp["error"]["code"] == "NOT_FOUND"
+    finally:
+        await sup.stop()
+
+
+@pytest.mark.asyncio
+async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
+    """Setting ``write_allowed`` to its current value doesn't restart the
+    broker — the manager short-circuits and returns the existing record.
+    No respawn means the broker PID is unchanged.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        catalog=_test_catalog(fake),
+    )
+    await sup.start()
+    try:
+        await _rpc_call(
+            sup.app_sock_path,
+            "add",
+            {
+                "slug": "icloud",
+                "user_suffix": "personal",
+                "label": "iCloud test",
+                "auth_blob": {"email": fake.user, "password": fake.password},
+                "write_allowed": False,
+            },
+        )
+        old_pid = sup._registry.get("icloud_personal").broker.proc.pid
+
+        upd_resp = await _rpc_call(
+            sup.app_sock_path,
+            "update",
+            {"id": "icloud_personal", "write_allowed": False},
+        )
+        assert "error" not in upd_resp, upd_resp
+        assert sup._registry.get("icloud_personal").broker.proc.pid == old_pid
+    finally:
+        await sup.stop()
+        await fake.stop()

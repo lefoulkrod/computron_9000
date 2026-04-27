@@ -171,6 +171,24 @@
     white-space: nowrap;
 }
 
+/* "Writes" label + ToggleSwitch primitive, read together as one unit.
+ * The switch primitive owns its own visuals; this just lays them out
+ * with the brand-font label and tints the label accent when active. */
+.writesToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+}
+
+.writesToggle.active {
+    color: var(--accent);
+}
+
 .badgeSuccess {
     background: var(--success-muted);
     color: var(--success);

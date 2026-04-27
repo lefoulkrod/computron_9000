@@ -177,6 +177,63 @@ async def handle_add_integration(request: web.Request) -> web.Response:
     return web.json_response(result, status=201)
 
 
+async def handle_update_integration(request: web.Request) -> web.Response:
+    """``PATCH /api/integrations/{id}`` — flip ``write_allowed`` on an integration.
+
+    Forwards to the supervisor's ``update`` verb, which rewrites meta on
+    disk and re-spawns the broker so the new ``WRITE_ALLOWED`` env takes
+    effect. Brief downtime (~SIGTERM grace + READY handshake) during the
+    respawn — clients that try to call a verb on this integration in that
+    window may get a transient ``IntegrationError``.
+
+    On success: ``200 OK`` with the updated record. On unknown id: ``404``.
+    """
+    integration_id = request.match_info.get("id", "")
+    if not integration_id:
+        return _error_response(
+            {"code": "BAD_REQUEST", "message": "integration id is required"}
+        )
+
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return web.json_response(
+            {"error": {"code": "BAD_REQUEST", "message": "invalid JSON body"}},
+            status=400,
+        )
+    if not isinstance(body, dict) or "write_allowed" not in body:
+        return _error_response(
+            {"code": "BAD_REQUEST", "message": "'write_allowed' required (bool)"}
+        )
+    write_allowed = bool(body.get("write_allowed"))
+
+    try:
+        resp = await _supervisor_rpc(
+            "update", {"id": integration_id, "write_allowed": write_allowed},
+        )
+    except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
+        logger.warning("supervisor unreachable for update: %s", exc)
+        return web.json_response(
+            {"error": {"code": "UNAVAILABLE", "message": "Integrations service isn't running."}},
+            status=503,
+        )
+    if "error" in resp:
+        return _error_response(resp["error"])
+
+    # Refresh the in-process cache with the new write_allowed value so the
+    # agent's next turn surfaces tools matching the new policy. The
+    # supervisor's update response carries the same shape as add.
+    result = resp["result"]
+    mark_added(
+        integration_id,
+        result.get("slug") or "",
+        result.get("capabilities") or (),
+        result.get("state") or "running",
+        bool(result.get("write_allowed", False)),
+    )
+    return web.json_response(result)
+
+
 async def handle_remove_integration(request: web.Request) -> web.Response:
     """``DELETE /api/integrations/{id}`` — tear down a registered integration.
 
@@ -212,6 +269,9 @@ def register_integrations_routes(app: web.Application) -> None:
     """Register ``/api/integrations`` routes on the application."""
     app.router.add_route("GET", "/api/integrations", handle_list_integrations)
     app.router.add_route("POST", "/api/integrations", handle_add_integration)
+    app.router.add_route(
+        "PATCH", "/api/integrations/{id}", handle_update_integration,
+    )
     app.router.add_route(
         "DELETE", "/api/integrations/{id}", handle_remove_integration,
     )

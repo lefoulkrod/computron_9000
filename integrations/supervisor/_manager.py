@@ -223,6 +223,93 @@ class BrokerManager:
         delete_integration(self._vault_dir, integration_id)
         logger.info("removed integration %s", integration_id)
 
+    async def update(
+        self, integration_id: str, *, write_allowed: bool,
+    ) -> IntegrationRecord:
+        """Flip the ``write_allowed`` policy on an existing integration.
+
+        The broker reads ``WRITE_ALLOWED`` from its env at spawn time, so a
+        flip means: rewrite the on-disk meta, terminate the running broker,
+        then re-spawn it with the new env. There's a brief gap (~SIGTERM
+        grace + READY handshake) during which the broker socket is gone.
+
+        Raises :class:`RpcError` (NOT_FOUND) if the id isn't registered.
+        Returns the updated record on success. If the respawn fails, the
+        meta on disk has the new value and the in-memory record is marked
+        ``broken``; the caller's recovery path is remove + re-add.
+        """
+        record = self._registry.get(integration_id)
+        if record is None:
+            raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
+
+        # No-op shortcut: nothing to do, no respawn cost incurred.
+        if record.meta.write_allowed == write_allowed:
+            return record
+
+        entry = self._catalog.get(record.meta.slug)
+        if entry is None:
+            # The slug existed when the integration was added but no longer
+            # does — same shape as the reconcile path's catalog-drift error.
+            raise RpcError(
+                "BAD_REQUEST",
+                f"catalog has no entry for slug {record.meta.slug!r}",
+            )
+
+        try:
+            secret_bundle = read_secrets(
+                self._vault_dir, integration_id, self._master_key,
+            )
+        except DecryptError as exc:
+            raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
+
+        new_meta = record.meta.model_copy(
+            update={"write_allowed": write_allowed, "updated_at": datetime.now(UTC)},
+        )
+        # Commit the meta change before we touch the running process. If we
+        # crash between this write and the respawn, the next reconcile
+        # picks up the new value.
+        write_meta(self._vault_dir, new_meta)
+
+        # Stop the watcher and terminate before respawn — same dance as
+        # remove(), but we keep the registry entry so the new handle slots
+        # back in under the same id.
+        record.expected_termination = True
+        watcher = self._watchers.pop(integration_id, None)
+        if watcher is not None and not watcher.done():
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+        await self._terminate_broker(record.broker)
+
+        try:
+            new_handle = await spawn_broker(
+                entry=entry,
+                integration_id=integration_id,
+                secret_bundle=secret_bundle,
+                write_allowed=write_allowed,
+                sockets_dir=self._sockets_dir,
+            )
+        except BrokerSpawnError as exc:
+            # New meta is on disk, but we have no live broker. Mark broken
+            # so list/resolve surface the failure; user remediation is
+            # remove + re-add.
+            record.state = "broken"
+            if exc.exit_code == _AUTH_FAIL_EXIT_CODE:
+                record.state = "auth_failed"
+                raise RpcError("AUTH", "upstream rejected credentials") from exc
+            raise RpcError("UPSTREAM", f"broker respawn failed: {exc}") from exc
+
+        # Reset terminal-state flags now that the new broker is live.
+        record.broker = new_handle
+        record.meta = new_meta
+        record.state = "running"
+        record.expected_termination = False
+        self._start_watcher(integration_id)
+        logger.info(
+            "updated integration %s (write_allowed=%s)",
+            integration_id, write_allowed,
+        )
+        return record
+
     async def stop_all(self) -> None:
         """Supervisor shutdown: stop all watchers, then SIGTERM all brokers."""
         for record in self._registry.list():

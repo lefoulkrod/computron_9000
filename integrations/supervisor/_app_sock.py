@@ -1,4 +1,4 @@
-"""``app.sock`` RPC handler: ``add`` / ``list`` / ``resolve`` / ``remove``.
+"""``app.sock`` RPC handler: ``add`` / ``list`` / ``resolve`` / ``update`` / ``remove``.
 
 The app server (UID ``computron``) is the only legitimate client. Per the
 broker RPC framing, requests are length-prefixed JSON frames with
@@ -11,6 +11,9 @@ their payloads:
   every active integration.
 - ``resolve``: ``{id}`` → ``{id, socket, write_allowed}``. The app server's
   broker_client calls this to locate a broker before any tool call.
+- ``update``: ``{id, write_allowed}`` → the same record shape as ``add``.
+  Rewrites meta, terminates the broker, re-spawns with new env so the
+  broker's WRITE_ALLOWED gate reflects the new policy.
 - ``remove``: ``{id}`` → ``{id}``. SIGTERMs broker, deletes vault files.
 
 The handler is a thin dispatcher: it parses args and delegates to a
@@ -52,6 +55,8 @@ class AppSockHandler:
             return self._list()
         if verb == "resolve":
             return self._resolve(args)
+        if verb == "update":
+            return await self._update(args)
         if verb == "remove":
             return await self._remove(args)
         msg = f"unknown verb: {verb}"
@@ -84,6 +89,16 @@ class AppSockHandler:
             "socket": str(record.broker.socket_path),
             "write_allowed": record.meta.write_allowed,
         }
+
+    async def _update(self, args: dict[str, Any]) -> dict[str, Any]:
+        integration_id = _require_str(args, "id")
+        if "write_allowed" not in args:
+            raise RpcError("BAD_REQUEST", "'write_allowed' required (bool)")
+        write_allowed = bool(args["write_allowed"])
+        record = await self._manager.update(
+            integration_id, write_allowed=write_allowed,
+        )
+        return _record_to_dict(record)
 
     async def _remove(self, args: dict[str, Any]) -> dict[str, Any]:
         integration_id = _require_str(args, "id")
