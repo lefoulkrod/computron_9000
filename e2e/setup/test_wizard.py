@@ -1,8 +1,8 @@
-"""E2E tests for the setup wizard.
+"""Post-condition tests for the setup wizard.
 
-The wizard itself is run by the session-scoped fixture in conftest.py.
-These tests verify everything was persisted and the app is in the
-correct state after the wizard completes.
+The wizard itself is driven by the autouse fixture in `e2e/_setup.py`
+before any test runs. These tests verify that everything the wizard
+should have persisted actually did.
 """
 
 from playwright.sync_api import Page, expect
@@ -29,24 +29,18 @@ def test_settings_default_agent(page: Page):
 
 def test_settings_vision_model(page: Page, wizard_choices):
     """The vision model should match what was picked in the wizard."""
-    if not wizard_choices:
-        return  # Setup was already done before tests ran
     settings = page.request.get("/api/settings").json()
     assert settings["vision_model"] == wizard_choices["vision_model"]
 
 
 def test_settings_compaction_model(page: Page, wizard_choices):
     """The compaction model should be set to the main model."""
-    if not wizard_choices:
-        return
     settings = page.request.get("/api/settings").json()
     assert settings["compaction_model"] == wizard_choices["main_model"]
 
 
 def test_ootb_profiles_all_have_same_model(page: Page, wizard_choices):
     """All OOTB profiles should have the picked model set."""
-    if not wizard_choices:
-        return
     profiles = page.request.get("/api/profiles").json()
     ootb_ids = {"computron", "code_expert", "research_agent", "creative_writer"}
     for profile in profiles:

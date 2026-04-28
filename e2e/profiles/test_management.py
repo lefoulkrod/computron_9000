@@ -2,12 +2,7 @@
 
 from playwright.sync_api import Page
 
-
-def _open_settings(page: Page):
-    """Navigate to the settings page, Agent Profiles tab."""
-    page.goto("/")
-    page.get_by_role("button", name="Settings", exact=True).click()
-    page.get_by_role("button", name="Agent Profiles").wait_for(state="visible")
+from e2e.pages import SettingsPage
 
 
 def _create_profile(page: Page, name: str) -> str:
@@ -28,24 +23,16 @@ def _delete_profile(page: Page, profile_id: str):
     page.request.delete(f"/api/profiles/{profile_id}")
 
 
-def _select_profile_in_list(page: Page, profile_id: str):
-    """Click a profile in the left-hand profile list by test ID."""
-    page.locator(f"[data-testid='profile-item-{profile_id}']").click()
-    page.locator("input[placeholder='Profile name']").wait_for(state="visible")
-
-
 def test_edit_profile_persists(page: Page):
     """Edit an existing profile's name and description, verify changes saved."""
     profile_id = _create_profile(page, "Edit Target")
     try:
-        _open_settings(page)
-        _select_profile_in_list(page, profile_id)
+        settings = SettingsPage(page).goto()
+        settings.profiles.select(profile_id)
 
-        name_input = page.locator("input[placeholder='Profile name']")
-        name_input.fill("Edited Agent")
-        page.locator("input[placeholder='Short description']").fill("Updated description")
-
-        page.get_by_role("button", name="Save").click()
+        settings.builder.name_input.fill("Edited Agent")
+        settings.builder.description_input.fill("Updated description")
+        settings.builder.save()
         page.wait_for_timeout(500)
 
         profile = page.request.get(f"/api/profiles/{profile_id}").json()
@@ -59,10 +46,9 @@ def test_duplicate_profile(page: Page):
     """Duplicate a profile and verify the copy exists with correct values."""
     profile_id = _create_profile(page, "Dup Source")
     try:
-        _open_settings(page)
-        _select_profile_in_list(page, profile_id)
-
-        page.get_by_role("button", name="Duplicate").click()
+        settings = SettingsPage(page).goto()
+        settings.profiles.select(profile_id)
+        settings.builder.duplicate()
         page.wait_for_timeout(500)
 
         profiles = page.request.get("/api/profiles").json()
@@ -77,10 +63,9 @@ def test_duplicate_profile(page: Page):
 def test_delete_profile(page: Page):
     """Delete a profile via the UI and verify it's gone."""
     profile_id = _create_profile(page, "Delete Me")
-    _open_settings(page)
-    _select_profile_in_list(page, profile_id)
-
-    page.get_by_role("button", name="Delete", exact=True).click()
+    settings = SettingsPage(page).goto()
+    settings.profiles.select(profile_id)
+    settings.builder.delete()
     page.wait_for_timeout(500)
 
     profiles = page.request.get("/api/profiles").json()

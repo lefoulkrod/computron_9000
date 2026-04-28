@@ -11,11 +11,7 @@ Covers:
 
 from playwright.sync_api import Page, expect
 
-
-def _open_settings(page: Page):
-    page.goto("/")
-    page.get_by_role("button", name="Settings", exact=True).click()
-    page.get_by_role("button", name="Agent Profiles").wait_for(state="visible")
+from e2e.pages import SettingsPage
 
 
 def _create_profile_via_api(page: Page, profile_id: str, name: str) -> None:
@@ -40,16 +36,15 @@ def test_disable_profile_hides_from_chat_dropdown(page: Page):
     _create_profile_via_api(page, profile_id, "Disable Me")
 
     try:
-        _open_settings(page)
-        page.locator(f"[data-testid='profile-item-{profile_id}']").click()
-        page.locator("input[placeholder='Profile name']").wait_for(state="visible")
+        settings = SettingsPage(page).goto()
+        settings.profiles.select(profile_id)
 
         # Flip the enabled toggle off
-        toggle = page.locator("[data-testid='profile-enabled-toggle'] input[type='checkbox']")
+        toggle = settings.builder.enabled_toggle
         expect(toggle).to_be_checked()
         toggle.uncheck()
 
-        page.get_by_role("button", name="Save").click()
+        settings.builder.save()
         page.wait_for_timeout(500)
 
         # API: enabled-only list should NOT include it
@@ -65,7 +60,7 @@ def test_disable_profile_hides_from_chat_dropdown(page: Page):
         assert match["enabled"] is False
 
         # Chat panel dropdown: the option should not be present
-        page.get_by_role("button", name="Settings", exact=True).click()  # close settings
+        settings.close()
         chat_selector = page.get_by_label("Agent profile")
         expect(chat_selector).to_be_visible()
         option = chat_selector.locator("option", has_text="Disable Me")
@@ -77,22 +72,20 @@ def test_disable_profile_hides_from_chat_dropdown(page: Page):
 def test_disable_default_profile_shows_inline_error(page: Page):
     """Attempting to disable the currently-set default_agent is blocked."""
     # Read current default so we can target it precisely
-    settings = page.request.get("/api/settings").json()
-    default_id = settings.get("default_agent", "computron")
+    settings_data = page.request.get("/api/settings").json()
+    default_id = settings_data.get("default_agent", "computron")
 
-    _open_settings(page)
-    page.locator(f"[data-testid='profile-item-{default_id}']").click()
-    page.locator("input[placeholder='Profile name']").wait_for(state="visible")
+    settings = SettingsPage(page).goto()
+    settings.profiles.select(default_id)
 
-    toggle = page.locator("[data-testid='profile-enabled-toggle'] input[type='checkbox']")
+    toggle = settings.builder.enabled_toggle
     expect(toggle).to_be_checked()
     toggle.uncheck()
-    page.get_by_role("button", name="Save").click()
+    settings.builder.save()
 
     # Inline error appears
-    error = page.locator("[data-testid='profile-save-error']")
-    expect(error).to_be_visible()
-    expect(error).to_contain_text("default")
+    expect(settings.builder.save_error).to_be_visible()
+    expect(settings.builder.save_error).to_contain_text("default")
 
     # Toggle should revert to checked
     expect(toggle).to_be_checked()
@@ -116,8 +109,8 @@ def test_disabled_badge_visible_in_profile_list(page: Page):
     })
 
     try:
-        _open_settings(page)
-        item = page.locator(f"[data-testid='profile-item-{profile_id}']")
+        settings = SettingsPage(page).goto()
+        item = settings.profiles.item(profile_id)
         expect(item).to_be_visible()
         # The disabled badge is a child span with the badgeDisabled class
         badge = item.locator("span[class*='badgeDisabled']")
@@ -140,14 +133,13 @@ def test_reenable_profile_restores_it(page: Page):
     })
 
     try:
-        _open_settings(page)
-        page.locator(f"[data-testid='profile-item-{profile_id}']").click()
-        page.locator("input[placeholder='Profile name']").wait_for(state="visible")
+        settings = SettingsPage(page).goto()
+        settings.profiles.select(profile_id)
 
-        toggle = page.locator("[data-testid='profile-enabled-toggle'] input[type='checkbox']")
+        toggle = settings.builder.enabled_toggle
         expect(toggle).not_to_be_checked()
         toggle.check()
-        page.get_by_role("button", name="Save").click()
+        settings.builder.save()
         page.wait_for_timeout(500)
 
         # Enabled-only list now includes it
