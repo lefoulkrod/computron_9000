@@ -9,6 +9,8 @@ side effects beyond reading the project ``config.yaml``.
 
 from __future__ import annotations
 
+import base64
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -382,6 +384,76 @@ async def test_send_email_reports_generic_error(monkeypatch: pytest.MonkeyPatch)
         "icloud_personal", to=["a@b.com"], subject="s", body="b",
     )
     assert out == "Failed to send via 'icloud_personal': smtp down"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_reads_attachment_paths_and_encodes_to_broker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """The tool reads each attachment path off disk, derives a mime_type from
+    the extension, and base64-encodes the bytes before handing the structured
+    list to the broker. The broker side never sees the raw filesystem path.
+    """
+    payload = b"\x89PNG fake-png-bytes"
+    attachment = tmp_path / "logo.png"
+    attachment.write_bytes(payload)
+
+    captured: dict[str, Any] = {}
+
+    async def _capture(integration_id: str, verb: str, args: dict, *, app_sock_path: str) -> Any:
+        captured["args"] = args
+        return {"sent": True, "message_id": "<abc@me.com>"}
+
+    monkeypatch.setattr(broker_client, "call", _capture)
+
+    await send_email(
+        "icloud_personal",
+        to=["a@b.com"],
+        subject="hi",
+        body="see attached",
+        attachments=[str(attachment)],
+    )
+
+    sent_attachments = captured["args"]["attachments"]
+    assert len(sent_attachments) == 1
+    item = sent_attachments[0]
+    assert item["filename"] == "logo.png"
+    assert item["mime_type"] == "image/png"
+    assert base64.b64decode(item["data_b64"]) == payload
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_email_reports_missing_attachment_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A path that doesn't exist surfaces as a plain-text error. Critically,
+    the broker is never called — we don't want a partial transaction where
+    the message goes out without the attachment the agent thought it was
+    sending.
+    """
+    called = False
+
+    async def _called(*_args: Any, **_kwargs: Any) -> Any:
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(broker_client, "call", _called)
+
+    missing = tmp_path / "does_not_exist.pdf"
+    out = await send_email(
+        "icloud_personal",
+        to=["a@b.com"],
+        subject="hi",
+        body="x",
+        attachments=[str(missing)],
+    )
+
+    assert "Cannot read attachment" in out
+    assert str(missing) in out
+    assert called is False
 
 
 # ── move_email ───────────────────────────────────────────────────────────────

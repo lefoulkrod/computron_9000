@@ -123,3 +123,9 @@ class Event(BaseModel):
 
     description: str = ""
     """Free-form description / body."""
+
+
+# (filename, mime_type, raw bytes). The verb layer is the one that knows
+# about the wire-level base64; by the time bytes reach the SMTP client
+# they're already decoded into raw form.
+OutboundAttachment = tuple[str, str, bytes]

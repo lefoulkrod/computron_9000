@@ -21,8 +21,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
+from collections.abc import Sequence
 from email.message import EmailMessage
 from email.utils import make_msgid
+
+from integrations.brokers.email_broker.types import OutboundAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -91,12 +94,17 @@ class SmtpClient:
         to: list[str],
         subject: str,
         body: str,
+        attachments: Sequence[OutboundAttachment] = (),
     ) -> str:
-        """Send a plain-text message; return the ``Message-ID`` header.
+        """Send a message; return the ``Message-ID`` header.
 
         ``to`` is a list of bare addresses. We attach a generated
         ``Message-ID`` and return it so callers can correlate the send with
         later IMAP fetches from the Sent folder.
+
+        When ``attachments`` is non-empty the message becomes
+        ``multipart/mixed``: a ``text/plain`` part with the body and one
+        ``Content-Disposition: attachment`` part per file.
         """
         async with self._lock:
             msg = EmailMessage()
@@ -106,6 +114,17 @@ class SmtpClient:
             message_id = make_msgid(domain=self._user.split("@", 1)[-1] or "localhost")
             msg["Message-ID"] = message_id
             msg.set_content(body)
+            for filename, mime_type, data in attachments:
+                # ``mime_type`` is "<maintype>/<subtype>"; fall back to
+                # application/octet-stream if it's malformed (the verb layer
+                # already validates non-empty, but typo-shaped values like
+                # "pdf" without a slash would otherwise tank add_attachment).
+                maintype, _, subtype = mime_type.partition("/")
+                if not subtype:
+                    maintype, subtype = "application", "octet-stream"
+                msg.add_attachment(
+                    data, maintype=maintype, subtype=subtype, filename=filename,
+                )
 
             def _blocking_send() -> None:
                 conn = self._smtp

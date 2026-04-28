@@ -9,13 +9,15 @@ subprocess-level broker tests.)
 
 from __future__ import annotations
 
+import base64
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from integrations._rpc import RpcError
 from integrations.brokers.email_broker._verbs import VerbDispatcher
-from integrations.brokers.email_broker.types import Mailbox
+from integrations.brokers.email_broker.types import Mailbox, OutboundAttachment
 
 
 class _StubImapClient:
@@ -73,8 +75,14 @@ class _StubSmtp:
         to: list[str],
         subject: str,
         body: str,
+        attachments: Sequence[OutboundAttachment] = (),
     ) -> str:
-        self.calls.append({"to": to, "subject": subject, "body": body})
+        self.calls.append({
+            "to": to,
+            "subject": subject,
+            "body": body,
+            "attachments": list(attachments),
+        })
         return "<stub@id>"
 
 
@@ -165,7 +173,7 @@ async def test_dispatch_send_message_calls_smtp_and_returns_message_id(tmp_path:
 
     assert result == {"sent": True, "message_id": "<stub@id>"}
     assert smtp.calls == [
-        {"to": ["a@b.com"], "subject": "hi", "body": "hello"},
+        {"to": ["a@b.com"], "subject": "hi", "body": "hello", "attachments": []},
     ]
 
 
@@ -181,6 +189,120 @@ async def test_dispatch_send_message_rejects_missing_to(tmp_path: Path) -> None:
         )
     assert excinfo.value.code == "BAD_REQUEST"
     assert "'to'" in excinfo.value.message
+
+
+@pytest.mark.asyncio
+async def test_dispatch_send_message_decodes_attachments_and_passes_bytes(
+    tmp_path: Path,
+) -> None:
+    """Happy path with attachments: bytes are base64-decoded once at the verb
+    boundary so the SMTP client sees raw ``OutboundAttachment`` tuples, not
+    the wire-level dicts."""
+    smtp = _StubSmtp()
+    dispatcher = VerbDispatcher(
+        imap=_StubImapClient(), smtp=smtp,
+        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+    )
+
+    payload = b"\x89PNG fake png"
+    await dispatcher.dispatch(
+        "send_message",
+        {
+            "to": ["a@b.com"],
+            "subject": "hi",
+            "body": "see attached",
+            "attachments": [
+                {
+                    "filename": "logo.png",
+                    "mime_type": "image/png",
+                    "data_b64": base64.b64encode(payload).decode("ascii"),
+                },
+            ],
+        },
+    )
+
+    assert smtp.calls[0]["attachments"] == [("logo.png", "image/png", payload)]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_send_message_rejects_invalid_base64(tmp_path: Path) -> None:
+    """Garbage in ``data_b64`` is a wire-level encoding bug — surface as BAD_REQUEST."""
+    smtp = _StubSmtp()
+    dispatcher = VerbDispatcher(
+        imap=_StubImapClient(), smtp=smtp,
+        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+    )
+    with pytest.raises(RpcError) as excinfo:
+        await dispatcher.dispatch(
+            "send_message",
+            {
+                "to": ["a@b.com"], "subject": "x", "body": "y",
+                "attachments": [
+                    {"filename": "f", "mime_type": "text/plain", "data_b64": "not!base64!"},
+                ],
+            },
+        )
+    assert excinfo.value.code == "BAD_REQUEST"
+    assert "invalid base64" in excinfo.value.message
+
+
+@pytest.mark.asyncio
+async def test_dispatch_send_message_rejects_missing_attachment_fields(
+    tmp_path: Path,
+) -> None:
+    """Each attachment must carry filename, mime_type, data_b64. Missing any
+    is a BAD_REQUEST that names the offending index + field for debug.
+    """
+    smtp = _StubSmtp()
+    dispatcher = VerbDispatcher(
+        imap=_StubImapClient(), smtp=smtp,
+        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+    )
+    with pytest.raises(RpcError) as excinfo:
+        await dispatcher.dispatch(
+            "send_message",
+            {
+                "to": ["a@b.com"], "subject": "x", "body": "y",
+                "attachments": [
+                    {"mime_type": "text/plain", "data_b64": ""},
+                ],
+            },
+        )
+    assert excinfo.value.code == "BAD_REQUEST"
+    assert "attachments[0].filename" in excinfo.value.message
+
+
+@pytest.mark.asyncio
+async def test_dispatch_send_message_rejects_total_size_over_cap(
+    tmp_path: Path,
+) -> None:
+    """The verb caps total raw attachment bytes (currently 30MB) so a
+    runaway agent can't push payloads the upstream SMTP server will bounce —
+    we want the BAD_REQUEST to fire here, before SMTP, so the agent gets
+    actionable feedback rather than an opaque server reject.
+    """
+    smtp = _StubSmtp()
+    dispatcher = VerbDispatcher(
+        imap=_StubImapClient(), smtp=smtp,
+        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+    )
+    # 31MB of zeros — one byte over the cap. b64 of 0x00*N is "AAAA..."
+    big = base64.b64encode(b"\x00" * (31 * 1024 * 1024)).decode("ascii")
+    with pytest.raises(RpcError) as excinfo:
+        await dispatcher.dispatch(
+            "send_message",
+            {
+                "to": ["a@b.com"], "subject": "x", "body": "y",
+                "attachments": [
+                    {"filename": "big.bin", "mime_type": "application/octet-stream", "data_b64": big},
+                ],
+            },
+        )
+    assert excinfo.value.code == "BAD_REQUEST"
+    assert "30MB" in excinfo.value.message
+    # Critically: the cap fires BEFORE the SMTP call. No half-built SMTP
+    # transaction to clean up.
+    assert smtp.calls == []
 
 
 @pytest.mark.asyncio

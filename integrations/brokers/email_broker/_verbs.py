@@ -24,6 +24,8 @@ subset works.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import mimetypes
 import secrets
 from collections.abc import Awaitable, Callable
@@ -35,6 +37,14 @@ from integrations._rpc import RpcError
 from integrations.brokers.email_broker._caldav_client import CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapClient
 from integrations.brokers.email_broker._smtp_client import SmtpClient
+from integrations.brokers.email_broker.types import OutboundAttachment
+
+# Total raw byte cap across all outbound attachments in one send. Above this
+# we refuse rather than try — provider SMTP limits land near 25MB and we want
+# the broker's BAD_REQUEST to fire before a multi-MB JSON frame works its way
+# all the way to the SMTP server only to bounce. 30MB leaves headroom over
+# the strictest providers without inviting OOM-shaped payloads.
+_MAX_OUTBOUND_ATTACHMENT_BYTES = 30 * 1024 * 1024
 
 # Authoritative read/write classification for email-broker verbs. The
 # app-server side keeps a parallel table at ``broker_client._verb_types``;
@@ -213,19 +223,22 @@ class VerbDispatcher:
         return {"moved": True}
 
     async def _handle_send_message(self, args: dict[str, Any]) -> dict[str, Any]:
-        """``send_message {to, subject, body}`` → ``{sent: true, message_id}``.
+        """``send_message {to, subject, body, attachments?}`` → ``{sent: true, message_id}``.
 
-        ``to`` is a JSON array of bare addresses. The broker does not validate
-        addresses; the upstream MTA does, and we surface its rejection
-        unchanged.
+        ``to`` is a JSON array of bare addresses. ``attachments``, when
+        present, is an array of ``{filename, mime_type, data_b64}`` objects
+        whose bytes get attached as ``Content-Disposition: attachment``
+        parts. The broker does not validate addresses; the upstream MTA
+        does, and we surface its rejection unchanged.
         """
         if self._smtp is None:
             raise RpcError("BAD_REQUEST", "smtp not configured for this integration")
         to = _require_str_list(args, "to")
         subject = _require_str(args, "subject")
         body = _require_str(args, "body")
+        attachments = _parse_outbound_attachments(args.get("attachments"))
         message_id = await self._smtp.send_message(
-            to=to, subject=subject, body=body,
+            to=to, subject=subject, body=body, attachments=attachments,
         )
         return {"sent": True, "message_id": message_id}
 
@@ -275,6 +288,61 @@ def _require_str_list(args: dict[str, Any], key: str) -> list[str]:
     if not all(isinstance(v, str) and v for v in value):
         raise RpcError("BAD_REQUEST", f"{key!r} must contain non-empty strings")
     return list(value)
+
+
+def _parse_outbound_attachments(value: Any) -> list[OutboundAttachment]:
+    """Validate the optional ``attachments`` arg on ``send_message``.
+
+    Each item must be an object with ``filename`` (non-empty str),
+    ``mime_type`` (non-empty str), and ``data_b64`` (str). Bytes are decoded
+    once here so the SMTP client gets raw payload. Total raw size is capped
+    at :data:`_MAX_OUTBOUND_ATTACHMENT_BYTES` — over that we refuse with
+    BAD_REQUEST rather than try to send something the upstream will bounce.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RpcError("BAD_REQUEST", "'attachments' must be an array")
+
+    out: list[OutboundAttachment] = []
+    total_bytes = 0
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise RpcError("BAD_REQUEST", f"'attachments[{i}]' must be an object")
+        filename = item.get("filename")
+        mime_type = item.get("mime_type")
+        data_b64 = item.get("data_b64")
+        if not isinstance(filename, str) or not filename:
+            raise RpcError(
+                "BAD_REQUEST",
+                f"'attachments[{i}].filename' required (non-empty string)",
+            )
+        if not isinstance(mime_type, str) or not mime_type:
+            raise RpcError(
+                "BAD_REQUEST",
+                f"'attachments[{i}].mime_type' required (non-empty string)",
+            )
+        if not isinstance(data_b64, str):
+            raise RpcError(
+                "BAD_REQUEST",
+                f"'attachments[{i}].data_b64' required (string)",
+            )
+        try:
+            data = base64.b64decode(data_b64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise RpcError(
+                "BAD_REQUEST",
+                f"'attachments[{i}].data_b64' invalid base64: {exc}",
+            ) from exc
+        total_bytes += len(data)
+        if total_bytes > _MAX_OUTBOUND_ATTACHMENT_BYTES:
+            cap_mb = _MAX_OUTBOUND_ATTACHMENT_BYTES // (1024 * 1024)
+            raise RpcError(
+                "BAD_REQUEST",
+                f"attachments exceed {cap_mb}MB total raw",
+            )
+        out.append((filename, mime_type, data))
+    return out
 
 
 def _write_attachment(

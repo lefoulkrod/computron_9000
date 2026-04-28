@@ -155,3 +155,74 @@ async def test_send_message_reconnects_after_dropped_session() -> None:
 
     assert len(fake.outbox) == 2
     assert fake.outbox[1].rcpt_to == ["bob@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_attachments_produces_multipart() -> None:
+    """An ``attachments`` arg promotes the message to ``multipart/mixed``:
+    one ``text/plain`` body part plus one ``Content-Disposition: attachment``
+    part per file, with the original bytes intact.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        client = SmtpClient(
+            host=fake.smtp_host,
+            port=fake.smtp_port,
+            user=fake.user,
+            password=fake.password,
+            starttls=False,
+        )
+        await client.connect()
+        payload = b"\x89PNG fake-png-bytes"
+        await client.send_message(
+            to=["alice@example.com"],
+            subject="see attached",
+            body="hello",
+            attachments=[("logo.png", "image/png", payload)],
+        )
+    finally:
+        await fake.stop()
+
+    parsed = _email.message_from_bytes(fake.outbox[0].raw)
+    assert parsed.is_multipart()
+    # First part is the plain-text body; the rest are attachments. Index
+    # access is deterministic for what add_attachment produces.
+    body_part, att_part = parsed.get_payload()[0], parsed.get_payload()[1]
+    assert body_part.get_content_type() == "text/plain"
+    assert "hello" in body_part.get_payload()
+    assert att_part.get_content_type() == "image/png"
+    assert att_part.get_filename() == "logo.png"
+    assert att_part.get_content_disposition() == "attachment"
+    assert att_part.get_payload(decode=True) == payload
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_malformed_mime_type_falls_back() -> None:
+    """A mime_type without a slash (``"pdf"``) defaults to
+    ``application/octet-stream`` rather than crashing add_attachment — the
+    broker's verb layer validates non-empty but doesn't enforce the slash.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        client = SmtpClient(
+            host=fake.smtp_host,
+            port=fake.smtp_port,
+            user=fake.user,
+            password=fake.password,
+            starttls=False,
+        )
+        await client.connect()
+        await client.send_message(
+            to=["alice@example.com"],
+            subject="malformed mime",
+            body="hi",
+            attachments=[("doc.pdf", "pdf", b"%PDF-fake")],
+        )
+    finally:
+        await fake.stop()
+
+    parsed = _email.message_from_bytes(fake.outbox[0].raw)
+    att_part = parsed.get_payload()[1]
+    assert att_part.get_content_type() == "application/octet-stream"
