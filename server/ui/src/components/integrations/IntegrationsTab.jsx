@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import Callout from '../primitives/Callout.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
-import ToggleSwitch from '../ToggleSwitch.jsx';
 import AddIntegrationModal from './AddIntegrationModal.jsx';
 import styles from './IntegrationsTab.module.css';
 
@@ -47,11 +47,10 @@ export default function IntegrationsTab() {
     const [loadError, setLoadError] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [removeError, setRemoveError] = useState(null);
-    // Per-id transient state for the inline write_allowed toggle. Pending
-    // ids show a busy badge; errors are surfaced inline on the row so the
-    // user sees which integration's flip failed.
-    const [togglePending, setTogglePending] = useState(() => new Set());
-    const [toggleError, setToggleError] = useState(null);
+    // Master-detail: which row's edit form fills the right pane.
+    const [selectedId, setSelectedId] = useState(null);
+    const [saveError, setSaveError] = useState(null);
+    const [saving, setSaving] = useState(false);
 
     const fetchIntegrations = useCallback(async () => {
         setLoading(true);
@@ -84,10 +83,23 @@ export default function IntegrationsTab() {
         fetchIntegrations();
     }, [fetchIntegrations]);
 
-    const handleAdded = () => {
+    // Auto-select on load: when the list arrives, pick the first row if no
+    // valid selection exists. Also clear the selection when the selected
+    // row gets removed.
+    useEffect(() => {
+        if (integrations.length === 0) {
+            if (selectedId !== null) setSelectedId(null);
+            return;
+        }
+        const stillExists = integrations.some(i => i.id === selectedId);
+        if (!stillExists) setSelectedId(integrations[0].id);
+    }, [integrations, selectedId]);
+
+    const handleAdded = useCallback((newRecord) => {
         setModalOpen(false);
         fetchIntegrations();
-    };
+        if (newRecord?.id) setSelectedId(newRecord.id);
+    }, [fetchIntegrations]);
 
     const handleRemove = useCallback(async (id) => {
         setRemoveError(null);
@@ -95,7 +107,7 @@ export default function IntegrationsTab() {
             const resp = await fetch(`/api/integrations/${encodeURIComponent(id)}`, {
                 method: 'DELETE',
             });
-            if (!resp.ok && resp.status !== 204) {
+            if (!resp.ok) {
                 const body = await resp.json().catch(() => ({}));
                 setRemoveError({
                     id,
@@ -109,40 +121,41 @@ export default function IntegrationsTab() {
         }
     }, [fetchIntegrations]);
 
-    const handleToggleWriteAllowed = useCallback(async (id, nextValue) => {
-        setToggleError(null);
-        setTogglePending(prev => {
-            const next = new Set(prev);
-            next.add(id);
-            return next;
-        });
+    const handleSave = useCallback(async (id, updates) => {
+        setSaving(true);
+        setSaveError(null);
         try {
             const resp = await fetch(`/api/integrations/${encodeURIComponent(id)}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ write_allowed: nextValue }),
+                body: JSON.stringify(updates),
             });
             if (!resp.ok) {
                 const body = await resp.json().catch(() => ({}));
-                setToggleError({
+                setSaveError({
                     id,
                     message: body?.error?.message || `HTTP ${resp.status}`,
                 });
-                return;
+                return false;
             }
             await fetchIntegrations();
+            return true;
         } catch (err) {
-            setToggleError({ id, message: err?.message || 'Request failed' });
+            setSaveError({ id, message: err?.message || 'Request failed' });
+            return false;
         } finally {
-            setTogglePending(prev => {
-                const next = new Set(prev);
-                next.delete(id);
-                return next;
-            });
+            setSaving(false);
         }
     }, [fetchIntegrations]);
 
-    const grouped = groupByCategory(integrations);
+    const grouped = useMemo(() => groupByCategory(integrations), [integrations]);
+    const selected = useMemo(
+        () => decorate(integrations.find(i => i.id === selectedId)),
+        [integrations, selectedId],
+    );
+
+    const removeMessage = removeError?.id === selectedId ? removeError.message : null;
+    const saveMessage = saveError?.id === selectedId ? saveError.message : null;
 
     return (
         <div className={styles.container}>
@@ -152,23 +165,39 @@ export default function IntegrationsTab() {
                 loadError.code === 'UNAVAILABLE' ? (
                     <UnavailableState onRetry={fetchIntegrations} />
                 ) : (
-                    <div className={styles.error}>
-                        <i className="bi bi-exclamation-triangle" /> {loadError.message}
-                        <button className={styles.btnOutline} onClick={fetchIntegrations}>Retry</button>
+                    <div className={styles.loadError}>
+                        <Callout
+                            tone="danger"
+                            title="Couldn't load integrations"
+                            description={loadError.message}
+                        />
+                        <button className={styles.btnOutline} onClick={fetchIntegrations}>
+                            <i className="bi bi-arrow-clockwise" /> Retry
+                        </button>
                     </div>
                 )
             ) : integrations.length === 0 ? (
                 <EmptyState onAdd={() => setModalOpen(true)} />
             ) : (
-                <PopulatedList
-                    grouped={grouped}
-                    onAdd={() => setModalOpen(true)}
-                    onRemove={handleRemove}
-                    removeError={removeError}
-                    onToggleWriteAllowed={handleToggleWriteAllowed}
-                    togglePending={togglePending}
-                    toggleError={toggleError}
-                />
+                <div className={styles.split}>
+                    <ListPane
+                        grouped={grouped}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onAdd={() => setModalOpen(true)}
+                    />
+                    {selected && (
+                        <DetailPane
+                            key={selected.id}
+                            record={selected}
+                            saving={saving}
+                            saveError={saveMessage}
+                            removeError={removeMessage}
+                            onSave={(updates) => handleSave(selected.id, updates)}
+                            onRemove={() => handleRemove(selected.id)}
+                        />
+                    )}
+                </div>
             )}
 
             {modalOpen && (
@@ -190,6 +219,12 @@ function groupByCategory(integrations) {
         groups.get(category).push({ ...item, meta });
     }
     return [...groups.entries()];
+}
+
+function decorate(item) {
+    if (!item) return null;
+    const meta = SLUG_META[item.slug] ?? { category: 'Other', icon: 'bi-plug', label: item.slug };
+    return { ...item, meta };
 }
 
 function UnavailableState({ onRetry }) {
@@ -233,103 +268,191 @@ function EmptyState({ onAdd }) {
     );
 }
 
-function PopulatedList({
-    grouped, onAdd, onRemove, removeError,
-    onToggleWriteAllowed, togglePending, toggleError,
-}) {
+function ListPane({ grouped, selectedId, onSelect, onAdd }) {
     return (
-        <div className={styles.list}>
-            {grouped.map(([category, rows]) => (
-                <section key={category} className={styles.group}>
-                    <div className={styles.groupLabel}>{category}</div>
-                    {rows.map(row => (
-                        <Row
-                            key={row.id}
-                            row={row}
-                            error={
-                                removeError?.id === row.id ? removeError.message
-                                    : toggleError?.id === row.id ? toggleError.message
-                                        : null
-                            }
-                            toggling={togglePending.has(row.id)}
-                            onRemove={() => onRemove(row.id)}
-                            onToggleWriteAllowed={
-                                (nextValue) => onToggleWriteAllowed(row.id, nextValue)
-                            }
-                        />
-                    ))}
-                </section>
-            ))}
-            <div className={styles.listFooter}>
+        <div className={styles.listPane}>
+            <div className={styles.listHeader}>
+                <span className={styles.listTitle}>Connected</span>
                 <button
-                    className={styles.btnFilled}
+                    className={styles.listAddBtn}
                     onClick={onAdd}
                     data-testid="integrations-add-another"
                 >
-                    <i className="bi bi-plus-lg" /> Add integration
+                    <i className="bi bi-plus-lg" /> ADD
                 </button>
+            </div>
+            <div className={styles.listBody}>
+                {grouped.map(([category, rows]) => (
+                    <section key={category} className={styles.group}>
+                        <div className={styles.groupLabel}>{category}</div>
+                        {rows.map(row => (
+                            <ListRow
+                                key={row.id}
+                                row={row}
+                                selected={row.id === selectedId}
+                                onClick={() => onSelect(row.id)}
+                            />
+                        ))}
+                    </section>
+                ))}
             </div>
         </div>
     );
 }
 
-function Row({ row, error, toggling, onRemove, onToggleWriteAllowed }) {
+function ListRow({ row, selected, onClick }) {
     const view = STATE_VIEW[row.state] ?? STATE_VIEW.running;
-    // Toggle is only useful when the broker is actually live — for a
-    // broken / auth_failed integration the user's path forward is
-    // remove + re-add, not a permission flip.
-    const canToggle = row.state === 'running' && !toggling;
-    const toggleTitle = toggling
-        ? 'Updating permissions…'
-        : (row.write_allowed
-            ? 'Writes enabled — click to disable'
-            : 'Read only — click to enable writes');
     return (
-        <div className={styles.row}>
+        <button
+            type="button"
+            className={`${styles.listItem} ${selected ? styles.listItemActive : ''}`}
+            onClick={onClick}
+            data-testid={`integrations-row-${row.id}`}
+        >
             <div className={styles.rowIcon}><i className={`bi ${row.meta.icon}`} /></div>
             <div className={styles.rowInfo}>
                 <div className={styles.rowTitle}>
-                    {row.label}
+                    <span className={styles.rowLabelText}>{row.label}</span>
                     <span className={`${styles.badge} ${styles[view.badgeClass]}`}>
                         <span className={`${styles.statusDot} ${styles[view.dotClass]}`} />
                         {view.label}
                     </span>
                 </div>
                 <div className={styles.rowDesc}>{row.id}</div>
-                {view.helper && (
-                    <div className={styles.rowHelper}>
-                        <i className="bi bi-exclamation-triangle" /> {view.helper}
-                    </div>
-                )}
-                {error && (
-                    <div className={styles.rowError}>
-                        <i className="bi bi-exclamation-triangle" /> {error}
-                    </div>
-                )}
             </div>
-            <div className={styles.rowControl}>
-                <label
-                    className={`${styles.writesToggle} ${row.write_allowed ? styles.active : ''}`}
-                    title={toggleTitle}
-                >
-                    <span>Writes</span>
-                    <ToggleSwitch
-                        checked={row.write_allowed}
-                        onChange={(e) => onToggleWriteAllowed(e.target.checked)}
-                        disabled={!canToggle}
-                        data-testid={`integrations-toggle-write-${row.id}`}
-                        aria-label={toggleTitle}
-                    />
-                </label>
+        </button>
+    );
+}
+
+function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }) {
+    const [labelDraft, setLabelDraft] = useState(record.label);
+    const [writesDraft, setWritesDraft] = useState(record.write_allowed);
+
+    const view = STATE_VIEW[record.state] ?? STATE_VIEW.running;
+    const canEditWrites = record.state === 'running';
+
+    const labelTrimmed = labelDraft.trim();
+    const dirty = (
+        labelTrimmed !== record.label || writesDraft !== record.write_allowed
+    );
+    const canSave = dirty && labelTrimmed.length > 0 && !saving;
+
+    const handleSave = useCallback(async () => {
+        const updates = {};
+        if (labelTrimmed !== record.label) updates.label = labelTrimmed;
+        if (writesDraft !== record.write_allowed) updates.write_allowed = writesDraft;
+        if (Object.keys(updates).length === 0) return;
+        await onSave(updates);
+    }, [labelTrimmed, writesDraft, record, onSave]);
+
+    const handleCancel = useCallback(() => {
+        setLabelDraft(record.label);
+        setWritesDraft(record.write_allowed);
+    }, [record]);
+
+    return (
+        <div className={styles.detailPane}>
+            {/* Action bar — top, mirrors ProfileBuilder. Disconnect on the
+                left as the destructive action; Cancel + Save right-aligned. */}
+            <div className={styles.actionsBar}>
                 <ConfirmButton
-                    icon="bi-trash3"
+                    className={styles.deleteBtn}
+                    label="Delete"
                     confirmLabel="Confirm?"
-                    busyLabel="Removing…"
-                    title="Disconnect"
+                    busyLabel="Deleting…"
+                    title="Delete this integration"
                     onConfirm={onRemove}
-                    data-testid={`integrations-remove-${row.id}`}
+                    data-testid={`integrations-remove-${record.id}`}
                 />
+                <div className={styles.actionsRight}>
+                    <button
+                        type="button"
+                        className={styles.secondaryBtn}
+                        onClick={handleCancel}
+                        disabled={!dirty || saving}
+                        data-testid={`integrations-cancel-${record.id}`}
+                    >
+                        Revert
+                    </button>
+                    <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        onClick={handleSave}
+                        disabled={!canSave}
+                        data-testid={`integrations-save-${record.id}`}
+                    >
+                        Save
+                    </button>
+                </div>
             </div>
+
+            <div className={styles.formBody}>
+                {view.helper && (
+                    <Callout tone="warning" description={view.helper} />
+                )}
+
+                <section className={styles.section}>
+                    <div className={styles.sectionLabel}>Label</div>
+                    <input
+                        className={styles.nameInput}
+                        type="text"
+                        value={labelDraft}
+                        onChange={(e) => setLabelDraft(e.target.value)}
+                        placeholder="Label"
+                        data-testid={`integrations-label-input-${record.id}`}
+                    />
+                </section>
+
+                <section className={styles.section}>
+                    <div className={styles.sectionLabel}>Permissions</div>
+                    <label className={styles.checkRow}>
+                        <input
+                            type="checkbox"
+                            checked={writesDraft}
+                            onChange={(e) => setWritesDraft(e.target.checked)}
+                            disabled={!canEditWrites}
+                            data-testid={`integrations-toggle-write-${record.id}`}
+                        />
+                        <span className={styles.checkLabel}>
+                            Allow writes
+                        </span>
+                        <span className={styles.checkHelp}>
+                            When off, this integration is read-only — it can fetch
+                            information but can't send, move, or change anything.
+                        </span>
+                    </label>
+                </section>
+
+                <section className={styles.section}>
+                    <div className={styles.sectionLabel}>Status</div>
+                    <KvRow label="State" value={view.label} />
+                    <KvRow label="Provider" value={record.slug} />
+                    <KvRow
+                        label="Capabilities"
+                        value={
+                            (record.capabilities || []).length > 0
+                                ? record.capabilities.join(' · ')
+                                : '—'
+                        }
+                    />
+                </section>
+
+                {saveError && (
+                    <Callout tone="danger" description={saveError} />
+                )}
+                {removeError && (
+                    <Callout tone="danger" description={removeError} />
+                )}
+            </div>
+        </div>
+    );
+}
+
+function KvRow({ label, value }) {
+    return (
+        <div className={styles.kv}>
+            <span className={styles.kvKey}>{label}</span>
+            <span className={styles.kvVal}>{value}</span>
         </div>
     );
 }

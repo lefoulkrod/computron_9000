@@ -178,13 +178,13 @@ async def handle_add_integration(request: web.Request) -> web.Response:
 
 
 async def handle_update_integration(request: web.Request) -> web.Response:
-    """``PATCH /api/integrations/{id}`` — flip ``write_allowed`` on an integration.
+    """``PATCH /api/integrations/{id}`` — update mutable fields on an integration.
 
-    Forwards to the supervisor's ``update`` verb, which rewrites meta on
-    disk and re-spawns the broker so the new ``WRITE_ALLOWED`` env takes
-    effect. Brief downtime (~SIGTERM grace + READY handshake) during the
-    respawn — clients that try to call a verb on this integration in that
-    window may get a transient ``IntegrationError``.
+    Body fields (each optional, at least one required): ``write_allowed``
+    (bool) and ``label`` (non-empty string). Flipping ``write_allowed``
+    triggers a broker respawn so the new ``WRITE_ALLOWED`` env takes effect
+    (brief downtime ~SIGTERM grace + READY handshake). Updating ``label``
+    is meta-only — no respawn.
 
     On success: ``200 OK`` with the updated record. On unknown id: ``404``.
     """
@@ -201,16 +201,31 @@ async def handle_update_integration(request: web.Request) -> web.Response:
             {"error": {"code": "BAD_REQUEST", "message": "invalid JSON body"}},
             status=400,
         )
-    if not isinstance(body, dict) or "write_allowed" not in body:
+    if not isinstance(body, dict):
         return _error_response(
-            {"code": "BAD_REQUEST", "message": "'write_allowed' required (bool)"}
+            {"code": "BAD_REQUEST", "message": "JSON body must be an object"}
         )
-    write_allowed = bool(body.get("write_allowed"))
+
+    rpc_args: dict[str, Any] = {"id": integration_id}
+    if "write_allowed" in body:
+        if not isinstance(body["write_allowed"], bool):
+            return _error_response(
+                {"code": "BAD_REQUEST", "message": "'write_allowed' must be a bool"}
+            )
+        rpc_args["write_allowed"] = body["write_allowed"]
+    if "label" in body:
+        if not isinstance(body["label"], str) or not body["label"]:
+            return _error_response(
+                {"code": "BAD_REQUEST", "message": "'label' must be a non-empty string"}
+            )
+        rpc_args["label"] = body["label"]
+    if "write_allowed" not in rpc_args and "label" not in rpc_args:
+        return _error_response(
+            {"code": "BAD_REQUEST", "message": "'write_allowed' and/or 'label' required"}
+        )
 
     try:
-        resp = await _supervisor_rpc(
-            "update", {"id": integration_id, "write_allowed": write_allowed},
-        )
+        resp = await _supervisor_rpc("update", rpc_args)
     except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
         logger.warning("supervisor unreachable for update: %s", exc)
         return web.json_response(

@@ -32,6 +32,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from integrations._rpc import RpcError
 from integrations.supervisor._catalog import CatalogEntry
@@ -229,14 +230,21 @@ class BrokerManager:
         logger.info("removed integration %s", integration_id)
 
     async def update(
-        self, integration_id: str, *, write_allowed: bool,
+        self,
+        integration_id: str,
+        *,
+        write_allowed: bool | None = None,
+        label: str | None = None,
     ) -> IntegrationRecord:
-        """Flip the ``write_allowed`` policy on an existing integration.
+        """Update mutable fields on an existing integration.
 
-        The broker reads ``WRITE_ALLOWED`` from its env at spawn time, so a
-        flip means: rewrite the on-disk meta, terminate the running broker,
-        then re-spawn it with the new env. There's a brief gap (~SIGTERM
-        grace + READY handshake) during which the broker socket is gone.
+        Mutables today are ``write_allowed`` and ``label``. Both are
+        optional — pass only the fields that should change. ``label`` is a
+        string the broker never sees, so a label-only update rewrites the
+        meta on disk and that's it. ``write_allowed`` is read from the
+        broker's env at spawn time, so flipping it means rewrite + SIGTERM
+        + respawn with the new env (brief gap during which the broker
+        socket is gone).
 
         Raises :class:`RpcError` (NOT_FOUND) if the id isn't registered.
         Returns the updated record on success. If the respawn fails, the
@@ -247,10 +255,39 @@ class BrokerManager:
         if record is None:
             raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
 
-        # No-op shortcut: nothing to do, no respawn cost incurred.
-        if record.meta.write_allowed == write_allowed:
+        if write_allowed is None and label is None:
+            raise RpcError("BAD_REQUEST", "update requires at least one field")
+
+        if label is not None and not label:
+            raise RpcError("BAD_REQUEST", "'label' must be a non-empty string")
+
+        write_changed = (
+            write_allowed is not None and record.meta.write_allowed != write_allowed
+        )
+        label_changed = label is not None and record.meta.label != label
+
+        # No-op shortcut: nothing actually different, skip the work.
+        if not write_changed and not label_changed:
             return record
 
+        meta_updates: dict[str, Any] = {"updated_at": datetime.now(UTC)}
+        if write_changed:
+            meta_updates["write_allowed"] = write_allowed
+        if label_changed:
+            meta_updates["label"] = label
+        new_meta = record.meta.model_copy(update=meta_updates)
+        # Commit the meta change before we touch the running process. If we
+        # crash between this write and a respawn, the next reconcile picks
+        # up the new value.
+        write_meta(self._vault_dir, new_meta)
+
+        # Label-only: no env change, no respawn. Update in place and return.
+        if not write_changed:
+            record.meta = new_meta
+            logger.info("updated integration %s (label=%r)", integration_id, label)
+            return record
+
+        # write_allowed changed — broker needs a new env, which means respawn.
         entry = self._catalog.get(record.meta.slug)
         if entry is None:
             # The slug existed when the integration was added but no longer
@@ -267,14 +304,6 @@ class BrokerManager:
         except DecryptError as exc:
             raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
 
-        new_meta = record.meta.model_copy(
-            update={"write_allowed": write_allowed, "updated_at": datetime.now(UTC)},
-        )
-        # Commit the meta change before we touch the running process. If we
-        # crash between this write and the respawn, the next reconcile
-        # picks up the new value.
-        write_meta(self._vault_dir, new_meta)
-
         # Stop the watcher and terminate before respawn — same dance as
         # remove(), but we keep the registry entry so the new handle slots
         # back in under the same id.
@@ -290,7 +319,7 @@ class BrokerManager:
                 entry=entry,
                 integration_id=integration_id,
                 secret_bundle=secret_bundle,
-                write_allowed=write_allowed,
+                write_allowed=new_meta.write_allowed,
                 sockets_dir=self._sockets_dir,
                 host_paths=self._host_paths,
             )
@@ -311,8 +340,8 @@ class BrokerManager:
         record.expected_termination = False
         self._start_watcher(integration_id)
         logger.info(
-            "updated integration %s (write_allowed=%s)",
-            integration_id, write_allowed,
+            "updated integration %s (write_allowed=%s, label=%r)",
+            integration_id, new_meta.write_allowed, new_meta.label,
         )
         return record
 

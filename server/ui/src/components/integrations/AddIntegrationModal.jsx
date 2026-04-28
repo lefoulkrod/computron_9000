@@ -1,6 +1,46 @@
 import { useEffect, useState } from 'react';
 
+import Callout from '../primitives/Callout.jsx';
 import styles from './AddIntegrationModal.module.css';
+
+// Map supervisor/route error shapes to user-facing Callout copy. Rendered
+// next to the action that triggered the failure; the user reads this and
+// decides what to fix, so the wording is intentionally about *their*
+// next move, not about what the broker / supervisor saw.
+function _errorCopy(error, provider) {
+    const vendor = provider?.vendor ?? provider?.title ?? 'this provider';
+    switch (error?.code) {
+        case 'AUTH':
+            return {
+                title: `${vendor} rejected the password`,
+                description:
+                    'App-specific passwords sometimes get revoked or mistyped. ' +
+                    `Generate a fresh one in ${vendor}, paste it again, and retry.`,
+            };
+        case 'UPSTREAM':
+            return {
+                title: `Couldn't reach ${vendor}`,
+                description:
+                    'The server returned an error or timed out. Try again in a moment — ' +
+                    'if it keeps failing, check your network or the provider\'s status page.',
+            };
+        case 'BAD_REQUEST':
+            return {
+                title: 'Couldn\'t add this integration',
+                description: error.message || 'The request was rejected. Double-check your inputs.',
+            };
+        case 'NETWORK':
+            return {
+                title: 'Network error',
+                description: error.message || 'Check your connection and try again.',
+            };
+        default:
+            return {
+                title: 'Couldn\'t add this integration',
+                description: error?.message || 'Try again, or refresh and start over.',
+            };
+    }
+}
 
 const PROVIDERS = [
     {
@@ -74,7 +114,10 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
             });
             const body = await resp.json().catch(() => ({}));
             if (!resp.ok) {
-                setError(body?.error?.message || `HTTP ${resp.status}`);
+                setError({
+                    code: body?.error?.code || 'ERROR',
+                    message: body?.error?.message || `HTTP ${resp.status}`,
+                });
                 setSubmitting(false);
                 setStep(2);
                 return;
@@ -82,7 +125,10 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
             setResult(body);
             setSubmitting(false);
         } catch (err) {
-            setError(err?.message || 'Request failed');
+            setError({
+                code: 'NETWORK',
+                message: err?.message || 'Request failed',
+            });
             setSubmitting(false);
             setStep(2);
         }
@@ -223,12 +269,10 @@ function ExplainerStep({ provider, onBack, onNext }) {
                     from your main account password.
                 </p>
                 <div className={styles.wzContent}>
-                    <div className={styles.note}>
-                        <i className="bi bi-info-circle-fill" />
-                        <span>
-                            Requires a {provider.vendor} account with two-factor authentication enabled.
-                        </span>
-                    </div>
+                    <Callout
+                        tone="info"
+                        description={`Requires a ${provider.vendor} account with two-factor authentication enabled.`}
+                    />
                     <div className={styles.chipStack}>
                         <span className={styles.chip}><i className="bi bi-check2" /> Encrypted at rest</span>
                         <span className={styles.chip}><i className="bi bi-check2" /> Agent never reads the password</span>
@@ -352,16 +396,21 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                             </div>
                         </label>
                     </div>
-                    <div className={styles.note}>
-                        <i className="bi bi-info-circle-fill" />
-                        <span>You can change this later — no need to reconnect.</span>
-                    </div>
+                    <Callout
+                        tone="info"
+                        description="You can change this later — no need to reconnect."
+                    />
 
-                    {error && (
-                        <div className={styles.errorBox}>
-                            <i className="bi bi-exclamation-triangle-fill" /> {error}
-                        </div>
-                    )}
+                    {error && (() => {
+                        const copy = _errorCopy(error, provider);
+                        return (
+                            <Callout
+                                tone="danger"
+                                title={copy.title}
+                                description={copy.description}
+                            />
+                        );
+                    })()}
                 </div>
             </div>
             <div className={styles.footer}>

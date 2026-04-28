@@ -355,6 +355,90 @@ async def test_update_unknown_id_returns_not_found(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_changes_label_via_app_sock(tmp_path: Path) -> None:
+    """``update {id, label}`` rewrites the on-disk meta and ``list`` reflects
+    the new label. Label is meta-only (the broker never sees it), so this
+    path doesn't go through respawn.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
+        catalog=_test_catalog(fake),
+    )
+    await sup.start()
+    try:
+        await _rpc_call(
+            sup.app_sock_path,
+            "add",
+            {
+                "slug": "icloud",
+                "user_suffix": "personal",
+                "label": "Original",
+                "auth_blob": {"email": fake.user, "password": fake.password},
+                "write_allowed": False,
+            },
+        )
+
+        upd_resp = await _rpc_call(
+            sup.app_sock_path,
+            "update",
+            {"id": "icloud_personal", "label": "Renamed"},
+        )
+        assert "error" not in upd_resp, upd_resp
+        assert upd_resp["result"]["label"] == "Renamed"
+
+        list_resp = await _rpc_call(sup.app_sock_path, "list", {})
+        listed = next(
+            i for i in list_resp["result"]["integrations"]
+            if i["id"] == "icloud_personal"
+        )
+        assert listed["label"] == "Renamed"
+    finally:
+        await sup.stop()
+        await fake.stop()
+
+
+@pytest.mark.asyncio
+async def test_update_rejects_empty_body(tmp_path: Path) -> None:
+    """``update {id}`` with no fields to change is BAD_REQUEST — caller has
+    to specify at least one of write_allowed or label."""
+    fake = FakeEmail()
+    await fake.start()
+    sup = Supervisor(
+        vault_dir=tmp_path / "vault",
+        app_sock_path=tmp_path / "app.sock",
+        sockets_dir=tmp_path / "sockets",
+        host_paths=make_host_paths(tmp_path),
+        catalog=_test_catalog(fake),
+    )
+    await sup.start()
+    try:
+        await _rpc_call(
+            sup.app_sock_path,
+            "add",
+            {
+                "slug": "icloud",
+                "user_suffix": "personal",
+                "label": "iCloud",
+                "auth_blob": {"email": fake.user, "password": fake.password},
+                "write_allowed": False,
+            },
+        )
+
+        resp = await _rpc_call(
+            sup.app_sock_path, "update", {"id": "icloud_personal"},
+        )
+        assert resp["error"]["code"] == "BAD_REQUEST"
+    finally:
+        await sup.stop()
+        await fake.stop()
+
+
+@pytest.mark.asyncio
 async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
     """Setting ``write_allowed`` to its current value doesn't restart the
     broker — the manager short-circuits and returns the existing record.

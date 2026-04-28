@@ -77,7 +77,12 @@ class SmtpClient:
         ``send_message``, so it lives on the instance rather than as a
         local closure.
         """
-        conn = smtplib.SMTP(self._host, self._port, timeout=30)
+        # 120s applies per socket op (connect + each send). Plain-text sends
+        # finish in well under a second, but a multi-MB attachment over
+        # STARTTLS to a slower submission server (iCloud is a known offender)
+        # can run past the older 30s budget. 120s is comfortable headroom
+        # without letting a truly stuck connection hang the broker forever.
+        conn = smtplib.SMTP(self._host, self._port, timeout=120)
         conn.ehlo()
         if self._starttls:
             # 587-style submission: STARTTLS upgrade after the unencrypted

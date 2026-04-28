@@ -269,26 +269,7 @@
     gap: var(--sp-3);
 }
 
-/* ── Notes + chips ───────────────────────────────────────── */
-.note {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--sp-2);
-    font-size: 12px;
-    color: var(--text-secondary);
-    padding: var(--sp-2) var(--sp-3);
-    background: var(--accent-muted);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius-md);
-    line-height: 1.5;
-}
-
-.note i {
-    color: var(--accent);
-    margin-top: 1px;
-    flex-shrink: 0;
-}
-
+/* ── Chips ──────────────────────────────────────────────── */
 .chipStack {
     display: flex;
     flex-direction: column;
@@ -496,21 +477,6 @@
     background: var(--success-muted);
     color: var(--success);
     border-color: var(--success-muted);
-}
-
-/* ── Error box ───────────────────────────────────────────── */
-.errorBox {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-3);
-    background: var(--danger-muted);
-    border: 1px solid var(--danger-muted);
-    border-left: 3px solid var(--danger);
-    border-radius: var(--radius-md);
-    color: var(--danger);
-    font-size: 12px;
-    line-height: 1.5;
 }
 
 /* ── Verifying check list ────────────────────────────────── */

@@ -11,9 +11,11 @@ their payloads:
   every active integration.
 - ``resolve``: ``{id}`` → ``{id, socket, write_allowed}``. The app server's
   broker_client calls this to locate a broker before any tool call.
-- ``update``: ``{id, write_allowed}`` → the same record shape as ``add``.
-  Rewrites meta, terminates the broker, re-spawns with new env so the
-  broker's WRITE_ALLOWED gate reflects the new policy.
+- ``update``: ``{id, write_allowed?, label?}`` → the same record shape as
+  ``add``. At least one of ``write_allowed`` / ``label`` must be present.
+  ``label`` is meta-only (broker never sees it), so a label-only update
+  rewrites meta in place. ``write_allowed`` flips the broker's env gate,
+  so changing it terminates the broker and re-spawns with new env.
 - ``remove``: ``{id}`` → ``{id}``. SIGTERMs broker, deletes vault files.
 
 The handler is a thin dispatcher: it parses args and delegates to a
@@ -92,11 +94,23 @@ class AppSockHandler:
 
     async def _update(self, args: dict[str, Any]) -> dict[str, Any]:
         integration_id = _require_str(args, "id")
-        if "write_allowed" not in args:
-            raise RpcError("BAD_REQUEST", "'write_allowed' required (bool)")
-        write_allowed = bool(args["write_allowed"])
+        write_allowed: bool | None = None
+        if "write_allowed" in args:
+            if not isinstance(args["write_allowed"], bool):
+                raise RpcError("BAD_REQUEST", "'write_allowed' must be a bool")
+            write_allowed = args["write_allowed"]
+        label: str | None = None
+        if "label" in args:
+            if not isinstance(args["label"], str) or not args["label"]:
+                raise RpcError("BAD_REQUEST", "'label' must be a non-empty string")
+            label = args["label"]
+        if write_allowed is None and label is None:
+            raise RpcError(
+                "BAD_REQUEST",
+                "update requires 'write_allowed' and/or 'label'",
+            )
         record = await self._manager.update(
-            integration_id, write_allowed=write_allowed,
+            integration_id, write_allowed=write_allowed, label=label,
         )
         return _record_to_dict(record)
 
