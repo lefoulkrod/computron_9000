@@ -219,7 +219,12 @@ test-ui *args:
 manual-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    just _require-image
+    # Per-branch image so concurrent worktrees don't clobber each other.
+    # Docker layer cache makes subsequent rebuilds fast (~5-15s steady state).
+    branch_tag=$(git rev-parse --abbrev-ref HEAD | tr '/.' '-')
+    image="computron_9000:e2e-${branch_tag}"
+    echo "🏗️  Building ${image}"
+    docker build -f container/Dockerfile -t "$image" .
     name="computron_manual_test"
     port=9090
     state=$(mktemp -d)
@@ -243,7 +248,7 @@ manual-test:
         $env_args \
         -v "$state/home:/home/computron:rw" \
         -v "$state/state:/var/lib/computron:rw" \
-        {{_image}}
+        "$image"
 
     just _sync-src "$name"
     docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
@@ -270,7 +275,12 @@ manual-test:
 e2e *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    just _require-image
+    # Per-branch image so concurrent worktrees don't clobber each other.
+    # Docker layer cache makes subsequent rebuilds fast (~5-15s steady state).
+    branch_tag=$(git rev-parse --abbrev-ref HEAD | tr '/.' '-')
+    image="computron_9000:e2e-${branch_tag}"
+    echo "🏗️  Building ${image}"
+    docker build -f container/Dockerfile -t "$image" .
     name="computron_e2e"
     port=9090
     state=$(mktemp -d)
@@ -301,7 +311,7 @@ e2e *args:
         $env_args \
         -v "$state/home:/home/computron:rw" \
         -v "$state/state:/var/lib/computron:rw" \
-        {{_image}}
+        "$image"
 
     just _sync-src "$name"
     docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
