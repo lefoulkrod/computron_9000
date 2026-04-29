@@ -49,10 +49,8 @@ def async_lru_cache(
     If any argument is not hashable, a TypeError is raised.
 
     Args:
-        maxsize (int): Maximum size of the LRU cache. Default is 10.
-        ttl (float | None): Optional time-to-live in seconds for cache entries.
-            If provided and > 0, entries expire after `ttl` seconds. If None or
-            <= 0, only LRU-based eviction is used.
+        ttl (float): Time-to-live in seconds for cache entries. Default is 60.0.
+            Entries expire after `ttl` seconds.
 
     Returns:
         Callable: Decorated async function.
