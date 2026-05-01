@@ -44,7 +44,7 @@ class TaskExecutor:
         conversation_id = f"goals/{run.goal_id}/{run.id}/{task_result.id}"
         self._store.set_conversation_id(task_result.id, conversation_id)
 
-        agent = self._build_agent(task)
+        agent = await self._build_agent(task)
 
         history = ConversationHistory(
             [
@@ -75,13 +75,13 @@ class TaskExecutor:
             dispatcher = get_current_dispatcher()
             if dispatcher:
                 dispatcher.subscribe(_capture_file_output)
-            state = AgentState(get_core_tools() + (agent.tools or []))
+            state = AgentState(await get_core_tools() + (agent.tools or []))
             async with agent_span(agent.name, instruction=instruction, agent_state=state):
                 result = await run_turn(history, agent, hooks=hooks)
 
         return result or "", file_paths
 
-    def _build_agent(self, task: Task) -> Agent:
+    async def _build_agent(self, task: Task) -> Agent:
         """Construct an Agent from the task's agent profile."""
         if not task.agent_profile:
             msg = f"Task {task.id} has no agent_profile set"
@@ -91,7 +91,7 @@ class TaskExecutor:
             msg = f"Agent profile '{task.agent_profile}' not found for task {task.id}"
             raise RuntimeError(msg)
 
-        agent_state = AgentState(get_core_tools())
+        agent_state = AgentState(await get_core_tools())
         for skill_name in profile.skills:
             skill = get_skill(skill_name)
             if skill is None:

@@ -29,7 +29,7 @@ import signal
 import sys
 from pathlib import Path
 
-from integrations._perms import PROCESS_UMASK
+from integrations._perms import PROCESS_UMASK, disable_core_dumps
 from integrations.supervisor._catalog import DEFAULT_CATALOG
 from integrations.supervisor._lifecycle import Supervisor
 from integrations.supervisor.types import HostPath
@@ -38,6 +38,12 @@ from integrations.supervisor.types import HostPath
 # sites still set explicit modes (e.g. 0o660 sockets), but anything created
 # without an explicit mode lands at 0o700 / 0o600 — see integrations/_perms.py.
 os.umask(PROCESS_UMASK)
+
+# No core dumps — the supervisor holds the master key in memory while
+# decrypt operations are in flight, and the rlimit is inherited by every
+# broker it spawns. A kernel-generated core would write that memory to
+# disk where the computron UID could read it.
+disable_core_dumps()
 
 logger = logging.getLogger("supervisor")
 

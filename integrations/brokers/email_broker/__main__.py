@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from integrations._env import env_required, parse_bool
-from integrations._perms import PROCESS_UMASK
+from integrations._perms import PROCESS_UMASK, disable_core_dumps
 from integrations._rpc import serve_rpc
 from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
 from integrations.brokers._common._ready import print_ready
@@ -42,6 +42,10 @@ logger = logging.getLogger("email_broker")
 # Owner-only by default for everything this process creates. Specific call
 # sites still set explicit modes (e.g. 0o660 sockets) — see integrations/_perms.py.
 os.umask(PROCESS_UMASK)
+
+# No core dumps — the broker holds the decrypted credential in memory,
+# and a kernel-generated core file would write that memory to disk.
+disable_core_dumps()
 
 
 async def _run() -> int:

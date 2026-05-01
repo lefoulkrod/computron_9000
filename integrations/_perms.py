@@ -21,9 +21,17 @@ The trust split the modes encode:
 
 If you change a constant here, audit ``container/entrypoint.sh`` for the
 matching directory chmod and update both in lockstep.
+
+This module also exposes :func:`disable_core_dumps`, a startup-time
+hardening helper for the supervisor and brokers. Core dumps would write
+the process's full memory snapshot — credentials included — to disk
+where another UID could read it; setting ``RLIMIT_CORE=(0, 0)`` tells
+the kernel never to generate one for this process or its children.
 """
 
 from __future__ import annotations
+
+import resource
 
 # Owner-only files: master key, encrypted credential bundles, .meta envelopes.
 # Permitted only for the broker UID; group and other get nothing.
@@ -53,3 +61,22 @@ ATTACHMENT_FILE_MODE = 0o640
 # (above) still apply where a specific mode is needed (notably 0o660 sockets,
 # which umask cannot widen back open).
 PROCESS_UMASK = 0o077
+
+
+def disable_core_dumps() -> None:
+    """Set ``RLIMIT_CORE = (0, 0)`` so the kernel won't dump this process.
+
+    Call once at the top of the supervisor and broker ``__main__`` modules.
+    Brokers hold the decrypted credential in memory; a crash with the
+    default core-dump policy would write that memory to disk where the
+    computron UID could read it (the dump file inherits the dumping
+    process's UID, but the path and permissions can leak depending on
+    ``/proc/sys/kernel/core_pattern``). Hard-capping at zero closes the
+    leak path entirely.
+
+    Subprocesses inherit the rlimit, so brokers spawned by the supervisor
+    are covered without needing their own call — but each broker calls it
+    again anyway for defense in depth and so a broker started outside the
+    supervisor (manual debugging, future test harnesses) is also covered.
+    """
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
