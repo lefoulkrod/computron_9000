@@ -60,18 +60,30 @@ def _derive_suffix_from_email(auth_blob: dict[str, Any] | None) -> str | None:
 
 
 async def _supervisor_rpc(verb: str, args: dict[str, Any]) -> dict[str, Any]:
-    """One-shot RPC: open UDS, send one frame, read one frame, close."""
+    """One-shot RPC: open UDS, send one frame, read one frame, close.
+
+    Wrapped in a 60s timeout. The supervisor's slowest verbs (``add`` /
+    ``update`` write_allowed) wait on a 30s broker READY handshake plus
+    SIGTERM grace, so 60s gives headroom for the worst legit case while
+    bounding hangs if the supervisor itself is wedged. ``TimeoutError``
+    is an ``OSError`` subclass on 3.11+, so route handlers catch it
+    through the existing ``except OSError`` arm and return a 503.
+    """
     app_sock = load_config().integrations.app_sock_path
-    reader, writer = await asyncio.open_unix_connection(app_sock)
-    try:
-        body = json.dumps({"id": 1, "verb": verb, "args": args}).encode("utf-8")
-        writer.write(len(body).to_bytes(4, "big") + body)
-        await writer.drain()
-        length = int.from_bytes(await reader.readexactly(4), "big")
-        return json.loads(await reader.readexactly(length))
-    finally:
-        writer.close()
-        await writer.wait_closed()
+
+    async def _do() -> dict[str, Any]:
+        reader, writer = await asyncio.open_unix_connection(app_sock)
+        try:
+            body = json.dumps({"id": 1, "verb": verb, "args": args}).encode("utf-8")
+            writer.write(len(body).to_bytes(4, "big") + body)
+            await writer.drain()
+            length = int.from_bytes(await reader.readexactly(4), "big")
+            return json.loads(await reader.readexactly(length))
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    return await asyncio.wait_for(_do(), timeout=60.0)
 
 
 def _error_response(error: dict[str, Any]) -> web.Response:

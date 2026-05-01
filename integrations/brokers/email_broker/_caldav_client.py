@@ -24,10 +24,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import caldav
+import requests.exceptions
+import urllib3.exceptions
 
 from integrations.brokers.email_broker.types import Calendar, Event
 
 logger = logging.getLogger(__name__)
+
+# Errors that indicate the underlying HTTP connection has gone away —
+# server-side idle close, RST, half-closed TLS. caldav uses requests under
+# the hood, so the visible shapes are requests/urllib3 errors. Auth failures
+# stay in their own ``AuthorizationError`` branch — retrying those would
+# loop on a real credential rejection.
+_STALE_CONN_ERRORS: tuple[type[BaseException], ...] = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    urllib3.exceptions.ProtocolError,
+)
 
 
 class CalDavAuthError(Exception):
@@ -54,19 +67,8 @@ class CalDavClient:
         Auth failures (HTTP 401) raise :class:`CalDavAuthError` so the
         broker's entry code can exit 77 — same shape as IMAP's auth flow.
         """
-        def _blocking_connect() -> tuple[caldav.DAVClient, Any]:
-            client = caldav.DAVClient(
-                url=self._url,
-                username=self._username,
-                password=self._password,
-            )
-            # Resolving the principal exercises the auth path; if creds are
-            # rejected this is where it surfaces.
-            principal = client.principal()
-            return client, principal
-
         try:
-            self._client, self._principal = await asyncio.to_thread(_blocking_connect)
+            self._client, self._principal = await asyncio.to_thread(self._blocking_connect)
         except caldav.lib.error.AuthorizationError as exc:
             msg = f"CalDAV auth rejected: {exc}"
             raise CalDavAuthError(msg) from exc
@@ -80,18 +82,54 @@ class CalDavClient:
             raise
         logger.info("CalDAV principal resolved (%s @ %s)", self._username, self._url)
 
+    def _blocking_connect(self) -> tuple[caldav.DAVClient, Any]:
+        """Synchronous connect — runs inside a worker thread.
+
+        Used by ``connect()`` and as the reconnect path inside
+        ``_with_reconnect``.
+        """
+        client = caldav.DAVClient(
+            url=self._url,
+            username=self._username,
+            password=self._password,
+        )
+        # Resolving the principal exercises the auth path; if creds are
+        # rejected this is where it surfaces.
+        principal = client.principal()
+        return client, principal
+
+    def _with_reconnect(self, op):
+        """Run ``op(client, principal)``; reconnect+retry once on stale-conn errors.
+
+        Caller must hold ``self._lock`` and must have awaited ``connect()``
+        first. iCloud closes idle DAV sessions after ~10–30 minutes; the
+        next request fails with a requests/urllib3 connection error. We
+        rebuild the DAVClient + principal and retry once. A second failure
+        propagates.
+
+        Auth errors are *not* caught here — they're bubbled up so the
+        broker's entry code can map them to exit 77.
+        """
+        if self._client is None or self._principal is None:
+            msg = "CalDavClient used before connect()"
+            raise RuntimeError(msg)
+        try:
+            return op(self._client, self._principal)
+        except _STALE_CONN_ERRORS as exc:
+            logger.info("CalDAV connection stale (%s); reconnecting and retrying once", exc)
+            client, principal = self._blocking_connect()
+            self._client = client
+            self._principal = principal
+            return op(client, principal)
+
     async def list_calendars(self) -> list[Calendar]:
         """Return the user's calendars (collections under their principal)."""
         async with self._lock:
-            if self._principal is None:
-                msg = "CalDavClient used before connect()"
-                raise RuntimeError(msg)
-            principal = self._principal
 
-            def _blocking_list() -> list[Any]:
+            def _op(_client: caldav.DAVClient, principal: Any) -> list[Any]:
                 return list(principal.calendars())
 
-            cals = await asyncio.to_thread(_blocking_list)
+            cals = await asyncio.to_thread(self._with_reconnect, _op)
 
         return [
             Calendar(
@@ -117,12 +155,8 @@ class CalDavClient:
         """
         limit = max(1, min(limit, 200))
         async with self._lock:
-            if self._client is None:
-                msg = "CalDavClient used before connect()"
-                raise RuntimeError(msg)
-            client = self._client
 
-            def _blocking_search() -> tuple[str, list[Any]]:
+            def _op(client: caldav.DAVClient, _principal: Any) -> tuple[str, list[Any]]:
                 cal = client.calendar(url=calendar_url)
                 name = _calendar_name(cal)
                 now = datetime.now(UTC)
@@ -136,7 +170,7 @@ class CalDavClient:
                 ))
                 return name, hits
 
-            name, raw = await asyncio.to_thread(_blocking_search)
+            name, raw = await asyncio.to_thread(self._with_reconnect, _op)
 
         logger.info(
             "list_events(%s, +%d/-%d days): %d raw hits",
