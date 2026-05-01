@@ -1,9 +1,8 @@
 """Tests for the public HTTP handlers in ``server.aiohttp_app``.
 
-Focused on input validation at the API edge — the chat / stop /
-delete-history endpoints must reject requests without a
-``conversation_id`` instead of silently falling back to a shared
-"default" conversation.
+Focused on input validation at the API edge — the chat and stop
+endpoints must reject requests without a ``conversation_id`` instead
+of silently falling back to a shared "default" conversation.
 """
 
 from __future__ import annotations
@@ -13,11 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from server.aiohttp_app import (
-    chat_handler,
-    delete_history_handler,
-    stop_handler,
-)
+from server.aiohttp_app import chat_handler, stop_handler
 
 
 def _make_request(*, raw_body: str | None = None, query: dict | None = None) -> MagicMock:
@@ -104,22 +99,3 @@ async def test_stop_empty_conversation_id_returns_400() -> None:
     assert resp.status == 400
 
 
-# -- delete_history_handler -------------------------------------------------
-
-
-@pytest.mark.unit
-async def test_delete_history_missing_conversation_id_returns_400() -> None:
-    """No conversation_id query param → 400."""
-    req = _make_request(query={})
-    resp = await delete_history_handler(req)
-    assert resp.status == 400
-    body = json.loads(resp.body)
-    assert body["error"] == "conversation_id is required."
-
-
-@pytest.mark.unit
-async def test_delete_history_empty_conversation_id_returns_400() -> None:
-    """Empty conversation_id query value → 400."""
-    req = _make_request(query={"conversation_id": ""})
-    resp = await delete_history_handler(req)
-    assert resp.status == 400

@@ -30,7 +30,7 @@ from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
 from server._settings_routes import register_settings_routes
 from server._task_routes import register_task_routes
-from server.message_handler import handle_user_message, reset_message_history, resume_conversation
+from server.message_handler import handle_user_message, resume_conversation
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from agents.types import Data
 from config import load_config
@@ -233,17 +233,6 @@ async def stop_handler(request: Request) -> Response:
     return web.json_response({"ok": True})
 
 
-async def delete_history_handler(request: Request) -> Response:
-    """Drop the in-memory conversation entry for the given id."""
-    conversation_id = request.query.get("conversation_id")
-    if not conversation_id:
-        return web.json_response(
-            {"error": "conversation_id is required."}, status=400,
-        )
-    reset_message_history(conversation_id=conversation_id)
-    return web.Response(status=204)
-
-
 async def list_custom_tools_handler(_request: Request) -> Response:
     """Return all custom tool definitions as JSON."""
     tools = list_tools()
@@ -359,7 +348,6 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # API routes
     app.router.add_route("POST", "/api/chat", chat_handler)
     app.router.add_route("POST", "/api/chat/stop", stop_handler)
-    app.router.add_route("DELETE", "/api/chat/history", delete_history_handler)
     app.router.add_route("GET", "/api/custom-tools", list_custom_tools_handler)
     app.router.add_route("DELETE", "/api/custom-tools/{name}", delete_custom_tool_handler)
     app.router.add_route("GET", "/api/memory", list_memory_handler)

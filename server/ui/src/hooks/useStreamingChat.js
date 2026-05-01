@@ -395,8 +395,13 @@ export default function useStreamingChat(callbacks) {
         }
     }, []);
 
-    /** Clear messages, generate a fresh conversation ID, and delete backend history. */
-    const newConversation = useCallback(async () => {
+    /** Clear messages and switch to a fresh conversation ID.
+     *
+     * Sends a best-effort stop for the previous conversation. The server
+     * keeps an LRU cache of recent conversations and rehydrates from disk
+     * on demand, so no explicit cache-eviction call is needed.
+     */
+    const newConversation = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -405,13 +410,7 @@ export default function useStreamingChat(callbacks) {
         fetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
         setMessages([]);
-        // Generate a fresh conversation ID for the new conversation
         conversationIdRef.current = _uuid();
-        try {
-            await fetch(`/api/chat/history?conversation_id=${oldConversationId}`, { method: 'DELETE' });
-        } catch (err) {
-            // ignore
-        }
     }, []);
 
     return {
