@@ -31,13 +31,13 @@ const STATE_VIEW = {
         dotClass: 'dotError',
         badgeClass: 'badgeDanger',
         label: 'auth failed',
-        helper: 'Credentials were rejected. Disconnect and re-add to refresh.',
+        helper: 'Credentials were rejected. Delete and re-add to refresh.',
     },
     broken: {
         dotClass: 'dotError',
         badgeClass: 'badgeDanger',
         label: 'not running',
-        helper: 'Couldn\'t reach this integration. Disconnect and re-add.',
+        helper: 'Couldn\'t reach this integration. Delete and re-add.',
     },
 };
 
@@ -235,7 +235,7 @@ function UnavailableState({ onRetry }) {
             </div>
             <div className={styles.emptyHeading}>Integrations unavailable</div>
             <div className={styles.emptyDesc}>
-                The integrations service isn't running right now. Start it and try again.
+                The integrations service is temporarily unavailable. Try again in a moment.
             </div>
             <button
                 className={styles.btnOutline}
