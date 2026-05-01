@@ -7,6 +7,7 @@ import DesktopPreview from './components/DesktopPreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
+import IntegrationsTab from './components/integrations/IntegrationsTab.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import SystemSettings from './components/SystemSettings.jsx';
 import ProfilesTab from './components/ProfilesTab.jsx';
@@ -332,6 +333,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                         <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab}>
                             {settingsTab === 'profiles' && (
                                 <ProfilesTab profilesHook={profilesHook} features={features} />
+                            )}
+                            {settingsTab === 'integrations' && (
+                                <IntegrationsTab />
                             )}
                             {settingsTab === 'system' && (
                                 <SystemSettings onRunWizard={() => setSetupComplete(false)} />

@@ -28,7 +28,7 @@ export LLM_HOST="${LLM_HOST:-http://localhost:11434}"
 # anything mkdir'd later (e.g. .config) root-owned, which silently breaks
 # Chrome: its crashpad handler can't write to ~/.config/google-chrome and the
 # launcher pipe closes with "recvmsg: Connection reset by peer".
-mkdir -p /home/computron/Desktop /home/computron/downloads
+mkdir -p /home/computron/Desktop /home/computron/downloads /home/computron/uploads
 
 # Copy default Xfce config on first run (named volume starts empty)
 if [ ! -d /home/computron/.config/xfce4/panel ]; then
@@ -37,7 +37,28 @@ if [ ! -d /home/computron/.config/xfce4/panel ]; then
 fi
 
 chown -R computron:computron /home/computron /var/lib/computron
-chmod 755 /home/computron
+chmod 755 /home/computron /var/lib/computron
+
+# ── Shared downloads dir (computron + broker) ────────────────────────────────
+# /home/computron/downloads is the landing place for files the agent
+# retrieves from external sources: browser saves (written by computron via
+# the browser tool) and email attachments (written by broker). Both UIDs
+# need to drop files here, but only computron should have full control of
+# the directory.
+#
+# Mode 3770 = setgid (2) + sticky (1) + 770:
+#  - 770: owner rwx, group rwx, others none
+#  - setgid (2): new files inherit group=broker so a file computron writes
+#    is still readable by broker via group membership and vice-versa
+#  - sticky (1): a process can only delete/rename files it owns. Broker
+#    creates email attachments and can clean those up; broker CANNOT delete
+#    or rename a file computron wrote. computron, as the directory owner,
+#    can still do anything to anything (sticky exempts the dir owner).
+#
+# Net: broker gets enough access to drop attachments and tidy its own GC;
+# computron retains full authority over the folder.
+chown computron:broker /home/computron/downloads
+chmod 3770 /home/computron/downloads
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
 Xvfb ":${_DISPLAY_NUM}" -screen 0 1280x720x24 -ac &
@@ -83,20 +104,58 @@ else
     echo "Desktop disabled (ENABLE_DESKTOP=${_DESKTOP}); Xvfb only on ${DISPLAY}"
 fi
 
-# ── App server with auto-restart ─────────────────────────────────────────────
-# The loop restarts the app on crash or when killed by container-restart-app.
-# SIGTERM (from podman stop) breaks the loop for clean shutdown.
-_shutdown=0
-trap '_shutdown=1; echo "Received SIGTERM, shutting down..."' SIGTERM
+# ── Integrations supervisor ──────────────────────────────────────────────────
+# Persistent vault dir (master key + encrypted creds) lives under the state
+# volume; runtime sockets live on tmpfs so stale files vanish on container
+# restart. Both are owned by `broker` so the agent (running as `computron`)
+# can't read decrypted credentials. `computron` is in the `broker` group, so
+# the runtime dir is traversable and app.sock is connectable.
+#
+# Modes here MUST stay in sync with integrations/_perms.py — that module is
+# the canonical reference and the in-process chmod calls reference it.
+mkdir -p /var/lib/computron/vault /run/cvault
+chown -R broker:broker /var/lib/computron/vault
+chown broker:broker /run/cvault
+chmod 0700 /var/lib/computron/vault   # VAULT_DIR_MODE
+chmod 0750 /run/cvault                # RUNTIME_DIR_MODE
 
+# ── Long-lived services ──────────────────────────────────────────────────────
+# Two execution models:
+#  - Dev (DEV_MODE=true): both supervisor and app run in respawn loops so
+#    `just restart-app` can pkill the inner Python and the loops pick them
+#    back up — fast in-container iteration without a container restart.
+#  - Prod (default): fail-fast. Whichever child exits first brings the
+#    container down; Docker's restart policy handles recovery.
 cd /opt/computron
-while [ $_shutdown -eq 0 ]; do
+
+if [ "${DEV_MODE:-false}" = "true" ]; then
+    # Kill all background loops on shutdown so the container exits cleanly.
+    trap 'kill -TERM $(jobs -p) 2>/dev/null || true; wait' TERM EXIT
+
+    (while true; do
+        echo "Starting integrations supervisor..."
+        gosu broker python3.12 -m integrations.supervisor || true
+        sleep 1
+    done) &
+
+    (while true; do
+        echo "Starting app server..."
+        gosu computron python3.12 main.py || true
+        sleep 1
+    done) &
+
+    wait
+else
+    trap 'kill -TERM "$SUPERVISOR_PID" "$APP_PID" 2>/dev/null || true; wait' EXIT
+
+    echo "Starting integrations supervisor..."
+    gosu broker python3.12 -m integrations.supervisor &
+    SUPERVISOR_PID=$!
+
     echo "Starting app server..."
     gosu computron python3.12 main.py &
     APP_PID=$!
-    wait $APP_PID
-    exit_code=$?
-    [ $_shutdown -eq 1 ] && break
-    echo "App server exited ($exit_code), restarting in 2s..."
-    sleep 2
-done
+
+    wait -n "$SUPERVISOR_PID" "$APP_PID"
+    exit $?
+fi

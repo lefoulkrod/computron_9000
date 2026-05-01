@@ -1,8 +1,10 @@
-"""POM for the Settings page — Agent Profiles tab + System tab."""
+"""POM for the Settings page — Agent Profiles tab + Integrations tab + System tab."""
 
 from __future__ import annotations
 
 from playwright.sync_api import Locator, Page
+
+from e2e.pages.integrations_tab import IntegrationsTab
 
 
 class ProfileList:
@@ -150,6 +152,7 @@ class SettingsPage:
         self.profiles = ProfileList(page)
         self.builder = ProfileBuilder(page)
         self.system = SystemTab(page)
+        self.integrations = IntegrationsTab(page)
 
     def goto(self) -> "SettingsPage":
         """Open Settings on the Agent Profiles tab (default)."""
@@ -163,6 +166,12 @@ class SettingsPage:
         self.goto()
         self.page.get_by_role("button", name="System").click()
         self.page.locator("[class*='settingRow']").first.wait_for(state="visible")
+        return self
+
+    def goto_integrations(self) -> "SettingsPage":
+        """Open Settings and switch to the Integrations tab."""
+        self.goto()
+        self.page.get_by_role("button", name="Integrations").click()
         return self
 
     def close(self) -> "SettingsPage":

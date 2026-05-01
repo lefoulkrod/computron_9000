@@ -268,7 +268,7 @@ async def _run_turn(
 
     # Fresh AgentState each turn, restored from persisted skill names.
     # Pre-load skills from the profile.
-    agent_state = AgentState(get_core_tools() + active_agent.tools)
+    agent_state = AgentState(await get_core_tools() + active_agent.tools)
     for skill_name in profile.skills:
         skill = get_skill(skill_name)
         if skill is None:

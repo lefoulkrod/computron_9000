@@ -2,6 +2,7 @@ import styles from './SettingsPage.module.css';
 
 const TABS = [
     { id: 'profiles', label: 'Agent Profiles' },
+    { id: 'integrations', label: 'Integrations' },
     { id: 'system', label: 'System' },
 ];
 

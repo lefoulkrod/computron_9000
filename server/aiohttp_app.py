@@ -25,24 +25,27 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import asyncio
 
+from agents.types import Data
+from config import load_config
+from conversations import (
+    delete_conversation as _delete_conversation,
+)
+from conversations import (
+    list_conversations as _list_conversations,
+)
+from sdk.turn import is_turn_active, queue_nudge, request_stop
 from server._feature_routes import register_feature_routes
+from server._integrations_routes import register_integrations_routes
 from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
 from server._settings_routes import register_settings_routes
 from server._task_routes import register_task_routes
 from server.message_handler import handle_user_message, resume_conversation
-from sdk.turn import is_turn_active, queue_nudge, request_stop
-from agents.types import Data
-from config import load_config
 from tools.custom_tools.registry import delete_tool, list_tools
+from tools.desktop._exec import DesktopExecError
+from tools.desktop._lifecycle import start_desktop
 from tools.memory import forget as forget_memory
 from tools.memory import load_memory, set_key_hidden
-from conversations import (
-    delete_conversation as _delete_conversation,
-    list_conversations as _list_conversations,
-)
-from tools.desktop._lifecycle import start_desktop
-from tools.desktop._exec import DesktopExecError
 
 logger = logging.getLogger(__name__)
 
@@ -185,13 +188,13 @@ async def chat_handler(request: Request) -> StreamResponse:
     data_objs: list[Data] | None = None
     if payload.data:
         data_objs = [
-            Data(base64_encoded=a.base64, content_type=a.content_type, filename=a.filename)
-            for a in payload.data
+            Data(base64_encoded=a.base64, content_type=a.content_type, filename=a.filename) for a in payload.data
         ]
     return await stream_events(
         request,
         handle_user_message(
-            user_query, data_objs,
+            user_query,
+            data_objs,
             profile_id=payload.profile_id,
             conversation_id=payload.conversation_id,
         ),
@@ -260,15 +263,15 @@ async def delete_custom_tool_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-
-
 async def list_memory_handler(_request: Request) -> Response:
     """Return all stored memories and the set of hidden keys."""
     entries = load_memory()
-    return web.json_response({
-        "entries": {k: e.value for k, e in entries.items()},
-        "hidden": sorted(k for k, e in entries.items() if e.hidden),
-    })
+    return web.json_response(
+        {
+            "entries": {k: e.value for k, e in entries.items()},
+            "hidden": sorted(k for k, e in entries.items() if e.hidden),
+        }
+    )
 
 
 async def delete_memory_handler(request: Request) -> Response:
@@ -325,7 +328,8 @@ async def desktop_start_handler(_request: Request) -> Response:
         return web.json_response({"running": True})
     except DesktopExecError as exc:
         return web.json_response(
-            {"running": False, "error": str(exc)}, status=503,
+            {"running": False, "error": str(exc)},
+            status=503,
         )
 
 
@@ -377,6 +381,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Task engine routes
     register_task_routes(app)
 
+    # Integrations (supervisor / brokers)
+    register_integrations_routes(app)
+
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.
     cfg = load_config()
@@ -394,14 +401,24 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # else reads state.  No user interaction needed.
     app.on_startup.append(_run_data_migrations)
 
-    # Phase 2: Setup readiness — an asyncio.Event that subsystems wait on.
-    # If the setup wizard has already been completed, the event is set
-    # immediately.  Otherwise it fires when the wizard finishes (via
-    # setup.mark_ready).
+    # Phase 2: Readiness signals — each contributor hook calls
+    # ``register_ready_contributor`` and signals its event when its
+    # prerequisite is met. ``_init_ready_signal`` aggregates them all into
+    # ``app["ready"]``; it MUST run after every contributor hook so the
+    # contributor list is fully populated before the aggregator inspects it.
+    # Adding a new gating signal: a new ``_init_*_signal`` hook above the
+    # aggregator. The deferred init in Phase 3 stays unchanged.
+    #   * setup readiness — fires when the setup wizard completes (or
+    #     immediately if it already did on a previous boot).
+    #   * integrations readiness — fires when the supervisor cache load
+    #     finishes, which transitively means every registered broker has
+    #     completed its READY handshake.
+    app.on_startup.append(_init_setup_signal)
+    app.on_startup.append(_init_integrations_signal)
     app.on_startup.append(_init_ready_signal)
 
-    # Phase 3: Deferred subsystems — a single background task awaits the
-    # ready event, then initializes all subsystems that need setup first.
+    # Phase 3: Deferred subsystems — a single background task awaits
+    # ``app["ready"]`` and then initializes everything that needed to wait.
     app.on_startup.append(_start_deferred_subsystems)
     app.on_cleanup.append(_stop_deferred_subsystems)
 
@@ -417,27 +434,113 @@ async def _run_data_migrations(_app: web.Application) -> None:
     run_migrations(state_dir)
 
 
-async def _init_ready_signal(app: web.Application) -> None:
-    """Create the ready event and set it immediately if setup is already done."""
+def register_ready_contributor(app: web.Application, name: str) -> asyncio.Event:
+    """Register a contributor to the aggregate ``app["ready"]`` event.
+
+    Returns the ``asyncio.Event`` the caller signals when its prerequisite
+    is met. ``_init_ready_signal`` collects every registered contributor and
+    sets ``app["ready"]`` once they're all signalled.
+
+    Must be called from an on-startup hook registered before
+    ``_init_ready_signal`` so the aggregator sees the contributor.
+    """
+    event = asyncio.Event()
+    app.setdefault("_ready_contributors", []).append((name, event))
+    return event
+
+
+async def _init_setup_signal(app: web.Application) -> None:
+    """Register the setup-readiness contributor."""
     import setup
 
-    app["ready"] = asyncio.Event()
+    app["setup_ready"] = register_ready_contributor(app, "setup")
     if setup.is_ready():
-        app["ready"].set()
-        logger.info("Setup already complete — ready signal set")
+        app["setup_ready"].set()
+        logger.info("Setup already complete — setup-ready signal set")
     else:
-        logger.info("Setup not complete — subsystems will wait for ready signal")
+        logger.info("Setup not complete — waiting for wizard to finish")
+
+
+_INTEGRATIONS_LOAD_DEADLINE_SECONDS = 30.0
+_INTEGRATIONS_LOAD_RETRY_INTERVAL_SECONDS = 1.0
+
+
+async def _init_integrations_signal(app: web.Application) -> None:
+    """Register the integrations-readiness contributor and load the cache.
+
+    The supervisor binds ``app.sock`` after reconciling stored brokers
+    (an upstream IMAP/CalDAV login per integration), which can take a
+    couple of seconds during a cold container start. We retry the cache
+    load until it succeeds or a generous deadline elapses, so the chat
+    agent's first turn finds the cache already warm. If the deadline
+    fires (supervisor permanently unreachable), the readiness event
+    still fires so deferred subsystems aren't held up forever — chat
+    keeps working without integration tools and the UI surfaces the
+    "Integrations unavailable" state.
+    """
+    from tools.integrations import cache_loaded, registered_integrations
+
+    app["integrations_ready"] = register_ready_contributor(app, "integrations")
+
+    async def _load_with_retry() -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _INTEGRATIONS_LOAD_DEADLINE_SECONDS
+        try:
+            while True:
+                await registered_integrations()
+                if cache_loaded():
+                    logger.info("Integrations cache loaded")
+                    return
+                if loop.time() >= deadline:
+                    logger.warning(
+                        "Integrations cache failed to load within %.0fs; "
+                        "deferred subsystems starting without integrations",
+                        _INTEGRATIONS_LOAD_DEADLINE_SECONDS,
+                    )
+                    return
+                await asyncio.sleep(_INTEGRATIONS_LOAD_RETRY_INTERVAL_SECONDS)
+        finally:
+            app["integrations_ready"].set()
+
+    # Store the task on the app so the GC doesn't drop it before it completes.
+    app["_integrations_load"] = asyncio.create_task(
+        _load_with_retry(), name="integrations-load-gate",
+    )
+
+
+async def _init_ready_signal(app: web.Application) -> None:
+    """Aggregate every registered contributor into ``app["ready"]``.
+
+    Spawns a watcher task that awaits each contributor's event in turn and
+    sets ``app["ready"]`` once they're all signalled. Runs after every
+    ``_init_*_signal`` hook so the contributor list is complete.
+    """
+    app["ready"] = asyncio.Event()
+    contributors = app.get("_ready_contributors", [])
+    if not contributors:
+        app["ready"].set()
+        return
+
+    async def _watch() -> None:
+        for name, event in contributors:
+            if not event.is_set():
+                logger.info("Waiting on readiness signal: %s", name)
+            await event.wait()
+        app["ready"].set()
+        logger.info("All readiness signals set")
+
+    app["_ready_watcher"] = asyncio.create_task(_watch(), name="ready-watcher")
 
 
 async def _start_deferred_subsystems(app: web.Application) -> None:
-    """Wait for setup to complete, then initialize all deferred subsystems."""
+    """Wait for ``app["ready"]``, then initialize all deferred subsystems."""
 
     async def _deferred() -> None:
         try:
             if not app["ready"].is_set():
-                logger.info("Deferred subsystems waiting for setup to complete")
+                logger.info("Deferred subsystems waiting for readiness")
             await app["ready"].wait()
-            logger.info("Setup ready — starting deferred subsystems")
+            logger.info("Ready — starting deferred subsystems")
             await _init_task_runner(app)
         except asyncio.CancelledError:
             raise

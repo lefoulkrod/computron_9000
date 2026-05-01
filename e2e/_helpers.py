@@ -29,3 +29,19 @@ def container_exec(script: str) -> str:
         capture_output=True, text=True, check=True,
     )
     return result.stdout.strip()
+
+
+def container_run_root(cmd: str) -> str:
+    """Run a shell command inside the container as root.
+
+    For setup/teardown ops that need privileges the app user doesn't
+    have — chmod on broker-owned files in /run/cvault, /etc/hosts edits,
+    process signals to the supervisor. Use sparingly; tests that touch
+    state managed by the app should prefer `container_exec` (runs as
+    the app's uid) so the app can read/clean up afterwards.
+    """
+    result = subprocess.run(
+        ["docker", "exec", "-u", "0", CONTAINER_NAME, "bash", "-c", cmd],
+        capture_output=True, text=True, check=True,
+    )
+    return result.stdout.strip()

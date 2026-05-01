@@ -62,3 +62,9 @@ goals:
   timezone: America/Chicago
   notifications:
     enabled: true
+
+integrations:
+  # Unix Domain Socket the supervisor binds for app-server RPC.
+  # Default matches the supervisor's in-container layout; override via env var
+  # for dev workflows that run the supervisor at a different path.
+  app_sock_path: ${SUPERVISOR_APP_SOCK:-/run/cvault/app.sock}

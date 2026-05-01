@@ -116,9 +116,10 @@ dev:
     if ! docker ps -q -f name=^{{_ctr}}$ 2>/dev/null | grep -q .; then
         docker rm -f {{_ctr}} 2>/dev/null || true
         env_args=""; [ -f .env ] && env_args="--env-file .env"
-        docker run -d --rm --name {{_ctr}} \
+        docker run -d --restart=unless-stopped --name {{_ctr}} \
             --gpus all --shm-size=256m --network=host \
             -e PYTHONDONTWRITEBYTECODE=1 \
+            -e DEV_MODE=true \
             $env_args \
             -v "$state/home:/home/computron:rw" \
             -v "$state/state:/var/lib/computron:rw" \
@@ -129,19 +130,17 @@ dev:
     fi
     just _sync-src {{_ctr}}
     just _ui-build {{_ctr}}
-    docker exec {{_ctr}} pkill -f "python3.12 main.py" 2>/dev/null || true
+    just _bounce-services {{_ctr}}
     just _wait-ready 8080
     echo "✅ Ready on http://localhost:8080"
 
-# Sync latest Python source, bounce the app (entrypoint loop respawns it)
+# Sync latest Python source and bounce supervisor + app so they reload it.
 restart-app:
     #!/usr/bin/env bash
     set -euo pipefail
     just _require-running
     just _sync-src {{_ctr}}
-    docker exec {{_ctr}} pkill -9 -f "inference_server.py" 2>/dev/null || true
-    docker exec {{_ctr}} rm -f /tmp/inference_server.pid 2>/dev/null || true
-    docker exec {{_ctr}} pkill -f "python3.12 main.py" 2>/dev/null || true
+    just _bounce-services {{_ctr}}
     just _wait-ready 8080
     echo "✅ App restarted"
 
@@ -253,7 +252,7 @@ manual-test:
 
     just _sync-src "$name"
     docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
-    docker exec "$name" pkill -f "python3.12 main.py" 2>/dev/null || true
+    docker restart "$name" >/dev/null
 
     ready=false
     for i in $(seq 1 30); do
@@ -316,8 +315,8 @@ e2e *args:
 
     just _sync-src "$name"
     docker exec "$name" bash -c "cd /opt/computron/{{UI_DIR}} && npm run build"
-    # Bounce main.py so it picks up the synced code + fresh dist
-    docker exec "$name" pkill -f "python3.12 main.py" 2>/dev/null || true
+    # Bounce the container so it picks up the synced code + fresh dist
+    docker restart "$name" >/dev/null
 
     # Wait for the synced app to come up on the e2e port
     ready=false
@@ -438,6 +437,13 @@ _ui-build ctr:
         fi
         npm run build
     '
+
+# Bounce supervisor + app inside the dev container. The DEV_MODE entrypoint
+# runs each in a respawn loop, so killing the inner Python lets the loop
+# pick it back up with the freshly synced source.
+_bounce-services ctr:
+    @docker exec {{ctr}} pkill -f "python3.12 -m integrations.supervisor" 2>/dev/null || true
+    @docker exec {{ctr}} pkill -f "python3.12 main.py" 2>/dev/null || true
 
 # Poll until the app responds on the given port (up to ~60s)
 _wait-ready port:
