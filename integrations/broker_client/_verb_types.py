@@ -27,7 +27,7 @@ _VERB_TYPES: dict[str, Literal["read", "write"]] = {
     "fetch_message": "read",
     "list_messages": "read",
     "fetch_attachment": "read",
-    "move_message": "write",
+    "move_messages": "write",
     "send_message": "write",
     # Calendar (CalDAV)
     "list_calendars": "read",

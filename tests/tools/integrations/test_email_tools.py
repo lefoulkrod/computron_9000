@@ -461,10 +461,35 @@ async def test_send_email_reports_missing_attachment_path(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_move_email_confirms_move(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_move_email_confirms_single_move(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_call(monkeypatch, result={"moved": True})
-    out = await move_email("icloud_personal", "INBOX", "42", "Archive")
-    assert out == "Moved '42' from 'INBOX' to 'Archive'."
+    out = await move_email("icloud_personal", "INBOX", ["42"], "Archive")
+    assert out == "Moved message from 'INBOX' to 'Archive'."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_confirms_bulk_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={"moved": True})
+    out = await move_email("icloud_personal", "INBOX", ["1", "2", "3"], "Archive")
+    assert out == "Moved messages from 'INBOX' to 'Archive'."
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_move_email_short_circuits_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty input doesn't even hit the broker — the tool short-circuits."""
+    called = False
+
+    async def _track(*_args: Any, **_kwargs: Any) -> Any:
+        nonlocal called
+        called = True
+        return {"moved": True}
+
+    monkeypatch.setattr(broker_client, "call", _track)
+    out = await move_email("icloud_personal", "INBOX", [], "Archive")
+    assert "No UIDs supplied" in out
+    assert called is False
 
 
 @pytest.mark.unit
@@ -473,19 +498,23 @@ async def test_move_email_passes_args_through(monkeypatch: pytest.MonkeyPatch) -
     captured: dict[str, Any] = {}
 
     async def _capture(integration_id: str, verb: str, args: dict, *, app_sock_path: str) -> Any:
+        captured["verb"] = verb
         captured["args"] = args
         return {"moved": True}
 
     monkeypatch.setattr(broker_client, "call", _capture)
-    await move_email("icloud_personal", "INBOX", "42", "Trash")
-    assert captured["args"] == {"folder": "INBOX", "uid": "42", "dest_folder": "Trash"}
+    await move_email("icloud_personal", "INBOX", ["42", "43"], "Trash")
+    assert captured["verb"] == "move_messages"
+    assert captured["args"] == {
+        "folder": "INBOX", "uids": ["42", "43"], "dest_folder": "Trash",
+    }
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_move_email_reports_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
-    out = await move_email("icloud_unknown", "INBOX", "42", "Archive")
+    out = await move_email("icloud_unknown", "INBOX", ["42"], "Archive")
     assert out == "Integration 'icloud_unknown' is not connected."
 
 
@@ -493,7 +522,7 @@ async def test_move_email_reports_not_connected(monkeypatch: pytest.MonkeyPatch)
 @pytest.mark.asyncio
 async def test_move_email_reports_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
-    out = await move_email("icloud_personal", "INBOX", "42", "Archive")
+    out = await move_email("icloud_personal", "INBOX", ["42"], "Archive")
     assert out == "Writes are disabled for 'icloud_personal'."
 
 
@@ -501,8 +530,9 @@ async def test_move_email_reports_write_denied(monkeypatch: pytest.MonkeyPatch) 
 @pytest.mark.asyncio
 async def test_move_email_reports_generic_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_call(monkeypatch, exc=broker_client.IntegrationError("no such mailbox"))
-    out = await move_email("icloud_personal", "INBOX", "42", "Nowhere")
-    assert out == "Failed to move '42' from 'INBOX' to 'Nowhere': no such mailbox"
+    out = await move_email("icloud_personal", "INBOX", ["42"], "Nowhere")
+    assert "no such mailbox" in out
+    assert "from 'INBOX' to 'Nowhere'" in out
 
 
 # ── read_email_message attachments rendering ─────────────────────────────────

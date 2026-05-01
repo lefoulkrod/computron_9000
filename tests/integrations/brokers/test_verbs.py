@@ -46,10 +46,12 @@ class _StubImapClient:
             Mailbox(name="Sent", attrs=["\\HasNoChildren"]),
         ]
 
-    async def move_message(self, folder: str, uid: str, dest_folder: str) -> None:
+    async def move_messages(
+        self, folder: str, uids: list[str], dest_folder: str,
+    ) -> None:
         if self.move_raises is not None:
             raise self.move_raises
-        self.move_calls.append((folder, uid, dest_folder))
+        self.move_calls.append((folder, list(uids), dest_folder))
 
     async def fetch_attachment(
         self, folder: str, uid: str, attachment_id: str,
@@ -306,38 +308,77 @@ async def test_dispatch_send_message_rejects_total_size_over_cap(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_move_message_calls_imap_and_returns_ack(tmp_path: Path) -> None:
-    """Happy path: ``move_message`` with WRITE_ALLOWED=true calls
-    ``ImapClient.move_message`` with the args from the frame.
+async def test_dispatch_move_messages_calls_imap_and_returns_ack(tmp_path: Path) -> None:
+    """Happy path: ``move_messages`` with WRITE_ALLOWED=true calls
+    ``ImapClient.move_messages`` with the args from the frame and returns
+    a thin ack. We don't surface a count because IMAP doesn't reliably
+    report which UIDs actually moved.
     """
     imap = _StubImapClient()
     dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     result = await dispatcher.dispatch(
-        "move_message",
-        {"folder": "INBOX", "uid": "42", "dest_folder": "Trash"},
+        "move_messages",
+        {"folder": "INBOX", "uids": ["42", "43", "44"], "dest_folder": "Trash"},
     )
 
     assert result == {"moved": True}
-    assert imap.move_calls == [("INBOX", "42", "Trash")]
+    assert imap.move_calls == [("INBOX", ["42", "43", "44"], "Trash")]
 
 
 @pytest.mark.asyncio
-async def test_dispatch_move_message_translates_lookup_error_to_not_found(tmp_path: Path) -> None:
-    """``LookupError`` from the IMAP client (no such UID / no such mailbox)
+async def test_dispatch_move_messages_translates_lookup_error_to_not_found(tmp_path: Path) -> None:
+    """``LookupError`` from the IMAP client (destination doesn't exist)
     surfaces as the wire-level ``NOT_FOUND`` code, not a generic error.
     """
     imap = _StubImapClient()
-    imap.move_raises = LookupError("no such message")
+    imap.move_raises = LookupError("no such mailbox")
     dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
-            "move_message",
-            {"folder": "INBOX", "uid": "999", "dest_folder": "Trash"},
+            "move_messages",
+            {"folder": "INBOX", "uids": ["999"], "dest_folder": "Nowhere"},
         )
     assert excinfo.value.code == "NOT_FOUND"
-    assert excinfo.value.message == "no such message"
+    assert excinfo.value.message == "no such mailbox"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_move_messages_rejects_empty_uids(tmp_path: Path) -> None:
+    """Empty ``uids`` list is a usage error — surfaces BAD_REQUEST so the
+    caller sees a clear "you didn't pass anything" error rather than a
+    silent no-op."""
+    imap = _StubImapClient()
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+
+    with pytest.raises(RpcError) as excinfo:
+        await dispatcher.dispatch(
+            "move_messages",
+            {"folder": "INBOX", "uids": [], "dest_folder": "Trash"},
+        )
+    assert excinfo.value.code == "BAD_REQUEST"
+    assert imap.move_calls == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_move_messages_rejects_oversize_batch(tmp_path: Path) -> None:
+    """200-uid cap is enforced at the verb layer so the broker never
+    builds a wire frame the server might reject with a parse error."""
+    imap = _StubImapClient()
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+
+    with pytest.raises(RpcError) as excinfo:
+        await dispatcher.dispatch(
+            "move_messages",
+            {
+                "folder": "INBOX",
+                "uids": [str(i) for i in range(201)],
+                "dest_folder": "Trash",
+            },
+        )
+    assert excinfo.value.code == "BAD_REQUEST"
+    assert imap.move_calls == []
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-"""Agent tool: move one email by UID from one folder to another."""
+"""Agent tool: move one or more emails by UID from one folder to another."""
 
 from __future__ import annotations
 
@@ -15,30 +15,31 @@ logger = logging.getLogger(__name__)
 async def move_email(
     integration_id: str,
     folder: str,
-    uid: str,
+    uids: list[str],
     dest_folder: str,
 ) -> str:
-    """Move one message by ``uid`` from ``folder`` to ``dest_folder``.
+    """Move one or more messages from ``folder`` to ``dest_folder``.
 
-    The destination must already exist on the server (use
-    ``list_email_folders`` to find candidate names — e.g. ``"Trash"``,
-    ``"Archive"``, ``"[Gmail]/All Mail"``).
+    The destination must already exist — use ``list_email_folders`` to
+    find candidate names (e.g. ``"Trash"``, ``"Archive"``).
 
     Args:
         integration_id: Identifier of the email integration.
-        folder: Source mailbox the message currently lives in.
-        uid: IMAP UID of the message (from one of the listing tools).
-        dest_folder: Destination mailbox to move it into.
+        folder: Source mailbox.
+        uids: List of message UIDs from a listing tool. Up to 200 per call.
+        dest_folder: Destination mailbox.
 
     Returns:
         Plain text — a confirmation line, or a short error notice.
     """
+    if not uids:
+        return "No UIDs supplied — nothing to move."
     app_sock = load_config().integrations.app_sock_path
     try:
         await broker_client.call(
             integration_id,
-            "move_message",
-            {"folder": folder, "uid": uid, "dest_folder": dest_folder},
+            "move_messages",
+            {"folder": folder, "uids": list(uids), "dest_folder": dest_folder},
             app_sock_path=app_sock,
         )
     except broker_client.IntegrationNotConnected:
@@ -47,11 +48,15 @@ async def move_email(
         return f"Writes are disabled for {integration_id!r}."
     except broker_client.IntegrationError as exc:
         logger.warning(
-            "move_email(%r, %r, %r -> %r) failed: %s",
-            integration_id, folder, uid, dest_folder, exc,
+            "move_email(%r, %r, %d uid(s) -> %r) failed: %s",
+            integration_id, folder, len(uids), dest_folder, exc,
         )
-        return f"Failed to move {uid!r} from {folder!r} to {dest_folder!r}: {exc}"
-    return f"Moved {uid!r} from {folder!r} to {dest_folder!r}."
+        return (
+            f"Failed to move {len(uids)} message(s) from {folder!r} "
+            f"to {dest_folder!r}: {exc}"
+        )
+    noun = "message" if len(uids) == 1 else "messages"
+    return f"Moved {noun} from {folder!r} to {dest_folder!r}."
 
 
 def build_move_email_tool(integration_ids: Iterable[str]) -> Callable[..., Any]:
@@ -62,22 +67,22 @@ def build_move_email_tool(integration_ids: Iterable[str]) -> Callable[..., Any]:
     async def _move_email(
         integration_id: str,
         folder: str,
-        uid: str,
+        uids: list[str],
         dest_folder: str,
     ) -> str:
-        return await move_email(integration_id, folder, uid, dest_folder)
+        return await move_email(integration_id, folder, uids, dest_folder)
 
     _move_email.__name__ = move_email.__name__
     _move_email.__doc__ = (
-        "Move one email by UID from one folder to another. The destination "
-        "must already exist on the server — call list_email_folders first "
-        "to discover names. Useful for triage workflows: archive, trash, "
-        f"or sort into project folders. Valid integration IDs: {ids_line}.\n\n"
+        "Move one or more emails from one folder to another. The "
+        "destination must already exist — call list_email_folders to "
+        "discover names. Useful for triage: archive, trash, or sort "
+        f"into project folders. Valid integration IDs: {ids_line}.\n\n"
         "Args:\n"
-        "    integration_id: Which integration to move the message on.\n"
-        "    folder: Source mailbox the message currently lives in.\n"
-        "    uid: IMAP UID of the message (from list_email_messages or search_email).\n"
-        "    dest_folder: Destination mailbox to move it into.\n\n"
+        "    integration_id: Which integration to move messages on.\n"
+        "    folder: Source mailbox.\n"
+        "    uids: List of message UIDs from a listing tool. Up to 200 per call.\n"
+        "    dest_folder: Destination mailbox.\n\n"
         "Returns:\n"
         "    Plain text — a confirmation line, or a short error notice.\n"
     )

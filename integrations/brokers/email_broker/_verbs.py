@@ -56,7 +56,7 @@ _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     "search_messages": "read",
     "fetch_message": "read",
     "fetch_attachment": "read",
-    "move_message": "write",
+    "move_messages": "write",
     "send_message": "write",
     # Calendar (CalDAV)
     "list_calendars": "read",
@@ -101,7 +101,7 @@ class VerbDispatcher:
             "search_messages": self._handle_search_messages,
             "fetch_message": self._handle_fetch_message,
             "fetch_attachment": self._handle_fetch_attachment,
-            "move_message": self._handle_move_message,
+            "move_messages": self._handle_move_messages,
         }
         if smtp is not None:
             self._handlers["send_message"] = self._handle_send_message
@@ -206,18 +206,27 @@ class VerbDispatcher:
             "size": len(payload),
         }
 
-    async def _handle_move_message(self, args: dict[str, Any]) -> dict[str, Any]:
-        """``move_message {folder, uid, dest_folder}`` → ``{moved: true}``.
+    async def _handle_move_messages(self, args: dict[str, Any]) -> dict[str, Any]:
+        """``move_messages {folder, uids, dest_folder}`` → ``{moved: true}``.
 
-        The verb returns a thin acknowledgment because UID MOVE assigns a
-        new UID at the destination that the caller didn't ask for; if a
-        future verb needs the new UID we can extend the response then.
+        ``uids`` is a JSON array of strings. The server moves whatever it
+        recognizes and silently skips the rest, returning ``OK`` either
+        way; we don't surface a count because the wire protocol doesn't
+        expose a reliable one. Callers needing exact accounting must
+        re-list the source folder.
         """
         folder = _require_str(args, "folder")
-        uid = _require_str(args, "uid")
+        uids = _require_str_list(args, "uids")
         dest_folder = _require_str(args, "dest_folder")
+        if not uids:
+            raise RpcError("BAD_REQUEST", "'uids' must not be empty")
+        if len(uids) > 200:
+            raise RpcError(
+                "BAD_REQUEST",
+                f"cannot move more than 200 messages per call (got {len(uids)})",
+            )
         try:
-            await self._imap.move_message(folder, uid, dest_folder)
+            await self._imap.move_messages(folder, uids, dest_folder)
         except LookupError as exc:
             raise RpcError("NOT_FOUND", str(exc)) from exc
         return {"moved": True}

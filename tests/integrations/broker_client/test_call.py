@@ -291,25 +291,29 @@ async def test_call_send_message_lands_in_outbox_through_real_broker(
 
 
 @pytest.mark.asyncio
-async def test_call_move_message_relocates_through_real_broker(
+async def test_call_move_messages_relocates_through_real_broker(
     tmp_path: Path,
 ) -> None:
     """End-to-end move: broker_client.call → broker → UID MOVE on the fake's
-    IMAP server → the source mailbox loses the message and the destination
-    gains it.
+    IMAP server → the source mailbox loses the messages and the destination
+    gains them.
 
     Same vertical-slice rationale as the send test — exercises the full
-    stack including the broker's mode-aware SELECT switching for write verbs.
+    stack including the broker's mode-aware SELECT switching for write
+    verbs and the bulk-uid path.
     """
     fake = FakeEmail()
     await fake.start()
-    uid = fake.add_message(
-        "INBOX",
-        from_="alice@example.com",
-        to=fake.user,
-        subject="archive me",
-        body="bye",
-    )
+    uids = [
+        fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject=f"archive me {i}",
+            body="bye",
+        )
+        for i in range(3)
+    ]
 
     sup = Supervisor(
         vault_dir=tmp_path / "vault",
@@ -330,8 +334,12 @@ async def test_call_move_message_relocates_through_real_broker(
 
         result = await broker_client.call(
             "icloud_personal",
-            "move_message",
-            {"folder": "INBOX", "uid": str(uid), "dest_folder": "Trash"},
+            "move_messages",
+            {
+                "folder": "INBOX",
+                "uids": [str(u) for u in uids],
+                "dest_folder": "Trash",
+            },
             app_sock_path=sup.app_sock_path,
         )
     finally:
@@ -340,6 +348,6 @@ async def test_call_move_message_relocates_through_real_broker(
 
     assert result == {"moved": True}
     assert fake.mailboxes["INBOX"].messages == []
-    assert len(fake.mailboxes["Trash"].messages) == 1
+    assert len(fake.mailboxes["Trash"].messages) == 3
 
 

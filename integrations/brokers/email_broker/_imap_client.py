@@ -379,39 +379,46 @@ class ImapClient:
             f"no attachment {attachment_id!r} in uid={uid}",
         )
 
-    async def move_message(self, folder: str, uid: str, dest_folder: str) -> None:
-        """Move one message by UID from ``folder`` to ``dest_folder``.
+    async def move_messages(
+        self, folder: str, uids: list[str], dest_folder: str,
+    ) -> None:
+        """Move ``uids`` from ``folder`` to ``dest_folder`` in one round-trip.
 
-        Uses IMAP UID MOVE (RFC 6851), which iCloud and Gmail both support.
-        Atomic on the server: on success the message is gone from the source
-        and present in the destination, with a fresh UID assigned by the
-        destination mailbox. We don't surface that new UID — the agent
-        operates on the move as a one-shot action.
+        Uses IMAP UID MOVE (RFC 6851) with a comma-joined UID set, which
+        iCloud and Gmail both support. UIDs the server doesn't recognize
+        are silently skipped (server behavior); the wire response is just
+        ``OK`` either way, so the only thing the caller learns is that
+        the command was accepted. Callers needing exact accounting must
+        re-list the source folder.
 
-        Raises ``LookupError`` if the UID isn't in the source mailbox or if
-        the destination doesn't exist.
+        Capped at 200 UIDs per call to stay well under server line-length
+        limits. The verb layer rejects oversize batches before we get here.
+
+        Raises ``LookupError`` if the destination doesn't exist or the
+        whole command fails.
         """
+        if not uids:
+            return
+        if len(uids) > 200:
+            msg = f"cannot move more than 200 messages per call (got {len(uids)})"
+            raise ValueError(msg)
+        uid_set = ",".join(uids)
         async with self._lock:
 
             def _op(conn: imaplib.IMAP4) -> None:
                 self._select_in_thread(conn, folder)
                 # imaplib doesn't expose a typed ``move`` helper, so we drive
-                # the raw UID MOVE command. The reply shape is the same as
-                # any other UID-prefixed command: ``("OK", [b"MOVE completed"])``
-                # on success, ``("NO", [reason])`` if the destination is
-                # missing or the UID isn't in the source.
-                # Quote the destination — same Python-3.12-imaplib reason as
-                # in ``_select_in_thread``: a name with a space gets parsed as
-                # extra args otherwise.
-                typ, data = conn.uid("MOVE", uid, _imap_quote(dest_folder))
+                # the raw UID MOVE command. Quote the destination — same
+                # Python-3.12-imaplib reason as in ``_select_in_thread``:
+                # a name with a space gets parsed as extra args otherwise.
+                typ, data = conn.uid("MOVE", uid_set, _imap_quote(dest_folder))
                 if typ != "OK":
                     detail = b" ".join(d for d in data if isinstance(d, bytes))
                     text = detail.decode("utf-8", errors="replace")
-                    # Many servers return NO for "no such uid" and "no such
-                    # mailbox" alike; LookupError is the closest match for
-                    # both — the broker maps it to NOT_FOUND on the wire.
+                    # NO usually means "no such mailbox"; the broker maps
+                    # LookupError to NOT_FOUND on the wire.
                     msg = (
-                        f"UID MOVE uid={uid} -> {dest_folder!r} "
+                        f"UID MOVE uids={uid_set} -> {dest_folder!r} "
                         f"failed: {typ} {text!r}"
                     )
                     raise LookupError(msg)

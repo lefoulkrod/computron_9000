@@ -102,10 +102,11 @@ async def test_connect_raises_imap_auth_error_when_login_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_move_message_relocates_message_between_mailboxes() -> None:
-    """Happy path: ``move_message`` moves a real seeded message from INBOX
-    to Trash. After the move, INBOX is empty and Trash has the message —
-    proves UID MOVE worked, not just COPY (which would leave a duplicate).
+async def test_move_messages_relocates_message_between_mailboxes() -> None:
+    """Happy path: ``move_messages`` with one UID moves a real seeded
+    message from INBOX to Trash. After the move, INBOX is empty and Trash
+    has the message — proves UID MOVE worked, not just COPY (which would
+    leave a duplicate).
     """
     fake = FakeEmail()
     await fake.start()
@@ -118,18 +119,99 @@ async def test_move_message_relocates_message_between_mailboxes() -> None:
             body="going to trash",
         )
         client = await _connected_client(fake)
-        await client.move_message("INBOX", str(uid), "Trash")
+        await client.move_messages("INBOX", [str(uid)], "Trash")
     finally:
         await fake.stop()
 
     assert fake.mailboxes["INBOX"].messages == []
     assert len(fake.mailboxes["Trash"].messages) == 1
-    moved = fake.mailboxes["Trash"].messages[0]
-    assert b"Subject: bye" in moved.raw
+    record = fake.mailboxes["Trash"].messages[0]
+    assert b"Subject: bye" in record.raw
 
 
 @pytest.mark.asyncio
-async def test_move_message_creates_destination_mailbox_on_fly() -> None:
+async def test_move_messages_bulk_moves_multiple_uids_in_one_call() -> None:
+    """Multiple UIDs in one call land on the destination together — the
+    real win of bulk move. Verifies the comma-joined UID set parses on
+    the server and every message ends up in the destination.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uids = [
+            fake.add_message(
+                "INBOX",
+                from_="alice@example.com",
+                to=fake.user,
+                subject=f"msg {i}",
+                body=f"body {i}",
+            )
+            for i in range(5)
+        ]
+        client = await _connected_client(fake)
+        await client.move_messages(
+            "INBOX", [str(u) for u in uids], "Archive",
+        )
+    finally:
+        await fake.stop()
+
+    assert fake.mailboxes["INBOX"].messages == []
+    assert len(fake.mailboxes["Archive"].messages) == 5
+
+
+@pytest.mark.asyncio
+async def test_move_messages_silently_skips_unknown_uids() -> None:
+    """Per RFC 6851 the server moves whatever UIDs it knows and silently
+    skips the rest, returning OK overall. The known UID lands at the
+    destination; the unknown ones produce no error.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        real_uid = fake.add_message(
+            "INBOX", from_="a@b.com", to=fake.user, subject="real",
+        )
+        client = await _connected_client(fake)
+        await client.move_messages(
+            "INBOX", [str(real_uid), "9998", "9999"], "Trash",
+        )
+    finally:
+        await fake.stop()
+
+    assert len(fake.mailboxes["Trash"].messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_move_messages_empty_list_is_noop() -> None:
+    """Empty input returns without hitting the wire — saves a server
+    round-trip when the agent's filter happened to match nothing."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        client = await _connected_client(fake)
+        await client.move_messages("INBOX", [], "Trash")
+    finally:
+        await fake.stop()
+
+
+@pytest.mark.asyncio
+async def test_move_messages_rejects_oversize_batch() -> None:
+    """The 200-UID cap stays well under typical IMAP command-line
+    limits; the client raises ``ValueError`` before sending anything."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        client = await _connected_client(fake)
+        with pytest.raises(ValueError, match="more than 200"):
+            await client.move_messages(
+                "INBOX", [str(i) for i in range(201)], "Trash",
+            )
+    finally:
+        await fake.stop()
+
+
+@pytest.mark.asyncio
+async def test_move_messages_creates_destination_mailbox_on_fly() -> None:
     """The fake's UID MOVE creates the destination on demand — same shape
     as Gmail/iCloud auto-creating labels. Verifies our client doesn't
     require the dest to exist before the call.
@@ -144,7 +226,7 @@ async def test_move_message_creates_destination_mailbox_on_fly() -> None:
             subject="archive me",
         )
         client = await _connected_client(fake)
-        await client.move_message("INBOX", str(uid), "Archive/2026")
+        await client.move_messages("INBOX", [str(uid)], "Archive/2026")
     finally:
         await fake.stop()
 
@@ -196,7 +278,7 @@ async def test_select_folder_with_space_in_name() -> None:
 
 
 @pytest.mark.asyncio
-async def test_move_message_to_folder_with_space() -> None:
+async def test_move_messages_to_folder_with_space() -> None:
     """Same quoting fix applies to ``UID MOVE``'s destination — moving to
     ``Sent Messages`` (or any iCloud-style multi-word folder) needs the
     destination quoted on the wire.
@@ -208,7 +290,7 @@ async def test_move_message_to_folder_with_space() -> None:
             "INBOX", from_="a@b.com", to=fake.user, subject="archive me",
         )
         client = await _connected_client(fake)
-        await client.move_message("INBOX", str(uid), "Sent Messages")
+        await client.move_messages("INBOX", [str(uid)], "Sent Messages")
     finally:
         await fake.stop()
     assert fake.mailboxes["INBOX"].messages == []
@@ -462,7 +544,7 @@ async def test_fetch_attachment_recovers_from_idle_drop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_move_message_recovers_from_idle_drop() -> None:
+async def test_move_messages_recovers_from_idle_drop() -> None:
     """UID MOVE after a forced disconnect: source ends empty, dest has the message."""
     fake = FakeEmail()
     await fake.start()
@@ -472,7 +554,7 @@ async def test_move_message_recovers_from_idle_drop() -> None:
         )
         client = await _connected_client(fake)
         fake.force_drop_next_imap = True
-        await client.move_message("INBOX", str(uid), "Trash")
+        await client.move_messages("INBOX", [str(uid)], "Trash")
     finally:
         await fake.stop()
     assert fake.mailboxes["INBOX"].messages == []
