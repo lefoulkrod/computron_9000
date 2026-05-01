@@ -172,10 +172,14 @@ async def chat_handler(request: Request) -> StreamResponse:
     user_query = payload.message.strip()
     if not user_query:
         return web.json_response({"error": "Message field is required."}, status=400)
+    if not payload.conversation_id:
+        return web.json_response(
+            {"error": "conversation_id is required."}, status=400,
+        )
 
     # If this conversation already has an active agent, queue the message as a nudge
     if is_turn_active(payload.conversation_id):
-        queue_nudge(payload.conversation_id or "default", user_query)
+        queue_nudge(payload.conversation_id, user_query)
         return web.json_response({"ok": True})
 
     data_objs: list[Data] | None = None
@@ -221,13 +225,21 @@ async def index_handler(_request: Request) -> StreamResponse:
 async def stop_handler(request: Request) -> Response:
     """Interrupt the active agent conversation turn."""
     conversation_id = request.query.get("conversation_id")
+    if not conversation_id:
+        return web.json_response(
+            {"error": "conversation_id is required."}, status=400,
+        )
     request_stop(conversation_id=conversation_id)
     return web.json_response({"ok": True})
 
 
 async def delete_history_handler(request: Request) -> Response:
-    """Clear chat history for a conversation."""
+    """Drop the in-memory conversation entry for the given id."""
     conversation_id = request.query.get("conversation_id")
+    if not conversation_id:
+        return web.json_response(
+            {"error": "conversation_id is required."}, status=400,
+        )
     reset_message_history(conversation_id=conversation_id)
     return web.Response(status=204)
 

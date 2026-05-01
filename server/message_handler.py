@@ -48,8 +48,6 @@ from tools.virtual_computer.receive_file import receive_attachment
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
 
-_DEFAULT_CONVERSATION_ID = "default"
-
 
 def _log_turn_start(profile: AgentProfile) -> None:
     """Print a Rich panel showing the active profile and its settings."""
@@ -104,20 +102,37 @@ _conversations: dict[str, _Conversation] = {}
 _background_tasks: set[asyncio.Task] = set()
 
 
-def _get_conversation(conversation_id: str | None = None) -> _Conversation:
-    """Return the conversation for the given ID, creating one if needed."""
-    cid = conversation_id or _DEFAULT_CONVERSATION_ID
-    if cid not in _conversations:
-        _conversations[cid] = _Conversation(
-            history=ConversationHistory(instance_id=cid),
-        )
-    return _conversations[cid]
+def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
+    """Return ``(conversation, is_new)`` for the given ID, creating it if needed.
+
+    ``is_new`` is True only when the conversation has no in-memory entry
+    AND no on-disk history — a genuine first-time use. On any cache miss
+    we hydrate from disk so turns survive process restarts: the browser
+    preserves a conversation id across server bounces (e.g. ``just
+    restart-app``), and without hydration the next turn would build on an
+    empty history and the persistence hook would overwrite the saved file.
+    """
+    if not conversation_id:
+        msg = "conversation_id is required"
+        raise ValueError(msg)
+    if conversation_id in _conversations:
+        return _conversations[conversation_id], False
+    persisted = load_conversation_history(conversation_id)
+    is_new = persisted is None
+    if is_new:
+        logger.info("Creating new conversation %s", conversation_id)
+    _conversations[conversation_id] = _Conversation(
+        history=ConversationHistory(persisted, instance_id=conversation_id),
+    )
+    return _conversations[conversation_id], is_new
 
 
-def reset_message_history(conversation_id: str | None = None) -> None:
-    """Resets the conversation history and context manager."""
-    cid = conversation_id or _DEFAULT_CONVERSATION_ID
-    _conversations.pop(cid, None)
+def reset_message_history(conversation_id: str) -> None:
+    """Drop the in-memory conversation entry. The on-disk history is kept."""
+    if not conversation_id:
+        msg = "conversation_id is required"
+        raise ValueError(msg)
+    _conversations.pop(conversation_id, None)
 
 
 def resume_conversation(conversation_id: str) -> list[dict] | None:
@@ -199,21 +214,21 @@ async def _run_turn(
     active_agent: Agent,
     profile: AgentProfile,
     user_content: str,
-    conversation_id: str | None,
+    conversation_id: str,
     handler: Callable[[AgentEvent], object],
     is_new_conversation: bool = False,
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
     logger.info(
         "Turn started: conv=%s agent=%s message=%.80s",
-        conversation_id or _DEFAULT_CONVERSATION_ID,
+        conversation_id,
         active_agent.name,
         user_content,
     )
     _log_turn_start(profile)
 
     ctx_manager = _ensure_context_manager(conversation, active_agent)
-    conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
+    conv_id = conversation_id
 
     # Fresh AgentState each turn, restored from persisted skill names.
     # Pre-load skills from the profile.
@@ -319,7 +334,7 @@ async def handle_user_message(
     data: Sequence[Data] | None = None,
     *,
     profile_id: str | None = None,
-    conversation_id: str | None = None,
+    conversation_id: str,
 ) -> AsyncGenerator[AgentEvent, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
@@ -327,14 +342,15 @@ async def handle_user_message(
         message: The user's message.
         data: Optional sequence of file attachment data.
         profile_id: Agent profile to use. Required.
-        conversation_id: Optional conversation identifier for isolation.
+        conversation_id: Conversation identifier for isolation. Required.
 
     Yields:
         AgentEvent: Events from the LLM.
     """
-    cid = conversation_id or _DEFAULT_CONVERSATION_ID
-    is_new_conversation = cid not in _conversations
-    conversation = _get_conversation(conversation_id)
+    if not conversation_id:
+        msg = "conversation_id is required"
+        raise ValueError(msg)
+    conversation, is_new_conversation = _get_conversation(conversation_id)
 
     user_content = message
     if data:
