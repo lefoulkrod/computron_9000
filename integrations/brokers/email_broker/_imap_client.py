@@ -87,25 +87,8 @@ class ImapClient:
         entry code translates that into ``sys.exit(77)`` so the supervisor
         flips state to ``auth_failed``.
         """
-
-        def _blocking_connect() -> imaplib.IMAP4:
-            # IMAP4_SSL for implicit TLS (port 993); IMAP4 for plaintext (test fakes
-            # on random ports, or legacy StartTLS setups which we don't support in v1).
-            conn: imaplib.IMAP4
-            if self._use_tls:
-                conn = imaplib.IMAP4_SSL(self._host, self._port)
-            else:
-                conn = imaplib.IMAP4(self._host, self._port)
-            typ, data = conn.login(self._user, self._password)
-            if typ != "OK":
-                # imaplib already raised imaplib.IMAP4.error on most LOGIN rejections;
-                # this branch catches the rarer "OK-but-not-really" server responses.
-                msg = f"IMAP LOGIN returned {typ}: {data!r}"
-                raise ImapAuthError(msg)
-            return conn
-
         try:
-            self._imap = await asyncio.to_thread(_blocking_connect)
+            self._imap = await asyncio.to_thread(self._blocking_connect)
         except imaplib.IMAP4.error as exc:
             # imaplib raises its own exception type on AUTHENTICATIONFAILED etc.
             # Translate to our sentinel so the broker can distinguish auth-fail
@@ -114,34 +97,79 @@ class ImapClient:
             raise ImapAuthError(msg) from exc
         logger.info("IMAP LOGIN ok (%s@%s:%d)", self._user, self._host, self._port)
 
-    async def _ensure_selected(self, folder: str) -> imaplib.IMAP4:
-        """Select ``folder`` if not already selected; return the IMAP handle.
+    def _blocking_connect(self) -> imaplib.IMAP4:
+        """Synchronous connect — runs inside a worker thread.
 
-        Caller must hold ``self._lock``. Caches the selection so consecutive
-        ops on the same folder skip a round-trip.
+        Used by ``connect()`` and as the reconnect path inside
+        ``_with_reconnect``, so it lives on the instance rather than a
+        local closure.
         """
-        if self._imap is None:
+        # IMAP4_SSL for implicit TLS (port 993); IMAP4 for plaintext (test fakes
+        # on random ports, or legacy StartTLS setups which we don't support in v1).
+        # 120s socket timeout applies to every blocking op (connect, login, FETCH,
+        # SEARCH); without it a half-open socket pins the broker's asyncio.Lock
+        # until OS keepalive breaks the connection minutes later. Matches
+        # SmtpClient — same rationale for slow upstreams (iCloud).
+        conn: imaplib.IMAP4
+        if self._use_tls:
+            conn = imaplib.IMAP4_SSL(self._host, self._port, timeout=120)
+        else:
+            conn = imaplib.IMAP4(self._host, self._port, timeout=120)
+        typ, data = conn.login(self._user, self._password)
+        if typ != "OK":
+            # imaplib already raised imaplib.IMAP4.error on most LOGIN rejections;
+            # this branch catches the rarer "OK-but-not-really" server responses.
+            msg = f"IMAP LOGIN returned {typ}: {data!r}"
+            raise ImapAuthError(msg)
+        return conn
+
+    def _with_reconnect(self, op):
+        """Run ``op(conn)`` synchronously; reconnect+retry once on stale-conn errors.
+
+        Caller must hold ``self._lock`` and must have awaited ``connect()``
+        first. ``imaplib`` wraps socket-level failures (idle drop, RST,
+        unsolicited BYE) as ``IMAP4.abort`` — we tear the dead handle
+        down, re-LOGIN, and retry once. A second failure propagates.
+
+        ``IMAP4.error`` (the parent class) is *not* caught: it also fires
+        on real ``BAD``/``NO`` responses where the connection is healthy
+        and retrying would loop on a genuine protocol bug.
+        """
+        conn = self._imap
+        if conn is None:
             msg = "ImapClient used before connect()"
             raise RuntimeError(msg)
-        conn = self._imap
+        try:
+            return op(conn)
+        except imaplib.IMAP4.abort as exc:
+            logger.info("IMAP connection stale (%s); reconnecting and retrying once", exc)
+            try:
+                conn.shutdown()
+            except Exception:  # noqa: BLE001
+                pass
+            self._current_mailbox = None
+            conn = self._blocking_connect()
+            self._imap = conn
+            return op(conn)
+
+    def _select_in_thread(self, conn: imaplib.IMAP4, folder: str) -> None:
+        """Issue SELECT inside the worker thread, caching the selection.
+
+        No-op if ``folder`` is already selected. ``_with_reconnect`` clears
+        ``_current_mailbox`` after a reconnect so the retry pass re-SELECTs
+        against the fresh connection.
+
+        Quote the folder — Python 3.12 ``imaplib`` doesn't auto-quote, so a
+        name with a space (``Sent Messages``, ``[Gmail]/All Mail``) reaches
+        the server as two tokens and gets ``BAD: Could not parse command``.
+        """
         if self._current_mailbox == folder:
-            return conn
-
-        def _blocking_select() -> None:
-            # Quote the folder name on the wire — Python 3.12's imaplib
-            # does not auto-quote command args, so a name containing a
-            # space (``Sent Messages``, ``[Gmail]/All Mail``) gets parsed
-            # by the server as separate tokens and rejected with
-            # ``BAD: Could not parse command``. iCloud and Gmail both hit
-            # this for any non-INBOX folder with whitespace.
-            typ, data = conn.select(_imap_quote(folder))
-            if typ != "OK":
-                msg = f"SELECT {folder!r} failed: {typ} {data!r}"
-                raise RuntimeError(msg)
-
-        await asyncio.to_thread(_blocking_select)
+            return
+        typ, data = conn.select(_imap_quote(folder))
+        if typ != "OK":
+            msg = f"SELECT {folder!r} failed: {typ} {data!r}"
+            raise RuntimeError(msg)
         self._current_mailbox = folder
-        return conn
 
     async def list_mailboxes(self) -> list[Mailbox]:
         """Return every mailbox on the server.
@@ -150,20 +178,8 @@ class ImapClient:
         IMAP call in a worker thread, parse the response into typed domain models.
         """
         async with self._lock:
-            if self._imap is None:
-                # TODO: reconnect path goes here when we add drop-handling; for now
-                # connect() must have been awaited by broker bootstrap first.
-                msg = "ImapClient used before connect()"
-                raise RuntimeError(msg)
 
-            # Capture the narrowed reference into a local. The inner ``_blocking_list``
-            # closes over ``conn`` rather than ``self._imap``; that keeps the type
-            # checker happy without a runtime ``assert`` (which ``python -O`` would
-            # strip) and documents that only the IMAP handle — not the whole client —
-            # crosses into the worker thread.
-            conn = self._imap
-
-            def _blocking_list() -> list[bytes]:
+            def _op(conn: imaplib.IMAP4) -> list[bytes]:
                 typ, data = conn.list()
                 if typ != "OK":
                     msg = f"LIST failed: {typ} {data!r}"
@@ -172,7 +188,7 @@ class ImapClient:
                 #   b'(\\HasNoChildren) "/" "INBOX"'
                 return [line for line in data if isinstance(line, bytes)]
 
-            raw_lines = await asyncio.to_thread(_blocking_list)
+            raw_lines = await asyncio.to_thread(self._with_reconnect, _op)
 
         return [_parse_list_line(line) for line in raw_lines]
 
@@ -184,9 +200,9 @@ class ImapClient:
         """
         limit = max(1, min(limit, 200))  # hard cap — protect context budget
         async with self._lock:
-            conn = await self._ensure_selected(folder)
 
-            def _blocking_fetch() -> list[tuple[str, bytes]]:
+            def _op(conn: imaplib.IMAP4) -> list[tuple[str, bytes]]:
+                self._select_in_thread(conn, folder)
                 # SEARCH ALL — return every message's *sequence number* in the
                 # selected mailbox. Sequence numbers are 1..N positions that
                 # change as messages get added/deleted; the FETCH below also
@@ -220,7 +236,7 @@ class ImapClient:
                     raise RuntimeError(msg)
                 return _collect_fetch_pairs(uid_data)
 
-            raw = await asyncio.to_thread(_blocking_fetch)
+            raw = await asyncio.to_thread(self._with_reconnect, _op)
 
         return [_parse_header_hit(uid, blob, folder) for uid, blob in reversed(raw)]
 
@@ -241,9 +257,9 @@ class ImapClient:
         # natural-language search and avoids building a literal command.
         safe_query = query.replace("\\", "").replace('"', "")
         async with self._lock:
-            conn = await self._ensure_selected(folder)
 
-            def _blocking_search() -> list[tuple[str, bytes]]:
+            def _op(conn: imaplib.IMAP4) -> list[tuple[str, bytes]]:
+                self._select_in_thread(conn, folder)
                 # SEARCH TEXT "query" — match the query against headers and
                 # body in the selected mailbox. IMAP has no cross-mailbox
                 # search; callers iterate folders client-side if they need
@@ -273,7 +289,7 @@ class ImapClient:
                     raise RuntimeError(msg)
                 return _collect_fetch_pairs(hdr_data)
 
-            raw = await asyncio.to_thread(_blocking_search)
+            raw = await asyncio.to_thread(self._with_reconnect, _op)
 
         return [_parse_header_hit(uid, blob, folder) for uid, blob in reversed(raw)]
 
@@ -283,9 +299,9 @@ class ImapClient:
         Raises ``LookupError`` if the UID is unknown in the current mailbox.
         """
         async with self._lock:
-            conn = await self._ensure_selected(folder)
 
-            def _blocking_fetch() -> bytes:
+            def _op(conn: imaplib.IMAP4) -> bytes:
+                self._select_in_thread(conn, folder)
                 # UID FETCH — like FETCH but the id is the stable UID instead
                 # of the volatile sequence number. ``BODY.PEEK[]`` (no section
                 # path) means "the whole RFC 822 message, raw" — headers and
@@ -300,7 +316,7 @@ class ImapClient:
                         return part[1]
                 raise LookupError(f"no such message: uid={uid}")
 
-            raw = await asyncio.to_thread(_blocking_fetch)
+            raw = await asyncio.to_thread(self._with_reconnect, _op)
 
         msg = _email.message_from_bytes(raw)
         header = MessageHeader(
@@ -336,9 +352,9 @@ class ImapClient:
         ``attachment_id`` doesn't match any part in the message.
         """
         async with self._lock:
-            conn = await self._ensure_selected(folder)
 
-            def _blocking_fetch() -> bytes:
+            def _op(conn: imaplib.IMAP4) -> bytes:
+                self._select_in_thread(conn, folder)
                 typ, data = conn.uid("FETCH", uid, "(BODY.PEEK[])")
                 if typ != "OK":
                     msg = f"UID FETCH failed: {typ} {data!r}"
@@ -348,7 +364,7 @@ class ImapClient:
                         return part[1]
                 raise LookupError(f"no such message: uid={uid}")
 
-            raw = await asyncio.to_thread(_blocking_fetch)
+            raw = await asyncio.to_thread(self._with_reconnect, _op)
 
         msg = _email.message_from_bytes(raw)
         for part_path, part in _walk_with_paths(msg):
@@ -376,16 +392,16 @@ class ImapClient:
         the destination doesn't exist.
         """
         async with self._lock:
-            conn = await self._ensure_selected(folder)
 
-            def _blocking_move() -> None:
+            def _op(conn: imaplib.IMAP4) -> None:
+                self._select_in_thread(conn, folder)
                 # imaplib doesn't expose a typed ``move`` helper, so we drive
                 # the raw UID MOVE command. The reply shape is the same as
                 # any other UID-prefixed command: ``("OK", [b"MOVE completed"])``
                 # on success, ``("NO", [reason])`` if the destination is
                 # missing or the UID isn't in the source.
                 # Quote the destination — same Python-3.12-imaplib reason as
-                # in ``_ensure_selected``: a name with a space gets parsed as
+                # in ``_select_in_thread``: a name with a space gets parsed as
                 # extra args otherwise.
                 typ, data = conn.uid("MOVE", uid, _imap_quote(dest_folder))
                 if typ != "OK":
@@ -400,7 +416,7 @@ class ImapClient:
                     )
                     raise LookupError(msg)
 
-            await asyncio.to_thread(_blocking_move)
+            await asyncio.to_thread(self._with_reconnect, _op)
 
 
 def _imap_quote(name: str) -> str:

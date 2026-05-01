@@ -333,3 +333,192 @@ async def test_fetch_attachment_unknown_id_raises_lookup_error() -> None:
         await fake.stop()
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Reconnect-on-idle-drop coverage.
+#
+# Real iCloud / Gmail close idle IMAP sockets after ~10–30 minutes; the next
+# command tries to ``send()`` over a half-closed TLS connection and ``imaplib``
+# raises ``IMAP4.abort``. ``ImapClient`` catches that, re-LOGINs, re-SELECTs
+# if the verb cared about a folder, and retries once.
+#
+# These tests force the failure shape via ``FakeEmail.force_drop_next_imap``
+# (the fake closes the next IMAP command's writer, mirroring a server-side
+# idle drop) and assert each verb returns the right answer despite the
+# transparent reconnect. Coverage is per-verb on purpose: every verb has its
+# own ``_op`` closure, and a regression in any one of them would only show
+# up on a live connection.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_mailboxes_recovers_from_idle_drop() -> None:
+    """LIST after a forced disconnect: the client reconnects and returns mailboxes."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        client = await _connected_client(fake)
+        fake.force_drop_next_imap = True
+        mailboxes = await client.list_mailboxes()
+    finally:
+        await fake.stop()
+    names = sorted(m.name for m in mailboxes)
+    assert names == ["INBOX", "Sent", "Trash"]
+
+
+@pytest.mark.asyncio
+async def test_list_messages_recovers_from_idle_drop() -> None:
+    """SELECT+SEARCH+FETCH after a forced disconnect: re-LOGIN, re-SELECT, retry."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="post-reconnect hello",
+            body="ok",
+        )
+        client = await _connected_client(fake)
+        fake.force_drop_next_imap = True
+        headers = await client.list_messages("INBOX", limit=10)
+    finally:
+        await fake.stop()
+    assert len(headers) == 1
+    assert headers[0].subject == "post-reconnect hello"
+
+
+@pytest.mark.asyncio
+async def test_search_messages_recovers_from_idle_drop() -> None:
+    """SEARCH TEXT after a forced disconnect: same recovery as list_messages."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="needle in haystack",
+            body="payload",
+        )
+        client = await _connected_client(fake)
+        fake.force_drop_next_imap = True
+        headers = await client.search_messages("INBOX", "needle", limit=10)
+    finally:
+        await fake.stop()
+    assert len(headers) == 1
+    assert "needle" in headers[0].subject
+
+
+@pytest.mark.asyncio
+async def test_fetch_message_recovers_from_idle_drop() -> None:
+    """UID FETCH after a forced disconnect: re-LOGIN, re-SELECT, refetch full message."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="reconnected fetch",
+            body="full body here",
+        )
+        client = await _connected_client(fake)
+        fake.force_drop_next_imap = True
+        message = await client.fetch_message("INBOX", str(uid))
+    finally:
+        await fake.stop()
+    assert message.header.subject == "reconnected fetch"
+    assert "full body here" in message.body_text
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_recovers_from_idle_drop() -> None:
+    """``fetch_attachment`` reuses the same path as ``fetch_message`` and must
+    recover the same way — exercise it explicitly so the per-verb path stays
+    covered if the verbs ever diverge.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    payload = b"\x89PNG some bytes"
+    try:
+        uid = fake.add_message(
+            "INBOX",
+            from_="alice@example.com",
+            to=fake.user,
+            subject="photo",
+            body="see attached",
+            attachments=[("photo.png", "image/png", payload)],
+        )
+        client = await _connected_client(fake)
+        fake.force_drop_next_imap = True
+        bytes_out, filename, mime_type = await client.fetch_attachment(
+            "INBOX", str(uid), "2",
+        )
+    finally:
+        await fake.stop()
+    assert bytes_out == payload
+    assert filename == "photo.png"
+    assert mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_move_message_recovers_from_idle_drop() -> None:
+    """UID MOVE after a forced disconnect: source ends empty, dest has the message."""
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        uid = fake.add_message(
+            "INBOX", from_="a@b.com", to=fake.user, subject="bye",
+        )
+        client = await _connected_client(fake)
+        fake.force_drop_next_imap = True
+        await client.move_message("INBOX", str(uid), "Trash")
+    finally:
+        await fake.stop()
+    assert fake.mailboxes["INBOX"].messages == []
+    assert len(fake.mailboxes["Trash"].messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_reconnect_clears_cached_selection_so_next_call_re_selects() -> None:
+    """Regression guard for the cached-mailbox state machine.
+
+    ``_current_mailbox`` is a cache that lets consecutive ops on the same
+    folder skip a SELECT round-trip. After ``_with_reconnect`` reconnects,
+    the cache must reset to ``None`` — otherwise the retry's
+    ``_select_in_thread`` short-circuits on the cached name and skips SELECT
+    on the *new* connection, leaving SEARCH/FETCH to run against a freshly-
+    LOGIN'd-but-not-SELECTed handle (server replies ``BAD: Must SELECT first``).
+
+    The bug only manifests when the retry asks for the **same** folder that
+    was cached pre-drop — a different folder always falls through the
+    cache check on its own. So this test:
+
+      1. Primes the cache on INBOX via a successful list_messages
+      2. Forces a drop on the next command (the SEARCH inside the second
+         list_messages call, since the cached SELECT is skipped)
+      3. Asks for INBOX *again* — if the cache wasn't cleared on reconnect,
+         the retry skips SELECT and SEARCH fails with BAD on the new conn.
+    """
+    fake = FakeEmail()
+    await fake.start()
+    try:
+        fake.add_message(
+            "INBOX", from_="a@b.com", to=fake.user, subject="msg",
+        )
+        client = await _connected_client(fake)
+        # Prime the selection cache on INBOX.
+        first = await client.list_messages("INBOX", limit=10)
+        assert len(first) == 1 and first[0].subject == "msg"
+        # Force a drop on the next command. Since INBOX is already cached,
+        # _select_in_thread short-circuits and the drop hits SEARCH —
+        # exactly the path where forgetting to clear the cache on reconnect
+        # would let the retry skip SELECT against the new connection.
+        fake.force_drop_next_imap = True
+        second = await client.list_messages("INBOX", limit=10)
+    finally:
+        await fake.stop()
+    assert len(second) == 1
+    assert second[0].subject == "msg"
+
+
