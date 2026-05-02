@@ -23,7 +23,8 @@ import GoalsView from './components/goals/GoalsView.jsx';
 import PreviewPanel from './components/PreviewPanel.jsx';
 import SplitHandle from './components/SplitHandle.jsx';
 import FilePreviewInline from './components/FilePreviewInline.jsx';
-import FullscreenPreview from './components/FullscreenPreview.jsx';
+import FileFullscreen from './components/FileFullscreen.jsx';
+import BrowserFullscreen from './components/BrowserFullscreen.jsx';
 import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
 // useModelSettings removed — replaced by profile-based configuration
@@ -407,7 +408,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     {preview.activeTab === 'browser' && preview.browserSnapshot && (
                                         <BrowserPreview
                                             snapshot={preview.browserSnapshot}
-                                            hideShell
+                                            onFullscreen={() => preview.setFullscreenItem({ kind: 'browser' })}
                                         />
                                     )}
                                     {preview.activeTab?.startsWith('file:') && (() => {
@@ -416,18 +417,18 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                         return file ? (
                                             <FilePreviewInline
                                                 item={file}
-                                                onFullscreen={() => preview.setFullscreenItem(file)}
+                                                onFullscreen={() => preview.setFullscreenItem({ kind: 'file', file })}
                                             />
                                         ) : null;
                                     })()}
                                     {preview.activeTab === 'terminal' && preview.terminalLines.length > 0 && (
-                                        <TerminalPanel lines={preview.terminalLines} hideShell />
+                                        <TerminalPanel lines={preview.terminalLines} />
                                     )}
                                     {preview.activeTab === 'desktop' && preview.desktopActive && (
-                                        <DesktopPreview visible hideShell />
+                                        <DesktopPreview visible />
                                     )}
                                     {preview.activeTab === 'generation' && preview.generationPreview && (
-                                        <GenerationPreview preview={preview.generationPreview} hideShell />
+                                        <GenerationPreview preview={preview.generationPreview} />
                                     )}
                                 </PreviewPanel>
                             </div>
@@ -442,10 +443,16 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 <DesktopPreview visible={true} onClose={() => setUserDesktopOpen(false)} overlay />
             )}
 
-            {/* Fullscreen file preview — fills entire viewport */}
-            {preview.fullscreenItem && (
-                <FullscreenPreview
-                    item={preview.fullscreenItem}
+            {/* Fullscreen preview — fills entire viewport */}
+            {preview.fullscreenItem?.kind === 'file' && (
+                <FileFullscreen
+                    item={preview.fullscreenItem.file}
+                    onClose={() => preview.setFullscreenItem(null)}
+                />
+            )}
+            {preview.fullscreenItem?.kind === 'browser' && preview.browserSnapshot && (
+                <BrowserFullscreen
+                    snapshot={preview.browserSnapshot}
                     onClose={() => preview.setFullscreenItem(null)}
                 />
             )}
