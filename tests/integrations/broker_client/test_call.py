@@ -23,7 +23,7 @@ import pytest
 
 from integrations import broker_client
 from integrations._rpc import RpcError, serve_rpc
-from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor._catalog import BrokerSpec, CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from tests.integrations.fixtures._host_paths import (
     EMAIL_BROKER_HOST_PATHS,
@@ -36,20 +36,26 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
     return {
         "icloud": CatalogEntry(
             slug="icloud",
-            command=["python", "-m", "integrations.brokers.email_broker"],
-            static_env={
-                "IMAP_HOST": fake.imap_host,
-                "IMAP_PORT": str(fake.imap_port),
-                "SMTP_HOST": fake.smtp_host,
-                "SMTP_PORT": str(fake.smtp_port),
-                "IMAP_TLS": "false",
-                "SMTP_STARTTLS": "false",
-            },
-            env_injection={
-                "email": "EMAIL_USER",
-                "password": "EMAIL_PASS",
-            },
-            host_paths=EMAIL_BROKER_HOST_PATHS,
+            label="iCloud",
+            brokers=(
+                BrokerSpec(
+                    capability="email_calendar",
+                    command=["python", "-m", "integrations.brokers.email_broker"],
+                    static_env={
+                        "IMAP_HOST": fake.imap_host,
+                        "IMAP_PORT": str(fake.imap_port),
+                        "SMTP_HOST": fake.smtp_host,
+                        "SMTP_PORT": str(fake.smtp_port),
+                        "IMAP_TLS": "false",
+                        "SMTP_STARTTLS": "false",
+                    },
+                    env_injection={
+                        "email": "EMAIL_USER",
+                        "password": "EMAIL_PASS",
+                    },
+                    host_paths=EMAIL_BROKER_HOST_PATHS,
+                ),
+            ),
         ),
     }
 

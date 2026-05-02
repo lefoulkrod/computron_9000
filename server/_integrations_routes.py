@@ -154,6 +154,11 @@ async def handle_add_integration(request: web.Request) -> web.Response:
         )
     body["user_suffix"] = derived
 
+    # Default to empty list if not provided — supervisor will enable all
+    # capabilities when the list is empty.
+    if "enabled_capabilities" not in body:
+        body["enabled_capabilities"] = []
+
     try:
         resp = await _supervisor_rpc("add", body)
     except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:

@@ -81,4 +81,33 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_list_calendars_tool(calendar_ids))
         tools.append(build_list_events_tool(calendar_ids))
 
+    storage_ids = frozenset(
+        i for i, rec in records.items()
+        if "storage" in rec.capabilities and rec.state == "running"
+    )
+    if storage_ids:
+        from tools.integrations.rclone_about import build_rclone_about_tool
+        from tools.integrations.rclone_cat import build_rclone_cat_tool
+        from tools.integrations.rclone_copy import build_rclone_copy_tool
+        from tools.integrations.rclone_list_directory import build_rclone_list_directory_tool
+        from tools.integrations.rclone_search import build_rclone_search_tool
+        from tools.integrations.rclone_size import build_rclone_size_tool
+        tools.append(build_rclone_list_directory_tool(storage_ids))
+        tools.append(build_rclone_about_tool(storage_ids))
+        tools.append(build_rclone_search_tool(storage_ids))
+        tools.append(build_rclone_cat_tool(storage_ids))
+        tools.append(build_rclone_size_tool(storage_ids))
+        tools.append(build_rclone_copy_tool(storage_ids))
+
+    storage_write_ids = frozenset(
+        i for i in storage_ids if records[i].write_allowed
+    )
+    if storage_write_ids:
+        from tools.integrations.rclone_delete import build_rclone_delete_tool
+        from tools.integrations.rclone_mkdir import build_rclone_mkdir_tool
+        from tools.integrations.rclone_move import build_rclone_move_tool
+        tools.append(build_rclone_delete_tool(storage_write_ids))
+        tools.append(build_rclone_mkdir_tool(storage_write_ids))
+        tools.append(build_rclone_move_tool(storage_write_ids))
+
     return tools

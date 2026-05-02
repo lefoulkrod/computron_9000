@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor._catalog import BrokerSpec, CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from tests.integrations.fixtures._host_paths import (
     EMAIL_BROKER_HOST_PATHS,
@@ -46,21 +46,26 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
     return {
         "icloud": CatalogEntry(
             slug="icloud",
-            command=["python", "-m", "integrations.brokers.email_broker"],
-            capabilities=frozenset({"email"}),
-            static_env={
-                "IMAP_HOST": fake.imap_host,
-                "IMAP_PORT": str(fake.imap_port),
-                "SMTP_HOST": fake.smtp_host,
-                "SMTP_PORT": str(fake.smtp_port),
-                "IMAP_TLS": "false",
-                "SMTP_STARTTLS": "false",
-            },
-            env_injection={
-                "email": "EMAIL_USER",
-                "password": "EMAIL_PASS",
-            },
-            host_paths=EMAIL_BROKER_HOST_PATHS,
+            label="iCloud",
+            brokers=(
+                BrokerSpec(
+                    capability="email_calendar",
+                    command=["python", "-m", "integrations.brokers.email_broker"],
+                    static_env={
+                        "IMAP_HOST": fake.imap_host,
+                        "IMAP_PORT": str(fake.imap_port),
+                        "SMTP_HOST": fake.smtp_host,
+                        "SMTP_PORT": str(fake.smtp_port),
+                        "IMAP_TLS": "false",
+                        "SMTP_STARTTLS": "false",
+                    },
+                    env_injection={
+                        "email": "EMAIL_USER",
+                        "password": "EMAIL_PASS",
+                    },
+                    host_paths=EMAIL_BROKER_HOST_PATHS,
+                ),
+            ),
         ),
     }
 
@@ -107,26 +112,26 @@ async def test_watcher_respawns_broker_after_unexpected_exit(tmp_path: Path) -> 
         assert "error" not in add_resp, add_resp
         original_record = sup._registry.get("icloud_personal")
         assert original_record is not None
-        original_pid = original_record.broker.proc.pid
+        original_pid = original_record.brokers["email_calendar"].proc.pid
 
         # Simulate a crash: SIGKILL the broker subprocess directly. The
         # watcher's `expected_termination` flag is False for this record,
         # so it should respawn.
-        original_record.broker.proc.kill()
+        original_record.brokers["email_calendar"].proc.kill()
 
         # Watcher's first respawn waits 1s after the first failure detection.
         await _wait_for(
             lambda: (
                 (rec := sup._registry.get("icloud_personal")) is not None
                 and rec.state == "running"
-                and rec.broker.proc.pid != original_pid
+                and rec.brokers["email_calendar"].proc.pid != original_pid
             ),
             timeout=15.0,
         )
 
         # The new broker socket should be reachable.
         rec = sup._registry.get("icloud_personal")
-        mb_resp = await _rpc_call(rec.broker.socket_path, "list_mailboxes", {})
+        mb_resp = await _rpc_call(rec.brokers["email_calendar"].socket_path, "list_mailboxes", {})
         assert "error" not in mb_resp, mb_resp
     finally:
         await sup.stop()
@@ -170,8 +175,8 @@ async def test_watcher_marks_auth_failed_when_broker_exits_77(tmp_path: Path) ->
         # recognize that as terminal.
         fake.reject_next_n_imap_logins = 99
         record = sup._registry.get("icloud_personal")
-        original_pid = record.broker.proc.pid
-        record.broker.proc.kill()
+        original_pid = record.brokers["email_calendar"].proc.pid
+        record.brokers["email_calendar"].proc.kill()
 
         await _wait_for(
             lambda: (
@@ -188,8 +193,8 @@ async def test_watcher_marks_auth_failed_when_broker_exits_77(tmp_path: Path) ->
 
         # No further respawn attempts — the dead PID stays the latest.
         rec = sup._registry.get("icloud_personal")
-        assert rec.broker.proc.returncode is not None
-        assert rec.broker.proc.pid == original_pid or rec.broker.proc.returncode == 77
+        assert rec.brokers["email_calendar"].proc.returncode is not None
+        assert rec.brokers["email_calendar"].proc.pid == original_pid or rec.brokers["email_calendar"].proc.returncode == 77
     finally:
         await sup.stop()
         await fake.stop()

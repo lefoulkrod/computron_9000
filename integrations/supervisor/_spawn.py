@@ -9,12 +9,13 @@ auth-fail (``77``) from a generic failure (``1``) and respond accordingly.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor._catalog import BrokerSpec
 from integrations.supervisor.types import HostPath
 
 logger = logging.getLogger(__name__)
@@ -40,61 +41,66 @@ class BrokerHandle:
     """The running broker subprocess for one integration."""
 
     integration_id: str
+    capability: str
     socket_path: Path
     proc: asyncio.subprocess.Process
 
 
 async def spawn_broker(
     *,
-    entry: CatalogEntry,
+    spec: BrokerSpec,
     integration_id: str,
     secret_bundle: dict,
     write_allowed: bool,
     sockets_dir: Path,
     host_paths: dict[str, HostPath],
 ) -> BrokerHandle:
-    """Spawn the broker for ``integration_id`` from its catalog entry.
+    """Spawn the broker for ``integration_id`` from its broker spec.
 
-    Combines the entry's static env, the credential-to-env mapping, the
+    Combines the spec's static env, the credential-to-env mapping, the
     per-spawn ``INTEGRATION_ID`` / ``BROKER_SOCKET`` / ``WRITE_ALLOWED`` vars,
-    and any host-path bindings the entry declares (each role looked up in
+    and any host-path bindings the spec declares (each role looked up in
     ``host_paths`` and injected as the binding's env_var). Awaits ``READY\\n``
     on the subprocess's stdout before returning.
     """
     sockets_dir.mkdir(parents=True, exist_ok=True)
-    socket_path = sockets_dir / f"{integration_id}.sock"
+    # Use a hash to keep socket path under Unix socket limit (~108 bytes)
+    # Format: <capability_prefix>_<hash>.sock where hash is first 8 chars of sha256(integration_id)
+    cap_prefix = spec.capability.replace("_", "")[:8]
+    id_hash = hashlib.sha256(integration_id.encode()).hexdigest()[:8]
+    socket_path = sockets_dir / f"{cap_prefix}_{id_hash}.sock"
 
     # Start from the supervisor's own env so the child inherits PATH, VIRTUAL_ENV,
     # and whatever else Python needs to resolve. Our explicit overrides win on
     # conflict. When we harden the container, swap to a curated allow-list.
     env: dict[str, str] = dict(os.environ)
-    env.update(entry.static_env)
-    for blob_key, env_name in entry.env_injection.items():
+    env.update(spec.static_env)
+    for blob_key, env_name in spec.env_injection.items():
         if blob_key not in secret_bundle:
             msg = f"env_injection references missing auth field: {blob_key!r}"
             raise BrokerSpawnError(msg)
         env[env_name] = secret_bundle[blob_key]
-    for binding in entry.host_paths:
-        spec = host_paths.get(binding.role)
-        if spec is None:
+    for binding in spec.host_paths:
+        spec_path = host_paths.get(binding.role)
+        if spec_path is None:
             # Catalog references a role the supervisor doesn't know about.
             # Startup validation should have caught this; the defensive check
             # here keeps a misconfigured spawn from racing past.
             msg = f"host_paths references unknown role: {binding.role!r}"
             raise BrokerSpawnError(msg)
-        env[binding.env_var] = str(spec.path)
+        env[binding.env_var] = str(spec_path.path)
     env["INTEGRATION_ID"] = integration_id
     env["BROKER_SOCKET"] = str(socket_path)
     env["WRITE_ALLOWED"] = "true" if write_allowed else "false"
 
-    logger.info("spawning broker for %s at %s", integration_id, socket_path)
+    logger.info("spawning broker for %s (%s) at %s", integration_id, spec.capability, socket_path)
 
     # stderr inherits the supervisor's fd — broker logs land directly in the
     # host's stderr (docker logs, journald, etc.) without a forwarding hop.
     # The broker's own log format already prefixes ``[email_broker[<id>]]``
     # so per-integration filtering still works.
     proc = await asyncio.create_subprocess_exec(
-        *entry.command,
+        *spec.command,
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.DEVNULL,
@@ -111,6 +117,7 @@ async def spawn_broker(
 
     return BrokerHandle(
         integration_id=integration_id,
+        capability=spec.capability,
         socket_path=socket_path,
         proc=proc,
     )

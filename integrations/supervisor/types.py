@@ -69,6 +69,9 @@ class IntegrationMeta(BaseModel):
             at dispatch. The flag is the real enforcement point: an agent
             bypassing the app server's tool registry and connecting directly
             to a broker's UDS still gets refused by the broker itself.
+        enabled_capabilities: Which capabilities from the catalog entry to enable.
+            Empty list or missing means default to ["email_calendar"] for backward
+            compat with version=1 metadata.
         added_at: When the integration was first added.
         updated_at: Last time the metadata or the encrypted blob was rewritten.
     """
@@ -78,5 +81,6 @@ class IntegrationMeta(BaseModel):
     slug: str
     label: str
     write_allowed: bool = False
+    enabled_capabilities: list[str] = []
     added_at: datetime
     updated_at: datetime

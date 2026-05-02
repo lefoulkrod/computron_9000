@@ -8,13 +8,13 @@ import styles from './IntegrationsTab.module.css';
 const SLUG_META = {
     icloud: {
         label: 'iCloud',
-        icon: 'bi-envelope-at',
-        category: 'Email & Calendar',
+        icon: 'bi-cloud',
+        category: 'Email, Calendar & Storage',
     },
     gmail: {
         label: 'Gmail',
         icon: 'bi-envelope-at',
-        category: 'Email & Calendar',
+        category: 'Email',
     },
 };
 
@@ -39,6 +39,11 @@ const STATE_VIEW = {
         label: 'not running',
         helper: 'Couldn\'t reach this integration. Delete and re-add.',
     },
+};
+
+const CAPABILITY_LABELS = {
+    email_calendar: 'Email & Calendar',
+    storage: 'Storage',
 };
 
 export default function IntegrationsTab() {
@@ -431,7 +436,7 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
                         label="Capabilities"
                         value={
                             (record.capabilities || []).length > 0
-                                ? record.capabilities.join(' · ')
+                                ? record.capabilities.map(c => CAPABILITY_LABELS[c] || c).join(' · ')
                                 : '—'
                         }
                     />

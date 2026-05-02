@@ -45,18 +45,22 @@ function _errorCopy(error, provider) {
 const PROVIDERS = [
     {
         slug: 'icloud',
-        category: 'Email & Calendar',
+        category: 'Email, Calendar & Storage',
         title: 'iCloud',
-        description: 'Email and calendar · app password',
-        icon: 'bi-envelope-at',
+        description: 'Email, calendar, and iCloud Drive · app password',
+        icon: 'bi-cloud',
         vendor: 'Apple',
         appPasswordUrl: 'https://account.apple.com/account/manage',
         appPasswordHost: 'account.apple.com',
         emailPlaceholder: 'you@icloud.com',
+        capabilities: [
+            { key: 'email_calendar', label: 'Email & Calendar', icon: 'bi-envelope-at', desc: 'Read/search email, view calendar events' },
+            { key: 'storage', label: 'iCloud Drive', icon: 'bi-cloud-arrow-up', desc: 'Browse, download, and upload files' },
+        ],
     },
     {
         slug: 'gmail',
-        category: 'Email & Calendar',
+        category: 'Email',
         title: 'Gmail',
         description: 'Email · app password',
         icon: 'bi-envelope-at',
@@ -64,6 +68,9 @@ const PROVIDERS = [
         appPasswordUrl: 'https://myaccount.google.com/apppasswords',
         appPasswordHost: 'myaccount.google.com',
         emailPlaceholder: 'you@gmail.com',
+        capabilities: [
+            { key: 'email_calendar', label: 'Email', icon: 'bi-envelope-at', desc: 'Read/search email' },
+        ],
     },
 ];
 
@@ -75,6 +82,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         password: '',
         label: '',
         writeAllowed: false,
+        enabledCapabilities: [],
     });
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
@@ -110,6 +118,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         password: form.password.replace(/\s+/g, ''),
                     },
                     write_allowed: form.writeAllowed,
+                    enabled_capabilities: form.enabledCapabilities,
                 }),
             });
             const body = await resp.json().catch(() => ({}));
@@ -154,6 +163,10 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         onPick={(p) => {
                             setProvider(p);
                             setStep(1);
+                            setForm(f => ({
+                                ...f,
+                                enabledCapabilities: (p.capabilities || []).map(c => c.key),
+                            }));
                         }}
                         onCancel={onClose}
                     />
@@ -167,7 +180,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                             setResult(null);
                             setStep(1);
                             setForm({
-                                email: '', password: '', label: '', writeAllowed: false,
+                                email: '', password: '', label: '', writeAllowed: false, enabledCapabilities: [],
                             });
                         }}
                         onDone={() => { onAdded?.(); }}
@@ -396,6 +409,33 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                             </div>
                         </label>
                     </div>
+                    {provider.capabilities && provider.capabilities.length > 1 && (
+                        <>
+                            <div className={styles.subsectionLabel}>Services to enable</div>
+                            <div className={styles.checkStack}>
+                                {provider.capabilities.map(cap => (
+                                    <label key={cap.key} className={styles.checkRow}>
+                                        <input
+                                            type="checkbox"
+                                            checked={form.enabledCapabilities.includes(cap.key)}
+                                            onChange={(e) => {
+                                                setForm(f => ({
+                                                    ...f,
+                                                    enabledCapabilities: e.target.checked
+                                                        ? [...f.enabledCapabilities, cap.key]
+                                                        : f.enabledCapabilities.filter(k => k !== cap.key),
+                                                }));
+                                            }}
+                                        />
+                                        <span className={styles.checkLabel}>
+                                            <i className={`bi ${cap.icon}`} /> {cap.label}
+                                        </span>
+                                        <span className={styles.checkHelp}>{cap.desc}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </>
+                    )}
                     <Callout
                         tone="info"
                         description="You can change this later — no need to reconnect."
@@ -473,13 +513,19 @@ function VerifyingStep() {
 }
 
 function SuccessScreen({ provider, form, result, onAddAnother, onDone }) {
+    const enabledLabels = (provider.capabilities || [])
+        .filter(c => (result.capabilities || []).includes(c.key))
+        .map(c => c.label);
+    const what = enabledLabels.length > 0 
+        ? enabledLabels.join(' and ').toLowerCase()
+        : 'your data';
     return (
         <>
             <Stepper step={4} />
             <div className={styles.wzBodyLeft}>
                 <h2 className={styles.wzTitle}>{provider.title} connected</h2>
                 <p className={styles.wzSubtitle}>
-                    Your agent can now read your email.
+                    Your agent can now access {what}.
                 </p>
                 <div className={styles.wzContent}>
                     <table className={styles.kvTable}>
@@ -499,6 +545,10 @@ function SuccessScreen({ provider, form, result, onAddAnother, onDone }) {
                             <tr>
                                 <td>Permissions</td>
                                 <td>{form.writeAllowed ? 'Read and write' : 'Read only'}</td>
+                            </tr>
+                            <tr>
+                                <td>Enabled services</td>
+                                <td>{enabledLabels.length > 0 ? enabledLabels.join(' · ') : '—'}</td>
                             </tr>
                         </tbody>
                     </table>

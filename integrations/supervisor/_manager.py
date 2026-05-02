@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from integrations._rpc import RpcError
-from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor._catalog import BrokerSpec, CatalogEntry
 from integrations.supervisor._crypto import DecryptError
 from integrations.supervisor._registry import IntegrationRecord, Registry
 from integrations.supervisor._spawn import BrokerHandle, BrokerSpawnError, spawn_broker
@@ -88,7 +88,8 @@ class BrokerManager:
         self._master_key = master_key
         self._catalog = catalog
         self._registry = registry
-        self._watchers: dict[str, asyncio.Task[None]] = {}
+        # Watcher keys are (integration_id, capability) tuples
+        self._watchers: dict[tuple[str, str], asyncio.Task[None]] = {}
 
     # --- public lifecycle ---------------------------------------------------
 
@@ -100,6 +101,7 @@ class BrokerManager:
         label: str,
         auth_blob: dict,
         write_allowed: bool,
+        enabled_capabilities: list[str] | None = None,
     ) -> IntegrationRecord:
         """Register a brand-new integration: validate, persist, spawn, watch.
 
@@ -121,12 +123,27 @@ class BrokerManager:
         if self._registry.contains(integration_id):
             raise RpcError("BAD_REQUEST", f"integration already exists: {integration_id}")
 
+        # Determine enabled capabilities
+        all_capabilities = entry.capabilities
+        if enabled_capabilities is None or len(enabled_capabilities) == 0:
+            # Backward compat: default to all capabilities from catalog
+            enabled_capabilities = sorted(all_capabilities)
+        
+        # Validate each capability exists in the catalog entry
+        for cap in enabled_capabilities:
+            if cap not in all_capabilities:
+                raise RpcError(
+                    "BAD_REQUEST",
+                    f"capability {cap!r} not available for slug {slug!r}",
+                )
+
         now = datetime.now(UTC)
         meta = IntegrationMeta(
             id=integration_id,
             slug=slug,
             label=label,
             write_allowed=write_allowed,
+            enabled_capabilities=enabled_capabilities,
             added_at=now,
             updated_at=now,
         )
@@ -137,30 +154,54 @@ class BrokerManager:
         write_meta(self._vault_dir, meta)
         write_secrets(self._vault_dir, integration_id, self._master_key, auth_blob)
 
-        try:
-            handle = await spawn_broker(
-                entry=entry,
-                integration_id=integration_id,
-                secret_bundle=auth_blob,
-                write_allowed=write_allowed,
-                sockets_dir=self._sockets_dir,
-                host_paths=self._host_paths,
-            )
-        except BrokerSpawnError as exc:
-            # Roll back — no broker subprocess is running at this point.
+        # Spawn all brokers concurrently
+        spawned_handles: dict[str, BrokerHandle] = {}
+        spawn_errors: list[Exception] = []
+        
+        for cap in enabled_capabilities:
+            spec = entry.broker_for(cap)
+            try:
+                handle = await spawn_broker(
+                    spec=spec,
+                    integration_id=integration_id,
+                    secret_bundle=auth_blob,
+                    write_allowed=write_allowed,
+                    sockets_dir=self._sockets_dir,
+                    host_paths=self._host_paths,
+                )
+                spawned_handles[cap] = handle
+            except BrokerSpawnError as exc:
+                spawn_errors.append((cap, exc))
+
+        # If any spawn failed, roll back all spawned brokers and delete vault files
+        if spawn_errors:
+            # Terminate all successfully spawned brokers
+            for handle in spawned_handles.values():
+                await self._terminate_broker(handle)
+            # Delete vault files
             delete_integration(self._vault_dir, integration_id)
-            if exc.exit_code == _AUTH_FAIL_EXIT_CODE:
-                raise RpcError("AUTH", "upstream rejected credentials") from exc
-            raise RpcError("UPSTREAM", f"broker spawn failed: {exc}") from exc
+            
+            # Check if any were auth failures
+            for cap, exc in spawn_errors:
+                if exc.exit_code == _AUTH_FAIL_EXIT_CODE:
+                    raise RpcError("AUTH", "upstream rejected credentials") from exc
+            
+            # Generic spawn failure
+            first_cap, first_exc = spawn_errors[0]
+            raise RpcError("UPSTREAM", f"broker spawn failed for {first_cap}: {first_exc}") from first_exc
 
         record = IntegrationRecord(
             meta=meta,
-            broker=handle,
-            capabilities=frozenset(entry.capabilities),
+            brokers=spawned_handles,
+            capabilities=frozenset(enabled_capabilities),
         )
         self._registry.add(record)
-        self._start_watcher(integration_id)
-        logger.info("added integration %s (slug=%s)", integration_id, slug)
+        
+        # Start watchers for all capabilities
+        for cap in enabled_capabilities:
+            self._start_watcher(integration_id, cap)
+        
+        logger.info("added integration %s (slug=%s, capabilities=%s)", integration_id, slug, enabled_capabilities)
         return record
 
     async def reconcile_existing(self, integration_id: str) -> IntegrationRecord:
@@ -182,32 +223,55 @@ class BrokerManager:
             msg = f"decrypt failed for {integration_id}: {exc}"
             raise ReconcileError(msg) from exc
 
-        try:
-            handle = await spawn_broker(
-                entry=entry,
-                integration_id=integration_id,
-                secret_bundle=secret_bundle,
-                write_allowed=meta.write_allowed,
-                sockets_dir=self._sockets_dir,
-                host_paths=self._host_paths,
-            )
-        except BrokerSpawnError as exc:
-            kind = "auth rejected" if exc.exit_code == _AUTH_FAIL_EXIT_CODE else "spawn failed"
-            msg = f"{kind} for {integration_id}: {exc}"
-            raise ReconcileError(msg) from exc
+        # Determine enabled capabilities with backward compat
+        if meta.version == 1 or not meta.enabled_capabilities:
+            # Default to email_calendar for backward compat
+            enabled_capabilities = ["email_calendar"]
+        else:
+            enabled_capabilities = meta.enabled_capabilities
+
+        # Spawn all brokers
+        spawned_handles: dict[str, BrokerHandle] = {}
+        spawn_errors: list[tuple[str, BrokerSpawnError]] = []
+        
+        for cap in enabled_capabilities:
+            spec = entry.broker_for(cap)
+            try:
+                handle = await spawn_broker(
+                    spec=spec,
+                    integration_id=integration_id,
+                    secret_bundle=secret_bundle,
+                    write_allowed=meta.write_allowed,
+                    sockets_dir=self._sockets_dir,
+                    host_paths=self._host_paths,
+                )
+                spawned_handles[cap] = handle
+            except BrokerSpawnError as exc:
+                spawn_errors.append((cap, exc))
+
+        if spawn_errors:
+            for handle in spawned_handles.values():
+                await self._terminate_broker(handle)
+            kind = "auth rejected" if any(e.exit_code == _AUTH_FAIL_EXIT_CODE for _, e in spawn_errors) else "spawn failed"
+            first_cap, first_exc = spawn_errors[0]
+            msg = f"{kind} for {integration_id} ({first_cap}): {first_exc}"
+            raise ReconcileError(msg) from first_exc
 
         record = IntegrationRecord(
             meta=meta,
-            broker=handle,
-            capabilities=frozenset(entry.capabilities),
+            brokers=spawned_handles,
+            capabilities=frozenset(enabled_capabilities),
         )
         self._registry.add(record)
-        self._start_watcher(integration_id)
-        logger.info("reconciled %s (slug=%s)", integration_id, meta.slug)
+        
+        for cap in enabled_capabilities:
+            self._start_watcher(integration_id, cap)
+        
+        logger.info("reconciled %s (slug=%s, capabilities=%s)", integration_id, meta.slug, enabled_capabilities)
         return record
 
     async def remove(self, integration_id: str) -> None:
-        """Tear down an integration: stop watcher, SIGTERM, drop registry, wipe vault.
+        """Tear down an integration: stop watchers, SIGTERM, drop registry, wipe vault.
 
         Raises :class:`RpcError` (NOT_FOUND) if the id isn't registered.
         """
@@ -215,17 +279,25 @@ class BrokerManager:
         if record is None:
             raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
 
-        # Flag the record first so the watcher sees expected_termination on
-        # the next iteration (or already-pending wait), then cancel its task
+        # Flag the record first so the watchers see expected_termination on
+        # the next iteration (or already-pending wait), then cancel their tasks
         # so the SIGTERM below isn't read as a crash.
         record.expected_termination = True
-        watcher = self._watchers.pop(integration_id, None)
-        if watcher is not None and not watcher.done():
-            watcher.cancel()
-            await asyncio.gather(watcher, return_exceptions=True)
+        
+        # Cancel all watchers for this integration
+        caps_to_remove = list(record.brokers.keys())
+        for cap in caps_to_remove:
+            watcher = self._watchers.pop((integration_id, cap), None)
+            if watcher is not None and not watcher.done():
+                watcher.cancel()
+                await asyncio.gather(watcher, return_exceptions=True)
 
         self._registry.remove(integration_id)
-        await self._terminate_broker(record.broker)
+        
+        # Terminate all brokers
+        for handle in record.brokers.values():
+            await self._terminate_broker(handle)
+        
         delete_integration(self._vault_dir, integration_id)
         logger.info("removed integration %s", integration_id)
 
@@ -287,7 +359,7 @@ class BrokerManager:
             logger.info("updated integration %s (label=%r)", integration_id, label)
             return record
 
-        # write_allowed changed — broker needs a new env, which means respawn.
+        # write_allowed changed — all brokers need a new env, which means respawn all.
         entry = self._catalog.get(record.meta.slug)
         if entry is None:
             # The slug existed when the integration was added but no longer
@@ -304,41 +376,59 @@ class BrokerManager:
         except DecryptError as exc:
             raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
 
-        # Stop the watcher and terminate before respawn — same dance as
-        # remove(), but we keep the registry entry so the new handle slots
-        # back in under the same id.
+        # Stop all watchers and terminate all brokers before respawn
         record.expected_termination = True
-        watcher = self._watchers.pop(integration_id, None)
-        if watcher is not None and not watcher.done():
-            watcher.cancel()
-            await asyncio.gather(watcher, return_exceptions=True)
-        await self._terminate_broker(record.broker)
+        for cap in list(record.brokers.keys()):
+            watcher = self._watchers.pop((integration_id, cap), None)
+            if watcher is not None and not watcher.done():
+                watcher.cancel()
+                await asyncio.gather(watcher, return_exceptions=True)
+        
+        for handle in record.brokers.values():
+            await self._terminate_broker(handle)
 
-        try:
-            new_handle = await spawn_broker(
-                entry=entry,
-                integration_id=integration_id,
-                secret_bundle=secret_bundle,
-                write_allowed=new_meta.write_allowed,
-                sockets_dir=self._sockets_dir,
-                host_paths=self._host_paths,
-            )
-        except BrokerSpawnError as exc:
-            # New meta is on disk, but we have no live broker. Mark broken
-            # so list/resolve surface the failure; user remediation is
-            # remove + re-add.
+        # Respawn all brokers
+        new_handles: dict[str, BrokerHandle] = {}
+        spawn_errors: list[tuple[str, BrokerSpawnError]] = []
+        
+        for cap in record.capabilities:
+            spec = entry.broker_for(cap)
+            try:
+                handle = await spawn_broker(
+                    spec=spec,
+                    integration_id=integration_id,
+                    secret_bundle=secret_bundle,
+                    write_allowed=new_meta.write_allowed,
+                    sockets_dir=self._sockets_dir,
+                    host_paths=self._host_paths,
+                )
+                new_handles[cap] = handle
+            except BrokerSpawnError as exc:
+                spawn_errors.append((cap, exc))
+
+        if spawn_errors:
+            # Terminate any successfully spawned brokers
+            for handle in new_handles.values():
+                await self._terminate_broker(handle)
+            # Mark broken
             record.state = "broken"
-            if exc.exit_code == _AUTH_FAIL_EXIT_CODE:
-                record.state = "auth_failed"
-                raise RpcError("AUTH", "upstream rejected credentials") from exc
-            raise RpcError("UPSTREAM", f"broker respawn failed: {exc}") from exc
+            for cap, exc in spawn_errors:
+                if exc.exit_code == _AUTH_FAIL_EXIT_CODE:
+                    record.state = "auth_failed"
+                    raise RpcError("AUTH", "upstream rejected credentials") from exc
+            first_cap, first_exc = spawn_errors[0]
+            raise RpcError("UPSTREAM", f"broker respawn failed for {first_cap}: {first_exc}") from first_exc
 
-        # Reset terminal-state flags now that the new broker is live.
-        record.broker = new_handle
+        # Reset terminal-state flags now that all new brokers are live.
+        record.brokers = new_handles
         record.meta = new_meta
         record.state = "running"
         record.expected_termination = False
-        self._start_watcher(integration_id)
+        
+        # Restart all watchers
+        for cap in record.capabilities:
+            self._start_watcher(integration_id, cap)
+        
         logger.info(
             "updated integration %s (write_allowed=%s, label=%r)",
             integration_id, new_meta.write_allowed, new_meta.label,
@@ -358,18 +448,20 @@ class BrokerManager:
         self._watchers.clear()
 
         for record in self._registry.list():
-            await self._terminate_broker(record.broker)
+            for handle in record.brokers.values():
+                await self._terminate_broker(handle)
 
     # --- internals ----------------------------------------------------------
 
-    def _start_watcher(self, integration_id: str) -> None:
+    def _start_watcher(self, integration_id: str, capability: str) -> None:
         """Schedule the per-broker watcher. Idempotent: replaces an existing one."""
-        existing = self._watchers.get(integration_id)
+        key = (integration_id, capability)
+        existing = self._watchers.get(key)
         if existing is not None and not existing.done():
             existing.cancel()
-        self._watchers[integration_id] = asyncio.create_task(
-            self._watch(integration_id),
-            name=f"broker-watch-{integration_id}",
+        self._watchers[key] = asyncio.create_task(
+            self._watch(integration_id, capability),
+            name=f"broker-watch-{integration_id}-{capability}",
         )
 
     async def _terminate_broker(self, handle: BrokerHandle) -> None:
@@ -382,7 +474,7 @@ class BrokerManager:
             handle.proc.kill()
             await handle.proc.wait()
 
-    async def _watch(self, integration_id: str) -> None:
+    async def _watch(self, integration_id: str, capability: str) -> None:
         """Per-broker respawn loop with exponential backoff and circuit-breakers."""
         consecutive_failures = 0
         while True:
@@ -390,13 +482,17 @@ class BrokerManager:
             if record is None:
                 return
 
+            handle = record.brokers.get(capability)
+            if handle is None:
+                return
+
             try:
-                exit_code = await record.broker.proc.wait()
+                exit_code = await handle.proc.wait()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception(
-                    "watcher for %s failed waiting on broker", integration_id,
+                    "watcher for %s (%s) failed waiting on broker", integration_id, capability,
                 )
                 return
 
@@ -405,15 +501,15 @@ class BrokerManager:
                 return
 
             logger.warning(
-                "broker for %s exited unexpectedly (code=%s); attempting respawn",
-                integration_id, exit_code,
+                "broker for %s (%s) exited unexpectedly (code=%s); attempting respawn",
+                integration_id, capability, exit_code,
             )
 
             if exit_code == _AUTH_FAIL_EXIT_CODE:
                 logger.warning(
-                    "broker for %s exited with auth-fail code %d; "
+                    "broker for %s (%s) exited with auth-fail code %d; "
                     "marking auth_failed and stopping respawn",
-                    integration_id, exit_code,
+                    integration_id, capability, exit_code,
                 )
                 record.state = "auth_failed"
                 return
@@ -421,8 +517,8 @@ class BrokerManager:
             consecutive_failures += 1
             if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
                 logger.warning(
-                    "broker for %s failed %d times in a row; marking broken",
-                    integration_id, consecutive_failures,
+                    "broker for %s (%s) failed %d times in a row; marking broken",
+                    integration_id, capability, consecutive_failures,
                 )
                 record.state = "broken"
                 return
@@ -432,27 +528,27 @@ class BrokerManager:
                 _BACKOFF_BASE_SECONDS * (2 ** (consecutive_failures - 1)),
             )
             logger.info(
-                "respawning broker for %s in %.1fs (attempt %d)",
-                integration_id, backoff, consecutive_failures,
+                "respawning broker for %s (%s) in %.1fs (attempt %d)",
+                integration_id, capability, backoff, consecutive_failures,
             )
             await asyncio.sleep(backoff)
 
             try:
-                new_handle = await self._respawn(integration_id, record)
+                new_handle = await self._respawn(integration_id, capability, record)
             except _RespawnError as exc:
-                logger.warning("respawn failed for %s: %s", integration_id, exc)
+                logger.warning("respawn failed for %s (%s): %s", integration_id, capability, exc)
                 if exc.exit_code == _AUTH_FAIL_EXIT_CODE:
                     record.state = "auth_failed"
                     return
                 continue
 
-            record.broker = new_handle
+            record.brokers[capability] = new_handle
             record.state = "running"
             consecutive_failures = 0
-            logger.info("respawned broker for %s", integration_id)
+            logger.info("respawned broker for %s (%s)", integration_id, capability)
 
     async def _respawn(
-        self, integration_id: str, record: IntegrationRecord,
+        self, integration_id: str, capability: str, record: IntegrationRecord,
     ) -> BrokerHandle:
         """Read secrets + spawn a fresh broker for an existing record."""
         entry = self._catalog.get(record.meta.slug)
@@ -466,9 +562,10 @@ class BrokerManager:
             msg = f"decrypt failed: {exc}"
             raise _RespawnError(msg) from exc
 
+        spec = entry.broker_for(capability)
         try:
             return await spawn_broker(
-                entry=entry,
+                spec=spec,
                 integration_id=integration_id,
                 secret_bundle=secret_bundle,
                 write_allowed=record.meta.write_allowed,

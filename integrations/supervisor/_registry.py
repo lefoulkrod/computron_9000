@@ -21,7 +21,7 @@ class IntegrationRecord:
 
     Pairs the integration's persisted metadata (slug, label, write_allowed,
     timestamps — the same thing on disk at ``<id>.meta``) with the live
-    ``BrokerHandle`` and a snapshot of ``capabilities`` lifted from the
+    ``BrokerHandle`` instances and a snapshot of ``capabilities`` lifted from the
     catalog at construction time. ``capabilities`` is denormalized here
     so the ``list`` verb doesn't need to look the catalog back up.
 
@@ -38,7 +38,7 @@ class IntegrationRecord:
     """
 
     meta: IntegrationMeta
-    broker: BrokerHandle
+    brokers: dict[str, BrokerHandle]  # capability -> handle
     capabilities: frozenset[str]
     state: IntegrationState = "running"
     expected_termination: bool = False

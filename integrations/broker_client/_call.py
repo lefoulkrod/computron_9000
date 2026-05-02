@@ -29,6 +29,7 @@ from integrations.broker_client._errors import (
     IntegrationNotConnected,
     IntegrationWriteDenied,
 )
+from integrations.broker_client._verb_types import _VERB_CAPABILITY
 
 
 async def call(
@@ -60,9 +61,13 @@ async def call(
         IntegrationError: any other protocol-level or broker-side failure.
     """
     # --- Hop 1: resolve integration_id -> broker socket via the supervisor.
+    capability = _VERB_CAPABILITY.get(verb)
+    if capability is None:
+        raise IntegrationError(f"unknown verb: {verb}")
+
     resolve_response = await _rpc_one_shot(
         app_sock_path,
-        {"id": 1, "verb": "resolve", "args": {"id": integration_id}},
+        {"id": 1, "verb": "resolve", "args": {"id": integration_id, "capability": capability}},
     )
     if "error" in resolve_response:
         error = resolve_response["error"]

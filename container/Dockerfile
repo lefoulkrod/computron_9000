@@ -71,6 +71,12 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get install -y --no-install-recommends gh && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ── rclone — cloud storage backend for the rclone_broker ─────────────────────
+RUN curl -fsSL https://downloads.rclone.org/rclone-current-linux-amd64.deb \
+      -o /tmp/rclone.deb && \
+    apt-get install -y /tmp/rclone.deb && \
+    rm /tmp/rclone.deb
+
 # ── Node.js LTS ───────────────────────────────────────────────────────────────
 RUN set -eux; \
     LTS_VERSION=$(curl -fsSL https://nodejs.org/dist/index.json | \

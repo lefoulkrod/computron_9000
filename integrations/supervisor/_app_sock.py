@@ -5,11 +5,11 @@ broker RPC framing, requests are length-prefixed JSON frames with
 ``{id, verb, args}`` and responses are ``{id, result | error}``. Verbs and
 their payloads:
 
-- ``add``: ``{slug, user_suffix, label, auth_blob, write_allowed}`` →
-  ``{id, slug, label, write_allowed, capabilities, state, socket}``.
+- ``add``: ``{slug, user_suffix, label, auth_blob, write_allowed, enabled_capabilities?}`` →
+  ``{id, slug, label, write_allowed, capabilities, state, sockets}``.
 - ``list``: ``{}`` → ``{integrations: [...]}``. Non-secret metadata of
   every active integration.
-- ``resolve``: ``{id}`` → ``{id, socket, write_allowed}``. The app server's
+- ``resolve``: ``{id, capability}`` → ``{id, socket, write_allowed}``. The app server's
   broker_client calls this to locate a broker before any tool call.
 - ``update``: ``{id, write_allowed?, label?}`` → the same record shape as
   ``add``. At least one of ``write_allowed`` / ``label`` must be present.
@@ -67,12 +67,20 @@ class AppSockHandler:
     # --- verbs --------------------------------------------------------------
 
     async def _add(self, args: dict[str, Any]) -> dict[str, Any]:
+        enabled_capabilities: list[str] | None = None
+        if "enabled_capabilities" in args:
+            ec = args["enabled_capabilities"]
+            if not isinstance(ec, list) or not all(isinstance(c, str) for c in ec):
+                raise RpcError("BAD_REQUEST", "'enabled_capabilities' must be a list of strings")
+            enabled_capabilities = ec
+        
         record = await self._manager.add(
             slug=_require_str(args, "slug"),
             user_suffix=_require_str(args, "user_suffix"),
             label=_require_str(args, "label"),
             auth_blob=args.get("auth_blob"),
             write_allowed=bool(args.get("write_allowed", False)),
+            enabled_capabilities=enabled_capabilities,
         )
         return _record_to_dict(record)
 
@@ -83,12 +91,21 @@ class AppSockHandler:
 
     def _resolve(self, args: dict[str, Any]) -> dict[str, Any]:
         integration_id = _require_str(args, "id")
+        capability = args.get("capability")
         record = self._registry.get(integration_id)
         if record is None:
             raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
+        
+        if capability is None:
+            # Default to first capability for backward compat
+            capability = next(iter(record.brokers.keys()))
+        
+        if capability not in record.brokers:
+            raise RpcError("NOT_FOUND", f"capability {capability!r} not available for {integration_id}")
+        
         return {
             "id": record.meta.id,
-            "socket": str(record.broker.socket_path),
+            "socket": str(record.brokers[capability].socket_path),
             "write_allowed": record.meta.write_allowed,
         }
 
@@ -122,15 +139,25 @@ class AppSockHandler:
 
 def _record_to_dict(record) -> dict[str, Any]:
     """Wire-shape for one integration — used by ``add`` and ``list``."""
-    return {
+    # Build sockets dict mapping capability -> socket path
+    sockets = {cap: str(handle.socket_path) for cap, handle in record.brokers.items()}
+    
+    result = {
         "id": record.meta.id,
         "slug": record.meta.slug,
         "label": record.meta.label,
         "write_allowed": record.meta.write_allowed,
         "capabilities": sorted(record.capabilities),
         "state": record.state,
-        "socket": str(record.broker.socket_path),
+        "sockets": sockets,
     }
+    
+    # Backward-compat: keep "socket" field pointing to the first broker's socket
+    if record.brokers:
+        first_cap = next(iter(record.brokers.keys()))
+        result["socket"] = str(record.brokers[first_cap].socket_path)
+    
+    return result
 
 
 def _require_str(args: dict[str, Any], key: str) -> str:

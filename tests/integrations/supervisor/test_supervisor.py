@@ -26,7 +26,7 @@ from typing import Any
 
 import pytest
 
-from integrations.supervisor._catalog import CatalogEntry
+from integrations.supervisor._catalog import BrokerSpec, CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from integrations.supervisor._store import enc_path, meta_path
 from tests.integrations.fixtures._host_paths import (
@@ -65,20 +65,26 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
     return {
         "icloud": CatalogEntry(
             slug="icloud",
-            command=["python", "-m", "integrations.brokers.email_broker"],
-            static_env={
-                "IMAP_HOST": fake.imap_host,
-                "IMAP_PORT": str(fake.imap_port),
-                "SMTP_HOST": fake.smtp_host,
-                "SMTP_PORT": str(fake.smtp_port),
-                "IMAP_TLS": "false",
-                "SMTP_STARTTLS": "false",
-            },
-            env_injection={
-                "email": "EMAIL_USER",
-                "password": "EMAIL_PASS",
-            },
-            host_paths=EMAIL_BROKER_HOST_PATHS,
+            label="iCloud",
+            brokers=(
+                BrokerSpec(
+                    capability="email_calendar",
+                    command=["python", "-m", "integrations.brokers.email_broker"],
+                    static_env={
+                        "IMAP_HOST": fake.imap_host,
+                        "IMAP_PORT": str(fake.imap_port),
+                        "SMTP_HOST": fake.smtp_host,
+                        "SMTP_PORT": str(fake.smtp_port),
+                        "IMAP_TLS": "false",
+                        "SMTP_STARTTLS": "false",
+                    },
+                    env_injection={
+                        "email": "EMAIL_USER",
+                        "password": "EMAIL_PASS",
+                    },
+                    host_paths=EMAIL_BROKER_HOST_PATHS,
+                ),
+            ),
         ),
     }
 
@@ -285,7 +291,8 @@ async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) ->
             },
         )
         assert "error" not in add_resp, add_resp
-        old_pid = sup._registry.get("icloud_personal").broker.proc.pid
+        record = sup._registry.get("icloud_personal")
+        old_pid = record.brokers["email_calendar"].proc.pid
         broker_socket_old = Path(add_resp["result"]["socket"])
 
         # Confirm the gate is currently active: send_message → WRITE_DENIED.
@@ -307,7 +314,7 @@ async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) ->
 
         # New broker with a different PID is now serving.
         new_record = sup._registry.get("icloud_personal")
-        assert new_record.broker.proc.pid != old_pid
+        assert new_record.brokers["email_calendar"].proc.pid != old_pid
         assert new_record.state == "running"
 
         # Old socket got rebound to the new broker — WRITE_DENIED is gone.
@@ -466,7 +473,8 @@ async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
                 "write_allowed": False,
             },
         )
-        old_pid = sup._registry.get("icloud_personal").broker.proc.pid
+        record = sup._registry.get("icloud_personal")
+        old_pid = record.brokers["email_calendar"].proc.pid
 
         upd_resp = await _rpc_call(
             sup.app_sock_path,
@@ -474,7 +482,7 @@ async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
             {"id": "icloud_personal", "write_allowed": False},
         )
         assert "error" not in upd_resp, upd_resp
-        assert sup._registry.get("icloud_personal").broker.proc.pid == old_pid
+        assert sup._registry.get("icloud_personal").brokers["email_calendar"].proc.pid == old_pid
     finally:
         await sup.stop()
         await fake.stop()

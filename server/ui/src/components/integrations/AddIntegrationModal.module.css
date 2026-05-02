@@ -388,6 +388,12 @@
     gap: var(--sp-2);
 }
 
+.checkStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+
 .radioCard {
     display: flex;
     align-items: center;
@@ -490,6 +496,7 @@
 .checkRow {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
     padding: 10px 12px;
     background: var(--surface);
@@ -520,6 +527,16 @@
 .checkLabel {
     flex: 1;
     color: var(--text-primary);
+}
+
+.checkHelp {
+    font-size: 11px;
+    color: var(--text-primary);
+    opacity: 0.6;
+    line-height: 1.4;
+    flex-basis: 100%;
+    margin-top: 2px;
+    margin-left: 26px;
 }
 
 .checkMeta {
