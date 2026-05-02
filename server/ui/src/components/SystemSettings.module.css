@@ -111,31 +111,8 @@
     box-shadow: 0 0 6px var(--danger-muted);
 }
 
-/* Action buttons (Refresh, Run Setup Wizard) */
-.actionBtn {
-    flex-shrink: 0;
-    height: 30px;
-    font-family: var(--font-brand);
-    font-size: 0.75rem;
-    padding: 0 0.75rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: var(--canvas);
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    box-shadow: none;
-}
-
-.actionBtn:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent-muted);
-}
-
-.actionBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+/* Action buttons (Refresh, Run Setup Wizard) now render via the
+ * Button primitive — see ./primitives/Button.jsx. */
 
 /* ── Group card: a row plus a nested disclosure + advanced body ── */
 .groupCard {

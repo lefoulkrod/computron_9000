@@ -24,7 +24,7 @@ describe('ChatInput', () => {
         await user.type(textarea, 'Hello world');
         await user.click(screen.getByLabelText('Send message'));
 
-        expect(onSend).toHaveBeenCalledWith('Hello world', null, expect.any(String));
+        expect(onSend).toHaveBeenCalledWith('Hello world', null);
     });
 
     it('trims whitespace from messages', async () => {
@@ -36,7 +36,7 @@ describe('ChatInput', () => {
         await user.type(textarea, '  test message  ');
         await user.click(screen.getByLabelText('Send message'));
 
-        expect(onSend).toHaveBeenCalledWith('test message', null, expect.any(String));
+        expect(onSend).toHaveBeenCalledWith('test message', null);
     });
 
     it('clears message after sending', async () => {
@@ -59,7 +59,7 @@ describe('ChatInput', () => {
         const textarea = screen.getByPlaceholderText('Type your message...');
         await user.type(textarea, 'Test{Enter}');
 
-        expect(onSend).toHaveBeenCalledWith('Test', null, expect.any(String));
+        expect(onSend).toHaveBeenCalledWith('Test', null);
     });
 
     it('does not submit on Shift+Enter', async () => {
@@ -140,9 +140,9 @@ describe('ChatInput', () => {
             'Check this image',
             expect.objectContaining({
                 content_type: 'image/png',
-                base64: expect.any(String)
+                base64: expect.any(String),
+                filename: 'test.png',
             }),
-            expect.any(String),
         );
     });
 
@@ -208,9 +208,8 @@ describe('ChatInput', () => {
                 'External image',
                 expect.objectContaining({
                     content_type: 'image/png',
-                    base64: MOCK_BASE64_PNG
+                    base64: MOCK_BASE64_PNG,
                 }),
-                expect.any(String),
             );
         });
 

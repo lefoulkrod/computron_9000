@@ -1,3 +1,4 @@
+import Button from '../../primitives/Button.jsx';
 import Callout from '../../primitives/Callout.jsx';
 import styles from './add-wizard.module.css';
 import { errorCopy } from './providers.js';
@@ -27,17 +28,17 @@ export function ExplainerStep({ provider, onBack, onNext }) {
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onBack}>
+                <Button onClick={onBack}>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button
-                        className={styles.btnFilled}
+                    <Button
+                        variant="filled"
                         onClick={onNext}
                         data-testid="wizard-next"
                     >
                         Next <i className="bi bi-arrow-right" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>
@@ -160,19 +161,19 @@ export function CredentialsStep({ provider, form, setForm, error, onBack, onCanc
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onBack}>
+                <Button onClick={onBack}>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
-                    <button
-                        className={styles.btnFilled}
+                    <Button onClick={onCancel}>Cancel</Button>
+                    <Button
+                        variant="filled"
                         disabled={!canSubmit}
                         onClick={onSubmit}
                         data-testid="wizard-submit"
                     >
                         Verify &amp; save <i className="bi bi-shield-check" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>
@@ -206,12 +207,12 @@ export function VerifyingStep() {
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} disabled>
+                <Button disabled>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnGhost} disabled>Cancel</button>
-                    <button className={styles.btnFilled} disabled>Continue</button>
+                    <Button disabled>Cancel</Button>
+                    <Button variant="filled" disabled>Continue</Button>
                 </div>
             </div>
         </>

@@ -1,3 +1,4 @@
+import Button from '../../primitives/Button.jsx';
 import Callout from '../../primitives/Callout.jsx';
 import styles from './add-wizard.module.css';
 import { errorCopy } from './providers.js';
@@ -66,18 +67,18 @@ export function OauthCapabilitiesStep({
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onBack}>
+                <Button onClick={onBack}>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button
-                        className={styles.btnFilled}
+                    <Button
+                        variant="filled"
                         onClick={onNext}
                         disabled={!canContinue}
                         data-testid="wizard-next"
                     >
                         Continue <i className="bi bi-arrow-right" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>
@@ -242,21 +243,21 @@ export function OauthGcpSetupStep({
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onBack} disabled={submitting}>
+                <Button onClick={onBack} disabled={submitting}>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnGhost} onClick={onCancel} disabled={submitting}>
+                    <Button onClick={onCancel} disabled={submitting}>
                         Cancel
-                    </button>
-                    <button
-                        className={styles.btnFilled}
+                    </Button>
+                    <Button
+                        variant="filled"
                         disabled={!canSubmit}
                         onClick={onSubmit}
                         data-testid="oauth-authorize"
                     >
                         Authorize <i className="bi bi-shield-check" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>
@@ -298,11 +299,11 @@ export function OauthRedirectStep({ provider, oauth, error, onCancel, onRestart 
                     </div>
                 </div>
                 <div className={styles.footer}>
-                    <button className={styles.btnOutline} onClick={onRestart}>
+                    <Button onClick={onRestart}>
                         <i className="bi bi-arrow-left" /> Try again
-                    </button>
+                    </Button>
                     <div className={styles.footerRight}>
-                        <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
+                        <Button onClick={onCancel}>Cancel</Button>
                     </div>
                 </div>
             </>
@@ -339,9 +340,9 @@ export function OauthRedirectStep({ provider, oauth, error, onCancel, onRestart 
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onCancel} disabled={terminal}>
+                <Button onClick={onCancel} disabled={terminal}>
                     Cancel
-                </button>
+                </Button>
             </div>
         </>
     );

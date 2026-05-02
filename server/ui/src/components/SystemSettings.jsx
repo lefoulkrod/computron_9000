@@ -5,6 +5,7 @@ import EyeIcon from './icons/EyeIcon';
 import CompactionIcon from './icons/CompactionIcon';
 import WrenchIcon from './icons/WrenchIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
+import Button from './primitives/Button.jsx';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 
 export default function SystemSettings({ onRunWizard }) {
@@ -236,13 +237,12 @@ export default function SystemSettings({ onRunWizard }) {
                             : 'Unable to reach Ollama'}
                     </span>
                 </div>
-                <button
-                    className={styles.actionBtn}
+                <Button
                     onClick={handleRefresh}
                     disabled={refreshing}
                 >
-                    {refreshing ? 'Refreshing...' : 'Refresh'}
-                </button>
+                    {refreshing ? 'Refreshing…' : 'Refresh'}
+                </Button>
             </div>
 
             {/* Setup */}
@@ -256,12 +256,9 @@ export default function SystemSettings({ onRunWizard }) {
                     <span className={styles.settingTitle}>Setup Wizard</span>
                     <span className={styles.settingDesc}>Re-run the initial configuration wizard</span>
                 </div>
-                <button
-                    className={styles.actionBtn}
-                    onClick={onRunWizard}
-                >
+                <Button onClick={onRunWizard}>
                     Run Setup Wizard
-                </button>
+                </Button>
             </div>
         </div>
     );

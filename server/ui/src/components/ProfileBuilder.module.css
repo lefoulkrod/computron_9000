@@ -90,59 +90,8 @@
     margin-left: auto;
 }
 
-.deleteBtn {
-    font-family: var(--font-brand);
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0.3rem 0.65rem;
-    border: 1px solid var(--danger-muted);
-    background: var(--danger-muted);
-    color: var(--danger);
-    cursor: pointer;
-    box-shadow: none;
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.deleteBtn:hover {
-    background: var(--danger-muted);
-    border-color: var(--danger-muted);
-}
-
-.secondaryBtn {
-    font-family: var(--font-brand);
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0.3rem 0.65rem;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-primary);
-    cursor: pointer;
-    box-shadow: none;
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.secondaryBtn:hover {
-    border-color: var(--accent);
-    background: var(--accent-muted);
-}
-
-.primaryBtn {
-    font-family: var(--font-brand);
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0.3rem 0.85rem;
-    border: 1px solid var(--accent-muted);
-    background: var(--accent-muted);
-    color: var(--accent);
-    cursor: pointer;
-    box-shadow: none;
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.primaryBtn:hover {
-    background: var(--accent-muted);
-    border-color: var(--accent-muted);
-}
+/* Action-bar buttons: Delete / Duplicate / Revert / Save now render
+ * via the Button primitive — see ./primitives/Button.jsx. */
 
 /* ---- Form body ---- */
 .formBody {

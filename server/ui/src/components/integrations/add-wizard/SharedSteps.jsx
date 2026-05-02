@@ -1,3 +1,4 @@
+import Button from '../../primitives/Button.jsx';
 import styles from './add-wizard.module.css';
 import { PROVIDERS } from './providers.js';
 
@@ -37,7 +38,7 @@ export function ProviderPicker({ onPick, onCancel }) {
                 ))}
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
+                <Button onClick={onCancel}>Cancel</Button>
             </div>
         </>
     );
@@ -96,16 +97,16 @@ export function SuccessScreen({ provider, form, result, onAddAnother, onDone }) 
             </div>
             <div className={styles.footer}>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnOutline} onClick={onAddAnother}>
+                    <Button onClick={onAddAnother}>
                         <i className="bi bi-plus-lg" /> Add another
-                    </button>
-                    <button
-                        className={styles.btnFilled}
+                    </Button>
+                    <Button
+                        variant="filled"
                         onClick={onDone}
                         data-testid="wizard-done"
                     >
                         Done
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>

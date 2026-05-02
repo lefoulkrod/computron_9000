@@ -15,6 +15,13 @@ export default function ProfileSelector({ selectedId, onChange, disabled, refres
         return () => { cancelled = true; };
     }, [refreshSignal]);
 
+    useEffect(() => {
+        if (profiles.length === 0) return;
+        if (!profiles.some((p) => p.id === selectedId)) {
+            onChange(profiles[0].id);
+        }
+    }, [profiles, selectedId, onChange]);
+
     if (profiles.length === 0) return null;
 
     return (

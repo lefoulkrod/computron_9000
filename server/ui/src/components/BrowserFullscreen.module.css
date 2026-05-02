@@ -1,0 +1,16 @@
+.imageContainer {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: var(--sp-6);
+    min-height: 100%;
+}
+
+.image {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: #000;
+}

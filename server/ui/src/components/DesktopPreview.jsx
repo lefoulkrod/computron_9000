@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import PreviewShell from './PreviewShell.jsx';
 import styles from './DesktopPreview.module.css';
-import DesktopIcon from './icons/DesktopIcon.jsx';
 import ExpandIcon from './icons/ExpandIcon.jsx';
 
 const MouseIcon = ({ size = 14 }) => (
@@ -77,12 +75,11 @@ function DesktopLightbox({ interactive, onToggle, onClose }) {
  *
  * @param {Object} props
  * @param {boolean} props.visible - Whether the desktop is visible
- * @param {function(): void} [props.onClose] - Callback when close button clicked
+ * @param {function(): void} [props.onClose] - Callback when close button clicked (overlay mode)
  * @param {boolean} [props.overlay] - If true, render as overlay lightbox
- * @param {boolean} [props.hideShell] - If true, render without PreviewShell wrapper
  * @returns {JSX.Element|null}
  */
-export default function DesktopPreview({ visible, onClose, overlay, hideShell }) {
+export default function DesktopPreview({ visible, onClose, overlay }) {
     const [interactive, setInteractive] = useState(false);
     const [expanded, setExpanded] = useState(false);
 
@@ -90,7 +87,6 @@ export default function DesktopPreview({ visible, onClose, overlay, hideShell })
 
     const toggle = () => setInteractive((v) => !v);
 
-    // Overlay mode: render lightbox directly (used from header button in network/agent views)
     if (overlay) {
         return (
             <DesktopLightbox
@@ -103,67 +99,26 @@ export default function DesktopPreview({ visible, onClose, overlay, hideShell })
 
     const vncUrl = _buildVncUrl(interactive);
 
-    const content = (
-        <iframe
-            key={interactive ? 'active' : 'passive'}
-            className={styles.vncFrame}
-            src={vncUrl}
-            title="Desktop View"
-            allow="clipboard-read; clipboard-write"
-        />
-    );
-
-    if (hideShell) {
-        return (
-            <>
-                <div className={styles.inlineControls}>
-                    <ControlButton interactive={interactive} onToggle={toggle} />
-                    <button
-                        className={styles.expandBtn}
-                        onClick={() => setExpanded(true)}
-                        aria-label="Open fullscreen"
-                        title="Open fullscreen"
-                    >
-                        <ExpandIcon size={14} />
-                    </button>
-                </div>
-                {content}
-                {expanded && (
-                    <DesktopLightbox
-                        interactive={interactive}
-                        onToggle={toggle}
-                        onClose={() => setExpanded(false)}
-                    />
-                )}
-            </>
-        );
-    }
-
     return (
         <>
-            <PreviewShell
-                icon={<DesktopIcon size={16} />}
-                title={interactive ? 'Desktop (controlling)' : 'Desktop'}
-                onClose={onClose}
-                headerExtra={
-                    <>
-                        <ControlButton interactive={interactive} onToggle={toggle} />
-                        <button
-                            className={styles.expandBtn}
-                            onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
-                            aria-label="Open fullscreen"
-                            title="Open fullscreen"
-                        >
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M3 6V3h3M13 10v3h-3M3 10v3h3M13 6V3h-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                        </button>
-                    </>
-                }
-            >
-                {content}
-            </PreviewShell>
-
+            <div className={styles.inlineControls}>
+                <ControlButton interactive={interactive} onToggle={toggle} />
+                <button
+                    className={styles.expandBtn}
+                    onClick={() => setExpanded(true)}
+                    aria-label="Open fullscreen"
+                    title="Open fullscreen"
+                >
+                    <ExpandIcon size={14} />
+                </button>
+            </div>
+            <iframe
+                key={interactive ? 'active' : 'passive'}
+                className={styles.vncFrame}
+                src={vncUrl}
+                title="Desktop View"
+                allow="clipboard-read; clipboard-write"
+            />
             {expanded && (
                 <DesktopLightbox
                     interactive={interactive}

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { formatCron, formatTime, formatTimeUntil, formatDuration } from './goalUtils.jsx';
 import TaskOutputModal from './TaskOutputModal.jsx';
+import Button from '../primitives/Button.jsx';
+import ConfirmButton from '../primitives/ConfirmButton.jsx';
 import styles from './GoalDetailPanel.module.css';
 
 /**
@@ -61,7 +63,6 @@ export default function GoalDetailPanel({
 }) {
     const [activeTab, setActiveTab] = useState('runs');
     const [selectedOutput, setSelectedOutput] = useState(null);
-    const [confirmDelete, setConfirmDelete] = useState(false);
 
     if (!goal) {
         return (
@@ -81,15 +82,6 @@ export default function GoalDetailPanel({
         else onPauseGoal(goal.id);
     };
 
-    const handleDelete = () => {
-        if (!confirmDelete) {
-            setConfirmDelete(true);
-            setTimeout(() => setConfirmDelete(false), 3000);
-            return;
-        }
-        onDeleteGoal(goal.id);
-    };
-
     const runs = detail?.runs || [];
     const tasks = detail?.tasks || [];
 
@@ -102,30 +94,31 @@ export default function GoalDetailPanel({
                     {statusLabel(goal.status, goal.is_running)}
                 </span>
                 <div className={styles.actionsRight}>
-                    <button
-                        className={styles.actionBtn}
+                    <Button
                         onClick={handlePauseResume}
                         disabled={isLoading}
                     >
                         {isPaused
-                            ? <><i className="bi bi-play-fill" /> RESUME</>
-                            : <><i className="bi bi-pause-fill" /> PAUSE</>
+                            ? <><i className="bi bi-play-fill" /> Resume</>
+                            : <><i className="bi bi-pause-fill" /> Pause</>
                         }
-                    </button>
-                    <button
-                        className={`${styles.actionBtn} ${styles.success}`}
+                    </Button>
+                    <Button
+                        variant="filled"
                         onClick={handleRunNow}
                         disabled={isLoading}
                     >
-                        <i className="bi bi-play-fill" /> RUN NOW
-                    </button>
-                    <button
-                        className={`${styles.actionBtn} ${styles.danger}`}
-                        onClick={handleDelete}
+                        <i className="bi bi-play-fill" /> Run now
+                    </Button>
+                    <ConfirmButton
+                        label="Delete"
+                        confirmLabel="Confirm?"
+                        busyLabel="Deleting…"
+                        icon="bi-trash3"
+                        title="Delete this goal"
+                        onConfirm={() => onDeleteGoal(goal.id)}
                         disabled={isLoading}
-                    >
-                        <i className="bi bi-trash3" /> {confirmDelete ? 'CONFIRM?' : 'DELETE'}
-                    </button>
+                    />
                 </div>
             </div>
 
