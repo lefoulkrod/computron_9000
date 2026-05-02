@@ -3333,6 +3333,29 @@ body {
         <button class="btn-icon" title="More"><i class="bi bi-three-dots"></i></button>
         <span style="font-size:11px;color:var(--text-tertiary);margin-left:8px;align-self:center">Icon buttons (28&times;28)</span>
       </div>
+
+      <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-code);margin-top:12px;line-height:1.6;max-width:760px">
+        // <strong style="color:var(--text-secondary)">When to reach for which.</strong> The four variants form a loudness ladder:
+        <code>filled</code> &gt; <code>outline</code> &gt; <code>ghost</code>, with <code>danger</code> as a parallel destructive track.<br>
+        // <code>.btn-filled</code> &mdash; the single primary action on a surface (Save, Connect, Submit, Next). At most one per row.<br>
+        // <code>.btn-outline</code> &mdash; the default for everything that isn&apos;t the primary CTA. Cancel, Back, Retry, Configure. A real, peer choice the user might pick.<br>
+        // <code>.btn-ghost</code> &mdash; tertiary / quiet. Use when the button stands alone or genuinely shouldn&apos;t compete for attention (a solo Skip, a hover-revealed row action). Reads as "an escape hatch."<br>
+        // <code>.btn-danger</code> &mdash; destructive (Delete, Disconnect, Remove). Use anywhere the action can&apos;t be cheaply undone.<br>
+        // <strong style="color:var(--text-secondary)">Rule of thumb:</strong> if two buttons live in the same action row, neither should be <code>ghost</code>. Use <code>filled</code> for the one primary CTA, <code>outline</code> for the rest, <code>danger</code> for destructive. Reach for <code>ghost</code> only when the button is alone or you specifically want it to feel almost-not-there.<br>
+        // Counter-example: a wizard footer of <code>[Back] [Cancel] [Save]</code>. All three are peer choices &mdash; render Back &amp; Cancel as <code>outline</code> and Save as <code>filled</code>. A <code>ghost</code> Cancel sitting next to outline Back reads as disabled, especially in dark mode.
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-danger">Delete</button>
+        <span style="color:var(--text-tertiary);font-family:var(--font-code);font-size:11px">&rarr;</span>
+        <button class="btn" style="background:var(--danger);color:#fff;border-color:var(--danger)">Confirm?</button>
+        <span style="color:var(--text-tertiary);font-family:var(--font-code);font-size:11px;margin-left:8px">click 1 arms; click 2 fires</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-code);margin-top:8px;line-height:1.6;max-width:760px">
+        // <strong style="color:var(--text-secondary)">Click-twice-to-confirm pattern.</strong> Destructive actions that can&apos;t be cheaply undone use a two-stage confirm: resting renders as <code>btn-danger</code> (danger-muted background, danger text); click 1 escalates to a solid danger fill (<code>background: var(--danger); color: #fff</code>) and the label flips to "Confirm?"; click 2 within the timeout (default 3s) fires the action.<br>
+        // The armed-state escalation is the affordance &mdash; resting state alone is not loud enough to signal "your next click is destructive." Don&apos;t replace this with a modal for inline row/panel actions; reserve modals for multi-field destructive forms.<br>
+        // Implemented by the <code>ConfirmButton</code> primitive (see <code>server/ui/src/components/primitives/ConfirmButton.jsx</code>). All Delete actions in the app should route through it.
+      </div>
     </div>
 
     <!-- Inputs -->

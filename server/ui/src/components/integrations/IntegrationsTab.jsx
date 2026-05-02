@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import Button from '../primitives/Button.jsx';
 import Callout from '../primitives/Callout.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
 import AddIntegrationModal from './AddIntegrationModal.jsx';
@@ -171,9 +172,9 @@ export default function IntegrationsTab() {
                             title="Couldn't load integrations"
                             description={loadError.message}
                         />
-                        <button className={styles.btnOutline} onClick={fetchIntegrations}>
+                        <Button onClick={fetchIntegrations}>
                             <i className="bi bi-arrow-clockwise" /> Retry
-                        </button>
+                        </Button>
                     </div>
                 )
             ) : integrations.length === 0 ? (
@@ -237,13 +238,12 @@ function UnavailableState({ onRetry }) {
             <div className={styles.emptyDesc}>
                 The integrations service is temporarily unavailable. Try again in a moment.
             </div>
-            <button
-                className={styles.btnOutline}
+            <Button
                 onClick={onRetry}
                 data-testid="integrations-retry"
             >
                 <i className="bi bi-arrow-clockwise" /> Try again
-            </button>
+            </Button>
         </div>
     );
 }
@@ -257,13 +257,13 @@ function EmptyState({ onAdd }) {
                 Give Computron access to your email and calendar. Credentials stay
                 encrypted in your own vault — the agent never sees them directly.
             </div>
-            <button
-                className={styles.btnFilledLg}
+            <Button
+                variant="filled"
                 onClick={onAdd}
                 data-testid="integrations-add-first"
             >
                 <i className="bi bi-plus-lg" /> Add integration
-            </button>
+            </Button>
         </div>
     );
 }
@@ -278,7 +278,7 @@ function ListPane({ grouped, selectedId, onSelect, onAdd }) {
                     onClick={onAdd}
                     data-testid="integrations-add-another"
                 >
-                    <i className="bi bi-plus-lg" /> ADD
+                    <i className="bi bi-plus-lg" /> Add
                 </button>
             </div>
             <div className={styles.listBody}>
@@ -356,7 +356,6 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
                 left as the destructive action; Cancel + Save right-aligned. */}
             <div className={styles.actionsBar}>
                 <ConfirmButton
-                    className={styles.deleteBtn}
                     label="Delete"
                     confirmLabel="Confirm?"
                     busyLabel="Deleting…"
@@ -365,24 +364,21 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
                     data-testid={`integrations-remove-${record.id}`}
                 />
                 <div className={styles.actionsRight}>
-                    <button
-                        type="button"
-                        className={styles.secondaryBtn}
+                    <Button
                         onClick={handleCancel}
                         disabled={!dirty || saving}
                         data-testid={`integrations-cancel-${record.id}`}
                     >
                         Revert
-                    </button>
-                    <button
-                        type="button"
-                        className={styles.primaryBtn}
+                    </Button>
+                    <Button
+                        variant="filled"
                         onClick={handleSave}
                         disabled={!canSave}
                         data-testid={`integrations-save-${record.id}`}
                     >
                         Save
-                    </button>
+                    </Button>
                 </div>
             </div>
 

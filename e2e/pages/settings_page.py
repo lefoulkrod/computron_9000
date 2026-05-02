@@ -95,8 +95,9 @@ class ProfileBuilder:
         return self
 
     def delete(self) -> "ProfileBuilder":
-        # exact=True so a profile NAMED "Delete X" doesn't collide with the button
+        # ConfirmButton: first click arms ("Confirm?"), second click fires.
         self.page.get_by_role("button", name="Delete", exact=True).click()
+        self.page.get_by_role("button", name="Confirm?").click()
         return self
 
     # ── Inline feedback ───────────────────────────────────────────

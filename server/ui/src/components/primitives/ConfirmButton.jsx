@@ -58,7 +58,6 @@ export default function ConfirmButton({
     const text = busy ? (busyLabel ?? label) : confirming ? confirmLabel : label;
     const composedClass = [
         styles.btn,
-        styles.btnIcon,
         className,
         confirming ? (confirmClassName ?? styles.confirming) : '',
     ].filter(Boolean).join(' ');
@@ -73,7 +72,7 @@ export default function ConfirmButton({
             data-testid={testid}
         >
             {icon && <i className={`bi ${icon}`} />}
-            {text != null && <span className={styles.label}>{text}</span>}
+            {text}
         </button>
     );
 }

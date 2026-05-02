@@ -278,74 +278,6 @@
     margin-left: auto;
 }
 
-/* All three actions-bar buttons share the design-language .btn baseline:
- * 32px tall, body font 13px/500, radius-md, 14px horizontal pad, 1px
- * transparent border, 150ms transition. Variants only override
- * background, color, and border-color — see §8 Form Controls. */
-.deleteBtn,
-.secondaryBtn,
-.primaryBtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 14px;
-    border-radius: var(--radius-md);
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms var(--ease);
-    border: 1px solid transparent;
-    white-space: nowrap;
-}
-
-.deleteBtn:active,
-.secondaryBtn:active,
-.primaryBtn:active {
-    transform: translateY(1px);
-}
-
-.deleteBtn:disabled,
-.secondaryBtn:disabled,
-.primaryBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* .btn-danger */
-.deleteBtn {
-    background: var(--danger-muted);
-    color: var(--danger);
-}
-
-.deleteBtn:hover:not(:disabled) {
-    background: rgba(220, 38, 38, 0.15);
-}
-
-/* .btn-outline */
-.secondaryBtn {
-    background: transparent;
-    border-color: var(--border);
-    color: var(--text-primary);
-}
-
-.secondaryBtn:hover:not(:disabled) {
-    background: var(--surface);
-    border-color: var(--border-strong);
-}
-
-/* .btn-filled */
-.primaryBtn {
-    background: var(--accent);
-    color: #fff;
-}
-
-.primaryBtn:hover:not(:disabled) {
-    background: var(--accent-hover);
-}
-
 /* Body scrolls; sections stack with thin separators. */
 .formBody {
     flex: 1;
@@ -460,50 +392,6 @@
     color: var(--text-primary);
     font-family: var(--font-code);
     font-size: 12px;
-}
-
-/* ── Empty / unavailable state buttons (§8 .btn baseline) ─── */
-.btnFilledLg,
-.btnOutline {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 0 14px;
-    height: 32px;
-    border-radius: var(--radius-md);
-    font-size: 13px;
-    font-family: var(--font-body);
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 150ms var(--ease);
-    white-space: nowrap;
-}
-
-.btnFilledLg {
-    background: var(--accent);
-    color: #fff;
-}
-
-.btnFilledLg:hover {
-    background: var(--accent-hover);
-}
-
-.btnOutline {
-    background: transparent;
-    border-color: var(--border);
-    color: var(--text-primary);
-}
-
-.btnOutline:hover:not(:disabled) {
-    background: var(--surface);
-    border-color: var(--border-strong);
-}
-
-.btnOutline:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 /* ── Loading + load-error wrapper ─────────────────────────── */
