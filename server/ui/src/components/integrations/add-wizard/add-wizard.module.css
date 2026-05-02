@@ -542,6 +542,102 @@
     to { transform: rotate(360deg); }
 }
 
+/* ── OAuth device-flow specifics ──────────────────────────
+ * Collapsible numbered steps for the Google Cloud setup walkthrough,
+ * the big device-code button, and the numbered "do this in your
+ * browser" list. */
+.gcpStep {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.gcpStep summary {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.gcpStep summary::-webkit-details-marker {
+    display: none;
+}
+
+.gcpStep summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 120ms var(--ease);
+    color: var(--text-tertiary);
+}
+
+.gcpStep[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.gcpStepBody {
+    padding: 0 14px 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+
+.gcpStepBody p {
+    margin: 0;
+}
+
+.gcpStepBody ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.deviceCode {
+    align-self: stretch;
+    padding: 22px 14px;
+    margin: 4px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    font-family: var(--font-code);
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-align: center;
+    color: var(--accent);
+    cursor: pointer;
+    transition: border-color 120ms var(--ease);
+}
+
+.deviceCode:hover {
+    border-color: var(--accent);
+}
+
+.deviceSteps {
+    margin: 0;
+    padding-left: 22px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.deviceSteps code {
+    font-family: var(--font-code);
+    color: var(--accent);
+    background: var(--accent-muted);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+}
+
 /* ── Success screen ──────────────────────────────────────── */
 .kvTable {
     width: 100%;

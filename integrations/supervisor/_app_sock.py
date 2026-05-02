@@ -1,4 +1,4 @@
-"""``app.sock`` RPC handler: ``add`` / ``list`` / ``resolve`` / ``update`` / ``remove``.
+"""``app.sock`` RPC handler.
 
 The app server (UID ``computron``) is the only legitimate client. Per the
 broker RPC framing, requests are length-prefixed JSON frames with
@@ -7,6 +7,10 @@ their payloads:
 
 - ``add``: ``{slug, user_suffix, label, auth_blob, write_allowed}`` →
   ``{id, slug, label, write_allowed, capabilities, state, socket}``.
+  Used by every flow that produces an auth blob — app-password (iCloud,
+  Gmail) and OAuth (Google Workspace) alike. The OAuth handshake itself
+  lives entirely in the app server; only the final encrypt-and-spawn
+  step crosses this boundary.
 - ``list``: ``{}`` → ``{integrations: [...]}``. Non-secret metadata of
   every active integration.
 - ``resolve``: ``{id}`` → ``{id, socket, write_allowed}``. The app server's

@@ -101,9 +101,37 @@ _GMAIL = CatalogEntry(
 )
 
 
+_GOOGLE_WORKSPACE = CatalogEntry(
+    slug="google_workspace",
+    command=["python", "-m", "integrations.brokers.google_workspace_broker"],
+    # Capabilities are determined per-integration from the OAuth scopes the
+    # user granted at consent time, not statically from the catalog. Phase
+    # 1 leaves the static set empty — Phase 2 will surface the granted scopes
+    # via the IntegrationMeta and the agent tool registry will read from there.
+    capabilities=frozenset(),
+    # No static_env: every Google API endpoint the broker hits is hard-coded
+    # in the client modules (oauth2.googleapis.com, gmail.googleapis.com,
+    # etc.). User-supplied client credentials live in the encrypted blob.
+    static_env={},
+    env_injection={
+        "client_id": "OAUTH_CLIENT_ID",
+        "client_secret": "OAUTH_CLIENT_SECRET",
+        "access_token": "OAUTH_ACCESS_TOKEN",
+        "refresh_token": "OAUTH_REFRESH_TOKEN",
+        "token_uri": "OAUTH_TOKEN_URI",
+        "scopes": "OAUTH_SCOPES",
+        "expires_at": "OAUTH_EXPIRES_AT",
+    },
+    # No host-path bindings yet. Phase 4 (writes) may need a downloads
+    # binding for Drive file uploads — defer until then.
+    host_paths=(),
+)
+
+
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
     "gmail": _GMAIL,
+    "google_workspace": _GOOGLE_WORKSPACE,
 }
 
 

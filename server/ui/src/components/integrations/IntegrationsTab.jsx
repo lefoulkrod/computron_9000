@@ -2,9 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Callout from '../primitives/Callout.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
-import AddIntegrationModal from './AddIntegrationModal.jsx';
+import AddIntegrationModal from './add-wizard/AddIntegrationModal.jsx';
 import styles from './IntegrationsTab.module.css';
 
+// Per-slug display metadata. Categories must match the Add wizard's
+// PROVIDERS list — otherwise a user picks "Google Workspace" under
+// "Productivity Suites" in the wizard and finds it under "Other" here.
+// Two sources of truth right now; followups plan moves both to a
+// server-side catalog endpoint.
 const SLUG_META = {
     icloud: {
         label: 'iCloud',
@@ -15,6 +20,11 @@ const SLUG_META = {
         label: 'Gmail',
         icon: 'bi-envelope-at',
         category: 'Email & Calendar',
+    },
+    google_workspace: {
+        label: 'Google Workspace',
+        icon: 'bi-google',
+        category: 'Productivity Suites',
     },
 };
 

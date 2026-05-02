@@ -35,6 +35,7 @@ from conversations import (
 )
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from server._feature_routes import register_feature_routes
+from server._integrations_oauth_routes import register_oauth_routes
 from server._integrations_routes import register_integrations_routes
 from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
@@ -383,6 +384,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
 
     # Integrations (supervisor / brokers)
     register_integrations_routes(app)
+    register_oauth_routes(app)
 
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.
