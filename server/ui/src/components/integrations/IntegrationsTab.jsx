@@ -4,6 +4,7 @@ import Button from '../primitives/Button.jsx';
 import Callout from '../primitives/Callout.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
 import AddIntegrationModal from './AddIntegrationModal.jsx';
+import modalStyles from './AddIntegrationModal.module.css';
 import styles from './IntegrationsTab.module.css';
 
 const SLUG_META = {
@@ -11,6 +12,11 @@ const SLUG_META = {
         label: 'iCloud',
         icon: 'bi-cloud',
         category: 'Email, Calendar & Storage',
+    },
+    icloud_drive: {
+        label: 'iCloud Drive',
+        icon: 'bi-cloud-arrow-up',
+        category: 'Storage',
     },
     gmail: {
         label: 'Gmail',
@@ -332,9 +338,12 @@ function ListRow({ row, selected, onClick }) {
 function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }) {
     const [labelDraft, setLabelDraft] = useState(record.label);
     const [writesDraft, setWritesDraft] = useState(record.write_allowed);
+    const [reauthOpen, setReauthOpen] = useState(false);
 
     const view = STATE_VIEW[record.state] ?? STATE_VIEW.running;
     const canEditWrites = record.state === 'running';
+    const isIcloudDrive = record.slug === 'icloud_drive';
+    const showReauth = record.state === 'auth_failed' && isIcloudDrive;
 
     const labelTrimmed = labelDraft.trim();
     const dirty = (
@@ -355,10 +364,13 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
         setWritesDraft(record.write_allowed);
     }, [record]);
 
+    const handleReauthDone = useCallback(() => {
+        setReauthOpen(false);
+        // The parent will refresh the list
+    }, []);
+
     return (
         <div className={styles.detailPane}>
-            {/* Action bar — top, mirrors ProfileBuilder. Disconnect on the
-                left as the destructive action; Cancel + Save right-aligned. */}
             <div className={styles.actionsBar}>
                 <ConfirmButton
                     label="Delete"
@@ -369,6 +381,15 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
                     data-testid={`integrations-remove-${record.id}`}
                 />
                 <div className={styles.actionsRight}>
+                    {showReauth && (
+                        <Button
+                            variant="filled"
+                            onClick={() => setReauthOpen(true)}
+                            data-testid={`integrations-reauth-${record.id}`}
+                        >
+                            <i className="bi bi-arrow-clockwise" /> Re-authenticate
+                        </Button>
+                    )}
                     <Button
                         onClick={handleCancel}
                         disabled={!dirty || saving}
@@ -388,8 +409,15 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
             </div>
 
             <div className={styles.formBody}>
-                {view.helper && (
+                {view.helper && !showReauth && (
                     <Callout tone="warning" description={view.helper} />
+                )}
+                {showReauth && (
+                    <Callout
+                        tone="warning"
+                        title="Session expired"
+                        description="Your iCloud Drive session has expired. Re-authenticate to restore access."
+                    />
                 )}
 
                 <section className={styles.section}>
@@ -443,6 +471,162 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
                 )}
                 {removeError && (
                     <Callout tone="danger" description={removeError} />
+                )}
+            </div>
+
+            {reauthOpen && (
+                <ReauthModal
+                    integrationId={record.id}
+                    onClose={() => setReauthOpen(false)}
+                    onDone={handleReauthDone}
+                />
+            )}
+        </div>
+    );
+}
+
+function ReauthModal({ integrationId, onClose, onDone }) {
+    const [step, setStep] = useState('init'); // 'init' | 'code' | 'verifying'
+    const [sessionId, setSessionId] = useState(null);
+    const [code, setCode] = useState('');
+    const [error, setError] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+
+    // Initiate reauth on mount
+    useEffect(() => {
+        let cancelled = false;
+        async function init() {
+            setSubmitting(true);
+            try {
+                const resp = await fetch(`/api/integrations/${encodeURIComponent(integrationId)}/reauth`, {
+                    method: 'POST',
+                });
+                const body = await resp.json().catch(() => ({}));
+                if (cancelled) return;
+                if (!resp.ok) {
+                    setError(body?.error?.message || 'Failed to start re-authentication');
+                    setSubmitting(false);
+                    return;
+                }
+                setSessionId(body.session_id);
+                setStep('code');
+                setSubmitting(false);
+            } catch (err) {
+                if (!cancelled) {
+                    setError(err?.message || 'Request failed');
+                    setSubmitting(false);
+                }
+            }
+        }
+        init();
+        return () => { cancelled = true; };
+    }, [integrationId]);
+
+    const handleSubmit = async () => {
+        setSubmitting(true);
+        setError(null);
+        setStep('verifying');
+        try {
+            const resp = await fetch(
+                `/api/integrations/${encodeURIComponent(integrationId)}/reauth/verify`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, code: code.trim() }),
+                },
+            );
+            const body = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                setError(body?.error?.message || 'Verification failed');
+                setSubmitting(false);
+                setStep('code');
+                return;
+            }
+            onDone?.();
+        } catch (err) {
+            setError(err?.message || 'Request failed');
+            setSubmitting(false);
+            setStep('code');
+        }
+    };
+
+    const canSubmit = code.trim().length === 6;
+
+    return (
+        <div className={modalStyles.backdrop} onClick={submitting ? undefined : onClose}>
+            <div className={modalStyles.modal} role="dialog" aria-modal="true">
+                <div className={modalStyles.header}>
+                    <div className={modalStyles.title}>RE-AUTHENTICATE</div>
+                    <button
+                        className={modalStyles.closeBtn}
+                        onClick={onClose}
+                        disabled={submitting}
+                        aria-label="Close"
+                    >
+                        <i className="bi bi-x-lg" />
+                    </button>
+                </div>
+
+                {step === 'init' ? (
+                    <>
+                        <div className={modalStyles.wzBodyLeft}>
+                            <h2 className={modalStyles.wzTitle}>Starting…</h2>
+                            <p className={modalStyles.wzSubtitle}>Contacting Apple to re-authenticate.</p>
+                            {error && <Callout tone="danger" description={error} />}
+                        </div>
+                        <div className={modalStyles.footer}>
+                            <Button onClick={onClose}>Cancel</Button>
+                        </div>
+                    </>
+                ) : step === 'code' ? (
+                    <>
+                        <div className={modalStyles.wzBodyLeft}>
+                            <h2 className={modalStyles.wzTitle}>Two-factor authentication</h2>
+                            <p className={modalStyles.wzSubtitle}>
+                                A verification code has been sent to your Apple devices.
+                            </p>
+                            <div className={modalStyles.wzContent}>
+                                <div className={modalStyles.field}>
+                                    <label className={modalStyles.fieldLabel}>Verification code</label>
+                                    <input
+                                        className={`${modalStyles.input} ${modalStyles.inputMono}`}
+                                        type="text"
+                                        inputMode="numeric"
+                                        autoComplete="one-time-code"
+                                        maxLength={6}
+                                        placeholder="000000"
+                                        value={code}
+                                        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                                        autoFocus
+                                    />
+                                </div>
+                                {error && <Callout tone="danger" description={error} />}
+                            </div>
+                        </div>
+                        <div className={modalStyles.footer}>
+                            <Button onClick={onClose}>Cancel</Button>
+                            <div className={modalStyles.footerRight}>
+                                <Button
+                                    variant="filled"
+                                    disabled={!canSubmit || submitting}
+                                    onClick={handleSubmit}
+                                >
+                                    Verify <i className="bi bi-shield-check" />
+                                </Button>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className={modalStyles.wzBodyLeft}>
+                            <h2 className={modalStyles.wzTitle}>Verifying…</h2>
+                            <p className={modalStyles.wzSubtitle}>Completing authentication.</p>
+                        </div>
+                        <div className={modalStyles.footer}>
+                            <Button disabled>Cancel</Button>
+                        </div>
+                    </>
                 )}
             </div>
         </div>

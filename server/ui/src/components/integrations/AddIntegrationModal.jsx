@@ -48,7 +48,7 @@ const PROVIDERS = [
         slug: 'icloud',
         category: 'Email, Calendar & Storage',
         title: 'iCloud',
-        description: 'Email, calendar, and iCloud Drive · app password',
+        description: 'Email and calendar · app password',
         icon: 'bi-cloud',
         vendor: 'Apple',
         appPasswordUrl: 'https://account.apple.com/account/manage',
@@ -56,6 +56,17 @@ const PROVIDERS = [
         emailPlaceholder: 'you@icloud.com',
         capabilities: [
             { key: 'email_calendar', label: 'Email & Calendar', icon: 'bi-envelope-at', desc: 'Read/search email, view calendar events' },
+        ],
+    },
+    {
+        slug: 'icloud_drive',
+        category: 'Storage',
+        title: 'iCloud Drive',
+        description: 'File storage · Apple ID + 2FA',
+        icon: 'bi-cloud-arrow-up',
+        vendor: 'Apple',
+        emailPlaceholder: 'you@icloud.com',
+        capabilities: [
             { key: 'storage', label: 'iCloud Drive', icon: 'bi-cloud-arrow-up', desc: 'Browse, download, and upload files' },
         ],
     },
@@ -88,6 +99,9 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
     const [result, setResult] = useState(null);
+    // 2FA state (only used for icloud_drive)
+    const [twoFactorSessionId, setTwoFactorSessionId] = useState(null);
+    const [twoFactorError, setTwoFactorError] = useState(null);
 
     useEffect(() => {
         const onEsc = (e) => {
@@ -101,12 +115,84 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         if (e.target === e.currentTarget && !submitting) onClose();
     };
 
+    const isIcloudDrive = provider?.slug === 'icloud_drive';
+
     const handleSubmit = async () => {
         setSubmitting(true);
         setError(null);
-        setStep(3);
         const email = form.email.trim();
         const label = form.label.trim() || `${provider.title} · ${email}`;
+
+        if (isIcloudDrive) {
+            // Step 2a: initiate SRP + 2FA
+            setStep(3); // "Verifying" while we call preauth
+            try {
+                const preResp = await fetch('/api/integrations/preauth/icloud-drive', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password: form.password }),
+                });
+                const preBody = await preResp.json().catch(() => ({}));
+                if (!preResp.ok) {
+                    setError({
+                        code: preBody?.error?.code || 'ERROR',
+                        message: preBody?.error?.message || `HTTP ${preResp.status}`,
+                    });
+                    setSubmitting(false);
+                    setStep(2);
+                    return;
+                }
+                if (preBody.requires_2fa) {
+                    setTwoFactorSessionId(preBody.session_id);
+                    setTwoFactorError(null);
+                    setSubmitting(false);
+                    setStep(4); // 2FA step
+                    return;
+                }
+                // No 2FA needed (rare) — proceed to add integration
+                await doAddIntegration(email, label);
+            } catch (err) {
+                setError({ code: 'NETWORK', message: err?.message || 'Request failed' });
+                setSubmitting(false);
+                setStep(2);
+            }
+            return;
+        }
+
+        // Non-iCloud-Drive: normal flow
+        setStep(3);
+        await doAddIntegration(email, label);
+    };
+
+    const handleTwoFactorSubmit = async (code) => {
+        setSubmitting(true);
+        setTwoFactorError(null);
+        setStep(5); // verifying
+        try {
+            const verifyResp = await fetch('/api/integrations/preauth/icloud-drive/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: twoFactorSessionId, code }),
+            });
+            const verifyBody = await verifyResp.json().catch(() => ({}));
+            if (!verifyResp.ok) {
+                setTwoFactorError(verifyBody?.error?.message || 'Invalid code');
+                setSubmitting(false);
+                setStep(4);
+                return;
+            }
+            // 2FA verified — now add the integration
+            const email = form.email.trim();
+            const label = form.label.trim() || `${provider.title} · ${email}`;
+            await doAddIntegration(email, label);
+        } catch (err) {
+            setTwoFactorError(err?.message || 'Request failed');
+            setSubmitting(false);
+            setStep(4);
+        }
+    };
+
+    const doAddIntegration = async (email, label) => {
         try {
             const resp = await fetch('/api/integrations', {
                 method: 'POST',
@@ -163,7 +249,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                     <ProviderPicker
                         onPick={(p) => {
                             setProvider(p);
-                            setStep(1);
+                            setStep(p.slug === 'icloud_drive' ? 2 : 1);
                             setForm(f => ({
                                 ...f,
                                 enabledCapabilities: (p.capabilities || []).map(c => c.key),
@@ -179,6 +265,8 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         onAddAnother={() => {
                             setProvider(null);
                             setResult(null);
+                            setTwoFactorSessionId(null);
+                            setTwoFactorError(null);
                             setStep(1);
                             setForm({
                                 email: '', password: '', label: '', writeAllowed: false, enabledCapabilities: [],
@@ -198,9 +286,16 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         form={form}
                         setForm={setForm}
                         error={error}
-                        onBack={() => setStep(1)}
+                        onBack={() => setStep(isIcloudDrive ? null : 1)}
                         onCancel={onClose}
                         onSubmit={handleSubmit}
+                    />
+                ) : step === 4 ? (
+                    <TwoFactorStep
+                        provider={provider}
+                        error={twoFactorError}
+                        onBack={() => { setStep(2); setTwoFactorSessionId(null); }}
+                        onSubmit={handleTwoFactorSubmit}
                     />
                 ) : (
                     <VerifyingStep />
@@ -314,27 +409,35 @@ function ExplainerStep({ provider, onBack, onNext }) {
 
 function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onSubmit }) {
     const canSubmit = form.email.trim() && form.password.trim();
+    const isIcloudDrive = provider.slug === 'icloud_drive';
     return (
         <>
             <Stepper step={2} />
             <div className={styles.wzBodyLeft}>
-                <h2 className={styles.wzTitle}>Generate &amp; paste</h2>
+                <h2 className={styles.wzTitle}>
+                    {isIcloudDrive ? 'Sign in with Apple ID' : 'Generate & paste'}
+                </h2>
                 <p className={styles.wzSubtitle}>
-                    Create an app-specific password in your {provider.vendor} account
-                    settings, name it "Computron," and paste it below.
+                    {isIcloudDrive
+                        ? 'Enter your Apple ID credentials. You\'ll verify with a 2FA code on the next step.'
+                        : `Create an app-specific password in your ${provider.vendor} account
+                    settings, name it "Computron," and paste it below.`
+                    }
                 </p>
                 <div className={styles.wzContent}>
-                    <a
-                        className={styles.linkBtn}
-                        href={provider.appPasswordUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        <span>
-                            <i className="bi bi-box-arrow-up-right" /> Open {provider.vendor} app-passwords page
-                        </span>
-                        <span className={styles.linkBtnHint}>{provider.appPasswordHost}</span>
-                    </a>
+                    {!isIcloudDrive && provider.appPasswordUrl && (
+                        <a
+                            className={styles.linkBtn}
+                            href={provider.appPasswordUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <span>
+                                <i className="bi bi-box-arrow-up-right" /> Open {provider.vendor} app-passwords page
+                            </span>
+                            <span className={styles.linkBtnHint}>{provider.appPasswordHost}</span>
+                        </a>
+                    )}
 
                     <div className={styles.field}>
                         <label className={styles.fieldLabel}>{provider.vendor} email</label>
@@ -349,17 +452,22 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                     </div>
 
                     <div className={styles.field}>
-                        <label className={styles.fieldLabel}>App-specific password</label>
+                        <label className={styles.fieldLabel}>
+                            {isIcloudDrive ? 'Apple ID password' : 'App-specific password'}
+                        </label>
                         <input
                             className={`${styles.input} ${styles.inputMono}`}
                             type="password"
-                            placeholder="xxxx-xxxx-xxxx-xxxx"
+                            placeholder={isIcloudDrive ? 'Your Apple ID password' : 'xxxx-xxxx-xxxx-xxxx'}
                             value={form.password}
                             onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
                             data-testid="wizard-password"
                         />
                         <span className={styles.fieldHint}>
-                            Pasted verbatim from {provider.vendor} — spaces are trimmed automatically.
+                            {isIcloudDrive
+                                ? 'Your regular Apple ID password — not an app-specific password.'
+                                : `Pasted verbatim from ${provider.vendor} — spaces are trimmed automatically.`
+                            }
                         </span>
                     </div>
 
@@ -389,7 +497,10 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                             <div className={styles.radioInfo}>
                                 <div className={styles.radioTitle}>Read only</div>
                                 <div className={styles.radioDesc}>
-                                    Search email, read messages, view your calendar.
+                                    {isIcloudDrive
+                                        ? 'Browse and download files from iCloud Drive.'
+                                        : 'Search email, read messages, view your calendar.'
+                                    }
                                 </div>
                             </div>
                         </label>
@@ -404,8 +515,10 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                             <div className={styles.radioInfo}>
                                 <div className={styles.radioTitle}>Read and write</div>
                                 <div className={styles.radioDesc}>
-                                    All of the above, plus send and move email, and create or
-                                    delete calendar events.
+                                    {isIcloudDrive
+                                        ? 'All of the above, plus upload, move, and delete files.'
+                                        : 'All of the above, plus send and move email, and create or delete calendar events.'
+                                    }
                                 </div>
                             </div>
                         </label>
@@ -466,7 +579,75 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                         onClick={onSubmit}
                         data-testid="wizard-submit"
                     >
-                        Verify &amp; save <i className="bi bi-shield-check" />
+                        {isIcloudDrive ? 'Continue to 2FA ' : 'Verify & save '}
+                        <i className={isIcloudDrive ? 'bi bi-shield-lock' : 'bi bi-shield-check'} />
+                    </Button>
+                </div>
+            </div>
+        </>
+    );
+}
+
+function TwoFactorStep({ provider, error, onBack, onSubmit }) {
+    const [code, setCode] = useState('');
+    const canSubmit = code.trim().length === 6;
+
+    const handleSubmit = (e) => {
+        e?.preventDefault();
+        if (canSubmit) onSubmit(code.trim());
+    };
+
+    return (
+        <>
+            <Stepper step={3} />
+            <div className={styles.wzBodyLeft}>
+                <h2 className={styles.wzTitle}>Two-factor authentication</h2>
+                <p className={styles.wzSubtitle}>
+                    A verification code has been sent to your Apple devices.
+                    Enter the 6-digit code below.
+                </p>
+                <div className={styles.wzContent}>
+                    <div className={styles.field}>
+                        <label className={styles.fieldLabel}>Verification code</label>
+                        <input
+                            className={`${styles.input} ${styles.inputMono}`}
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            placeholder="000000"
+                            value={code}
+                            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                            autoFocus
+                            data-testid="wizard-2fa-code"
+                        />
+                        <span className={styles.fieldHint}>
+                            Check your iPhone, iPad, or Mac for the code.
+                        </span>
+                    </div>
+
+                    {error && (
+                        <Callout
+                            tone="danger"
+                            title="Verification failed"
+                            description={error}
+                        />
+                    )}
+                </div>
+            </div>
+            <div className={styles.footer}>
+                <Button onClick={onBack}>
+                    <i className="bi bi-arrow-left" /> Back
+                </Button>
+                <div className={styles.footerRight}>
+                    <Button
+                        variant="filled"
+                        disabled={!canSubmit}
+                        onClick={handleSubmit}
+                        data-testid="wizard-2fa-submit"
+                    >
+                        Verify <i className="bi bi-shield-check" />
                     </Button>
                 </div>
             </div>

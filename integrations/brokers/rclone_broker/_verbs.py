@@ -89,7 +89,7 @@ class VerbDispatcher:
         return await handler(args)
 
     async def _run_rclone(self, *args: str, check: bool = True) -> tuple[int, str, str]:
-        """Run rclone and return (returncode, stdout, stderr)."""
+        """Run rclone and return (returncode, stdout, stderr) as decoded strings."""
         proc = await asyncio.create_subprocess_exec(
             "rclone", *args,
             stdout=asyncio.subprocess.PIPE,
@@ -101,6 +101,22 @@ class VerbDispatcher:
         if check and proc.returncode != 0:
             raise RpcError("UPSTREAM", f"rclone error: {stderr_str.strip() or stdout_str.strip()}")
         return proc.returncode, stdout_str, stderr_str
+
+    async def _run_rclone_raw(self, *args: str) -> tuple[int, bytes, str]:
+        """Run rclone and return (returncode, raw stdout bytes, stderr string).
+
+        Use this for verbs that need binary-clean stdout (e.g. ``cat``).
+        """
+        proc = await asyncio.create_subprocess_exec(
+            "rclone", *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        stderr_str = stderr.decode("utf-8", errors="replace")
+        if proc.returncode != 0:
+            raise RpcError("UPSTREAM", f"rclone error: {stderr_str.strip()}")
+        return proc.returncode, stdout, stderr_str
 
     # --- handlers ---
 
@@ -212,18 +228,16 @@ class VerbDispatcher:
     async def _handle_cat(self, args: dict[str, Any]) -> dict[str, Any]:
         remote_path = _validate_remote_path(_require_str(args, "remote_path"))
         remote = f"default:{remote_path}"
-        _, stdout, _ = await self._run_rclone("cat", remote)
-        # Return raw content — could be text or binary encoded as base64
-        max_bytes = args.get("max_bytes", 1_000_000)  # 1MB default limit
-        content = stdout.encode("utf-8", errors="replace")
-        truncated = len(content) > max_bytes
-        if truncated:
-            content = content[:max_bytes]
+        max_bytes: int = args.get("max_bytes", 1_000_000)  # 1MB default limit
+        _, stdout_bytes, _ = await self._run_rclone_raw("cat", remote)
+        total_size = len(stdout_bytes)
+        truncated = total_size > max_bytes
+        content = stdout_bytes[:max_bytes] if truncated else stdout_bytes
         return {
             "content": base64.b64encode(content).decode("ascii"),
             "encoding": "base64",
             "truncated": truncated,
-            "size": len(stdout.encode("utf-8", errors="replace")),
+            "size": total_size,
         }
 
     async def _handle_size(self, args: dict[str, Any]) -> dict[str, Any]:

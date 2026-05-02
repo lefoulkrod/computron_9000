@@ -6,6 +6,7 @@ actually running rclone (the _run_rclone method is mocked).
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -112,10 +113,28 @@ class TestVerbDispatcher:
     @pytest.mark.asyncio
     async def test_cat(self) -> None:
         d = self._make_dispatcher()
-        d._run_rclone = AsyncMock(return_value=(0, "hello world", ""))
+        d._run_rclone_raw = AsyncMock(return_value=(0, b"hello world", ""))
         result = await d.dispatch("cat", {"remote_path": "test.txt"})
         assert result["encoding"] == "base64"
         assert result["truncated"] is False
+        assert result["size"] == 11
+        # Round-trip the base64 to verify content is intact
+        decoded = base64.b64decode(result["content"])
+        assert decoded == b"hello world"
+
+    @pytest.mark.asyncio
+    async def test_cat_binary_content(self) -> None:
+        """Binary files survive the round-trip without corruption."""
+        import base64 as _base64
+        d = self._make_dispatcher()
+        # Bytes that are invalid UTF-8: 0x80, 0xFF, 0x00
+        binary_data = bytes([0x00, 0x80, 0xFF, 0x41, 0x42, 0x43])
+        d._run_rclone_raw = AsyncMock(return_value=(0, binary_data, ""))
+        result = await d.dispatch("cat", {"remote_path": "binary.bin"})
+        assert result["truncated"] is False
+        assert result["size"] == 6
+        decoded = _base64.b64decode(result["content"])
+        assert decoded == binary_data
 
     @pytest.mark.asyncio
     async def test_size(self) -> None:
@@ -255,11 +274,15 @@ class TestVerbDispatcher:
     async def test_cat_truncation(self) -> None:
         d = self._make_dispatcher()
         # Return content larger than max_bytes
-        big_content = "x" * 2000
-        d._run_rclone = AsyncMock(return_value=(0, big_content, ""))
+        big_content = b"x" * 2000
+        d._run_rclone_raw = AsyncMock(return_value=(0, big_content, ""))
         result = await d.dispatch("cat", {"remote_path": "big.txt", "max_bytes": 100})
         assert result["truncated"] is True
         assert result["encoding"] == "base64"
+        assert result["size"] == 2000
+        decoded = base64.b64decode(result["content"])
+        assert len(decoded) == 100
+        assert decoded == big_content[:100]
 
 
 # --- Local path validation ---

@@ -301,6 +301,112 @@ class BrokerManager:
         delete_integration(self._vault_dir, integration_id)
         logger.info("removed integration %s", integration_id)
 
+    async def reauth_init(self, integration_id: str) -> dict[str, Any]:
+        """Start re-authentication for an iCloud Drive integration.
+
+        Reads the stored password from the vault and initiates a new SRP
+        handshake with Apple.  Returns ``{session_id, requires_2fa}``.
+
+        Raises :class:`RpcError` (NOT_FOUND) if the id isn't registered,
+        or (INTERNAL) if the vault can't be read.
+        """
+        record = self._registry.get(integration_id)
+        if record is None:
+            raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
+
+        try:
+            secret_bundle = read_secrets(self._vault_dir, integration_id, self._master_key)
+        except DecryptError as exc:
+            raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
+
+        password = secret_bundle.get("password")
+        email = secret_bundle.get("email")
+        if not isinstance(password, str) or not password:
+            raise RpcError("INTERNAL", "no password in stored secrets")
+        if not isinstance(email, str) or not email:
+            raise RpcError("INTERNAL", "no email in stored secrets")
+
+        from integrations._icloud_auth import (
+            IcloudAuthError,
+            IcloudAuthPasswordError,
+            initiate_auth,
+        )
+
+        try:
+            result = initiate_auth(email, password)
+        except IcloudAuthPasswordError as exc:
+            raise RpcError("AUTH", str(exc)) from exc
+        except IcloudAuthError as exc:
+            raise RpcError("UPSTREAM", str(exc)) from exc
+
+        return result
+
+    async def reauth_verify(
+        self, integration_id: str, session_id: str, code: str,
+    ) -> IntegrationRecord:
+        """Complete re-authentication: validate 2FA code, write new trust token, respawn.
+
+        Returns the updated :class:`IntegrationRecord` on success.
+
+        Raises :class:`RpcError` (AUTH) if the code is wrong or the session
+        expired, or (UPSTREAM) if the broker fails to respawn.
+        """
+        record = self._registry.get(integration_id)
+        if record is None:
+            raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
+
+        from integrations._icloud_auth import IcloudAuthError, complete_auth
+
+        try:
+            complete_auth(session_id, code)
+        except IcloudAuthError as exc:
+            raise RpcError("AUTH", str(exc)) from exc
+
+        # Respawn the storage broker with the new trust token
+        entry = self._catalog.get(record.meta.slug)
+        if entry is None:
+            raise RpcError("INTERNAL", f"catalog has no entry for slug {record.meta.slug!r}")
+
+        try:
+            secret_bundle = read_secrets(self._vault_dir, integration_id, self._master_key)
+        except DecryptError as exc:
+            raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
+
+        # Stop existing watcher and terminate old broker if still running
+        cap = "storage"
+        watcher = self._watchers.pop((integration_id, cap), None)
+        if watcher is not None and not watcher.done():
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+
+        old_handle = record.brokers.get(cap)
+        if old_handle is not None and old_handle.proc.returncode is None:
+            record.expected_termination = True
+            await self._terminate_broker(old_handle)
+
+        # Spawn fresh broker
+        spec = entry.broker_for(cap)
+        try:
+            new_handle = await spawn_broker(
+                spec=spec,
+                integration_id=integration_id,
+                secret_bundle=secret_bundle,
+                write_allowed=record.meta.write_allowed,
+                sockets_dir=self._sockets_dir,
+                host_paths=self._host_paths,
+            )
+        except BrokerSpawnError as exc:
+            record.state = "auth_failed" if exc.exit_code == _AUTH_FAIL_EXIT_CODE else "broken"
+            raise RpcError("UPSTREAM", f"broker respawn failed: {exc}") from exc
+
+        record.brokers[cap] = new_handle
+        record.state = "running"
+        record.expected_termination = False
+        self._start_watcher(integration_id, cap)
+
+        logger.info("reauth complete for %s", integration_id)
+        return record
+
     async def update(
         self,
         integration_id: str,

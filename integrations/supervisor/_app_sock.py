@@ -61,6 +61,10 @@ class AppSockHandler:
             return await self._update(args)
         if verb == "remove":
             return await self._remove(args)
+        if verb == "reauth_init":
+            return await self._reauth_init(args)
+        if verb == "reauth_verify":
+            return await self._reauth_verify(args)
         msg = f"unknown verb: {verb}"
         raise RpcError("BAD_REQUEST", msg)
 
@@ -135,6 +139,17 @@ class AppSockHandler:
         integration_id = _require_str(args, "id")
         await self._manager.remove(integration_id)
         return {"id": integration_id}
+
+    async def _reauth_init(self, args: dict[str, Any]) -> dict[str, Any]:
+        integration_id = _require_str(args, "id")
+        return await self._manager.reauth_init(integration_id)
+
+    async def _reauth_verify(self, args: dict[str, Any]) -> dict[str, Any]:
+        integration_id = _require_str(args, "id")
+        session_id = _require_str(args, "session_id")
+        code = _require_str(args, "code")
+        record = await self._manager.reauth_verify(integration_id, session_id, code)
+        return _record_to_dict(record)
 
 
 def _record_to_dict(record) -> dict[str, Any]:

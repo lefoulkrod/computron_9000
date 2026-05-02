@@ -83,14 +83,19 @@ _ICLOUD = CatalogEntry(
             env_injection={"email": "EMAIL_USER", "password": "EMAIL_PASS"},
             host_paths=_EMAIL_HOST_PATHS,
         ),
+    ),
+)
+
+
+_ICLOUD_DRIVE = CatalogEntry(
+    slug="icloud_drive",
+    label="iCloud Drive",
+    brokers=(
         BrokerSpec(
             capability="storage",
             command=["python", "-m", "integrations.brokers.rclone_broker"],
-            static_env={"RCLONE_CONFIG_DEFAULT_TYPE": "iclouddrive"},
-            env_injection={
-                "email": "RCLONE_CONFIG_DEFAULT_USER",
-                "password": "RCLONE_CONFIG_DEFAULT_PASS",
-            },
+            static_env={},
+            env_injection={"email": "RCLONE_CONFIG_DEFAULT_USER"},
             host_paths=_RCLONE_HOST_PATHS,
         ),
     ),
@@ -119,6 +124,7 @@ _GMAIL = CatalogEntry(
 
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
+    "icloud_drive": _ICLOUD_DRIVE,
     "gmail": _GMAIL,
 }
 
