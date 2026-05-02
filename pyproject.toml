@@ -128,6 +128,9 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "-q",
+    "--no-header",
+    "--disable-warnings",
 ]
 markers = [
     "unit: marks tests as unit tests",
@@ -135,9 +138,9 @@ markers = [
     "slow: marks tests as slow running",
 ]
 asyncio_mode = "auto"
-log_cli = true
-log_cli_level = "INFO"
-log_level = "INFO"
+log_cli = false
+log_cli_level = "ERROR"
+log_level = "WARNING"
 
 
 [build-system]
