@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import Button from '../primitives/Button.jsx';
 import Callout from '../primitives/Callout.jsx';
 import styles from './AddIntegrationModal.module.css';
 
@@ -245,7 +246,7 @@ function ProviderPicker({ onPick, onCancel }) {
                 ))}
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
+                <Button onClick={onCancel}>Cancel</Button>
             </div>
         </>
     );
@@ -294,17 +295,17 @@ function ExplainerStep({ provider, onBack, onNext }) {
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onBack}>
+                <Button onClick={onBack}>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button
-                        className={styles.btnFilled}
+                    <Button
+                        variant="filled"
                         onClick={onNext}
                         data-testid="wizard-next"
                     >
                         Next <i className="bi bi-arrow-right" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>
@@ -454,19 +455,19 @@ function CredentialsStep({ provider, form, setForm, error, onBack, onCancel, onS
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} onClick={onBack}>
+                <Button onClick={onBack}>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnGhost} onClick={onCancel}>Cancel</button>
-                    <button
-                        className={styles.btnFilled}
+                    <Button onClick={onCancel}>Cancel</Button>
+                    <Button
+                        variant="filled"
                         disabled={!canSubmit}
                         onClick={onSubmit}
                         data-testid="wizard-submit"
                     >
                         Verify &amp; save <i className="bi bi-shield-check" />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>
@@ -500,12 +501,12 @@ function VerifyingStep() {
                 </div>
             </div>
             <div className={styles.footer}>
-                <button className={styles.btnOutline} disabled>
+                <Button disabled>
                     <i className="bi bi-arrow-left" /> Back
-                </button>
+                </Button>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnGhost} disabled>Cancel</button>
-                    <button className={styles.btnFilled} disabled>Continue</button>
+                    <Button disabled>Cancel</Button>
+                    <Button variant="filled" disabled>Continue</Button>
                 </div>
             </div>
         </>
@@ -556,16 +557,16 @@ function SuccessScreen({ provider, form, result, onAddAnother, onDone }) {
             </div>
             <div className={styles.footer}>
                 <div className={styles.footerRight}>
-                    <button className={styles.btnOutline} onClick={onAddAnother}>
+                    <Button onClick={onAddAnother}>
                         <i className="bi bi-plus-lg" /> Add another
-                    </button>
-                    <button
-                        className={styles.btnFilled}
+                    </Button>
+                    <Button
+                        variant="filled"
                         onClick={onDone}
                         data-testid="wizard-done"
                     >
                         Done
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>

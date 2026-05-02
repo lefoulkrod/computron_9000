@@ -46,45 +46,8 @@
     margin-left: auto;
 }
 
-.actionBtn {
-    font-family: var(--font-brand);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px var(--sp-2);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-primary);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    transition: background 150ms var(--ease, ease), border-color 150ms var(--ease, ease);
-}
-
-.actionBtn i { font-size: 10px; }
-
-.actionBtn:hover:not(:disabled) {
-    background: var(--accent-muted);
-    border-color: var(--accent-muted);
-}
-
-.actionBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.actionBtn.success {
-    background: var(--success-muted);
-    border-color: var(--success-muted);
-    color: var(--success);
-}
-
-.actionBtn.danger {
-    background: var(--danger-muted);
-    border-color: var(--danger-muted);
-    color: var(--danger);
-}
+/* Action-bar buttons (Pause/Resume, Run now, Delete) now render via the
+ * Button + ConfirmButton primitives — see ../primitives/. */
 
 /* ─── Heading block (title + desc + schedule, sticky) ── */
 .headingBlock {

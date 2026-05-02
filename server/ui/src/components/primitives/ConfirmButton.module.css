@@ -1,9 +1,10 @@
 /* ConfirmButton — click-twice-to-confirm primitive.
  *
- * Mirrors the design language's `.btn` baseline + `.btn-danger` variant,
- * with a small/icon-friendly footprint by default. The component appends
- * `.confirming` when armed so the button shifts to the danger palette;
- * callers don't need to handle the visual transition themselves.
+ * Resting state matches the design language's `btn-danger` exactly
+ * (32px, body 13px, danger-muted background, danger text). The
+ * `.confirming` class escalates to a solid danger fill on click 1,
+ * giving the user a strong visual "I'm armed" cue before click 2
+ * executes the action.
  */
 
 .btn {
@@ -14,65 +15,28 @@
     height: 32px;
     padding: 0 14px;
     border-radius: var(--radius-md);
-    font-size: 13px;
     font-family: var(--font-body);
+    font-size: 13px;
     font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms var(--ease);
     border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-primary);
+    background: var(--danger-muted);
+    color: var(--danger);
     white-space: nowrap;
 }
 
 .btn:hover:not(:disabled) {
-    background: var(--surface);
+    background: rgba(220, 38, 38, 0.15);
 }
 
-.btn:active:not(:disabled) {
-    transform: translateY(1px);
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-/* Compact icon-first variant — matches the design language's .btn-icon
- * footprint. Default for callers that don't pass `variant`. */
-.btnIcon {
-    height: 28px;
-    min-width: 28px;
-    padding: 0 8px;
-    color: var(--text-tertiary);
-    font-size: 14px;
-    gap: 6px;
-}
-
-.btnIcon:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: var(--surface);
-}
-
-/* Confirming state — design language's .btn-danger palette. Applied by
- * the component automatically when the button is armed. */
+/* Armed state — applied automatically after click 1. Solid danger
+ * fill + white text reads as "next click does it." */
 .confirming {
-    background: var(--danger-muted);
-    color: var(--danger);
-    border-color: var(--danger-muted);
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
 }
 
 .confirming:hover:not(:disabled) {
-    background: rgba(220, 38, 38, 0.15);
-    color: var(--danger);
-}
-
-/* Small uppercase brand-font label that pairs with the icon — matches the
- * "CONFIRM?" treatment GoalDetailPanel uses today. */
-.label {
-    font-family: var(--font-brand);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    background: var(--danger);
+    border-color: var(--danger);
 }

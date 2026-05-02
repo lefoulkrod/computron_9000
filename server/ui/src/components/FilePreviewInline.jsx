@@ -8,6 +8,7 @@ import SourceIcon from './icons/SourceIcon.jsx';
 import EyeIcon from './icons/EyeIcon.jsx';
 import CopyIcon from './icons/CopyIcon.jsx';
 import FileContentRenderer from './FileContentRenderer.jsx';
+import IconButton from './primitives/IconButton.jsx';
 import useFileContent from '../hooks/useFileContent.js';
 
 function getFileIcon(contentType, filename) {
@@ -93,35 +94,35 @@ export default function FilePreviewInline({ item, onFullscreen }) {
 
                 <div className={styles.toolbarRight}>
                     {canCopy && (
-                        <button
-                            className={styles.toolbarBtn}
+                        <IconButton
+                            size="sm"
                             onClick={onCopyClick}
                             title={copied ? 'Copied!' : 'Copy to clipboard'}
                             aria-label="Copy file contents to clipboard"
                             data-testid="file-copy"
                         >
                             <CopyIcon size={14} />
-                        </button>
+                        </IconButton>
                     )}
-                    <button
-                        className={styles.toolbarBtn}
+                    <IconButton
+                        size="sm"
                         onClick={handleDownload}
                         title="Download"
                         aria-label="Download file"
                         data-testid="file-download"
                     >
                         <DownloadIcon size={14} />
-                    </button>
+                    </IconButton>
                     {onFullscreen && (
-                        <button
-                            className={styles.toolbarBtn}
+                        <IconButton
+                            size="sm"
                             onClick={onFullscreen}
                             title="Fullscreen"
                             aria-label="Open fullscreen"
                             data-testid="file-fullscreen"
                         >
                             <ExpandIcon size={14} />
-                        </button>
+                        </IconButton>
                     )}
                 </div>
             </div>

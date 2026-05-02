@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
+import Button from './primitives/Button.jsx';
 import Callout from './primitives/Callout.jsx';
+import ConfirmButton from './primitives/ConfirmButton.jsx';
 
 const PRESETS = {
     balanced: { temperature: 0.7 },
@@ -177,31 +179,23 @@ export default function ProfileBuilder({
             <div className={styles.editor}>
                 {/* Actions bar */}
                 <div className={styles.actionsBar}>
-                        <button
-                            className={styles.deleteBtn}
-                            onClick={() => onDelete?.(profile.id)}
-                        >
-                            Delete
-                        </button>
+                        <ConfirmButton
+                            label="Delete"
+                            confirmLabel="Confirm?"
+                            busyLabel="Deleting…"
+                            title="Delete this profile"
+                            onConfirm={() => onDelete?.(profile.id)}
+                        />
                         <div className={styles.actionsRight}>
-                            <button
-                                className={styles.secondaryBtn}
-                                onClick={() => onDuplicate?.(profile.id)}
-                            >
+                            <Button onClick={() => onDuplicate?.(profile.id)}>
                                 Duplicate
-                            </button>
-                            <button
-                                className={styles.secondaryBtn}
-                                onClick={handleRevert}
-                            >
+                            </Button>
+                            <Button onClick={handleRevert}>
                                 Revert
-                            </button>
-                            <button
-                                className={styles.primaryBtn}
-                                onClick={handleSave}
-                            >
+                            </Button>
+                            <Button variant="filled" onClick={handleSave}>
                                 Save
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
