@@ -81,4 +81,18 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_list_calendars_tool(calendar_ids))
         tools.append(build_list_events_tool(calendar_ids))
 
+    drive_ids = frozenset(
+        i for i, rec in records.items()
+        if "drive" in rec.capabilities and rec.state == "running"
+    )
+    if drive_ids:
+        from tools.integrations.drive.export_file import build_export_drive_file_tool
+        from tools.integrations.drive.get_file_metadata import build_get_drive_file_metadata_tool
+        from tools.integrations.drive.list_files import build_list_drive_files_tool
+        from tools.integrations.drive.search_files import build_search_drive_files_tool
+        tools.append(build_list_drive_files_tool(drive_ids))
+        tools.append(build_search_drive_files_tool(drive_ids))
+        tools.append(build_get_drive_file_metadata_tool(drive_ids))
+        tools.append(build_export_drive_file_tool(drive_ids))
+
     return tools

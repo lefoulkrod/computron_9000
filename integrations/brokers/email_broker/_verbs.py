@@ -46,9 +46,7 @@ from integrations.brokers.email_broker.types import OutboundAttachment
 # the strictest providers without inviting OOM-shaped payloads.
 _MAX_OUTBOUND_ATTACHMENT_BYTES = 30 * 1024 * 1024
 
-# Authoritative read/write classification for email-broker verbs. The
-# app-server side keeps a parallel table at ``broker_client._verb_types``;
-# ``tests/integrations/test_verb_types_drift.py`` asserts the two agree.
+# Authoritative read/write classification for email-broker verbs.
 _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     # Email
     "list_mailboxes": "read",

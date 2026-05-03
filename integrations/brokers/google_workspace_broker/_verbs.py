@@ -1,29 +1,28 @@
-"""Verb dispatcher for the Google Workspace broker.
-
-Phase 1 ships an empty dispatcher — no API verbs are wired yet, but the
-broker still serves its UDS so the supervisor can lifecycle-manage it
-and the agent's tool registry sees the integration as ``running``.
-Phase 2 fills in the read verbs (Gmail / Calendar / Drive / Contacts);
-Phase 4 adds writes.
-"""
+"""Verb dispatcher for the Google Workspace broker."""
 
 from __future__ import annotations
 
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, Literal
 
-from google.auth.transport.requests import AuthorizedSession
+from google.oauth2.credentials import Credentials
+from googleapiclient.errors import HttpError
 
 from integrations._rpc import RpcError
+from integrations.brokers.google_workspace_broker._drive_client import DriveClient, _run_sync
 
 logger = logging.getLogger(__name__)
 
 
-# Authoritative read/write classification mirrored on the app-server side
-# in ``broker_client._verb_types``. The drift-check test asserts the two
-# tables agree. Empty in Phase 1 — verbs land in Phases 2-4.
-_VERB_TYPE: dict[str, Literal["read", "write"]] = {}
+_VERB_TYPE: dict[str, Literal["read", "write"]] = {
+    "list_drive_files": "read",
+    "search_drive_files": "read",
+    "get_drive_file_metadata": "read",
+    "export_drive_file": "read",
+}
 
 
 _Handler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -34,16 +33,26 @@ class VerbDispatcher:
 
     def __init__(
         self,
-        session: AuthorizedSession,
+        creds: Credentials,
         *,
         write_allowed: bool,
+        downloads_dir: Path,
     ) -> None:
-        self._session = session
+        self._creds = creds
         self._write_allowed = write_allowed
+        self._downloads_dir = downloads_dir
 
-        # Handler registry — grows as verbs land in Phases 2-4. Same shape
-        # as the email broker's dispatcher.
+        self._drive: DriveClient | None = None
+        scopes = set(creds.scopes or ())
+        if "https://www.googleapis.com/auth/drive.readonly" in scopes:
+            self._drive = DriveClient(creds)
+
         self._handlers: dict[str, _Handler] = {}
+        if self._drive is not None:
+            self._handlers["list_drive_files"] = self._handle_list_drive_files
+            self._handlers["search_drive_files"] = self._handle_search_drive_files
+            self._handlers["get_drive_file_metadata"] = self._handle_get_drive_file_metadata
+            self._handlers["export_drive_file"] = self._handle_export_drive_file
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
@@ -52,11 +61,6 @@ class VerbDispatcher:
             msg = f"unknown verb: {verb}"
             raise RpcError("BAD_REQUEST", msg)
 
-        # WRITE_ALLOWED gate. Checked before handler lookup so every
-        # declared write verb returns ``WRITE_DENIED`` consistently —
-        # whether or not it has a handler wired yet — and so a new write
-        # verb added to ``_VERB_TYPE`` fails the gate before anyone looks
-        # up its handler.
         if verb_type == "write" and not self._write_allowed:
             raise RpcError(
                 "WRITE_DENIED",
@@ -69,3 +73,87 @@ class VerbDispatcher:
             msg = f"verb not implemented: {verb}"
             raise RpcError("BAD_REQUEST", msg)
         return await handler(args)
+
+    # --- Drive handlers ------------------------------------------------------
+
+    async def _handle_list_drive_files(self, args: dict[str, Any]) -> dict[str, Any]:
+        folder_id = args.get("folder_id") or "root"
+        limit = _require_int(args, "limit", default=50)
+        try:
+            files = await _run_sync(self._drive.list_files, folder_id, limit)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"files": files}
+
+    async def _handle_search_drive_files(self, args: dict[str, Any]) -> dict[str, Any]:
+        query = _require_str(args, "query")
+        limit = _require_int(args, "limit", default=30)
+        try:
+            files = await _run_sync(self._drive.search_files, query, limit)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"files": files}
+
+    async def _handle_get_drive_file_metadata(self, args: dict[str, Any]) -> dict[str, Any]:
+        file_id = _require_str(args, "file_id")
+        try:
+            meta = await _run_sync(self._drive.get_file_metadata, file_id)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"file": meta}
+
+    async def _handle_export_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        file_id = _require_str(args, "file_id")
+        try:
+            content, filename, mime_type = await _run_sync(
+                self._drive.export_file, file_id,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        path = _write_download(self._downloads_dir, content, filename)
+        return {
+            "path": str(path),
+            "filename": filename,
+            "mime_type": mime_type,
+            "size": len(content),
+        }
+
+
+# --- helpers -----------------------------------------------------------------
+
+
+def _require_str(args: dict[str, Any], key: str) -> str:
+    value = args.get(key)
+    if not isinstance(value, str) or not value:
+        raise RpcError("BAD_REQUEST", f"{key!r} required (non-empty string)")
+    return value
+
+
+def _require_int(args: dict[str, Any], key: str, *, default: int) -> int:
+    value = args.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RpcError("BAD_REQUEST", f"{key!r} must be an integer")
+    return value
+
+
+def _wrap_http_error(exc: HttpError) -> RpcError:
+    status = exc.resp.status if exc.resp else 500
+    if status == 404:
+        return RpcError("NOT_FOUND", str(exc))
+    if status in (401, 403):
+        return RpcError("AUTH", str(exc))
+    return RpcError("UPSTREAM", str(exc))
+
+
+def _write_download(dir_path: Path, payload: bytes, filename: str) -> Path:
+    """Write downloaded content to disk, deduplicating collisions."""
+    dir_path.mkdir(parents=True, exist_ok=True)
+    dest = dir_path / filename
+    if dest.exists():
+        stem = dest.stem
+        suffix = dest.suffix
+        dest = dir_path / f"{stem}_{secrets.token_hex(4)}{suffix}"
+    dest.write_bytes(payload)
+    dest.chmod(0o640)
+    return dest

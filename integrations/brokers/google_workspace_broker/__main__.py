@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from google.auth.exceptions import RefreshError
-from google.auth.transport.requests import AuthorizedSession, Request
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 from integrations._env import env_required, parse_bool
@@ -111,8 +111,10 @@ async def _run() -> int:
         log.error("OAuth refresh network error: %s", exc)
         return GENERIC_ERROR
 
-    session = AuthorizedSession(creds)
-    dispatcher = VerbDispatcher(session=session, write_allowed=write_allowed)
+    downloads_dir = Path(env_required("DOWNLOADS_DIR"))
+    dispatcher = VerbDispatcher(
+        creds, write_allowed=write_allowed, downloads_dir=downloads_dir,
+    )
 
     async def handler(verb: str, args: dict[str, Any]) -> dict[str, Any]:
         return await dispatcher.dispatch(verb, args)

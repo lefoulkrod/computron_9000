@@ -54,6 +54,28 @@ class CatalogEntry:
     write). Empty for integrations that don't touch shared state — the MCP
     broker, for example."""
 
+    scope_capabilities: dict[str, str] = field(default_factory=dict)
+    """Maps OAuth scope URIs to capability names. When non-empty, capabilities
+    are derived per-integration from the granted scopes in the auth blob
+    (key ``"scopes"``, space-separated) instead of from the static
+    ``capabilities`` field. Entries whose scope isn't present are omitted."""
+
+    def resolve_capabilities(self, auth_blob: dict | None = None) -> frozenset[str]:
+        """Derive the capability set for one integration.
+
+        For static providers (iCloud, Gmail) this returns ``self.capabilities``.
+        For OAuth providers with ``scope_capabilities`` set, it inspects the
+        auth blob's ``"scopes"`` field and returns only the capabilities
+        whose scope was granted.
+        """
+        if not self.scope_capabilities or auth_blob is None:
+            return frozenset(self.capabilities)
+        granted = set((auth_blob.get("scopes") or "").split())
+        return frozenset(
+            cap for scope, cap in self.scope_capabilities.items()
+            if scope in granted
+        )
+
 
 _EMAIL_HOST_PATHS = (
     # Email attachments land in the shared "downloads" role alongside browser
@@ -104,14 +126,6 @@ _GMAIL = CatalogEntry(
 _GOOGLE_WORKSPACE = CatalogEntry(
     slug="google_workspace",
     command=["python", "-m", "integrations.brokers.google_workspace_broker"],
-    # Capabilities are determined per-integration from the OAuth scopes the
-    # user granted at consent time, not statically from the catalog. Phase
-    # 1 leaves the static set empty — Phase 2 will surface the granted scopes
-    # via the IntegrationMeta and the agent tool registry will read from there.
-    capabilities=frozenset(),
-    # No static_env: every Google API endpoint the broker hits is hard-coded
-    # in the client modules (oauth2.googleapis.com, gmail.googleapis.com,
-    # etc.). User-supplied client credentials live in the encrypted blob.
     static_env={},
     env_injection={
         "client_id": "OAUTH_CLIENT_ID",
@@ -122,9 +136,15 @@ _GOOGLE_WORKSPACE = CatalogEntry(
         "scopes": "OAUTH_SCOPES",
         "expires_at": "OAUTH_EXPIRES_AT",
     },
-    # No host-path bindings yet. Phase 4 (writes) may need a downloads
-    # binding for Drive file uploads — defer until then.
-    host_paths=(),
+    scope_capabilities={
+        "https://www.googleapis.com/auth/gmail.readonly": "email",
+        "https://www.googleapis.com/auth/calendar.readonly": "calendar",
+        "https://www.googleapis.com/auth/drive.readonly": "drive",
+        "https://www.googleapis.com/auth/contacts.readonly": "contacts",
+    },
+    host_paths=(
+        HostPathBinding(role="downloads", env_var="DOWNLOADS_DIR", mode="write"),
+    ),
 )
 
 

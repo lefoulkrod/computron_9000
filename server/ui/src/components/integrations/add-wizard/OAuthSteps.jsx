@@ -325,6 +325,15 @@ export function OauthRedirectStep({ provider, oauth, error, onCancel, onRestart 
                         <span className={styles.spinner} />
                         <span>Waiting for you to sign in&hellip;</span>
                     </div>
+                    <Callout
+                        tone="info"
+                        title={<>Seeing &ldquo;Google hasn&rsquo;t verified this app&rdquo;?</>}
+                        description={<>
+                            That&rsquo;s expected &mdash; this is your own personal OAuth app,
+                            not a published one. Click <strong>Advanced</strong>, then{' '}
+                            <strong>Go to &hellip; (unsafe)</strong> to continue.
+                        </>}
+                    />
                     <p className={styles.wzSubtitle}>
                         Did the popup get blocked or close accidentally?
                     </p>

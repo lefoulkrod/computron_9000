@@ -156,7 +156,7 @@ class BrokerManager:
         record = IntegrationRecord(
             meta=meta,
             broker=handle,
-            capabilities=frozenset(entry.capabilities),
+            capabilities=entry.resolve_capabilities(auth_blob),
         )
         self._registry.add(record)
         self._start_watcher(integration_id)
@@ -199,7 +199,7 @@ class BrokerManager:
         record = IntegrationRecord(
             meta=meta,
             broker=handle,
-            capabilities=frozenset(entry.capabilities),
+            capabilities=entry.resolve_capabilities(secret_bundle),
         )
         self._registry.add(record)
         self._start_watcher(integration_id)

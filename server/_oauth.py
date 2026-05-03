@@ -30,11 +30,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import UTC
 from typing import Literal
+
+# Google's token endpoint returns expanded scope URIs (e.g.
+# "https://...userinfo.email" instead of the shorthand "email" we
+# requested). oauthlib treats any scope difference as an error unless
+# this env var is set.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 from google_auth_oauthlib.flow import Flow
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
