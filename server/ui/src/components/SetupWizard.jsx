@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { apiFetch } from '../utils/api.js';
 import styles from './SetupWizard.module.css';
 
 const STEPS = ['Welcome', 'Provider', 'Main Model', 'Vision Model', 'Ready'];
@@ -266,9 +267,9 @@ export default function SetupWizard({ onComplete }) {
         }
 
         try {
-            const settingsRes = await fetch('/api/settings', {
+            const settingsRes = await apiFetch('/api/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settingsBody),
             });
             if (!settingsRes.ok) {
@@ -301,9 +302,9 @@ export default function SetupWizard({ onComplete }) {
         setSaving(true);
         setError(null);
         try {
-            const setModelRes = await fetch('/api/profiles/set-model', {
+            const setModelRes = await apiFetch('/api/profiles/set-model', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: selectedMain }),
             });
             if (!setModelRes.ok) {
@@ -311,9 +312,9 @@ export default function SetupWizard({ onComplete }) {
                 throw new Error(data.error || 'Failed to set model on profiles');
             }
 
-            const res = await fetch('/api/settings', {
+            const res = await apiFetch('/api/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     setup_complete: true,
                     default_agent: 'computron',

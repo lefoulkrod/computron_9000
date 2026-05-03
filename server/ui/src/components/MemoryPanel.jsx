@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { apiFetch } from '../utils/api.js';
 import styles from './CustomToolsPanel.module.css';
 import TrashIcon from './icons/TrashIcon.jsx';
 import EyeIcon from './icons/EyeIcon.jsx';
@@ -34,9 +35,9 @@ export default function MemoryPanel({ refreshSignal }) {
             return next;
         });
         try {
-            await fetch(`/api/memory/${encodeURIComponent(key)}/hidden`, {
+            await apiFetch(`/api/memory/${encodeURIComponent(key)}/hidden`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ hidden: nowHidden }),
             });
         } catch (_) {
