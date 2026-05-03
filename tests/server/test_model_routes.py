@@ -21,10 +21,11 @@ def _make_request(query: dict | None = None) -> MagicMock:
 
 
 @pytest.fixture(autouse=True)
-def _patch_llm_host():
-    """Avoid config.yaml dependency in _llm_host()."""
+def _patch_load_config():
+    """Avoid config.yaml dependency in handle_list_models."""
     with patch("server._model_routes.load_config") as mock_cfg:
         mock_cfg.return_value.llm.host = "http://localhost:11434"
+        mock_cfg.return_value.llm.api_key = None
         yield
 
 
@@ -47,8 +48,8 @@ class TestHandleListModels:
         body = json.loads(resp.body)
         assert body["models"] == models
 
-    async def test_provider_error_no_status_code_returns_generic_message(self):
-        """ProviderError without status_code must return 'Provider is unreachable'."""
+    async def test_provider_error_no_status_code_message_is_sanitized(self):
+        """ProviderError without status_code passes through the message with keys redacted."""
         exc = ProviderError(
             "Connection refused to api.key=sk-secret-abc123",
             retryable=True,
@@ -64,13 +65,16 @@ class TestHandleListModels:
         assert resp.status == 503
         body = json.loads(resp.body)
         assert body["error"] == "provider_unreachable"
-        # Must not leak any part of the raw exception string (could contain API keys)
         assert "sk-secret-abc123" not in body["message"]
-        assert body["message"] == "Provider is unreachable"
+        assert "Connection refused" in body["message"]
 
     async def test_provider_error_with_status_code_surfaces_code(self):
-        """ProviderError with a status code produces 'HTTP <code>' safe message."""
-        exc = ProviderError("Unauthorized sk-key", retryable=False, status_code=401)
+        """ProviderError with status_code passes through the informative message."""
+        exc = ProviderError(
+            "Error code: 401 - {'error': {'message': 'Invalid API key'}} sk-abc123456789",
+            retryable=False,
+            status_code=401,
+        )
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
             mock_provider.list_models_detailed.side_effect = exc
@@ -80,11 +84,12 @@ class TestHandleListModels:
 
         assert resp.status == 503
         body = json.loads(resp.body)
-        assert "sk-key" not in body["message"]
+        assert "sk-abc123456789" not in body["message"]
         assert "401" in body["message"]
+        assert "Invalid API key" in body["message"]
 
-    async def test_generic_exception_returns_sanitized_message(self):
-        """Unexpected exceptions must not leak raw message to the client."""
+    async def test_generic_exception_message_is_sanitized(self):
+        """Unexpected exceptions pass through a sanitized message."""
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
             mock_provider.list_models_detailed.side_effect = RuntimeError(
@@ -97,7 +102,23 @@ class TestHandleListModels:
         assert resp.status == 503
         body = json.loads(resp.body)
         assert "sk-top-secret" not in body["message"]
-        assert body["message"] == "Provider is unreachable"
+        assert "internal error" in body["message"]
+
+    async def test_configured_api_key_is_redacted(self):
+        """The literal configured API key is scrubbed even if it doesn't match a pattern."""
+        exc = ProviderError("auth failed: myspecialtoken", retryable=False, status_code=None)
+        with patch("server._model_routes.get_provider") as mock_get:
+            mock_provider = AsyncMock()
+            mock_provider.list_models_detailed.side_effect = exc
+            mock_get.return_value = mock_provider
+            with patch("server._model_routes.load_config") as mock_cfg:
+                mock_cfg.return_value.llm.host = "http://localhost:11434"
+                mock_cfg.return_value.llm.api_key = "myspecialtoken"
+                resp = await handle_list_models(_make_request())
+
+        body = json.loads(resp.body)
+        assert "myspecialtoken" not in body["message"]
+        assert "auth failed" in body["message"]
 
     async def test_capability_filter_vision(self):
         """?capability=vision returns only models with that capability."""

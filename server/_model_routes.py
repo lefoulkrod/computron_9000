@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from aiohttp import web
 
@@ -12,11 +13,19 @@ from sdk.providers._models import ProviderError
 
 logger = logging.getLogger(__name__)
 
+# Patterns that could contain credentials; replaced before the message leaves the process.
+_KEY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"sk-[A-Za-z0-9_-]{10,}"), "sk-***"),
+    (re.compile(r"Bearer\s+\S+", re.IGNORECASE), "Bearer ***"),
+]
 
-def _llm_host() -> str:
-    """Return the configured LLM host for display in error responses."""
-    cfg = load_config()
-    return cfg.llm.host or "http://localhost:11434"
+
+def _sanitize(msg: str, api_key: str | None = None) -> str:
+    for pattern, replacement in _KEY_PATTERNS:
+        msg = pattern.sub(replacement, msg)
+    if api_key:
+        msg = msg.replace(api_key, "***")
+    return msg
 
 
 async def handle_list_models(request: web.Request) -> web.Response:
@@ -32,24 +41,26 @@ async def handle_list_models(request: web.Request) -> web.Response:
     try:
         models = await provider.list_models_detailed()
     except ProviderError as exc:
-        # Log full error at DEBUG to avoid leaking API keys to app logs.
-        logger.debug("Provider error listing models: %s", exc)
-        safe_msg = f"Provider returned HTTP {exc.status_code}" if exc.status_code else "Provider is unreachable"
+        cfg = load_config()
+        safe_msg = _sanitize(str(exc), cfg.llm.api_key)
+        logger.warning("Provider error listing models: %s", safe_msg)
         return web.json_response(
             {
                 "error": "provider_unreachable",
                 "message": safe_msg,
-                "llm_host": _llm_host(),
+                "llm_host": cfg.llm.host or "http://localhost:11434",
             },
             status=503,
         )
     except Exception as exc:
-        logger.debug("Unexpected error listing models: %s", exc)
+        cfg = load_config()
+        safe_msg = _sanitize(str(exc), cfg.llm.api_key)
+        logger.warning("Unexpected error listing models: %s", safe_msg)
         return web.json_response(
             {
                 "error": "provider_unreachable",
-                "message": "Provider is unreachable",
-                "llm_host": _llm_host(),
+                "message": safe_msg,
+                "llm_host": cfg.llm.host or "http://localhost:11434",
             },
             status=503,
         )
