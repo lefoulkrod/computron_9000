@@ -42,9 +42,15 @@ def test_pause_and_resume_goal(page: Page, test_goal):
     expect(goals.status_label()).to_contain_text("PAUSED", timeout=5000)
     expect(goals.resume_button()).to_be_visible()
 
+    resp = page.request.get(f"/api/goals/{test_goal}")
+    assert resp.json()["goal"]["status"] == "paused"
+
     goals.resume_button().click()
     expect(goals.status_label()).to_contain_text("ACTIVE", timeout=5000)
     expect(goals.pause_button()).to_be_visible()
+
+    resp = page.request.get(f"/api/goals/{test_goal}")
+    assert resp.json()["goal"]["status"] == "active"
 
 
 def test_delete_goal(page: Page, test_goal):
