@@ -137,7 +137,7 @@ async def spawn_agent(
         _log_spawn_error(agent_name, msg)
         return msg
 
-    agent_state = AgentState(get_core_tools())
+    agent_state = AgentState(await get_core_tools())
     for skill_name in agent_profile.skills:
         skill = get_skill(skill_name)
         if skill is None:

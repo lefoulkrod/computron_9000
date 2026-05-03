@@ -46,10 +46,6 @@ class _ModelOptions(BaseModel):
         raise TypeError(msg)
 
 
-class VisionConfig(_ModelOptions):
-    """Configuration for the vision model used by browser and virtual computer tools."""
-
-
 class SummaryConfig(_ModelOptions):
     """Configuration for the summarization model used for context compaction."""
 
@@ -117,7 +113,6 @@ class DesktopConfig(BaseModel):
     agent_display_base: int = 100
     resolution: str = "1280x720"
     websocket_port: int = 6080
-    vision_model: str | None = "qwen3.5:4b"
 
 
 class FeaturesConfig(BaseModel):
@@ -174,6 +169,17 @@ class GoalsConfig(BaseModel):
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
 
 
+class IntegrationsConfig(BaseModel):
+    """Configuration for the integrations subsystem.
+
+    The app server talks to the integrations supervisor over a Unix Domain
+    Socket at ``app_sock_path``. Route handlers and tool handlers both
+    read this path from config rather than being passed it explicitly.
+    """
+
+    app_sock_path: str = "/run/cvault/app.sock"
+
+
 class AppConfig(BaseModel):
     """Application level configuration."""
 
@@ -183,10 +189,10 @@ class AppConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     desktop: DesktopConfig = Field(default_factory=DesktopConfig)
-    vision: VisionConfig | None = None
     summary: SummaryConfig | None = None
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
     goals: GoalsConfig = Field(default_factory=GoalsConfig)
+    integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
 
 
 logger = logging.getLogger(__name__)

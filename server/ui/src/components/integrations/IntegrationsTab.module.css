@@ -1,0 +1,400 @@
+.container {
+    flex: 1;
+    overflow: hidden;
+    padding: var(--sp-5);
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Empty / unavailable state (no integrations yet) ─────── */
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px;
+    text-align: center;
+    background: var(--canvas);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 540px;
+    margin: 32px auto;
+    gap: var(--sp-3);
+}
+
+.emptyIcon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent-muted);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: var(--sp-1);
+}
+
+.emptyIconMuted {
+    background: var(--border-subtle);
+    color: var(--text-tertiary);
+}
+
+.emptyHeading {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.emptyDesc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 420px;
+}
+
+/* ── Master-detail split (§17 Split Panel) ─────────────────────────────
+ * List on the left (35-40% width, capped 380px); detail on the right
+ * fills the remainder. Both columns scroll independently.
+ */
+.split {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(260px, 36%) 1fr;
+    gap: var(--sp-4);
+    align-items: stretch;
+}
+
+/* ── List pane ──────────────────────────────────────────── */
+.listPane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+    padding-right: var(--sp-4);
+}
+
+.listHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--sp-3);
+}
+
+.listTitle {
+    font-family: var(--font-brand);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.listAddBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-sm);
+    background: var(--accent-muted);
+    color: var(--accent);
+    border: 1px solid transparent;
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 120ms var(--ease);
+}
+
+.listAddBtn:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.listBody {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+}
+
+.groupLabel {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-1);
+}
+
+/* ── List item (one integration row) ─────────────────────── */
+.listItem {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    transition: border-color 120ms var(--ease), background 120ms var(--ease);
+}
+
+.listItem:hover {
+    border-color: var(--border-strong);
+}
+
+.listItemActive {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+}
+
+.rowIcon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
+.rowInfo {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rowTitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+
+.rowLabelText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rowDesc {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.3;
+    font-family: var(--font-code);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Badge / status dot ─────────────────────────────────── */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--border-subtle);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.badgeSuccess {
+    background: var(--success-muted);
+    color: var(--success);
+    border-color: var(--success-muted);
+}
+
+.badgeDanger {
+    background: var(--danger-muted);
+    color: var(--danger);
+    border-color: var(--danger-muted);
+}
+
+
+/* ── Detail pane (mirrors ProfileBuilder layout) ──────────────────── */
+.detailPane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+}
+
+/* Action bar at top: destructive on left, primary actions on right. */
+.actionsBar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) 0 var(--sp-3);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.actionsRight {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-left: auto;
+}
+
+/* Body scrolls; sections stack with thin separators. */
+.formBody {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-5) 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.section {
+    padding: var(--sp-3) 0;
+    border-top: 1px solid var(--border);
+}
+
+.section:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+/* Section label — ProfileBuilder-style brand-font tag with low-opacity
+ * text-primary, intentionally matching the agent profiles editor per
+ * earlier UX direction. */
+.sectionLabel {
+    font-family: var(--font-brand);
+    font-size: 12px;
+    color: var(--text-primary);
+    opacity: 0.4;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--sp-2);
+}
+
+/* Full-width text input matching design language §8 .input spec. */
+.nameInput {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+
+.nameInput::placeholder {
+    color: var(--text-tertiary);
+}
+
+.nameInput:focus {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
+}
+
+/* Checkbox + inline label + help text underneath, left-aligned.
+ * Mirrors ProfileBuilder's enabledToggle pattern. */
+.checkRow {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: var(--sp-2);
+    row-gap: 2px;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkRow input[type="checkbox"] {
+    grid-row: 1;
+    grid-column: 1;
+    margin: 0;
+}
+
+.checkLabel {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.checkHelp {
+    grid-row: 2;
+    grid-column: 2;
+    font-size: 11px;
+    color: var(--text-primary);
+    opacity: 0.6;
+    line-height: 1.4;
+}
+
+/* Status: read-only KV rows. */
+.kv {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    font-size: 12px;
+    padding: 2px 0;
+}
+
+.kvKey {
+    color: var(--text-tertiary);
+    font-family: var(--font-brand);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+}
+
+.kvVal {
+    color: var(--text-primary);
+    font-family: var(--font-code);
+    font-size: 12px;
+}
+
+/* ── Loading + load-error wrapper ─────────────────────────── */
+.loading {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    padding: var(--sp-8);
+    text-align: center;
+}
+
+.loadError {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+    margin: var(--sp-8) auto;
+    max-width: 540px;
+}
+
+.loadError button {
+    align-self: flex-start;
+}

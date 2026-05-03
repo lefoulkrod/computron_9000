@@ -158,10 +158,18 @@ RUN mkdir -p /opt/kokoro && \
       https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin && \
     chmod -R 755 /opt/kokoro
 
-# ── User & permissions ───────────────────────────────────────────────────────
-# Single user: computron runs the app server, agent tools, and desktop.
-# App code is root-owned (read-only). State and home are both owned by computron.
-RUN useradd --create-home --shell /bin/bash --uid 1000 computron && \
+# ── Users & permissions ──────────────────────────────────────────────────────
+# Two-user trust split for credential isolation:
+#   computron (UID 1000) — runs the app server, agent tools, and desktop.
+#   broker    (UID 1001) — runs the integrations supervisor and the broker
+#                          subprocesses it spawns. Owns the credential vault
+#                          (mode 0700) so computron can't read decrypted creds.
+# computron is in the broker group ONLY so it can connect to /run/cvault/app.sock
+# (mode 0660 broker:broker) — the entry point that admin RPCs ride.
+RUN groupadd --gid 1001 broker && \
+    useradd --uid 1001 --gid 1001 --no-create-home --shell /usr/sbin/nologin broker && \
+    useradd --create-home --shell /bin/bash --uid 1000 computron && \
+    usermod -aG broker computron && \
     passwd -d computron && \
     mkdir -p /var/lib/computron && \
     chown computron:computron /var/lib/computron && \

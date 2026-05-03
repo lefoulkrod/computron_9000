@@ -7,10 +7,10 @@ import DesktopPreview from './components/DesktopPreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
+import IntegrationsTab from './components/integrations/IntegrationsTab.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import SystemSettings from './components/SystemSettings.jsx';
-import ProfileList from './components/ProfileList.jsx';
-import ProfileBuilder from './components/ProfileBuilder.jsx';
+import ProfilesTab from './components/ProfilesTab.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
 import useAgentProfiles from './hooks/useAgentProfiles.js';
 import TerminalPanel from './components/TerminalOutput.jsx';
@@ -23,7 +23,8 @@ import GoalsView from './components/goals/GoalsView.jsx';
 import PreviewPanel from './components/PreviewPanel.jsx';
 import SplitHandle from './components/SplitHandle.jsx';
 import FilePreviewInline from './components/FilePreviewInline.jsx';
-import FullscreenPreview from './components/FullscreenPreview.jsx';
+import FileFullscreen from './components/FileFullscreen.jsx';
+import BrowserFullscreen from './components/BrowserFullscreen.jsx';
 import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
 // useModelSettings removed — replaced by profile-based configuration
@@ -76,12 +77,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     // Agent profiles for the settings page builder
     const profilesHook = useAgentProfiles();
-    const [allModels, setAllModels] = useState([]);
-    useEffect(() => {
-        fetch('/api/models').then(r => r.json()).then(data => {
-            setAllModels(data.models || []);
-        }).catch(() => {});
-    }, []);
 
     const goalsState = useGoals(flyoutPanel === 'goals');
     const goalsActive = flyoutPanel === 'goals';
@@ -338,46 +333,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     {flyoutPanel === 'settings' && (
                         <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab}>
                             {settingsTab === 'profiles' && (
-                                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                                    <ProfileList
-                                        profiles={profilesHook.profiles}
-                                        selectedId={profilesHook.selectedProfileId}
-                                        onSelect={profilesHook.setSelectedProfileId}
-                                        onNew={async () => {
-                                            const result = await profilesHook.createProfile({
-                                                id: `custom_${Date.now()}`,
-                                                name: 'New Profile',
-                                                description: '',
-                                                icon: '🤖',
-                                                model: allModels[0]?.name || '',
-                                                system_prompt: '',
-                                                skills: [],
-                                            });
-                                            if (result) profilesHook.setSelectedProfileId(result.id);
-                                        }}
-                                    />
-                                    <ProfileBuilder
-                                        profile={profilesHook.profiles.find(p => p.id === profilesHook.selectedProfileId) || null}
-                                        onSave={async (updated) => {
-                                            const result = await profilesHook.updateProfile(updated.id, updated);
-                                            return result;
-                                        }}
-                                        onDelete={async (id) => {
-                                            await profilesHook.deleteProfile(id);
-                                        }}
-                                        onDuplicate={async (id) => {
-                                            const result = await profilesHook.duplicateProfile(id);
-                                            if (result) profilesHook.setSelectedProfileId(result.id);
-                                        }}
-                                        models={allModels}
-                                        availableSkills={[
-                                            'coder', 'browser', 'goal_planner',
-                                            ...(features.desktop ? ['desktop'] : []),
-                                            ...(features.image_generation ? ['image_gen'] : []),
-                                            ...(features.music_generation ? ['music_gen'] : []),
-                                        ]}
-                                    />
-                                </div>
+                                <ProfilesTab profilesHook={profilesHook} features={features} />
+                            )}
+                            {settingsTab === 'integrations' && (
+                                <IntegrationsTab />
                             )}
                             {settingsTab === 'system' && (
                                 <SystemSettings onRunWizard={() => setSetupComplete(false)} />
@@ -449,7 +408,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     {preview.activeTab === 'browser' && preview.browserSnapshot && (
                                         <BrowserPreview
                                             snapshot={preview.browserSnapshot}
-                                            hideShell
+                                            onFullscreen={() => preview.setFullscreenItem({ kind: 'browser' })}
                                         />
                                     )}
                                     {preview.activeTab?.startsWith('file:') && (() => {
@@ -458,18 +417,18 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                         return file ? (
                                             <FilePreviewInline
                                                 item={file}
-                                                onFullscreen={() => preview.setFullscreenItem(file)}
+                                                onFullscreen={() => preview.setFullscreenItem({ kind: 'file', file })}
                                             />
                                         ) : null;
                                     })()}
                                     {preview.activeTab === 'terminal' && preview.terminalLines.length > 0 && (
-                                        <TerminalPanel lines={preview.terminalLines} hideShell />
+                                        <TerminalPanel lines={preview.terminalLines} />
                                     )}
                                     {preview.activeTab === 'desktop' && preview.desktopActive && (
-                                        <DesktopPreview visible hideShell />
+                                        <DesktopPreview visible />
                                     )}
                                     {preview.activeTab === 'generation' && preview.generationPreview && (
-                                        <GenerationPreview preview={preview.generationPreview} hideShell />
+                                        <GenerationPreview preview={preview.generationPreview} />
                                     )}
                                 </PreviewPanel>
                             </div>
@@ -484,10 +443,16 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 <DesktopPreview visible={true} onClose={() => setUserDesktopOpen(false)} overlay />
             )}
 
-            {/* Fullscreen file preview — fills entire viewport */}
-            {preview.fullscreenItem && (
-                <FullscreenPreview
-                    item={preview.fullscreenItem}
+            {/* Fullscreen preview — fills entire viewport */}
+            {preview.fullscreenItem?.kind === 'file' && (
+                <FileFullscreen
+                    item={preview.fullscreenItem.file}
+                    onClose={() => preview.setFullscreenItem(null)}
+                />
+            )}
+            {preview.fullscreenItem?.kind === 'browser' && preview.browserSnapshot && (
+                <BrowserFullscreen
+                    snapshot={preview.browserSnapshot}
                     onClose={() => preview.setFullscreenItem(null)}
                 />
             )}

@@ -1,0 +1,34 @@
+/* IconButton — square icon-only button primitive.
+ *
+ * Used wherever a toolbar/header has a small icon control with hover-bg
+ * feedback. Caller passes the icon (or any node) as children and chooses
+ * a size: xs (24×24), sm (28×28), md (32×32).
+ */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    box-shadow: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 150ms var(--ease), color 150ms var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+    background: var(--accent-muted);
+    color: var(--text-primary);
+}
+
+.xs { width: 24px; height: 24px; }
+.sm { width: 28px; height: 28px; }
+.md { width: 32px; height: 32px; }
+
+:global([data-theme="light"]) .btn:hover:not(:disabled) {
+    background: var(--border-subtle);
+}

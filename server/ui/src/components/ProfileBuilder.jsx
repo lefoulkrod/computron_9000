@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
+import Button from './primitives/Button.jsx';
+import Callout from './primitives/Callout.jsx';
+import ConfirmButton from './primitives/ConfirmButton.jsx';
 
 const PRESETS = {
     balanced: { temperature: 0.7 },
@@ -69,7 +72,16 @@ const ADVANCED_HELP = {
     thinking: 'Step-by-step reasoning before answering. Good for math, logic, code',
 };
 
-export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate, models, availableSkills }) {
+export default function ProfileBuilder({
+    profile,
+    onSave,
+    onDelete,
+    onDuplicate,
+    models,
+    availableSkills,
+    deleteConflict,
+    onDismissDeleteConflict,
+}) {
     const [draft, setDraft] = useState(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [saveError, setSaveError] = useState(null);
@@ -167,33 +179,34 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
             <div className={styles.editor}>
                 {/* Actions bar */}
                 <div className={styles.actionsBar}>
-                        <button
-                            className={styles.deleteBtn}
-                            onClick={() => onDelete?.(profile.id)}
-                        >
-                            Delete
-                        </button>
+                        <ConfirmButton
+                            label="Delete"
+                            confirmLabel="Confirm?"
+                            busyLabel="Deleting…"
+                            title="Delete this profile"
+                            onConfirm={() => onDelete?.(profile.id)}
+                        />
                         <div className={styles.actionsRight}>
-                            <button
-                                className={styles.secondaryBtn}
-                                onClick={() => onDuplicate?.(profile.id)}
-                            >
+                            <Button onClick={() => onDuplicate?.(profile.id)}>
                                 Duplicate
-                            </button>
-                            <button
-                                className={styles.secondaryBtn}
-                                onClick={handleRevert}
-                            >
+                            </Button>
+                            <Button onClick={handleRevert}>
                                 Revert
-                            </button>
-                            <button
-                                className={styles.primaryBtn}
-                                onClick={handleSave}
-                            >
+                            </Button>
+                            <Button variant="filled" onClick={handleSave}>
                                 Save
-                            </button>
+                            </Button>
                         </div>
                     </div>
+
+                {deleteConflict && (
+                    <div className={styles.calloutSlot} data-testid="profile-delete-conflict">
+                        <DeleteConflictCallout
+                            conflict={deleteConflict}
+                            onDismiss={onDismissDeleteConflict}
+                        />
+                    </div>
+                )}
 
                 <div className={styles.formBody}>
                     {/* 1. Identity */}
@@ -244,7 +257,6 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
                             value={draft.model || ''}
                             onChange={(e) => update('model', e.target.value)}
                         >
-                            <option value="">Inherit from default agent</option>
                             {(models || []).map((m) => (
                                 <option key={m.name} value={m.name}>{m.name}</option>
                             ))}
@@ -380,5 +392,39 @@ export default function ProfileBuilder({ profile, onSave, onDelete, onDuplicate,
             </div>
 
         </div>
+    );
+}
+
+function DeleteConflictCallout({ conflict, onDismiss }) {
+    // Group usage rows by goal — multiple tasks in the same goal collapse
+    // into a single line. The user only needs to know which goals to clear.
+    const goals = useMemo(() => {
+        const seen = new Set();
+        const rows = [];
+        for (const u of conflict.usage || []) {
+            if (seen.has(u.goal_id)) continue;
+            seen.add(u.goal_id);
+            rows.push({ id: u.goal_id, description: u.goal_description });
+        }
+        return rows;
+    }, [conflict.usage]);
+
+    const description = goals.length === 1
+        ? 'Remove this profile from the goal below, then try again.'
+        : `Remove this profile from the ${goals.length} goals below, then try again.`;
+
+    return (
+        <Callout
+            tone="danger"
+            title="Can't delete — profile is in use"
+            description={description}
+            onDismiss={onDismiss}
+        >
+            <Callout.List>
+                {goals.map(g => (
+                    <Callout.Item key={g.id} kind="goal">{g.description}</Callout.Item>
+                ))}
+            </Callout.List>
+        </Callout>
     );
 }

@@ -1,29 +1,31 @@
 import React, { useMemo, useState } from 'react';
-import styles from './Message.module.css';
+import styles from './CodeBlock.module.css';
 import CopyIcon from './icons/CopyIcon.jsx';
 import copyToClipboard from '../utils/copyToClipboard.js';
 import { highlightCode } from '../utils/highlight.js';
 
 function CodeHeader({ lang, onCopy, copied }) {
   return (
-    <div className={styles.codeHeader}>
-      <span className={styles.codeLangLabel}>{lang || 'code'}</span>
-      <button className={styles.copyBtn} type="button" onClick={onCopy}>
-        <CopyIcon size={16} />
+    <div className={styles.codeblockHeader}>
+      <span className={styles.codeblockLang}>{lang || 'code'}</span>
+      <button className={styles.codeblockCopy} type="button" onClick={onCopy}>
+        <CopyIcon size={12} />
         <span>{copied ? 'Copied!' : 'Copy code'}</span>
       </button>
     </div>
   );
 }
 
-// Inline code renderer: keep simple inline styling
+// Inline code renderer — uses design language `.inline-code` pattern.
 export function InlineCode({ className, children, ...props }) {
+  const cls = className ? `${styles.inlineCode} ${className}` : styles.inlineCode;
   return (
-    <code className={className} {...props}>{children}</code>
+    <code className={cls} data-testid="inline-code" {...props}>{children}</code>
   );
 }
 
-// Block pre renderer: inject header and copy button while preserving children
+// Block code renderer — uses design language `.codeblock` pattern: an outer
+// container with a normal-flow header above a `<pre>` body.
 export function PreCodeBlock({ children }) {
   const [copied, setCopied] = useState(false);
 
@@ -61,17 +63,19 @@ export function PreCodeBlock({ children }) {
   };
 
   return (
-    <pre>
+    <div className={styles.codeblock} data-testid="code-block" data-lang={lang}>
       <CodeHeader lang={lang} onCopy={handleCopy} copied={copied} />
-      {highlighted ? (
-        <code
-          className="hljs"
-          dangerouslySetInnerHTML={{ __html: highlighted.html }}
-        />
-      ) : (
-        codeEl
-      )}
-    </pre>
+      <pre className={styles.codeblockBody}>
+        {highlighted ? (
+          <code
+            className="hljs"
+            dangerouslySetInnerHTML={{ __html: highlighted.html }}
+          />
+        ) : (
+          codeEl
+        )}
+      </pre>
+    </div>
   );
 }
 

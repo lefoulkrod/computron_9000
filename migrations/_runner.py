@@ -9,6 +9,7 @@ from pathlib import Path
 
 from migrations._001_task_agent_to_profile import migrate as _001_task_agent_to_profile
 from migrations._002_install_default_profiles import migrate as _002_install_default_profiles
+from migrations._003_vision_settings import migrate as _003_vision_settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ _APPLIED_FILE = ".migrations.json"
 _MIGRATIONS: list[tuple[str, Callable[[Path], None]]] = [
     ("001_task_agent_to_profile", _001_task_agent_to_profile),
     ("002_install_default_profiles", _002_install_default_profiles),
+    ("003_vision_settings", _003_vision_settings),
 ]
 
 

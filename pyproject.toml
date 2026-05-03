@@ -17,6 +17,8 @@ dependencies = [
     "anthropic>=0.52.0",
     "openai>=1.0",
     "croniter>=1.3",
+    "cryptography>=46.0.7",
+    "caldav>=1.3",
 ]
 
 [project.optional-dependencies]
@@ -127,6 +129,9 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "-q",
+    "--no-header",
+    "--disable-warnings",
 ]
 markers = [
     "unit: marks tests as unit tests",
@@ -134,9 +139,9 @@ markers = [
     "slow: marks tests as slow running",
 ]
 asyncio_mode = "auto"
-log_cli = true
-log_cli_level = "INFO"
-log_level = "INFO"
+log_cli = false
+log_cli_level = "ERROR"
+log_level = "WARNING"
 
 
 [build-system]

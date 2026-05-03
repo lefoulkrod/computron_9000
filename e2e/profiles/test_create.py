@@ -5,68 +5,50 @@ The API reads profiles from JSON files on disk (no in-memory cache),
 so asserting via the API proves disk persistence.
 """
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page
+
+from e2e.pages import SettingsPage
 
 
 def test_create_profile_persists_all_settings(page: Page):
     """Create a new profile via the UI, set every field, save, and verify via API."""
-    page.goto("/")
-
-    # Open settings
-    page.get_by_role("button", name="Settings", exact=True).click()
-    expect(page.get_by_text("Agent Profiles")).to_be_visible()
-
-    # Click "+ New" to create a profile
-    page.get_by_role("button", name="+ New").click()
-
-    # Wait for the editor to load
-    name_input = page.locator("input[placeholder='Profile name']")
-    name_input.wait_for(state="visible")
+    settings = SettingsPage(page).goto()
+    settings.profiles.new()
+    builder = settings.builder
 
     # --- Identity ---
-    name_input.fill("")
-    name_input.fill("Test Agent")
-    page.locator("input[placeholder='Short description']").fill("A test profile created by e2e")
+    builder.name_input.fill("")
+    builder.name_input.fill("Test Agent")
+    builder.description_input.fill("A test profile created by e2e")
 
     # --- Model (first available) ---
-    model_select = page.locator("select").first
-    model_options = model_select.locator("option").all()
-    selected_model = model_options[1].get_attribute("value") if len(model_options) > 1 else ""
+    model_options = builder.model_select.locator("option").all()
+    selected_model = model_options[0].get_attribute("value") if model_options else ""
     if selected_model:
-        model_select.select_option(selected_model)
+        builder.model_select.select_option(selected_model)
 
     # --- System prompt ---
-    page.locator("textarea[placeholder='System prompt...']").fill("You are a test agent.")
+    builder.system_prompt.fill("You are a test agent.")
 
     # --- Skills (toggle first available) ---
-    skill_buttons = page.locator("button[class*='chip']")
     first_skill = None
-    if skill_buttons.count() > 0:
-        first_skill = skill_buttons.first.inner_text().strip()
-        skill_buttons.first.click()
+    if builder.skill_chips.count() > 0:
+        first_skill = builder.skill_chips.first.inner_text().strip()
+        builder.skill_chips.first.click()
 
     # --- Advanced settings (set every inference field) ---
-    page.get_by_text("Advanced Settings").click()
-
-    # Temperature (input[placeholder='auto'] #0)
-    page.locator("input[placeholder='auto']").nth(0).fill("0.8")
-    # Top K (#1)
-    page.locator("input[placeholder='auto']").nth(1).fill("50")
-    # Top P (#2)
-    page.locator("input[placeholder='auto']").nth(2).fill("0.9")
-    # Repeat Penalty (#3)
-    page.locator("input[placeholder='auto']").nth(3).fill("1.2")
-    # Context / num_ctx (#4)
-    page.locator("input[placeholder='auto']").nth(4).fill("16000")
-    # Max Output / num_predict
-    page.locator("input[placeholder='unlimited']").nth(0).fill("4096")
-    # Iterations / max_iterations
-    page.locator("input[placeholder='unlimited']").nth(1).fill("25")
-    # Thinking toggle
+    builder.open_advanced()
+    builder.auto_field(0).fill("0.8")       # Temperature
+    builder.auto_field(1).fill("50")        # Top K
+    builder.auto_field(2).fill("0.9")       # Top P
+    builder.auto_field(3).fill("1.2")       # Repeat Penalty
+    builder.auto_field(4).fill("16000")     # num_ctx
+    builder.unlimited_field(0).fill("4096") # num_predict
+    builder.unlimited_field(1).fill("25")   # max_iterations
     page.locator("label", has_text="Thinking").click()
 
     # --- Save ---
-    page.get_by_role("button", name="Save").click()
+    builder.save()
     page.wait_for_timeout(500)
 
     # --- Verify via API (reads from disk, no cache) ---
@@ -106,3 +88,17 @@ def test_create_profile_persists_all_settings(page: Page):
     # Clean up — delete the test profile
     resp = page.request.delete(f"/api/profiles/{created['id']}")
     assert resp.status == 204
+
+
+def test_new_button_does_not_persist_until_save(page: Page):
+    """Clicking + New opens the builder without writing anything to disk."""
+    before = {p["id"] for p in page.request.get("/api/profiles").json()}
+
+    settings = SettingsPage(page).goto()
+    settings.profiles.new()
+
+    # Discard the draft by selecting an existing profile.
+    page.locator("[data-testid^='profile-item-']").first.click()
+
+    after = {p["id"] for p in page.request.get("/api/profiles").json()}
+    assert before == after, "A profile was persisted without clicking Save"

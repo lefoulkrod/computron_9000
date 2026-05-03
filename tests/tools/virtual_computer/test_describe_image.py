@@ -20,19 +20,16 @@ _spec.loader.exec_module(_mod)
 describe_image = _mod.describe_image
 
 
-class _FakeVision:
-    model = "vision-model"
-    options = {}
-    think = False
-
-
 @pytest.fixture()
 def mock_env(tmp_path):
     """Provide a mock config and temp directory for describe_image."""
     cfg = MagicMock()
     cfg.llm.host = None
-    cfg.vision = _FakeVision()
-    fake_settings = {"vision_model": "vision-model"}
+    fake_settings = {
+        "vision_model": "vision-model",
+        "vision_options": {},
+        "vision_think": False,
+    }
     with (
         patch.object(_mod, "load_config", return_value=cfg),
         patch("settings.load_settings", return_value=fake_settings),

@@ -19,6 +19,7 @@
 }
 
 .url {
+  flex: 1;
   font-size: 12px;
   color: var(--text-secondary);
   overflow: hidden;
@@ -47,13 +48,6 @@
 }
 
 .screenshot {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-
-.expandedImg {
   width: 100%;
   height: auto;
   display: block;

@@ -172,12 +172,12 @@ export default function useStreamingChat(callbacks) {
     const abortControllerRef = useRef(null);
     const conversationIdRef = useRef(_uuid());
 
-    const sendMessage = useCallback(async (message, fileData, modelSettings) => {
+    const sendMessage = useCallback(async (message, fileData, profileId) => {
         if (!message && !fileData) return;
 
         // If already streaming, send as a nudge (fire-and-forget)
         if (isStreamingRef.current) {
-            const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
+            const body = _buildRequestBody(message, fileData, profileId, conversationIdRef.current);
             fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -207,7 +207,7 @@ export default function useStreamingChat(callbacks) {
             { id: placeholderId, role: 'assistant', placeholder: true },
         ]);
 
-        const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
+        const body = _buildRequestBody(message, fileData, profileId, conversationIdRef.current);
 
         // IDs for pending animation frame flushes. Declared here so the
         // finally block can cancel them if the stream errors or aborts.
@@ -396,8 +396,13 @@ export default function useStreamingChat(callbacks) {
         }
     }, []);
 
-    /** Clear messages, generate a fresh conversation ID, and delete backend history. */
-    const newConversation = useCallback(async () => {
+    /** Clear messages and switch to a fresh conversation ID.
+     *
+     * Sends a best-effort stop for the previous conversation. The server
+     * keeps an LRU cache of recent conversations and rehydrates from disk
+     * on demand, so no explicit cache-eviction call is needed.
+     */
+    const newConversation = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -406,13 +411,7 @@ export default function useStreamingChat(callbacks) {
         fetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(() => {});
         setIsStreaming(false);
         setMessages([]);
-        // Generate a fresh conversation ID for the new conversation
         conversationIdRef.current = _uuid();
-        try {
-            await fetch(`/api/chat/history?conversation_id=${oldConversationId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        } catch (err) {
-            // ignore
-        }
     }, []);
 
     return {

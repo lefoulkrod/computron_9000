@@ -1,18 +1,7 @@
-import PreviewShell from './PreviewShell.jsx';
 import styles from './GenerationPreview.module.css';
-import SparkleIcon from './icons/SparkleIcon.jsx';
 import DownloadIcon from './icons/DownloadIcon.jsx';
 
-/**
- * Generation preview component for image/video/audio generation.
- *
- * @param {Object} props
- * @param {Object} props.preview - Generation preview data
- * @param {function(): void} [props.onClose] - Callback when close button clicked
- * @param {boolean} [props.hideShell] - If true, render without PreviewShell wrapper
- * @returns {JSX.Element|null}
- */
-export default function GenerationPreview({ preview, onClose, hideShell }) {
+export default function GenerationPreview({ preview }) {
     if (!preview) return null;
 
     const { media_type, status, step, total_steps, message } = preview;
@@ -23,10 +12,6 @@ export default function GenerationPreview({ preview, onClose, hideShell }) {
 
     const isImage = media_type === 'image';
     const isAudio = media_type === 'audio';
-    const isVideo = !isImage && !isAudio;
-
-    const LABELS = { image: 'Image', video: 'Video', audio: 'Music' };
-    const label = LABELS[media_type] || 'Media';
 
     const progressPct = (step != null && total_steps)
         ? Math.round((step / total_steps) * 100)
@@ -48,19 +33,7 @@ export default function GenerationPreview({ preview, onClose, hideShell }) {
         link.click();
     };
 
-    const displayTitle = isComplete ? `${label} Generated` : `Generating ${label}`;
-
-    const expandContent = isComplete && hasOutput && outputSrc ? (
-        isAudioContent ? (
-            <audio src={outputSrc} controls autoPlay className={styles.expandedMedia} />
-        ) : isVideoContent ? (
-            <video src={outputSrc} controls autoPlay loop className={styles.expandedMedia} />
-        ) : (
-            <img src={outputSrc} alt="Generated" className={styles.expandedMedia} />
-        )
-    ) : undefined;
-
-    const content = (
+    return (
         <div className={styles.content}>
             {!isComplete && !isFailed && (
                 <div className={styles.progressSection}>
@@ -127,20 +100,5 @@ export default function GenerationPreview({ preview, onClose, hideShell }) {
                 </div>
             )}
         </div>
-    );
-
-    if (hideShell) {
-        return content;
-    }
-
-    return (
-        <PreviewShell
-            icon={<SparkleIcon size={16} />}
-            title={displayTitle}
-            onClose={onClose}
-            expandContent={expandContent}
-        >
-            {content}
-        </PreviewShell>
     );
 }

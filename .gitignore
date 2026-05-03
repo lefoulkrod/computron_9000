@@ -39,6 +39,9 @@ logs/
 # Editor-specific files
 .idea/
 
+# Claude Code runtime state (scheduler locks, local settings, agent worktrees)
+.claude/
+
 # OS generated files
 .DS_Store
 

@@ -2,10 +2,10 @@
     width: 100%;
     max-width: 640px;
     margin: 0 auto;
-    padding: 1.5rem 2rem;
+    padding: var(--sp-6) var(--sp-8);
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--sp-2);
     overflow-y: auto;
 }
 
@@ -17,7 +17,7 @@
     opacity: 0.4;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin-top: 0.75rem;
+    margin-top: var(--sp-3);
 }
 
 .sectionLabel:first-child {
@@ -28,8 +28,8 @@
 .settingRow {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.6rem 0.75rem;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -93,48 +93,124 @@
     outline-offset: 2px;
 }
 
-/* Status dot */
-.statusDot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
 
-.statusConnected {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-muted);
-}
+/* Action buttons (Refresh, Run Setup Wizard) now render via the
+ * Button primitive — see ./primitives/Button.jsx. */
 
-.statusDisconnected {
-    background: var(--danger);
-    box-shadow: 0 0 6px var(--danger-muted);
-}
-
-/* Action buttons (Refresh, Run Setup Wizard) */
-.actionBtn {
-    flex-shrink: 0;
-    height: 30px;
-    font-family: var(--font-brand);
-    font-size: 0.75rem;
-    padding: 0 0.75rem;
-    border-radius: var(--radius-md);
+/* ── Group card: a row plus a nested disclosure + advanced body ── */
+.groupCard {
+    background: var(--surface);
     border: 1px solid var(--border);
-    background: var(--canvas);
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
+
+.groupCard .settingRow {
+    background: transparent;
+    border: none;
+    border-radius: 0;
     box-shadow: none;
 }
 
-.actionBtn:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent-muted);
+.groupDisclosure {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    border-radius: 0;
+    color: var(--text-secondary);
+    font-family: var(--font-brand);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: var(--sp-2) var(--sp-3);
+    cursor: pointer;
+    text-align: left;
+    transition: background 150ms var(--ease), color 150ms var(--ease);
 }
 
-.actionBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.groupDisclosure:hover {
+    color: var(--text-primary);
+    background: var(--canvas);
+}
+
+[data-theme="dark"] .groupDisclosure:hover {
+    background: var(--elevated);
+}
+
+.chev {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: transform 150ms var(--ease);
+}
+
+.groupDisclosureOpen .chev {
+    transform: rotate(90deg);
+}
+
+.groupBody {
+    display: flex;
+    flex-direction: column;
+    padding: var(--sp-1) var(--sp-3) var(--sp-2);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.groupRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.groupRow:last-child {
+    border-bottom: none;
+}
+
+/* Number input — follows design language .input primitive.
+   text-align: right and hidden spin buttons are app-wide conventions
+   for numeric fields (see ProfileBuilder .numInput, ModelSettingsPanel .numInput). */
+.numberInput {
+    width: 120px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--canvas);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-body);
+    text-align: right;
+    outline: none;
+    appearance: textfield;
+    transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+
+.numberInput::-webkit-inner-spin-button,
+.numberInput::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+}
+
+.numberInput::placeholder {
+    color: var(--text-tertiary);
+}
+
+[data-theme="dark"] .numberInput {
+    background: var(--surface);
+}
+
+.numberInput:focus {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
 }
 
 /* Info note */
@@ -143,7 +219,7 @@
     color: var(--text-primary);
     opacity: 0.5;
     line-height: 1.5;
-    padding: 0.55rem 0.75rem;
+    padding: var(--sp-2) var(--sp-3);
     background: var(--accent-muted);
     border-left: 3px solid var(--accent-muted);
     border-radius: var(--radius-md);

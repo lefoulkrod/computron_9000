@@ -82,8 +82,12 @@ vi.mock('../components/FilePreviewInline.jsx', () => ({
     default: ({ item }) => <div data-testid="file-preview-inline">{item?.filename}</div>,
 }));
 
-vi.mock('../components/FullscreenPreview.jsx', () => ({
+vi.mock('../components/FileFullscreen.jsx', () => ({
     default: () => <div data-testid="fullscreen-preview" />,
+}));
+
+vi.mock('../components/BrowserFullscreen.jsx', () => ({
+    default: () => <div data-testid="browser-fullscreen" />,
 }));
 
 vi.mock('../components/SettingsPage.jsx', () => ({
@@ -94,12 +98,8 @@ vi.mock('../components/SystemSettings.jsx', () => ({
     default: () => <div>SystemSettings</div>,
 }));
 
-vi.mock('../components/ProfileList.jsx', () => ({
-    default: () => <div>ProfileList</div>,
-}));
-
-vi.mock('../components/ProfileBuilder.jsx', () => ({
-    default: () => <div>ProfileBuilder</div>,
+vi.mock('../components/ProfilesTab.jsx', () => ({
+    default: () => <div>ProfilesTab</div>,
 }));
 
 vi.mock('../components/SetupWizard.jsx', () => ({

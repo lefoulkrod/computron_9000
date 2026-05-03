@@ -1,0 +1,42 @@
+/* ConfirmButton — click-twice-to-confirm primitive.
+ *
+ * Resting state matches the design language's `btn-danger` exactly
+ * (32px, body 13px, danger-muted background, danger text). The
+ * `.confirming` class escalates to a solid danger fill on click 1,
+ * giving the user a strong visual "I'm armed" cue before click 2
+ * executes the action.
+ */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    background: var(--danger-muted);
+    color: var(--danger);
+    white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.15);
+}
+
+/* Armed state — applied automatically after click 1. Solid danger
+ * fill + white text reads as "next click does it." */
+.confirming {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+}
+
+.confirming:hover:not(:disabled) {
+    background: var(--danger);
+    border-color: var(--danger);
+}

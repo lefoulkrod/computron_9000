@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import OrderedDict
 from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -40,15 +41,13 @@ from sdk.events import (
 from sdk.hooks._agent_event_buffer import AgentEventBufferHook
 from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
-from sdk.turn import turn_scope
+from sdk.turn import is_turn_active, turn_scope
 from sdk.turn._turn import StopRequestedError
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
-
-_DEFAULT_CONVERSATION_ID = "default"
 
 
 def _log_turn_start(profile: AgentProfile) -> None:
@@ -97,27 +96,77 @@ class _Conversation:
     context_manager: ContextManager | None = None
 
 
-# Conversation store keyed by conversation ID.
-_conversations: dict[str, _Conversation] = {}
+# In-memory conversation cache. LRU-bounded so a long-lived process
+# doesn't hold every conversation a user has ever opened. The on-disk
+# state is authoritative; an evicted entry is rehydrated from disk on
+# next access.
+_MAX_CACHED_CONVERSATIONS = 25
+_conversations: OrderedDict[str, _Conversation] = OrderedDict()
 
 # Track background tasks to avoid garbage collection (RUF006)
 _background_tasks: set[asyncio.Task] = set()
 
 
-def _get_conversation(conversation_id: str | None = None) -> _Conversation:
-    """Return the conversation for the given ID, creating one if needed."""
-    cid = conversation_id or _DEFAULT_CONVERSATION_ID
-    if cid not in _conversations:
-        _conversations[cid] = _Conversation(
-            history=ConversationHistory(instance_id=cid),
-        )
-    return _conversations[cid]
+def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
+    """Return ``(conversation, is_new)`` for the given ID, creating it if needed.
+
+    ``is_new`` is True only when the conversation has no in-memory entry
+    AND no on-disk history — a genuine first-time use. On any cache miss
+    we hydrate from disk so turns survive process restarts: the browser
+    preserves a conversation id across server bounces (e.g. ``just
+    restart-app``), and without hydration the next turn would build on an
+    empty history and the persistence hook would overwrite the saved file.
+
+    Cache hits move the entry to the end of the LRU; cache misses insert
+    at the end and may evict the least-recently-used entry whose turn is
+    not currently active.
+    """
+    if not conversation_id:
+        msg = "conversation_id is required"
+        raise ValueError(msg)
+    if conversation_id in _conversations:
+        _conversations.move_to_end(conversation_id)
+        return _conversations[conversation_id], False
+    persisted = load_conversation_history(conversation_id)
+    is_new = persisted is None
+    if is_new:
+        logger.info("Creating new conversation %s", conversation_id)
+    _conversations[conversation_id] = _Conversation(
+        history=ConversationHistory(persisted, instance_id=conversation_id),
+    )
+    _evict_lru(exclude=conversation_id)
+    return _conversations[conversation_id], is_new
 
 
-def reset_message_history(conversation_id: str | None = None) -> None:
-    """Resets the conversation history and context manager."""
-    cid = conversation_id or _DEFAULT_CONVERSATION_ID
-    _conversations.pop(cid, None)
+def _evict_lru(exclude: str | None = None) -> None:
+    """Drop the oldest non-active entries until we are at or below the cap.
+
+    Conversations whose turn is currently in flight are skipped — popping
+    them from the dict would leave the running turn writing to a referent
+    nobody else can find, and a subsequent chat for the same id would
+    rehydrate from disk, producing two parallel writers.
+
+    ``exclude`` skips the conversation that triggered this eviction. The
+    caller has not yet entered ``turn_scope`` for it, so ``is_turn_active``
+    cannot recognize it as protected — without this guard the just-inserted
+    entry would be evicted by its own insert in the rare case where every
+    other cached entry is mid-turn.
+    """
+    while len(_conversations) > _MAX_CACHED_CONVERSATIONS:
+        for cid in _conversations:
+            if cid == exclude:
+                continue
+            if not is_turn_active(cid):
+                _conversations.pop(cid)
+                logger.info(
+                    "Evicted LRU conversation %s from in-memory cache", cid,
+                )
+                break
+        else:
+            # Every cached conversation is mid-turn (or is the just-inserted
+            # caller) — accept temporary overflow rather than evict an
+            # active one. The next insert will retry.
+            return
 
 
 def resume_conversation(conversation_id: str) -> list[dict] | None:
@@ -133,6 +182,8 @@ def resume_conversation(conversation_id: str) -> list[dict] | None:
         history=ConversationHistory(messages, instance_id=conversation_id),
     )
     _conversations[conversation_id] = conversation
+    _conversations.move_to_end(conversation_id)
+    _evict_lru(exclude=conversation_id)
     return messages
 
 
@@ -199,25 +250,25 @@ async def _run_turn(
     active_agent: Agent,
     profile: AgentProfile,
     user_content: str,
-    conversation_id: str | None,
+    conversation_id: str,
     handler: Callable[[AgentEvent], object],
     is_new_conversation: bool = False,
 ) -> None:
     """Execute a single conversation turn: model calls, tool execution, persistence."""
     logger.info(
         "Turn started: conv=%s agent=%s message=%.80s",
-        conversation_id or _DEFAULT_CONVERSATION_ID,
+        conversation_id,
         active_agent.name,
         user_content,
     )
     _log_turn_start(profile)
 
     ctx_manager = _ensure_context_manager(conversation, active_agent)
-    conv_id = conversation_id or _DEFAULT_CONVERSATION_ID
+    conv_id = conversation_id
 
     # Fresh AgentState each turn, restored from persisted skill names.
     # Pre-load skills from the profile.
-    agent_state = AgentState(get_core_tools() + active_agent.tools)
+    agent_state = AgentState(await get_core_tools() + active_agent.tools)
     for skill_name in profile.skills:
         skill = get_skill(skill_name)
         if skill is None:
@@ -319,7 +370,7 @@ async def handle_user_message(
     data: Sequence[Data] | None = None,
     *,
     profile_id: str | None = None,
-    conversation_id: str | None = None,
+    conversation_id: str,
 ) -> AsyncGenerator[AgentEvent, None]:
     """Handles a user message by sending it to the LLM and yielding events.
 
@@ -327,14 +378,15 @@ async def handle_user_message(
         message: The user's message.
         data: Optional sequence of file attachment data.
         profile_id: Agent profile to use. Required.
-        conversation_id: Optional conversation identifier for isolation.
+        conversation_id: Conversation identifier for isolation. Required.
 
     Yields:
         AgentEvent: Events from the LLM.
     """
-    cid = conversation_id or _DEFAULT_CONVERSATION_ID
-    is_new_conversation = cid not in _conversations
-    conversation = _get_conversation(conversation_id)
+    if not conversation_id:
+        msg = "conversation_id is required"
+        raise ValueError(msg)
+    conversation, is_new_conversation = _get_conversation(conversation_id)
 
     user_content = message
     if data:

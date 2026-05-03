@@ -1,26 +1,33 @@
-import { useState } from 'react';
-import PreviewShell from './PreviewShell.jsx';
 import styles from './BrowserPreview.module.css';
-import BrowserIcon from './icons/BrowserIcon.jsx';
 import LockIcon from './icons/LockIcon.jsx';
-import Lightbox from './Lightbox.jsx';
+import ExpandIcon from './icons/ExpandIcon.jsx';
+import IconButton from './primitives/IconButton.jsx';
 
-export default function BrowserPreview({ snapshot, onClose, hideShell }) {
-    const [lightboxOpen, setLightboxOpen] = useState(false);
-
+export default function BrowserPreview({ snapshot, onFullscreen }) {
     if (!snapshot) return null;
 
     const screenshotSrc = snapshot.screenshot
         ? `data:image/png;base64,${snapshot.screenshot}`
         : null;
 
-    const content = (
+    return (
         <div className={styles.content}>
             <div className={styles.urlBar}>
                 <LockIcon size={12} className={styles.lockIcon} />
                 <span className={styles.url} title={snapshot.url}>
                     {snapshot.url}
                 </span>
+                {onFullscreen && (
+                    <IconButton
+                        size="sm"
+                        onClick={onFullscreen}
+                        title="Fullscreen"
+                        aria-label="Open fullscreen"
+                        data-testid="browser-fullscreen"
+                    >
+                        <ExpandIcon size={14} />
+                    </IconButton>
+                )}
             </div>
 
             {snapshot.title && (
@@ -32,7 +39,7 @@ export default function BrowserPreview({ snapshot, onClose, hideShell }) {
             {screenshotSrc && (
                 <div
                     className={styles.screenshotContainer}
-                    onClick={() => setLightboxOpen(true)}
+                    onClick={onFullscreen}
                 >
                     <img
                         key={snapshot.screenshot.substring(0, 50)}
@@ -42,30 +49,6 @@ export default function BrowserPreview({ snapshot, onClose, hideShell }) {
                     />
                 </div>
             )}
-            {lightboxOpen && screenshotSrc && (
-                <Lightbox
-                    src={screenshotSrc}
-                    alt="Browser screenshot"
-                    onClose={() => setLightboxOpen(false)}
-                />
-            )}
         </div>
-    );
-
-    if (hideShell) {
-        return content;
-    }
-
-    return (
-        <PreviewShell
-            icon={<BrowserIcon size={16} />}
-            title="Browser"
-            onClose={onClose}
-            expandContent={screenshotSrc ? (
-                <img src={screenshotSrc} alt="Browser screenshot" className={styles.expandedImg} />
-            ) : undefined}
-        >
-            {content}
-        </PreviewShell>
     );
 }

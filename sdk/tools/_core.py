@@ -4,8 +4,11 @@ from collections.abc import Callable
 from typing import Any
 
 
-def get_core_tools() -> list[Callable[..., Any]]:
+async def get_core_tools() -> list[Callable[..., Any]]:
     """Return tools that every agent gets regardless of skill configuration.
+
+    Async because the integration tool gating awaits the integrations cache,
+    which loads lazily on first use after app startup.
 
     Lazy imports to avoid circular dependencies.
     """
@@ -32,4 +35,50 @@ def get_core_tools() -> list[Callable[..., Any]]:
     if load_config().features.custom_tools:
         from tools.custom_tools import create_custom_tool, lookup_custom_tools, run_custom_tool
         tools.extend([create_custom_tool, lookup_custom_tools, run_custom_tool])
+
+    # Integration-bound tools are gated by capability — the supervisor's
+    # catalog declares which capabilities each provider offers, surfaced in
+    # the list/add RPC responses. The tool's dynamic docstring lists the
+    # currently-registered IDs so the model picks a real one instead of
+    # guessing.
+    from tools.integrations import registered_integrations
+    records = await registered_integrations()
+    # Only running integrations get their tools surfaced — auth_failed /
+    # broken integrations would just produce errors when the agent calls
+    # them, so hide them until the user re-adds.
+    email_ids = frozenset(
+        i for i, rec in records.items()
+        if "email" in rec.capabilities and rec.state == "running"
+    )
+    if email_ids:
+        from tools.integrations.download_email_attachment import build_download_email_attachment_tool
+        from tools.integrations.list_email_folders import build_list_email_folders_tool
+        from tools.integrations.list_email_messages import build_list_email_messages_tool
+        from tools.integrations.read_email_message import build_read_email_message_tool
+        from tools.integrations.search_email import build_search_email_tool
+        tools.append(build_list_email_folders_tool(email_ids))
+        tools.append(build_list_email_messages_tool(email_ids))
+        tools.append(build_read_email_message_tool(email_ids))
+        tools.append(build_search_email_tool(email_ids))
+        tools.append(build_download_email_attachment_tool(email_ids))
+
+    email_write_ids = frozenset(
+        i for i in email_ids if records[i].write_allowed
+    )
+    if email_write_ids:
+        from tools.integrations.move_email import build_move_email_tool
+        from tools.integrations.send_email import build_send_email_tool
+        tools.append(build_move_email_tool(email_write_ids))
+        tools.append(build_send_email_tool(email_write_ids))
+
+    calendar_ids = frozenset(
+        i for i, rec in records.items()
+        if "calendar" in rec.capabilities and rec.state == "running"
+    )
+    if calendar_ids:
+        from tools.integrations.list_calendars import build_list_calendars_tool
+        from tools.integrations.list_events import build_list_events_tool
+        tools.append(build_list_calendars_tool(calendar_ids))
+        tools.append(build_list_events_tool(calendar_ids))
+
     return tools

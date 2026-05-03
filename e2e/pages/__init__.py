@@ -12,6 +12,8 @@ from .conversations_flyout import ConversationsFlyout
 from .preview_panel import PreviewPanel
 from .file_preview import FilePreview
 from .fullscreen_preview import FullscreenPreview
+from .goals_view import GoalsView
+from .settings_page import SettingsPage
 
 __all__ = [
     "ChatView",
@@ -21,4 +23,6 @@ __all__ = [
     "PreviewPanel",
     "FilePreview",
     "FullscreenPreview",
+    "GoalsView",
+    "SettingsPage",
 ]
