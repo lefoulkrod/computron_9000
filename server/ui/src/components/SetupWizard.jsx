@@ -40,40 +40,43 @@ function ProgressBar({ currentStep }) {
     );
 }
 
-function ModelCard({ model, selected, onSelect }) {
+function ModelCard({ name, value, description, model, selected, onSelect }) {
     return (
         <button
             className={`${styles.modelCard} ${selected ? styles.modelCardSelected : ''}`}
-            onClick={() => onSelect(model.name)}
+            onClick={() => onSelect(value ?? name)}
             type="button"
             aria-pressed={selected}
         >
             <span className={`${styles.radio} ${selected ? styles.radioSelected : ''}`} aria-hidden="true" />
             <div className={styles.modelInfo}>
-                <span className={styles.modelName}>{model.name}</span>
-                <div className={styles.badges}>
-                    {model.parameter_size && (
-                        <span className={`${styles.badge} ${styles.badgeParams}`}>
-                            {model.parameter_size}
-                        </span>
-                    )}
-                    {model.quantization_level && (
-                        <span className={`${styles.badge} ${styles.badgeQuant}`}>
-                            {model.quantization_level}
-                        </span>
-                    )}
-                    {model.family && (
-                        <span className={`${styles.badge} ${styles.badgeFamily}`}>
-                            {model.family}
-                        </span>
-                    )}
-                    {model.is_cloud && (
-                        <span className={`${styles.badge} ${styles.badgeCloud}`}>cloud</span>
-                    )}
-                    {(model.capabilities || []).includes('vision') && (
-                        <span className={`${styles.badge} ${styles.badgeVision}`}>vision</span>
-                    )}
-                </div>
+                <span className={styles.modelName}>{name}</span>
+                {description && <span className={styles.modelDesc}>{description}</span>}
+                {model && (
+                    <div className={styles.badges}>
+                        {model.parameter_size && (
+                            <span className={`${styles.badge} ${styles.badgeParams}`}>
+                                {model.parameter_size}
+                            </span>
+                        )}
+                        {model.quantization_level && (
+                            <span className={`${styles.badge} ${styles.badgeQuant}`}>
+                                {model.quantization_level}
+                            </span>
+                        )}
+                        {model.family && (
+                            <span className={`${styles.badge} ${styles.badgeFamily}`}>
+                                {model.family}
+                            </span>
+                        )}
+                        {model.is_cloud && (
+                            <span className={`${styles.badge} ${styles.badgeCloud}`}>cloud</span>
+                        )}
+                        {(model.capabilities || []).includes('vision') && (
+                            <span className={`${styles.badge} ${styles.badgeVision}`}>vision</span>
+                        )}
+                    </div>
+                )}
             </div>
         </button>
     );
@@ -412,47 +415,34 @@ export default function SetupWizard({ onComplete }) {
                             Connect to a local model server or a cloud API.
                         </p>
 
-                        <fieldset className={styles.providerFieldset}>
-                            <legend className={styles.srOnly}>LLM Provider</legend>
-                            <div className={styles.providerTiles}>
-                                {[
-                                    {
-                                        key: PROVIDER_OLLAMA,
-                                        name: 'Ollama (local)',
-                                        desc: 'Run models on your own machine',
-                                    },
-                                    {
-                                        key: PROVIDER_OPENAI_COMPAT,
-                                        name: 'OpenAI-compatible endpoint',
-                                        desc: 'LM Studio, vLLM, Groq, Together AI, and others',
-                                    },
-                                    {
-                                        key: PROVIDER_CLOUD,
-                                        name: 'Cloud API',
-                                        desc: 'Anthropic or OpenAI cloud',
-                                    },
-                                ].map(({ key, name, desc }) => (
-                                    <label
-                                        key={key}
-                                        className={`${styles.providerTile} ${selectedProvider === key ? styles.providerTileSelected : ''}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="provider"
-                                            value={key}
-                                            checked={selectedProvider === key}
-                                            onChange={() => { setSelectedProvider(key); setProviderError(null); }}
-                                            className={styles.providerTileInput}
-                                        />
-                                        <span className={styles.providerTileMarker} aria-hidden="true" />
-                                        <span className={styles.providerTileText}>
-                                            <span className={styles.providerTileName}>{name}</span>
-                                            <span className={styles.providerTileDesc}>{desc}</span>
-                                        </span>
-                                    </label>
-                                ))}
-                            </div>
-                        </fieldset>
+                        <div className={styles.modelList}>
+                            {[
+                                {
+                                    key: PROVIDER_OLLAMA,
+                                    name: 'Ollama (local)',
+                                    desc: 'Run models on your own machine',
+                                },
+                                {
+                                    key: PROVIDER_OPENAI_COMPAT,
+                                    name: 'OpenAI-compatible endpoint',
+                                    desc: 'LM Studio, vLLM, Groq, Together AI, and others',
+                                },
+                                {
+                                    key: PROVIDER_CLOUD,
+                                    name: 'Cloud API',
+                                    desc: 'Anthropic or OpenAI cloud',
+                                },
+                            ].map(({ key, name, desc }) => (
+                                <ModelCard
+                                    key={key}
+                                    name={name}
+                                    value={key}
+                                    description={desc}
+                                    selected={selectedProvider === key}
+                                    onSelect={(k) => { setSelectedProvider(k); setProviderError(null); }}
+                                />
+                            ))}
+                        </div>
 
                         {/* Conditional fields */}
                         {selectedProvider === PROVIDER_OLLAMA && (
@@ -589,6 +579,7 @@ export default function SetupWizard({ onComplete }) {
                                 {allModels.map((m) => (
                                     <ModelCard
                                         key={m.name}
+                                        name={m.name}
                                         model={m}
                                         selected={selectedMain === m.name}
                                         onSelect={setSelectedMain}
@@ -635,6 +626,7 @@ export default function SetupWizard({ onComplete }) {
                                 {visionModels.map((m) => (
                                     <ModelCard
                                         key={m.name}
+                                        name={m.name}
                                         model={m}
                                         selected={selectedVision === m.name}
                                         onSelect={setSelectedVision}
