@@ -14,6 +14,7 @@ from googleapiclient.errors import HttpError
 
 from integrations._rpc import RpcError
 from integrations.brokers.google_workspace_broker._calendar_client import CalendarClient
+from integrations.brokers.google_workspace_broker._contacts_client import ContactsClient
 from integrations.brokers.google_workspace_broker._drive_client import DriveClient, _run_sync
 from integrations.brokers.google_workspace_broker._gmail_client import GmailClient
 
@@ -32,6 +33,8 @@ _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     "search_messages": "read",
     "fetch_message": "read",
     "fetch_attachment": "read",
+    "list_contacts": "read",
+    "search_contacts": "read",
 }
 
 
@@ -55,6 +58,7 @@ class VerbDispatcher:
         self._drive: DriveClient | None = None
         self._calendar: CalendarClient | None = None
         self._gmail: GmailClient | None = None
+        self._contacts: ContactsClient | None = None
 
         scopes = set(creds.scopes or ())
         if "https://www.googleapis.com/auth/drive.readonly" in scopes:
@@ -63,6 +67,8 @@ class VerbDispatcher:
             self._calendar = CalendarClient(creds)
         if "https://www.googleapis.com/auth/gmail.readonly" in scopes:
             self._gmail = GmailClient(creds)
+        if "https://www.googleapis.com/auth/contacts.readonly" in scopes:
+            self._contacts = ContactsClient(creds)
 
         self._handlers: dict[str, _Handler] = {}
         if self._drive is not None:
@@ -79,6 +85,9 @@ class VerbDispatcher:
             self._handlers["search_messages"] = self._handle_search_messages
             self._handlers["fetch_message"] = self._handle_fetch_message
             self._handlers["fetch_attachment"] = self._handle_fetch_attachment
+        if self._contacts is not None:
+            self._handlers["list_contacts"] = self._handle_list_contacts
+            self._handlers["search_contacts"] = self._handle_search_contacts
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
@@ -202,9 +211,9 @@ class VerbDispatcher:
             raise _wrap_http_error(exc) from exc
 
         mailboxes = [
-            {"name": l.get("name", ""), "attrs": [l.get("type", "")]}
-            for l in labels
-            if l.get("name")
+            {"name": lab.get("name", ""), "attrs": [lab.get("type", "")]}
+            for lab in labels
+            if lab.get("name")
         ]
         return {"mailboxes": mailboxes}
 
@@ -266,6 +275,25 @@ class VerbDispatcher:
             "size": len(content),
         }
 
+    # --- Contacts handlers ---------------------------------------------------
+
+    async def _handle_list_contacts(self, args: dict[str, Any]) -> dict[str, Any]:
+        limit = _require_int(args, "limit", default=50)
+        try:
+            people = await _run_sync(self._contacts.list_contacts, limit)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"contacts": [_flatten_contact(p) for p in people]}
+
+    async def _handle_search_contacts(self, args: dict[str, Any]) -> dict[str, Any]:
+        query = _require_str(args, "query")
+        limit = _require_int(args, "limit", default=20)
+        try:
+            people = await _run_sync(self._contacts.search_contacts, query, limit)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"contacts": [_flatten_contact(p) for p in people]}
+
 
 # --- helpers -----------------------------------------------------------------
 
@@ -316,4 +344,28 @@ def _flatten_event(e: dict[str, Any]) -> dict[str, Any]:
         "start": start_block.get("dateTime") or start_block.get("date", ""),
         "end": end_block.get("dateTime") or end_block.get("date", ""),
         "location": e.get("location", ""),
+    }
+
+
+def _flatten_contact(person: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a People API person resource to a simple dict."""
+    names = person.get("names", [])
+    name = names[0].get("displayName", "") if names else ""
+    emails = [
+        e.get("value", "") for e in person.get("emailAddresses", [])
+        if e.get("value")
+    ]
+    phones = [
+        p.get("value", "") for p in person.get("phoneNumbers", [])
+        if p.get("value")
+    ]
+    orgs = person.get("organizations", [])
+    org = orgs[0].get("name", "") if orgs else ""
+    title = orgs[0].get("title", "") if orgs else ""
+    return {
+        "name": name,
+        "emails": emails,
+        "phones": phones,
+        "organization": org,
+        "title": title,
     }

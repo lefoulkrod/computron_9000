@@ -10,7 +10,7 @@ from integrations.brokers.google_workspace_broker._gmail_client import (
     _extract_text_body,
     _list_attachments,
 )
-from integrations.brokers.google_workspace_broker._verbs import _flatten_event
+from integrations.brokers.google_workspace_broker._verbs import _flatten_contact, _flatten_event
 
 
 @pytest.mark.unit
@@ -200,3 +200,47 @@ def test_list_attachments_skips_parts_without_filename() -> None:
 @pytest.mark.unit
 def test_list_attachments_empty() -> None:
     assert _list_attachments("msg1", {"mimeType": "text/plain"}) == []
+
+
+# ── Contacts helpers ───────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_flatten_contact_full() -> None:
+    person = {
+        "names": [{"displayName": "Alice Smith"}],
+        "emailAddresses": [{"value": "alice@example.com"}],
+        "phoneNumbers": [{"value": "+1-555-0100"}],
+        "organizations": [{"name": "Acme Corp", "title": "CEO"}],
+    }
+    assert _flatten_contact(person) == {
+        "name": "Alice Smith",
+        "emails": ["alice@example.com"],
+        "phones": ["+1-555-0100"],
+        "organization": "Acme Corp",
+        "title": "CEO",
+    }
+
+
+@pytest.mark.unit
+def test_flatten_contact_multiple_emails_and_phones() -> None:
+    person = {
+        "names": [{"displayName": "Bob"}],
+        "emailAddresses": [{"value": "bob@work.com"}, {"value": "bob@home.com"}],
+        "phoneNumbers": [{"value": "+1-555-0001"}, {"value": "+1-555-0002"}],
+        "organizations": [],
+    }
+    flat = _flatten_contact(person)
+    assert flat["emails"] == ["bob@work.com", "bob@home.com"]
+    assert flat["phones"] == ["+1-555-0001", "+1-555-0002"]
+
+
+@pytest.mark.unit
+def test_flatten_contact_minimal() -> None:
+    assert _flatten_contact({}) == {
+        "name": "",
+        "emails": [],
+        "phones": [],
+        "organization": "",
+        "title": "",
+    }

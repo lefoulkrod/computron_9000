@@ -95,4 +95,14 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_get_drive_file_metadata_tool(drive_ids))
         tools.append(build_export_drive_file_tool(drive_ids))
 
+    contacts_ids = frozenset(
+        i for i, rec in records.items()
+        if "contacts" in rec.capabilities and rec.state == "running"
+    )
+    if contacts_ids:
+        from tools.integrations.contacts.list_contacts import build_list_contacts_tool
+        from tools.integrations.contacts.search_contacts import build_search_contacts_tool
+        tools.append(build_list_contacts_tool(contacts_ids))
+        tools.append(build_search_contacts_tool(contacts_ids))
+
     return tools
