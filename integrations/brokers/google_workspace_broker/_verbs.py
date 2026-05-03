@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 import secrets
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -14,6 +15,7 @@ from googleapiclient.errors import HttpError
 from integrations._rpc import RpcError
 from integrations.brokers.google_workspace_broker._calendar_client import CalendarClient
 from integrations.brokers.google_workspace_broker._drive_client import DriveClient, _run_sync
+from integrations.brokers.google_workspace_broker._gmail_client import GmailClient
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,11 @@ _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     "export_drive_file": "read",
     "list_calendars": "read",
     "list_events": "read",
+    "list_mailboxes": "read",
+    "list_messages": "read",
+    "search_messages": "read",
+    "fetch_message": "read",
+    "fetch_attachment": "read",
 }
 
 
@@ -47,12 +54,15 @@ class VerbDispatcher:
 
         self._drive: DriveClient | None = None
         self._calendar: CalendarClient | None = None
+        self._gmail: GmailClient | None = None
 
         scopes = set(creds.scopes or ())
         if "https://www.googleapis.com/auth/drive.readonly" in scopes:
             self._drive = DriveClient(creds)
         if "https://www.googleapis.com/auth/calendar.readonly" in scopes:
             self._calendar = CalendarClient(creds)
+        if "https://www.googleapis.com/auth/gmail.readonly" in scopes:
+            self._gmail = GmailClient(creds)
 
         self._handlers: dict[str, _Handler] = {}
         if self._drive is not None:
@@ -63,6 +73,12 @@ class VerbDispatcher:
         if self._calendar is not None:
             self._handlers["list_calendars"] = self._handle_list_calendars
             self._handlers["list_events"] = self._handle_list_events
+        if self._gmail is not None:
+            self._handlers["list_mailboxes"] = self._handle_list_mailboxes
+            self._handlers["list_messages"] = self._handle_list_messages
+            self._handlers["search_messages"] = self._handle_search_messages
+            self._handlers["fetch_message"] = self._handle_fetch_message
+            self._handlers["fetch_attachment"] = self._handle_fetch_attachment
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
@@ -161,14 +177,14 @@ class VerbDispatcher:
             raise _wrap_http_error(exc) from exc
 
         events = [_flatten_event(e) for e in items]
-        cal_name = self._resolve_calendar_name(calendar_id)
+        cal_name = await _run_sync(self._resolve_calendar_name, calendar_id)
         result: dict[str, Any] = {"events": events}
         if cal_name:
             result["calendar_name"] = cal_name
         return result
 
     def _resolve_calendar_name(self, calendar_id: str) -> str | None:
-        """Best-effort lookup of a calendar's display name."""
+        """Best-effort lookup of a calendar's display name (blocking)."""
         try:
             meta = self._calendar._service.calendarList().get(
                 calendarId=calendar_id,
@@ -176,6 +192,79 @@ class VerbDispatcher:
             return meta.get("summary")
         except HttpError:
             return None
+
+    # --- Gmail handlers ------------------------------------------------------
+
+    async def _handle_list_mailboxes(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            labels = await _run_sync(self._gmail.list_labels)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        mailboxes = [
+            {"name": l.get("name", ""), "attrs": [l.get("type", "")]}
+            for l in labels
+            if l.get("name")
+        ]
+        return {"mailboxes": mailboxes}
+
+    async def _handle_list_messages(self, args: dict[str, Any]) -> dict[str, Any]:
+        folder = _require_str(args, "folder")
+        limit = _require_int(args, "limit", default=20)
+        try:
+            headers = await _run_sync(self._gmail.list_messages, folder, limit)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        for h in headers:
+            h["folder"] = folder
+        return {"headers": headers}
+
+    async def _handle_search_messages(self, args: dict[str, Any]) -> dict[str, Any]:
+        folder = _require_str(args, "folder")
+        query = _require_str(args, "query")
+        limit = _require_int(args, "limit", default=20)
+        try:
+            headers = await _run_sync(
+                self._gmail.search_messages, query, folder, limit,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        for h in headers:
+            h["folder"] = folder
+        return {"headers": headers}
+
+    async def _handle_fetch_message(self, args: dict[str, Any]) -> dict[str, Any]:
+        folder = args.get("folder", "")
+        uid = _require_str(args, "uid")
+        try:
+            message = await _run_sync(self._gmail.get_message, uid)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        message["header"]["folder"] = folder
+        return {"message": message}
+
+    async def _handle_fetch_attachment(self, args: dict[str, Any]) -> dict[str, Any]:
+        uid = _require_str(args, "uid")
+        attachment_id = _require_str(args, "attachment_id")
+        try:
+            content, filename, mime_type = await _run_sync(
+                self._gmail.get_attachment, uid, attachment_id,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        if not filename:
+            ext = mimetypes.guess_extension(mime_type) or ""
+            filename = f"attachment_{secrets.token_hex(4)}{ext}"
+        path = _write_download(self._downloads_dir, content, filename)
+        return {
+            "path": str(path),
+            "filename": filename,
+            "mime_type": mime_type,
+            "size": len(content),
+        }
 
 
 # --- helpers -----------------------------------------------------------------

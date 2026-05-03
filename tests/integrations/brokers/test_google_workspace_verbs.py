@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
+from integrations.brokers.google_workspace_broker._gmail_client import (
+    _extract_text_body,
+    _list_attachments,
+)
 from integrations.brokers.google_workspace_broker._verbs import _flatten_event
 
 
@@ -68,3 +74,129 @@ def test_flatten_prefers_datetime_over_date() -> None:
     flat = _flatten_event(raw)
     assert flat["start"] == "2026-05-05T10:00:00Z"
     assert flat["end"] == "2026-05-05T11:00:00Z"
+
+
+# ── Gmail helpers ──────────────────────────────────────────────────────────
+
+
+def _b64url(text: str) -> str:
+    return base64.urlsafe_b64encode(text.encode()).decode()
+
+
+@pytest.mark.unit
+def test_extract_text_body_simple_text_plain() -> None:
+    """Simple message with text/plain at the top level."""
+    payload = {
+        "mimeType": "text/plain",
+        "body": {"data": _b64url("Hello world")},
+    }
+    assert _extract_text_body(payload) == "Hello world"
+
+
+@pytest.mark.unit
+def test_extract_text_body_multipart() -> None:
+    """Multipart message — extracts the text/plain part."""
+    payload = {
+        "mimeType": "multipart/alternative",
+        "body": {"size": 0},
+        "parts": [
+            {
+                "mimeType": "text/plain",
+                "body": {"data": _b64url("Plain version")},
+            },
+            {
+                "mimeType": "text/html",
+                "body": {"data": _b64url("<p>HTML version</p>")},
+            },
+        ],
+    }
+    assert _extract_text_body(payload) == "Plain version"
+
+
+@pytest.mark.unit
+def test_extract_text_body_nested_multipart() -> None:
+    """Deeply nested MIME structure — text/plain inside multipart/mixed."""
+    payload = {
+        "mimeType": "multipart/mixed",
+        "body": {"size": 0},
+        "parts": [
+            {
+                "mimeType": "multipart/alternative",
+                "body": {"size": 0},
+                "parts": [
+                    {
+                        "mimeType": "text/plain",
+                        "body": {"data": _b64url("Nested body")},
+                    },
+                ],
+            },
+            {
+                "mimeType": "application/pdf",
+                "filename": "report.pdf",
+                "body": {"attachmentId": "att1", "size": 1024},
+            },
+        ],
+    }
+    assert _extract_text_body(payload) == "Nested body"
+
+
+@pytest.mark.unit
+def test_extract_text_body_empty_payload() -> None:
+    assert _extract_text_body({}) == ""
+
+
+@pytest.mark.unit
+def test_list_attachments_collects_from_parts() -> None:
+    payload = {
+        "mimeType": "multipart/mixed",
+        "parts": [
+            {
+                "mimeType": "text/plain",
+                "body": {"data": _b64url("body"), "size": 4},
+            },
+            {
+                "mimeType": "application/pdf",
+                "filename": "report.pdf",
+                "body": {"attachmentId": "att_abc", "size": 2048},
+            },
+            {
+                "mimeType": "image/png",
+                "filename": "chart.png",
+                "body": {"attachmentId": "att_def", "size": 512},
+            },
+        ],
+    }
+    atts = _list_attachments("msg1", payload)
+    assert len(atts) == 2
+    assert atts[0] == {
+        "id": "att_abc",
+        "filename": "report.pdf",
+        "mime_type": "application/pdf",
+        "size": 2048,
+    }
+    assert atts[1] == {
+        "id": "att_def",
+        "filename": "chart.png",
+        "mime_type": "image/png",
+        "size": 512,
+    }
+
+
+@pytest.mark.unit
+def test_list_attachments_skips_parts_without_filename() -> None:
+    """Inline parts (no filename) are not listed as downloadable attachments."""
+    payload = {
+        "mimeType": "multipart/mixed",
+        "parts": [
+            {
+                "mimeType": "image/png",
+                "body": {"attachmentId": "inline_img", "size": 100},
+            },
+        ],
+    }
+    assert _list_attachments("msg1", payload) == []
+
+
+@pytest.mark.unit
+def test_list_attachments_empty() -> None:
+    assert _list_attachments("msg1", {"mimeType": "text/plain"}) == []
