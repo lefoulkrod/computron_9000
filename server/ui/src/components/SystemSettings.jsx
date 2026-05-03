@@ -6,6 +6,7 @@ import CompactionIcon from './icons/CompactionIcon';
 import WrenchIcon from './icons/WrenchIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
 import Button from './primitives/Button.jsx';
+import StatusDot from './StatusDot.jsx';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 
 export default function SystemSettings({ onRunWizard }) {
@@ -224,8 +225,8 @@ export default function SystemSettings({ onRunWizard }) {
             <div className={styles.sectionLabel}>Ollama Connection</div>
 
             <div className={styles.settingRow}>
-                <div className={styles.settingIcon}>
-                    <span className={`${styles.statusDot} ${connected ? styles.statusConnected : styles.statusDisconnected}`} />
+                <div className={styles.settingIcon} style={{ opacity: 1 }}>
+                    <StatusDot status={connected ? 'connected' : 'disconnected'} />
                 </div>
                 <div className={styles.settingInfo}>
                     <span className={styles.settingTitle}>

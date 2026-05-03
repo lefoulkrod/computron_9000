@@ -3,6 +3,7 @@ import { formatCron, formatTime, formatTimeUntil, formatDuration } from './goalU
 import TaskOutputModal from './TaskOutputModal.jsx';
 import Button from '../primitives/Button.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
+import StatusDot from '../StatusDot.jsx';
 import styles from './GoalDetailPanel.module.css';
 
 /**
@@ -31,11 +32,12 @@ function getNextRun(cron) {
     return null;
 }
 
-function statusDotClass(status, isRunning) {
-    if (isRunning || status === 'running') return styles.statusDotRunning;
-    if (status === 'completed' || status === 'active') return styles.statusDotComplete;
-    if (status === 'failed') return styles.statusDotError;
-    return '';
+function goalDotStatus(status, isRunning) {
+    if (isRunning || status === 'running') return 'running';
+    if (status === 'active') return 'ready';
+    if (status === 'completed') return 'complete';
+    if (status === 'failed') return 'error';
+    return 'idle';
 }
 
 function statusLabel(status, isRunning) {
@@ -90,7 +92,7 @@ export default function GoalDetailPanel({
             {/* Actions bar */}
             <div className={styles.actionsBar}>
                 <span className={styles.activeLabel}>
-                    <span className={`${styles.statusDot} ${statusDotClass(goal.status, goal.is_running)}`} />
+                    <StatusDot status={goalDotStatus(goal.status, goal.is_running)} />
                     {statusLabel(goal.status, goal.is_running)}
                 </span>
                 <div className={styles.actionsRight}>
@@ -219,19 +221,13 @@ function RunRow({ run, taskMap, isExpanded, onToggle, onViewOutput, onDelete }) 
         run.status === 'completed' ? 'COMPLETE'
         : run.status === 'failed' ? 'FAILED'
         : String(run.status || '').toUpperCase();
-    const dotClass =
-        run.status === 'completed' ? styles.statusDotComplete
-        : run.status === 'failed' ? styles.statusDotError
-        : run.status === 'running' ? styles.statusDotRunning
-        : '';
-
     return (
         <div className={styles.row}>
             <div className={styles.rowHead} onClick={onToggle}>
                 <span className={styles.chevron}>
                     <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
                 </span>
-                <span className={`${styles.statusDot} ${dotClass}`} />
+                <StatusDot status={run.status} />
                 <div className={styles.rowMain}>
                     <span className={styles.rowTitle}>Run #{run.run_number}</span>
                     <span className={styles.rowMeta}>
@@ -268,12 +264,6 @@ function RunRow({ run, taskMap, isExpanded, onToggle, onViewOutput, onDelete }) 
                                 const task = taskMap[taskResult.task_id];
                                 const taskDuration = formatDuration(taskResult.started_at, taskResult.completed_at);
                                 const hasOutput = taskResult.result || taskResult.error;
-                                const trDotClass =
-                                    taskResult.status === 'completed' ? styles.statusDotComplete
-                                    : taskResult.status === 'failed' ? styles.statusDotError
-                                    : taskResult.status === 'running' ? styles.statusDotRunning
-                                    : '';
-
                                 return (
                                     <tr key={taskResult.id}>
                                         <td>{task?.description || taskResult.task_id}</td>
@@ -282,7 +272,7 @@ function RunRow({ run, taskMap, isExpanded, onToggle, onViewOutput, onDelete }) 
                                                 {task?.agent_profile_name || '—'}
                                             </span>
                                         </td>
-                                        <td><span className={`${styles.statusDot} ${trDotClass}`} /></td>
+                                        <td><StatusDot status={taskResult.status} /></td>
                                         <td>{taskDuration || <span className={styles.skipped}>—</span>}</td>
                                         <td>
                                             {hasOutput && (

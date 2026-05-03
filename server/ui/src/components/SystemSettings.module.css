@@ -93,23 +93,6 @@
     outline-offset: 2px;
 }
 
-/* Status dot */
-.statusDot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
-
-.statusConnected {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-muted);
-}
-
-.statusDisconnected {
-    background: var(--danger);
-    box-shadow: 0 0 6px var(--danger-muted);
-}
 
 /* Action buttons (Refresh, Run Setup Wizard) now render via the
  * Button primitive — see ./primitives/Button.jsx. */

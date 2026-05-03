@@ -236,22 +236,6 @@
     border-color: var(--danger-muted);
 }
 
-.statusDot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-}
-
-.dotRunning {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-muted);
-}
-
-.dotError {
-    background: var(--danger);
-}
 
 /* ── Detail pane (mirrors ProfileBuilder layout) ──────────────────── */
 .detailPane {

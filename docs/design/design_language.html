@@ -554,6 +554,7 @@ body {
   display: inline-block;
 }
 
+.dot-ready  { background: var(--success); box-shadow: 0 0 6px var(--success-muted); }
 .dot-running {
   background: var(--success);
   box-shadow: 0 0 6px var(--success-muted);
@@ -3254,6 +3255,13 @@ body {
         </thead>
         <tbody>
           <tr>
+            <td><span class="vocab-state">Ready</span></td>
+            <td><code>--success</code></td>
+            <td><span class="vocab-dot" style="background:var(--success);box-shadow:0 0 6px var(--success-muted)"></span><span style="color:var(--text-tertiary)">solid + glow</span></td>
+            <td><code>--success-muted</code></td>
+            <td>Connected integrations, enabled goals, healthy services</td>
+          </tr>
+          <tr>
             <td><span class="vocab-state">Running</span></td>
             <td><code>--success</code></td>
             <td><span class="vocab-dot" style="background:var(--success);box-shadow:0 0 6px var(--success-muted);animation:pulse 2s infinite"></span><span style="color:var(--text-tertiary)">pulsing</span></td>
@@ -3441,6 +3449,7 @@ body {
     <div class="subsection">
       <div class="subsection-label">Status Dot</div>
       <div class="component-row" style="gap: 16px">
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-ready"></span><span style="font-size:12px;color:var(--text-secondary)">Ready (steady green)</span></span>
         <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-running"></span><span style="font-size:12px;color:var(--text-secondary)">Running (pulses)</span></span>
         <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-complete"></span><span style="font-size:12px;color:var(--text-secondary)">Complete</span></span>
         <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-error"></span><span style="font-size:12px;color:var(--text-secondary)">Error</span></span>
@@ -3598,7 +3607,7 @@ body {
             <div class="desc">Endpoint for the inference backend.</div>
           </div>
           <div class="control">
-            <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> CONNECTED</span>
+            <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-ready" style="width:5px;height:5px"></span> CONNECTED</span>
           </div>
         </div>
       </div>
@@ -4341,7 +4350,7 @@ body {
           <div class="fs-row-desc">Endpoint for the inference backend.</div>
         </div>
         <div class="fs-row-control">
-          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> CONNECTED</span>
+          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-ready" style="width:5px;height:5px"></span> CONNECTED</span>
         </div>
       </div>
       <div class="fs-row">
@@ -4439,13 +4448,13 @@ body {
     <div class="sd-page" style="max-width:720px">
       <div class="sd-header">
         <div class="sd-title-row">
-          <span class="status-dot dot-running"></span>
+          <span class="status-dot dot-ready"></span>
           <h2 class="sd-title">Scrape API docs daily</h2>
           <button class="btn btn-outline" style="font-size:11px;height:28px;margin-left:auto"><i class="bi bi-pause-fill" style="font-size:11px"></i> Pause</button>
           <button class="btn btn-outline" style="font-size:11px;height:28px"><i class="bi bi-play-fill" style="font-size:11px"></i> Run now</button>
         </div>
         <div class="sd-meta-row">
-          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> ACTIVE</span>
+          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-ready" style="width:5px;height:5px"></span> ACTIVE</span>
           <span class="sd-meta-item">cron: 0 6 * * *</span>
           <span class="sd-meta-item">tz: UTC</span>
           <span class="sd-meta-item">next: 06:00</span>

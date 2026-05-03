@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Button from '../primitives/Button.jsx';
 import Callout from '../primitives/Callout.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
+import StatusDot from '../StatusDot.jsx';
 import AddIntegrationModal from './AddIntegrationModal.jsx';
 import styles from './IntegrationsTab.module.css';
 
@@ -23,19 +24,19 @@ const SLUG_META = {
 // every list/add response — we just translate it into the row chrome.
 const STATE_VIEW = {
     running: {
-        dotClass: 'dotRunning',
+        dotStatus: 'ready',
         badgeClass: 'badgeSuccess',
         label: 'connected',
         helper: null,
     },
     auth_failed: {
-        dotClass: 'dotError',
+        dotStatus: 'error',
         badgeClass: 'badgeDanger',
         label: 'auth failed',
         helper: 'Credentials were rejected. Delete and re-add to refresh.',
     },
     broken: {
-        dotClass: 'dotError',
+        dotStatus: 'error',
         badgeClass: 'badgeDanger',
         label: 'not running',
         helper: 'Couldn\'t reach this integration. Delete and re-add.',
@@ -314,7 +315,7 @@ function ListRow({ row, selected, onClick }) {
                 <div className={styles.rowTitle}>
                     <span className={styles.rowLabelText}>{row.label}</span>
                     <span className={`${styles.badge} ${styles[view.badgeClass]}`}>
-                        <span className={`${styles.statusDot} ${styles[view.dotClass]}`} />
+                        <StatusDot status={view.dotStatus} />
                         {view.label}
                     </span>
                 </div>
