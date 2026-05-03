@@ -12,6 +12,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 
 from integrations._rpc import RpcError
+from integrations.brokers.google_workspace_broker._calendar_client import CalendarClient
 from integrations.brokers.google_workspace_broker._drive_client import DriveClient, _run_sync
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ _VERB_TYPE: dict[str, Literal["read", "write"]] = {
     "search_drive_files": "read",
     "get_drive_file_metadata": "read",
     "export_drive_file": "read",
+    "list_calendars": "read",
+    "list_events": "read",
 }
 
 
@@ -43,9 +46,13 @@ class VerbDispatcher:
         self._downloads_dir = downloads_dir
 
         self._drive: DriveClient | None = None
+        self._calendar: CalendarClient | None = None
+
         scopes = set(creds.scopes or ())
         if "https://www.googleapis.com/auth/drive.readonly" in scopes:
             self._drive = DriveClient(creds)
+        if "https://www.googleapis.com/auth/calendar.readonly" in scopes:
+            self._calendar = CalendarClient(creds)
 
         self._handlers: dict[str, _Handler] = {}
         if self._drive is not None:
@@ -53,6 +60,9 @@ class VerbDispatcher:
             self._handlers["search_drive_files"] = self._handle_search_drive_files
             self._handlers["get_drive_file_metadata"] = self._handle_get_drive_file_metadata
             self._handlers["export_drive_file"] = self._handle_export_drive_file
+        if self._calendar is not None:
+            self._handlers["list_calendars"] = self._handle_list_calendars
+            self._handlers["list_events"] = self._handle_list_events
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
@@ -119,6 +129,54 @@ class VerbDispatcher:
             "size": len(content),
         }
 
+    # --- Calendar handlers ---------------------------------------------------
+
+    async def _handle_list_calendars(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            items = await _run_sync(self._calendar.list_calendars)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        calendars = [
+            {"name": c.get("summary", "(unnamed)"), "url": c["id"]}
+            for c in items
+            if "id" in c
+        ]
+        return {"calendars": calendars}
+
+    async def _handle_list_events(self, args: dict[str, Any]) -> dict[str, Any]:
+        calendar_id = _require_str(args, "calendar_url")
+        days_forward = _require_int(args, "days_forward", default=30)
+        days_back = _require_int(args, "days_back", default=0)
+        limit = _require_int(args, "limit", default=50)
+        try:
+            items = await _run_sync(
+                self._calendar.list_events,
+                calendar_id,
+                days_forward=days_forward,
+                days_back=days_back,
+                limit=limit,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+
+        events = [_flatten_event(e) for e in items]
+        cal_name = self._resolve_calendar_name(calendar_id)
+        result: dict[str, Any] = {"events": events}
+        if cal_name:
+            result["calendar_name"] = cal_name
+        return result
+
+    def _resolve_calendar_name(self, calendar_id: str) -> str | None:
+        """Best-effort lookup of a calendar's display name."""
+        try:
+            meta = self._calendar._service.calendarList().get(
+                calendarId=calendar_id,
+            ).execute()
+            return meta.get("summary")
+        except HttpError:
+            return None
+
 
 # --- helpers -----------------------------------------------------------------
 
@@ -157,3 +215,16 @@ def _write_download(dir_path: Path, payload: bytes, filename: str) -> Path:
     dest.write_bytes(payload)
     dest.chmod(0o640)
     return dest
+
+
+def _flatten_event(e: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a Google Calendar event to the shape the agent tools expect."""
+    start_block = e.get("start", {})
+    end_block = e.get("end", {})
+    return {
+        "uid": e.get("id", ""),
+        "summary": e.get("summary", ""),
+        "start": start_block.get("dateTime") or start_block.get("date", ""),
+        "end": end_block.get("dateTime") or end_block.get("date", ""),
+        "location": e.get("location", ""),
+    }

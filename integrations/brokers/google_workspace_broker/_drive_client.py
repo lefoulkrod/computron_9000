@@ -129,7 +129,7 @@ class DriveClient:
         return buf.getvalue(), name, mime
 
 
-async def _run_sync(fn, *args):  # noqa: ANN001, ANN002, ANN202
+async def _run_sync(fn, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
     """Run a blocking googleapiclient call on the default executor."""
-    return await asyncio.to_thread(fn, *args)
+    return await asyncio.to_thread(fn, *args, **kwargs)
 
