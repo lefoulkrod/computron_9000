@@ -279,7 +279,7 @@ export default function SetupWizard({ onComplete }) {
             }
 
             // Probe the connection by listing models
-            const modelsRes = await fetch('/api/models');
+            const modelsRes = await apiFetch('/api/models');
             const modelsData = await modelsRes.json().catch(() => ({}));
             if (!modelsRes.ok) {
                 setProviderError(modelsData.message || 'Could not connect to provider');
