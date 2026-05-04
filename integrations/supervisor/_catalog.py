@@ -101,9 +101,25 @@ _GMAIL = CatalogEntry(
 )
 
 
+_LLM_PROXY = CatalogEntry(
+    slug="llm_proxy",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities=frozenset({"llm_proxy"}),
+    # All three fields come from the auth_blob: api_key is the secret,
+    # provider and base_url are stored encrypted alongside it for convenience.
+    env_injection={
+        "api_key": "LLM_API_KEY",
+        "provider": "LLM_PROVIDER",
+        "base_url": "LLM_BASE_URL",
+    },
+    host_paths=(),
+)
+
+
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
     "gmail": _GMAIL,
+    "llm_proxy": _LLM_PROXY,
 }
 
 

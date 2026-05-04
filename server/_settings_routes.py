@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 # When any of these fields change, the provider singleton and config cache must
 # be invalidated so the next request picks up the new connection details.
-_LLM_FIELDS: frozenset[str] = frozenset({"llm_provider", "llm_base_url", "llm_api_key"})
+# llm_api_key is no longer in settings — keys live in the supervisor vault.
+_LLM_FIELDS: frozenset[str] = frozenset({"llm_provider", "llm_base_url"})
 
 
 async def handle_get_settings(_request: web.Request) -> web.Response:

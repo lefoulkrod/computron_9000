@@ -41,22 +41,33 @@ _SUFFIX_NON_ALLOWED = re.compile(r"[^a-z0-9_-]")
 _SUFFIX_DASH_RUNS = re.compile(r"-+")
 
 
-def _derive_suffix_from_email(auth_blob: dict[str, Any] | None) -> str | None:
-    """Sanitize ``auth_blob['email']``'s local-part into a usable user suffix.
+def _derive_suffix(auth_blob: dict[str, Any] | None) -> str | None:
+    """Derive a usable user suffix from auth_blob.
 
-    Returns ``None`` if there's no email or the cleaned local-part is empty.
-    The supervisor enforces the actual format invariant — this is just here
-    so the frontend can submit credentials without thinking up an ID.
+    For email-based integrations (gmail, icloud) uses the email local-part.
+    For provider-based integrations (llm_proxy) falls back to ``provider``.
+    Returns ``None`` if neither field is present or yields a non-empty result.
+    The supervisor enforces the actual format invariant.
     """
     if not isinstance(auth_blob, dict):
         return None
+
+    # Email-based integrations: use the local part of the email address.
     email = auth_blob.get("email")
-    if not isinstance(email, str):
-        return None
-    local = email.split("@", 1)[0].lower()
-    cleaned = _SUFFIX_DASH_RUNS.sub("-", _SUFFIX_NON_ALLOWED.sub("-", local)).strip("-")
-    cleaned = cleaned[:48]
-    return cleaned or None
+    if isinstance(email, str) and email:
+        local = email.split("@", 1)[0].lower()
+        cleaned = _SUFFIX_DASH_RUNS.sub("-", _SUFFIX_NON_ALLOWED.sub("-", local)).strip("-")
+        return cleaned[:48] or None
+
+    # Provider-based integrations (e.g. llm_proxy): use the provider name.
+    provider = auth_blob.get("provider")
+    if isinstance(provider, str) and provider:
+        cleaned = _SUFFIX_DASH_RUNS.sub(
+            "-", _SUFFIX_NON_ALLOWED.sub("-", provider.lower())
+        ).strip("-")
+        return cleaned[:48] or None
+
+    return None
 
 
 async def _supervisor_rpc(verb: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -145,12 +156,12 @@ async def handle_add_integration(request: web.Request) -> web.Response:
             status=400,
         )
 
-    # user_suffix is derived from auth_blob.email — clients never set it.
-    # Keeps integration IDs deterministic and out of the user's mental model.
-    derived = _derive_suffix_from_email(body.get("auth_blob"))
+    # user_suffix is derived from auth_blob (email local-part or provider name).
+    # Clients never set it; keeps integration IDs deterministic.
+    derived = _derive_suffix(body.get("auth_blob"))
     if not derived:
         return _error_response(
-            {"code": "BAD_REQUEST", "message": "auth_blob.email is required"}
+            {"code": "BAD_REQUEST", "message": "auth_blob must include 'email' or 'provider'"}
         )
     body["user_suffix"] = derived
 

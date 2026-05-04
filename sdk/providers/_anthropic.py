@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
+from pathlib import Path
 from typing import Any
 
 from ._base import BaseAPIProvider
@@ -26,16 +27,37 @@ _STOP_REASON_MAP: dict[str, str] = {
 class AnthropicProvider(BaseAPIProvider):
     """LLM provider backed by the Anthropic Messages API."""
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        *,
+        proxy_socket: Path | None = None,
+    ) -> None:
         super().__init__(api_key, base_url)
         import anthropic
 
-        kwargs: dict[str, Any] = {}
-        if api_key:
-            kwargs["api_key"] = api_key
-        if base_url:
-            kwargs["base_url"] = base_url
-        self._client = anthropic.AsyncAnthropic(**kwargs)
+        if proxy_socket is not None:
+            # Route all SDK traffic through the llm_proxy broker's UDS.
+            # The Anthropic SDK adds /v1/messages paths relative to base_url;
+            # using "http://localhost" means it sends to http://localhost/v1/...
+            # which the proxy receives and forwards to the real upstream.
+            import httpx
+            transport = httpx.AsyncHTTPTransport(uds=str(proxy_socket))
+            http_client = httpx.AsyncClient(transport=transport)
+            self._client = anthropic.AsyncAnthropic(
+                http_client=http_client,
+                base_url="http://localhost",
+                api_key="proxy",
+            )
+        else:
+            kwargs: dict[str, Any] = {}
+            if api_key:
+                kwargs["api_key"] = api_key
+            if base_url:
+                kwargs["base_url"] = base_url
+            self._client = anthropic.AsyncAnthropic(**kwargs)
+
         self._model_cache: list[str] | None = None
         self._model_cache_at: float = 0.0
 

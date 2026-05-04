@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
+from pathlib import Path
 from typing import Any
 
 from config import LLMConfig
@@ -30,18 +31,38 @@ _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 class OpenAIProvider(BaseAPIProvider):
     """LLM provider backed by the OpenAI API or any OpenAI-compatible endpoint."""
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        *,
+        proxy_socket: Path | None = None,
+    ) -> None:
         super().__init__(api_key, base_url)
         # Lazy import — the openai package is an optional heavy dep.
         import openai
 
-        kwargs: dict[str, Any] = {}
-        if base_url:
-            kwargs["base_url"] = base_url
-        # Many OpenAI-compatible servers require a non-empty api_key even when
-        # auth is disabled; use a placeholder so the SDK doesn't complain.
-        kwargs["api_key"] = api_key or "not-required"
-        self._client = openai.AsyncOpenAI(**kwargs)
+        if proxy_socket is not None:
+            # Route all SDK traffic through the llm_proxy broker's UDS.
+            # The broker injects the real API key; we pass a placeholder so
+            # the SDK doesn't complain about a missing key.
+            import httpx
+            transport = httpx.AsyncHTTPTransport(uds=str(proxy_socket))
+            http_client = httpx.AsyncClient(transport=transport)
+            self._client = openai.AsyncOpenAI(
+                http_client=http_client,
+                base_url="http://localhost/v1",
+                api_key="proxy",
+            )
+        else:
+            kwargs: dict[str, Any] = {}
+            if base_url:
+                kwargs["base_url"] = base_url
+            # Many OpenAI-compatible servers require a non-empty api_key even when
+            # auth is disabled; use a placeholder so the SDK doesn't complain.
+            kwargs["api_key"] = api_key or "not-required"
+            self._client = openai.AsyncOpenAI(**kwargs)
+
         self._model_cache: list[str] | None = None
         self._model_cache_at: float = 0.0
 

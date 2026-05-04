@@ -175,9 +175,12 @@ class IntegrationsConfig(BaseModel):
     The app server talks to the integrations supervisor over a Unix Domain
     Socket at ``app_sock_path``. Route handlers and tool handlers both
     read this path from config rather than being passed it explicitly.
+    ``sockets_dir`` is where each broker's UDS socket lives; the provider
+    layer uses it to locate the llm_proxy broker socket.
     """
 
     app_sock_path: str = "/run/cvault/app.sock"
+    sockets_dir: str = "/run/cvault"
 
 
 class AppConfig(BaseModel):

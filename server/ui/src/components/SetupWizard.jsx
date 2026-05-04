@@ -255,18 +255,64 @@ export default function SetupWizard({ onComplete }) {
                 ? 'openai'
                 : 'ollama';
 
-        const settingsBody = { llm_provider: providerName };
-
-        if (selectedProvider === PROVIDER_OLLAMA) {
-            settingsBody.llm_base_url = providerUrl || 'http://host.docker.internal:11434';
-        } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && providerUrl) {
-            settingsBody.llm_base_url = providerUrl;
-        }
-        if (providerApiKey) {
-            settingsBody.llm_api_key = providerApiKey;
-        }
-
         try {
+            // Cloud API and OpenAI-compat with an API key: store the key encrypted
+            // in the supervisor vault via the llm_proxy integration.
+            const needsProxy = selectedProvider === PROVIDER_CLOUD ||
+                (selectedProvider === PROVIDER_OPENAI_COMPAT && !!providerApiKey);
+
+            if (needsProxy) {
+                const DEFAULT_UPSTREAM = {
+                    anthropic: 'https://api.anthropic.com',
+                    openai: 'https://api.openai.com',
+                };
+                // Strip trailing /v1 so the proxy can reconstruct full paths.
+                const stripV1 = (url) => url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+                const upstreamBase = selectedProvider === PROVIDER_OPENAI_COMPAT
+                    ? stripV1(providerUrl || 'http://localhost:1234')
+                    : (DEFAULT_UPSTREAM[cloudProvider] || DEFAULT_UPSTREAM.openai);
+
+                // Best-effort removal of any existing proxy for this provider
+                // (e.g. if the user navigated back and is re-configuring).
+                try {
+                    await apiFetch(`/api/integrations/llm_proxy_${providerName}`, { method: 'DELETE' });
+                } catch (_) { /* 404 or supervisor offline — handled below */ }
+
+                const integRes = await apiFetch('/api/integrations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        slug: 'llm_proxy',
+                        label: selectedProvider === PROVIDER_CLOUD
+                            ? `${cloudProvider.charAt(0).toUpperCase() + cloudProvider.slice(1)} API`
+                            : 'OpenAI-compatible',
+                        auth_blob: {
+                            api_key: providerApiKey,
+                            provider: providerName,
+                            base_url: upstreamBase,
+                        },
+                        write_allowed: false,
+                    }),
+                });
+                if (!integRes.ok) {
+                    const data = await integRes.json().catch(() => ({}));
+                    const msg = data.error?.message || data.error || `Failed to store API key (${integRes.status})`;
+                    setProviderError(msg);
+                    return;
+                }
+            }
+
+            // Save provider + connection settings (no api_key — it's in the vault).
+            const settingsBody = { llm_provider: providerName };
+            if (selectedProvider === PROVIDER_OLLAMA) {
+                settingsBody.llm_base_url = providerUrl || 'http://host.docker.internal:11434';
+            } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && !providerApiKey) {
+                // No API key: direct connection using the user-supplied base URL.
+                if (providerUrl) settingsBody.llm_base_url = providerUrl;
+            }
+            // For cloud and compat-with-key: the proxy broker knows the upstream URL;
+            // llm_base_url is not needed in settings.
+
             const settingsRes = await apiFetch('/api/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },

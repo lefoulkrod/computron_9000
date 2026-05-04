@@ -96,11 +96,14 @@ class TestSettingsUpdate:
         u = SettingsUpdate(
             llm_provider="openai",
             llm_base_url="http://localhost:1234/v1",
-            llm_api_key="sk-test",
         )
         assert u.llm_provider == "openai"
         assert u.llm_base_url == "http://localhost:1234/v1"
-        assert u.llm_api_key == "sk-test"
+
+    def test_llm_api_key_rejected(self):
+        """llm_api_key is no longer a settings field — keys live in the vault."""
+        with pytest.raises(ValidationError, match="Extra inputs"):
+            SettingsUpdate(llm_api_key="sk-test")
 
     def test_llm_base_url_rejects_non_http_scheme(self):
         """file:// and other dangerous schemes must be rejected."""
