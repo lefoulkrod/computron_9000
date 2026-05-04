@@ -8,7 +8,7 @@ exchanging codes for tokens,
 Lifecycle:
 
 1. UI POSTs ``/api/integrations/oauth/start`` with client_id,
-   client_secret, scopes, slug, user_suffix, label, write_allowed.
+   client_secret, scopes, slug, user_suffix, label, permissions.
 2. Route handler computes ``redirect_uri`` from the request host and
    calls :meth:`OAuthIntegrationManager.start`. The flow builds an authorize URL with
    a fresh ``state`` token, registers a :class:`PendingOAuthIntegration`, returns
@@ -82,7 +82,7 @@ class PendingOAuthIntegration:
     user_suffix: str
     label: str
     scopes: list[str]
-    write_allowed: bool
+    permissions_raw: dict[str, str]
     redirect_uri: str
     authorize_url: str
     expires_at: float
@@ -109,7 +109,7 @@ class OAuthIntegrationManager:
         client_id: str,
         client_secret: str,
         scopes: list[str],
-        write_allowed: bool,
+        permissions_raw: dict[str, str],
         redirect_uri: str,
     ) -> PendingOAuthIntegration:
         """Build the Google authorize URL and register a pending record.
@@ -167,7 +167,7 @@ class OAuthIntegrationManager:
             user_suffix=user_suffix,
             label=label,
             scopes=list(scopes),
-            write_allowed=write_allowed,
+            permissions_raw=dict(permissions_raw),
             redirect_uri=redirect_uri,
             authorize_url=authorize_url,
             expires_at=now + _PENDING_TTL_SECONDS,

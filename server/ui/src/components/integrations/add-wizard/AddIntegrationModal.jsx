@@ -13,12 +13,13 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         email: '',
         password: '',
         label: '',
-        writeAllowed: false,
+        permissions: {},
     });
     const [oauth, setOauth] = useState({
         clientId: '',
         clientSecret: '',
         capabilities: {},
+        access: {},
         pending: null,
         status: null,
     });
@@ -55,7 +56,11 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         email,
                         password: form.password.replace(/\s+/g, ''),
                     },
-                    write_allowed: form.writeAllowed,
+                    permissions: Object.fromEntries(
+                        (provider.capabilities || []).map(
+                            cap => [cap, form.permissions[cap] || 'r'],
+                        ),
+                    ),
                 }),
             });
             const body = await resp.json().catch(() => ({}));
@@ -84,9 +89,15 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         setSubmitting(true);
         setError(null);
         const scopes = [...(provider.baseScopes || [])];
+        const permissions = {};
         for (const group of provider.capabilityGroups) {
             if (oauth.capabilities[group.id]) {
-                scopes.push(...group.scopes);
+                scopes.push(...group.readScopes);
+                const access = oauth.access[group.id] || 'r';
+                if (access === 'rw' && group.writeScopes?.length) {
+                    scopes.push(...group.writeScopes);
+                }
+                permissions[group.id] = access;
             }
         }
         const email = form.email.trim();
@@ -108,7 +119,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                     client_id: oauth.clientId.trim(),
                     client_secret: oauth.clientSecret.trim(),
                     scopes,
-                    write_allowed: form.writeAllowed,
+                    permissions,
                 }),
             });
             const body = await resp.json().catch(() => ({}));
@@ -195,12 +206,15 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                             setStep(1);
                             if (p.authFlow === 'oauth_device') {
                                 const caps = {};
+                                const access = {};
                                 for (const g of p.capabilityGroups) {
-                                    caps[g.id] = !!g.defaultChecked;
+                                    caps[g.id] = true;
+                                    access[g.id] = g.defaultAccess || 'r';
                                 }
                                 setOauth({
                                     clientId: '', clientSecret: '',
-                                    capabilities: caps, pending: null, status: null,
+                                    capabilities: caps, access,
+                                    pending: null, status: null,
                                 });
                             }
                         }}
@@ -216,11 +230,12 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                             setResult(null);
                             setStep(1);
                             setForm({
-                                email: '', password: '', label: '', writeAllowed: false,
+                                email: '', password: '', label: '', permissions: {},
                             });
                             setOauth({
                                 clientId: '', clientSecret: '',
-                                capabilities: {}, pending: null, status: null,
+                                capabilities: {}, access: {},
+                                pending: null, status: null,
                             });
                             setError(null);
                         }}

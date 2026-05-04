@@ -675,5 +675,66 @@
     word-break: break-all;
 }
 
+/* ── Permission rows (app-password per-capability select) ── */
+.permStack {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.permRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.permRow:last-child {
+    border-bottom: none;
+}
+
+.permLabel {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* ── Capability row (checkbox + access dropdown) ���───────── */
+.capLabel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.accessSelect {
+    flex-shrink: 0;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--canvas);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 150ms var(--ease);
+}
+
+.accessSelect:focus {
+    border-color: var(--accent);
+}
+
+.accessSelect:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 /* Buttons: footer Cancel / Back / Next / Save / etc. now render via the
  * Button primitive — see ../primitives/Button.jsx. */

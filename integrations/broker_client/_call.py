@@ -27,7 +27,7 @@ from integrations.broker_client._errors import (
     IntegrationAuthFailed,
     IntegrationError,
     IntegrationNotConnected,
-    IntegrationWriteDenied,
+    IntegrationPermissionDenied,
 )
 
 
@@ -91,8 +91,8 @@ async def call(
         message = error.get("message", "")
         if code == "AUTH":
             raise IntegrationAuthFailed(f"{integration_id} {verb}: {message}")
-        if code == "WRITE_DENIED":
-            raise IntegrationWriteDenied(f"{integration_id} {verb}: {message}")
+        if code == "PERMISSION_DENIED":
+            raise IntegrationPermissionDenied(f"{integration_id} {verb}: {message}")
         raise IntegrationError(
             f"{integration_id} {verb} -> {code}: {message}",
         )

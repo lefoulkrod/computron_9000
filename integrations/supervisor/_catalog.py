@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from integrations.permissions import Access, Capability, Permissions
 from integrations.supervisor.types import HostPath, HostPathBinding
 
 
@@ -29,13 +30,10 @@ class CatalogEntry:
     """The argv to exec for the broker subprocess
     (e.g. ``["python", "-m", "integrations.brokers.email_broker"]``)."""
 
-    capabilities: frozenset[str] = frozenset()
-    """Tags the app server uses to decide which agent tools to expose for this
-    integration. Each capability corresponds to a family of tools — e.g.
-    ``"email"`` unlocks the IMAP-backed email tools; ``"calendar"`` unlocks
-    CalDAV tools when those land. The supervisor surfaces these in ``list``
-    and ``add`` RPC responses so the app server doesn't need to know which
-    slug supports which tools."""
+    capabilities: dict[Capability, Access] = field(default_factory=dict)
+    """Per-capability maximum access level for static providers (app-password
+    integrations where the credential grants everything). Each capability
+    corresponds to a family of agent tools."""
 
     static_env: dict[str, str] = field(default_factory=dict)
     """Env vars the supervisor provides directly — protocol hosts, ports, etc.
@@ -54,27 +52,29 @@ class CatalogEntry:
     write). Empty for integrations that don't touch shared state — the MCP
     broker, for example."""
 
-    scope_capabilities: dict[str, str] = field(default_factory=dict)
-    """Maps OAuth scope URIs to capability names. When non-empty, capabilities
-    are derived per-integration from the granted scopes in the auth blob
-    (key ``"scopes"``, space-separated) instead of from the static
-    ``capabilities`` field. Entries whose scope isn't present are omitted."""
+    scope_capabilities: dict[str, tuple[Capability, Access]] = field(default_factory=dict)
+    """Maps OAuth scope URIs to ``(capability, max_access)`` pairs. When
+    non-empty, the per-integration max access is derived from the granted
+    scopes in the auth blob instead of from the static ``capabilities``
+    field. For each capability, the highest access level among all matching
+    granted scopes wins."""
 
-    def resolve_capabilities(self, auth_blob: dict | None = None) -> frozenset[str]:
-        """Derive the capability set for one integration.
+    def resolve_capabilities(self, auth_blob: dict | None = None) -> dict[Capability, Access]:
+        """Derive the max access level per capability for one integration.
 
-        For static providers (iCloud, Gmail) this returns ``self.capabilities``.
-        For OAuth providers with ``scope_capabilities`` set, it inspects the
-        auth blob's ``"scopes"`` field and returns only the capabilities
-        whose scope was granted.
+        For static providers (iCloud, Gmail) returns ``self.capabilities``
+        unchanged. For OAuth providers with ``scope_capabilities`` set,
+        inspects the auth blob's ``"scopes"`` field and returns the highest
+        granted access level per capability.
         """
         if not self.scope_capabilities or auth_blob is None:
-            return frozenset(self.capabilities)
+            return dict(self.capabilities)
         granted = set((auth_blob.get("scopes") or "").split())
-        return frozenset(
-            cap for scope, cap in self.scope_capabilities.items()
-            if scope in granted
-        )
+        ceiling: dict[Capability, Access] = {}
+        for scope, (cap, access) in self.scope_capabilities.items():
+            if scope in granted:
+                ceiling[cap] = max(ceiling.get(cap, Access.OFF), access)
+        return ceiling
 
 
 _EMAIL_HOST_PATHS = (
@@ -87,7 +87,10 @@ _EMAIL_HOST_PATHS = (
 _ICLOUD = CatalogEntry(
     slug="icloud",
     command=["python", "-m", "integrations.brokers.email_broker"],
-    capabilities=frozenset({"email", "calendar"}),
+    capabilities={
+        Capability.EMAIL: Access.READ_WRITE,
+        Capability.CALENDAR: Access.READ_WRITE,
+    },
     static_env={
         "IMAP_HOST": "imap.mail.me.com",
         "IMAP_PORT": "993",
@@ -108,7 +111,7 @@ _ICLOUD = CatalogEntry(
 _GMAIL = CatalogEntry(
     slug="gmail",
     command=["python", "-m", "integrations.brokers.email_broker"],
-    capabilities=frozenset({"email"}),
+    capabilities={Capability.EMAIL: Access.READ_WRITE},
     static_env={
         "IMAP_HOST": "imap.gmail.com",
         "IMAP_PORT": "993",
@@ -137,10 +140,13 @@ _GOOGLE_WORKSPACE = CatalogEntry(
         "expires_at": "OAUTH_EXPIRES_AT",
     },
     scope_capabilities={
-        "https://www.googleapis.com/auth/gmail.readonly": "email",
-        "https://www.googleapis.com/auth/calendar.readonly": "calendar",
-        "https://www.googleapis.com/auth/drive.readonly": "drive",
-        "https://www.googleapis.com/auth/contacts.readonly": "contacts",
+        "https://www.googleapis.com/auth/gmail.readonly": (Capability.EMAIL, Access.READ),
+        "https://www.googleapis.com/auth/gmail.modify": (Capability.EMAIL, Access.READ_WRITE),
+        "https://www.googleapis.com/auth/calendar.readonly": (Capability.CALENDAR, Access.READ),
+        "https://www.googleapis.com/auth/calendar.events": (Capability.CALENDAR, Access.READ_WRITE),
+        "https://www.googleapis.com/auth/drive.readonly": (Capability.DRIVE, Access.READ),
+        "https://www.googleapis.com/auth/drive.file": (Capability.DRIVE, Access.READ_WRITE),
+        "https://www.googleapis.com/auth/contacts.readonly": (Capability.CONTACTS, Access.READ),
     },
     host_paths=(
         HostPathBinding(role="downloads", env_var="DOWNLOADS_DIR", mode="write"),

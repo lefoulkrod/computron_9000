@@ -4,6 +4,13 @@ import styles from './add-wizard.module.css';
 import { errorCopy } from './providers.js';
 import { Stepper } from './SharedSteps.jsx';
 
+const CAP_LABELS = {
+    email: 'Email',
+    calendar: 'Calendar',
+    drive: 'Drive',
+    contacts: 'Contacts',
+};
+
 export function ExplainerStep({ provider, onBack, onNext }) {
     return (
         <>
@@ -110,38 +117,29 @@ export function CredentialsStep({ provider, form, setForm, error, onBack, onCanc
                     </div>
 
                     <div className={styles.subsectionLabel}>Permissions</div>
-                    <div className={styles.radioStack}>
-                        <label className={`${styles.radioCard} ${!form.writeAllowed ? styles.selected : ''}`}>
-                            <input
-                                type="radio"
-                                className={styles.radioInput}
-                                checked={!form.writeAllowed}
-                                onChange={() => setForm(f => ({ ...f, writeAllowed: false }))}
-                            />
-                            <div className={styles.radioIndicator} />
-                            <div className={styles.radioInfo}>
-                                <div className={styles.radioTitle}>Read only</div>
-                                <div className={styles.radioDesc}>
-                                    Search email, read messages, view your calendar.
-                                </div>
+                    <div className={styles.permStack}>
+                        {(provider.capabilities || []).map(cap => (
+                            <div key={cap} className={styles.permRow}>
+                                <span className={styles.permLabel}>
+                                    {CAP_LABELS[cap] || cap}
+                                </span>
+                                <select
+                                    className={styles.accessSelect}
+                                    value={form.permissions[cap] || 'r'}
+                                    onChange={(e) => setForm(f => ({
+                                        ...f,
+                                        permissions: {
+                                            ...f.permissions,
+                                            [cap]: e.target.value,
+                                        },
+                                    }))}
+                                    data-testid={`wizard-perm-${cap}`}
+                                >
+                                    <option value="r">Read only</option>
+                                    <option value="rw">Read + Write</option>
+                                </select>
                             </div>
-                        </label>
-                        <label className={`${styles.radioCard} ${form.writeAllowed ? styles.selected : ''}`}>
-                            <input
-                                type="radio"
-                                className={styles.radioInput}
-                                checked={form.writeAllowed}
-                                onChange={() => setForm(f => ({ ...f, writeAllowed: true }))}
-                            />
-                            <div className={styles.radioIndicator} />
-                            <div className={styles.radioInfo}>
-                                <div className={styles.radioTitle}>Read and write</div>
-                                <div className={styles.radioDesc}>
-                                    All of the above, plus send and move email, and create or
-                                    delete calendar events.
-                                </div>
-                            </div>
-                        </label>
+                        ))}
                     </div>
                     <Callout
                         tone="info"

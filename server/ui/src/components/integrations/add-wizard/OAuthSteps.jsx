@@ -39,29 +39,46 @@ export function OauthCapabilitiesStep({
                     <div className={styles.subsectionLabel}>What to share</div>
                     <div className={styles.radioStack}>
                         {provider.capabilityGroups.map(g => (
-                            <label
+                            <div
                                 key={g.id}
                                 className={`${styles.radioCard} ${oauth.capabilities[g.id] ? styles.selected : ''}`}
                             >
-                                <input
-                                    type="checkbox"
-                                    className={styles.radioInput}
-                                    checked={!!oauth.capabilities[g.id]}
+                                <label className={styles.capLabel}>
+                                    <input
+                                        type="checkbox"
+                                        className={styles.radioInput}
+                                        checked={!!oauth.capabilities[g.id]}
+                                        onChange={(e) => setOauth(o => ({
+                                            ...o,
+                                            capabilities: {
+                                                ...o.capabilities,
+                                                [g.id]: e.target.checked,
+                                            },
+                                        }))}
+                                        data-testid={`oauth-capability-${g.id}`}
+                                    />
+                                    <div className={styles.radioIndicator} />
+                                    <div className={styles.radioInfo}>
+                                        <div className={styles.radioTitle}>{g.label}</div>
+                                        <div className={styles.radioDesc}>{g.description}</div>
+                                    </div>
+                                </label>
+                                <select
+                                    className={styles.accessSelect}
+                                    value={oauth.access[g.id] || 'r'}
                                     onChange={(e) => setOauth(o => ({
                                         ...o,
-                                        capabilities: {
-                                            ...o.capabilities,
-                                            [g.id]: e.target.checked,
-                                        },
+                                        access: { ...o.access, [g.id]: e.target.value },
                                     }))}
-                                    data-testid={`oauth-capability-${g.id}`}
-                                />
-                                <div className={styles.radioIndicator} />
-                                <div className={styles.radioInfo}>
-                                    <div className={styles.radioTitle}>{g.label}</div>
-                                    <div className={styles.radioDesc}>{g.description}</div>
-                                </div>
-                            </label>
+                                    disabled={!oauth.capabilities[g.id] || !g.writeScopes?.length}
+                                    data-testid={`oauth-access-${g.id}`}
+                                >
+                                    <option value="r">Read only</option>
+                                    <option value="rw" disabled={!g.writeScopes?.length}>
+                                        Read + Write
+                                    </option>
+                                </select>
+                            </div>
                         ))}
                     </div>
                 </div>

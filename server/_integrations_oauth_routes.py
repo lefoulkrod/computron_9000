@@ -18,6 +18,7 @@ from aiohttp import web
 from config import load_config
 from integrations import supervisor_client
 from integrations.supervisor_client import SupervisorError
+from integrations.permissions import permissions_from_dict
 from server._integrations_http import error_response
 from server._oauth import OAuthIntegrationManager
 from tools.integrations import mark_added
@@ -101,7 +102,7 @@ async def handle_start_oauth(request: web.Request) -> web.Response:
           "client_id": "...",
           "client_secret": "...",
           "scopes": ["https://www.googleapis.com/auth/gmail.readonly", ...],
-          "write_allowed": false
+          "permissions": {"email": "rw", "calendar": "r"}
         }
 
     On success: ``200 OK`` with ``{state, authorize_url, expires_in}``.
@@ -145,6 +146,10 @@ async def handle_start_oauth(request: web.Request) -> web.Response:
         f"{request.scheme}://{request.host}/api/integrations/oauth/callback"
     )
 
+    perms_raw = body.get("permissions")
+    if not isinstance(perms_raw, dict):
+        perms_raw = {}
+
     try:
         pending = _oauth.start(
             slug=_require_str(body, "slug"),
@@ -153,7 +158,7 @@ async def handle_start_oauth(request: web.Request) -> web.Response:
             client_id=_require_str(body, "client_id"),
             client_secret=_require_str(body, "client_secret"),
             scopes=scopes,
-            write_allowed=bool(body.get("write_allowed", False)),
+            permissions_raw=perms_raw,
             redirect_uri=redirect_uri,
         )
     except _StringRequired as exc:
@@ -232,7 +237,7 @@ async def handle_oauth_callback(request: web.Request) -> web.Response:
         "user_suffix": pending.user_suffix,
         "label": pending.label,
         "auth_blob": auth_blob,
-        "write_allowed": pending.write_allowed,
+        "permissions": pending.permissions_raw,
     }
     try:
         result = await _supervisor_call("add", add_body)
@@ -278,12 +283,12 @@ async def handle_oauth_callback(request: web.Request) -> web.Response:
 
     # Warm the agent's tool cache so the new integration's tools appear
     # on the next turn — same hook the app-password add path uses.
+    perms_result = result.get("permissions")
     mark_added(
         integration_id,
         slug,
-        result.get("capabilities") or (),
+        permissions_from_dict(perms_result) if isinstance(perms_result, dict) else {},
         result.get("state") or "running",
-        bool(result.get("write_allowed", False)),
     )
     _oauth.mark_success(state, integration_id)
     return web.Response(

@@ -18,6 +18,7 @@ from aiohttp import web
 
 from config import load_config
 from integrations import supervisor_client
+from integrations.permissions import permissions_from_dict
 from integrations.supervisor_client import SupervisorError
 from server._integrations_http import error_response
 from tools.integrations import mark_added, mark_removed
@@ -52,7 +53,7 @@ def _derive_suffix_from_email(auth_blob: dict[str, Any] | None) -> str | None:
 async def _supervisor_call(verb: str, args: dict[str, Any]) -> dict[str, Any]:
     """Call a supervisor verb with a 60s timeout.
 
-    The supervisor's slowest verbs (``add`` / ``update`` write_allowed) wait
+    The supervisor's slowest verbs (``add`` / ``update`` permissions) wait
     on a 30s broker READY handshake plus SIGTERM grace, so 60s gives headroom
     for the worst legit case while bounding hangs if the supervisor itself is
     wedged. ``TimeoutError`` is an ``OSError`` subclass on 3.11+, so route
@@ -89,7 +90,7 @@ async def handle_add_integration(request: web.Request) -> web.Response:
           "slug": "icloud",
           "label": "iCloud — Larry",
           "auth_blob": {"email": "...", "password": "..."},
-          "write_allowed": false
+          "permissions": {"email": "rw", "calendar": "r"}
         }
 
     The integration ID's user-suffix is derived from ``auth_blob['email']``
@@ -142,12 +143,12 @@ async def handle_add_integration(request: web.Request) -> web.Response:
     if not (isinstance(integration_id, str) and isinstance(slug, str)):
         logger.error("supervisor add response missing id/slug: %r", result)
         return error_response("UPSTREAM", "Something went wrong on our end. Try again.")
+    perms_result = result.get("permissions")
     mark_added(
         integration_id,
         slug,
-        result.get("capabilities") or (),
+        permissions_from_dict(perms_result) if isinstance(perms_result, dict) else {},
         result.get("state") or "running",
-        bool(result.get("write_allowed", False)),
     )
 
     return web.json_response(result, status=201)
@@ -156,11 +157,11 @@ async def handle_add_integration(request: web.Request) -> web.Response:
 async def handle_update_integration(request: web.Request) -> web.Response:
     """``PATCH /api/integrations/{id}`` — update mutable fields on an integration.
 
-    Body fields (each optional, at least one required): ``write_allowed``
-    (bool) and ``label`` (non-empty string). Flipping ``write_allowed``
-    triggers a broker respawn so the new ``WRITE_ALLOWED`` env takes effect
-    (brief downtime ~SIGTERM grace + READY handshake). Updating ``label``
-    is meta-only — no respawn.
+    Body fields (each optional, at least one required): ``permissions``
+    (dict of ``{capability: access_str}``) and ``label`` (non-empty string).
+    Changing ``permissions`` triggers a broker respawn so the new
+    ``PERMISSIONS`` env takes effect (brief downtime ~SIGTERM grace + READY
+    handshake). Updating ``label`` is meta-only — no respawn.
 
     On success: ``200 OK`` with the updated record. On unknown id: ``404``.
     """
@@ -186,15 +187,15 @@ async def handle_update_integration(request: web.Request) -> web.Response:
         )
 
     rpc_args: dict[str, Any] = {"id": integration_id}
-    if "write_allowed" in body:
-        if not isinstance(body["write_allowed"], bool):
-            return error_response("BAD_REQUEST", "Write permission must be on or off.")
-        rpc_args["write_allowed"] = body["write_allowed"]
+    if "permissions" in body:
+        if not isinstance(body["permissions"], dict):
+            return error_response("BAD_REQUEST", "Permissions must be an object.")
+        rpc_args["permissions"] = body["permissions"]
     if "label" in body:
         if not isinstance(body["label"], str) or not body["label"]:
             return error_response("BAD_REQUEST", "Label can't be empty.")
         rpc_args["label"] = body["label"]
-    if "write_allowed" not in rpc_args and "label" not in rpc_args:
+    if "permissions" not in rpc_args and "label" not in rpc_args:
         return error_response("BAD_REQUEST", "Nothing to update.")
 
     try:
@@ -208,15 +209,12 @@ async def handle_update_integration(request: web.Request) -> web.Response:
     except SupervisorError as exc:
         return error_response(exc.code, exc.message)
 
-    # Refresh the in-process cache with the new write_allowed value so the
-    # agent's next turn surfaces tools matching the new policy. The
-    # supervisor's update response carries the same shape as add.
+    perms_result = result.get("permissions")
     mark_added(
         integration_id,
         result.get("slug") or "",
-        result.get("capabilities") or (),
+        permissions_from_dict(perms_result) if isinstance(perms_result, dict) else {},
         result.get("state") or "running",
-        bool(result.get("write_allowed", False)),
     )
     return web.json_response(result)
 

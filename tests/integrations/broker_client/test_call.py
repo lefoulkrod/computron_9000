@@ -23,6 +23,7 @@ import pytest
 
 from integrations import broker_client
 from integrations._rpc import RpcError, serve_rpc
+from integrations.permissions import Access, Capability
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from tests.integrations.fixtures._host_paths import (
@@ -37,6 +38,10 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
         "icloud": CatalogEntry(
             slug="icloud",
             command=["python", "-m", "integrations.brokers.email_broker"],
+            capabilities={
+                Capability.EMAIL: Access.READ_WRITE,
+                Capability.CALENDAR: Access.READ_WRITE,
+            },
             static_env={
                 "IMAP_HOST": fake.imap_host,
                 "IMAP_PORT": str(fake.imap_port),
@@ -60,7 +65,7 @@ async def _rpc_add(
     user_suffix: str,
     label: str,
     fake: FakeEmail,
-    write_allowed: bool = False,
+    permissions: dict[str, str] | None = None,
     password_override: str | None = None,
 ) -> dict[str, Any]:
     """Admin-path ``add`` via the supervisor's ``app.sock``.
@@ -82,7 +87,7 @@ async def _rpc_add(
                     "email": fake.user,
                     "password": password_override if password_override is not None else fake.password,
                 },
-                "write_allowed": write_allowed,
+                "permissions": permissions or {"email": "rw", "calendar": "rw"},
             },
         }
         body = json.dumps(frame).encode("utf-8")
@@ -175,7 +180,7 @@ async def test_call_raises_auth_failed_when_broker_returns_auth_error(
         return {
             "id": args["id"],
             "socket": str(broker_sock_path),
-            "write_allowed": True,
+            "permissions": {"email": "rw"},
         }
 
     async def broker_handler(verb: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -197,11 +202,11 @@ async def test_call_raises_auth_failed_when_broker_returns_auth_error(
 
 
 @pytest.mark.asyncio
-async def test_call_raises_write_denied_when_write_allowed_is_false(
+async def test_call_raises_permission_denied_when_access_insufficient(
     tmp_path: Path,
 ) -> None:
-    """``write_allowed=False`` on the integration causes the broker to reject
-    write-classified verbs with WRITE_DENIED, which ``call()`` maps to
+    """Read-only email permissions cause the broker to reject write-classified
+    verbs with PERMISSION_DENIED, which ``call()`` maps to
     ``broker_client.IntegrationWriteDenied``."""
     fake = FakeEmail()
     await fake.start()
@@ -219,11 +224,11 @@ async def test_call_raises_write_denied_when_write_allowed_is_false(
             user_suffix="personal",
             label="iCloud test",
             fake=fake,
-            write_allowed=False,
+            permissions={"email": "r"},
         )
 
-        # send_message is write-classified. With write_allowed=False, the
-        # broker refuses locally (per its dispatcher's gate). Placeholder args —
+        # send_message requires email:rw. With email:r, the broker refuses
+        # locally (per its dispatcher's permission gate). Placeholder args —
         # the gate fires before the broker looks at the args at all.
         with pytest.raises(broker_client.IntegrationWriteDenied, match="send_message"):
             await broker_client.call(
@@ -264,7 +269,7 @@ async def test_call_send_message_lands_in_outbox_through_real_broker(
             user_suffix="personal",
             label="iCloud test",
             fake=fake,
-            write_allowed=True,
+            permissions={"email": "rw", "calendar": "rw"},
         )
 
         result = await broker_client.call(
@@ -329,7 +334,7 @@ async def test_call_move_messages_relocates_through_real_broker(
             user_suffix="personal",
             label="iCloud test",
             fake=fake,
-            write_allowed=True,
+            permissions={"email": "rw", "calendar": "rw"},
         )
 
         result = await broker_client.call(

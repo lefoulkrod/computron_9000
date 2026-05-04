@@ -17,12 +17,16 @@ Vault layout::
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 from pathlib import Path
 
 from integrations._perms import VAULT_FILE_MODE
 from integrations.supervisor._crypto import decrypt_secrets, encrypt_secrets
 from integrations.supervisor.types import IntegrationMeta
+
+logger = logging.getLogger(__name__)
 
 
 def creds_dir(vault_dir: Path) -> Path:
@@ -66,11 +70,13 @@ def write_meta(vault_dir: Path, meta: IntegrationMeta) -> None:
     _atomic_write(meta_path(vault_dir, meta.id), data)
 
 
-def read_meta(vault_dir: Path, integration_id: str) -> IntegrationMeta:
-    """Load and validate the ``.meta`` file. Raises pydantic's ``ValidationError``
-    on shape mismatch — that's deliberate, a schema-drift in .meta is a bug."""
+def read_raw_meta(vault_dir: Path, integration_id: str) -> dict:
+    """Load the ``.meta`` file as a raw dict.
+
+    Callers are responsible for version migration and validation.
+    """
     path = meta_path(vault_dir, integration_id)
-    return IntegrationMeta.model_validate_json(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def write_secrets(
@@ -118,3 +124,5 @@ def list_integration_ids(vault_dir: Path) -> list[str]:
     meta_ids = {p.stem for p in cdir.glob("*.meta")}
     enc_ids = {p.stem for p in cdir.glob("*.enc")}
     return sorted(meta_ids & enc_ids)
+
+

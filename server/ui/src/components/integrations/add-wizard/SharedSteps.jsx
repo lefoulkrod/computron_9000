@@ -63,14 +63,28 @@ export function Stepper({ step }) {
     );
 }
 
+const ACCESS_DISPLAY = { off: 'Off', r: 'Read only', rw: 'Read + Write' };
+const CAP_DISPLAY = { email: 'Email', calendar: 'Calendar', drive: 'Drive', contacts: 'Contacts' };
+
+function formatPermissions(perms) {
+    if (!perms || Object.keys(perms).length === 0) return null;
+    return Object.entries(perms)
+        .filter(([, v]) => v && v !== 'off')
+        .map(([cap, access]) =>
+            `${CAP_DISPLAY[cap] || cap}: ${ACCESS_DISPLAY[access] || access}`,
+        )
+        .join(', ');
+}
+
 export function SuccessScreen({ provider, form, result, onAddAnother, onDone }) {
+    const permsSummary = formatPermissions(result.permissions);
     return (
         <>
             <Stepper step={4} />
             <div className={styles.wzBodyLeft}>
                 <h2 className={styles.wzTitle}>{provider.title} connected</h2>
                 <p className={styles.wzSubtitle}>
-                    Your agent can now read your email.
+                    Your agent can now access the capabilities you selected.
                 </p>
                 <div className={styles.wzContent}>
                     <table className={styles.kvTable}>
@@ -89,7 +103,7 @@ export function SuccessScreen({ provider, form, result, onAddAnother, onDone }) 
                             </tr>
                             <tr>
                                 <td>Permissions</td>
-                                <td>{form.writeAllowed ? 'Read and write' : 'Read only'}</td>
+                                <td>{permsSummary || 'Read only'}</td>
                             </tr>
                         </tbody>
                     </table>

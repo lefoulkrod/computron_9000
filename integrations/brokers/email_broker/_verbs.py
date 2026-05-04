@@ -38,6 +38,7 @@ from integrations.brokers.email_broker._caldav_client import CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapClient
 from integrations.brokers.email_broker._smtp_client import SmtpClient
 from integrations.brokers.email_broker.types import OutboundAttachment
+from integrations.permissions import Access, Capability, Permissions
 
 # Total raw byte cap across all outbound attachments in one send. Above this
 # we refuse rather than try — provider SMTP limits land near 25MB and we want
@@ -46,21 +47,21 @@ from integrations.brokers.email_broker.types import OutboundAttachment
 # the strictest providers without inviting OOM-shaped payloads.
 _MAX_OUTBOUND_ATTACHMENT_BYTES = 30 * 1024 * 1024
 
-# Authoritative read/write classification for email-broker verbs.
-_VERB_TYPE: dict[str, Literal["read", "write"]] = {
+# Per-verb: (capability, minimum_access_required).
+_VERB_REQUIREMENT: dict[str, tuple[Capability, Access]] = {
     # Email
-    "list_mailboxes": "read",
-    "list_messages": "read",
-    "search_messages": "read",
-    "fetch_message": "read",
-    "fetch_attachment": "read",
-    "move_messages": "write",
-    "send_message": "write",
+    "list_mailboxes": (Capability.EMAIL, Access.READ),
+    "list_messages": (Capability.EMAIL, Access.READ),
+    "search_messages": (Capability.EMAIL, Access.READ),
+    "fetch_message": (Capability.EMAIL, Access.READ),
+    "fetch_attachment": (Capability.EMAIL, Access.READ),
+    "move_messages": (Capability.EMAIL, Access.READ_WRITE),
+    "send_message": (Capability.EMAIL, Access.READ_WRITE),
     # Calendar (CalDAV)
-    "list_calendars": "read",
-    "list_events": "read",
-    "create_event": "write",
-    "delete_event": "write",
+    "list_calendars": (Capability.CALENDAR, Access.READ),
+    "list_events": (Capability.CALENDAR, Access.READ),
+    "create_event": (Capability.CALENDAR, Access.READ_WRITE),
+    "delete_event": (Capability.CALENDAR, Access.READ_WRITE),
 }
 
 
@@ -82,17 +83,18 @@ class VerbDispatcher:
         # calendar capability; calendar verbs return "not implemented" then.
         caldav: CalDavClient | None = None,
         *,
-        write_allowed: bool,
+        permissions: Permissions,
         attachments_dir: Path,
     ) -> None:
         self._imap = imap
         self._smtp = smtp
         self._caldav = caldav
-        self._write_allowed = write_allowed
+        self._permissions = permissions
         self._attachments_dir = attachments_dir
 
-        # Handler registry — grows as verbs land. Everything in ``_VERB_TYPE``
-        # that lacks a handler here falls through to "not implemented."
+        # Handler registry — grows as verbs land. Everything in
+        # ``_VERB_REQUIREMENT`` that lacks a handler here falls through to
+        # "not implemented."
         self._handlers: dict[str, _Handler] = {
             "list_mailboxes": self._handle_list_mailboxes,
             "list_messages": self._handle_list_messages,
@@ -109,32 +111,22 @@ class VerbDispatcher:
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
-        verb_type = _VERB_TYPE.get(verb)
-        if verb_type is None:
-            # Not on the declared surface at all. Distinguishes "typo" from
-            # "declared but not yet implemented" below.
+        requirement = _VERB_REQUIREMENT.get(verb)
+        if requirement is None:
             msg = f"unknown verb: {verb}"
             raise RpcError("BAD_REQUEST", msg)
 
-        # WRITE_ALLOWED gate. Checked before handler lookup on purpose:
-        #  - Every declared write verb returns ``WRITE_DENIED`` consistently,
-        #    whether or not it has a handler wired yet. Without this ordering,
-        #    a write verb without a handler would return "not implemented" while
-        #    the same verb with a handler would return "WRITE_DENIED" — two
-        #    different responses for what should be one policy decision.
-        #  - New write verbs added to ``_VERB_TYPE`` fail the gate before anyone
-        #    looks up their handler, so we can't accidentally expose a new write
-        #    path by adding an entry to ``_VERB_TYPE`` before wiring the handler.
-        # (Not for information hiding — unknown verbs already return a specific
-        # error above, so the verb surface is enumerable regardless.)
-        if verb_type == "write" and not self._write_allowed:
-            msg = "writes disabled for this integration"
-            raise RpcError("WRITE_DENIED", msg)
+        cap, min_access = requirement
+        granted = self._permissions.get(cap, Access.OFF)
+        if granted < min_access:
+            msg = (
+                f"verb {verb!r} requires {cap.value}:{min_access.name.lower()}, "
+                f"but this integration has {cap.value}:{granted.name.lower()}"
+            )
+            raise RpcError("PERMISSION_DENIED", msg)
 
         handler = self._handlers.get(verb)
         if handler is None:
-            # Declared in _VERB_TYPE but no handler wired yet — walking skeleton
-            # or a verb on the roadmap.
             msg = f"verb not implemented: {verb}"
             raise RpcError("BAD_REQUEST", msg)
 

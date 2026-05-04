@@ -7,7 +7,7 @@ import mimetypes
 import secrets
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
@@ -17,24 +17,29 @@ from integrations.brokers.google_workspace_broker._calendar_client import Calend
 from integrations.brokers.google_workspace_broker._contacts_client import ContactsClient
 from integrations.brokers.google_workspace_broker._drive_client import DriveClient, _run_sync
 from integrations.brokers.google_workspace_broker._gmail_client import GmailClient
+from integrations.permissions import Access, Capability, Permissions
 
 logger = logging.getLogger(__name__)
 
 
-_VERB_TYPE: dict[str, Literal["read", "write"]] = {
-    "list_drive_files": "read",
-    "search_drive_files": "read",
-    "get_drive_file_metadata": "read",
-    "export_drive_file": "read",
-    "list_calendars": "read",
-    "list_events": "read",
-    "list_mailboxes": "read",
-    "list_messages": "read",
-    "search_messages": "read",
-    "fetch_message": "read",
-    "fetch_attachment": "read",
-    "list_contacts": "read",
-    "search_contacts": "read",
+_VERB_REQUIREMENT: dict[str, tuple[Capability, Access]] = {
+    # Drive
+    "list_drive_files": (Capability.DRIVE, Access.READ),
+    "search_drive_files": (Capability.DRIVE, Access.READ),
+    "get_drive_file_metadata": (Capability.DRIVE, Access.READ),
+    "export_drive_file": (Capability.DRIVE, Access.READ),
+    # Calendar
+    "list_calendars": (Capability.CALENDAR, Access.READ),
+    "list_events": (Capability.CALENDAR, Access.READ),
+    # Email (Gmail)
+    "list_mailboxes": (Capability.EMAIL, Access.READ),
+    "list_messages": (Capability.EMAIL, Access.READ),
+    "search_messages": (Capability.EMAIL, Access.READ),
+    "fetch_message": (Capability.EMAIL, Access.READ),
+    "fetch_attachment": (Capability.EMAIL, Access.READ),
+    # Contacts
+    "list_contacts": (Capability.CONTACTS, Access.READ),
+    "search_contacts": (Capability.CONTACTS, Access.READ),
 }
 
 
@@ -48,11 +53,11 @@ class VerbDispatcher:
         self,
         creds: Credentials,
         *,
-        write_allowed: bool,
+        permissions: Permissions,
         downloads_dir: Path,
     ) -> None:
         self._creds = creds
-        self._write_allowed = write_allowed
+        self._permissions = permissions
         self._downloads_dir = downloads_dir
 
         self._drive: DriveClient | None = None
@@ -91,17 +96,19 @@ class VerbDispatcher:
 
     async def dispatch(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
-        verb_type = _VERB_TYPE.get(verb)
-        if verb_type is None:
+        requirement = _VERB_REQUIREMENT.get(verb)
+        if requirement is None:
             msg = f"unknown verb: {verb}"
             raise RpcError("BAD_REQUEST", msg)
 
-        if verb_type == "write" and not self._write_allowed:
-            raise RpcError(
-                "WRITE_DENIED",
-                f"writes are disabled for this integration; "
-                f"verb {verb!r} requires write_allowed=true",
+        cap, min_access = requirement
+        granted = self._permissions.get(cap, Access.OFF)
+        if granted < min_access:
+            msg = (
+                f"verb {verb!r} requires {cap.value}:{min_access.name.lower()}, "
+                f"but this integration has {cap.value}:{granted.name.lower()}"
             )
+            raise RpcError("PERMISSION_DENIED", msg)
 
         handler = self._handlers.get(verb)
         if handler is None:

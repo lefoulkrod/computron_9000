@@ -28,12 +28,13 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-from integrations._env import env_required, parse_bool
+from integrations._env import env_required
 from integrations._perms import PROCESS_UMASK, disable_core_dumps
 from integrations._rpc import serve_rpc
 from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
 from integrations.brokers._common._ready import print_ready
 from integrations.brokers.google_workspace_broker._verbs import VerbDispatcher
+from integrations.permissions import permissions_from_env
 
 logger = logging.getLogger("google_workspace_broker")
 
@@ -63,7 +64,7 @@ _OAUTH_ENV_VARS = (
 async def _run() -> int:
     integration_id = env_required("INTEGRATION_ID")
     socket_path = Path(env_required("BROKER_SOCKET"))
-    write_allowed = parse_bool(env_required("WRITE_ALLOWED"))
+    permissions = permissions_from_env(env_required("PERMISSIONS"))
 
     expires_raw = int(env_required("OAUTH_EXPIRES_AT"))
     creds = Credentials(
@@ -113,7 +114,7 @@ async def _run() -> int:
 
     downloads_dir = Path(env_required("DOWNLOADS_DIR"))
     dispatcher = VerbDispatcher(
-        creds, write_allowed=write_allowed, downloads_dir=downloads_dir,
+        creds, permissions=permissions, downloads_dir=downloads_dir,
     )
 
     async def handler(verb: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -121,8 +122,8 @@ async def _run() -> int:
 
     server = await serve_rpc(socket_path, handler)
     log.info(
-        "listening on %s (write_allowed=%s, scopes=%s)",
-        socket_path, write_allowed, " ".join(creds.scopes or ()),
+        "listening on %s (permissions=%s, scopes=%s)",
+        socket_path, permissions, " ".join(creds.scopes or ()),
     )
 
     # READY sentinel: the supervisor watches stdout for this exact line and

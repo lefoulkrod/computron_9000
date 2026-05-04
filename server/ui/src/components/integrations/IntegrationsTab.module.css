@@ -394,6 +394,72 @@
     font-size: 12px;
 }
 
+/* ── Per-capability permission toggles (§ dl-fpreview-toggle) ─── */
+.permRow {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0;
+}
+
+.permRow + .permRow {
+    border-top: 1px solid var(--border-subtle);
+}
+
+.permLabel {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.toggleGroup {
+    display: flex;
+    background: var(--canvas);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.toggleOpt {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    font-size: 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    white-space: nowrap;
+    transition: all 120ms var(--ease);
+}
+
+.toggleOpt:hover:not(:disabled) {
+    color: var(--text-primary);
+}
+
+.toggleOpt:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.toggleActiveOff {
+    background: var(--surface);
+    color: var(--text-primary);
+}
+
+.toggleActiveRead {
+    background: var(--accent-muted);
+    color: var(--accent);
+}
+
+.toggleActive {
+    background: var(--accent);
+    color: #fff;
+}
+
 /* ── Loading + load-error wrapper ─────────────────────────── */
 .loading {
     color: var(--text-tertiary);

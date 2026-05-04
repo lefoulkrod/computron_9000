@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from integrations.permissions import Access, Capability
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from tests.integrations.fixtures._host_paths import (
@@ -47,7 +48,10 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
         "icloud": CatalogEntry(
             slug="icloud",
             command=["python", "-m", "integrations.brokers.email_broker"],
-            capabilities=frozenset({"email"}),
+            capabilities={
+                Capability.EMAIL: Access.READ_WRITE,
+                Capability.CALENDAR: Access.READ_WRITE,
+            },
             static_env={
                 "IMAP_HOST": fake.imap_host,
                 "IMAP_PORT": str(fake.imap_port),
@@ -101,7 +105,7 @@ async def test_watcher_respawns_broker_after_unexpected_exit(tmp_path: Path) -> 
                 "user_suffix": "personal",
                 "label": "iCloud test",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "rw", "calendar": "rw"},
             },
         )
         assert "error" not in add_resp, add_resp
@@ -160,7 +164,7 @@ async def test_watcher_marks_auth_failed_when_broker_exits_77(tmp_path: Path) ->
                 "user_suffix": "personal",
                 "label": "iCloud test",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "rw", "calendar": "rw"},
             },
         )
         assert "error" not in add_resp, add_resp
@@ -219,7 +223,7 @@ async def test_watcher_does_not_respawn_after_remove(tmp_path: Path) -> None:
                 "user_suffix": "personal",
                 "label": "iCloud test",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "rw", "calendar": "rw"},
             },
         )
         await _rpc_call(sup.app_sock_path, "remove", {"id": "icloud_personal"})
