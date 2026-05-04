@@ -5,6 +5,35 @@ from __future__ import annotations
 from playwright.sync_api import Locator, Page
 
 
+class ConversationItem:
+    """A single conversation entry in the flyout list."""
+
+    def __init__(self, locator: Locator):
+        self._loc = locator
+
+    @property
+    def title(self) -> str:
+        return self._loc.locator("[class*='name']").text_content() or ""
+
+    @property
+    def description(self) -> Locator:
+        return self._loc.locator("[class*='desc']")
+
+    @property
+    def resume_button(self) -> Locator:
+        return self._loc.locator("[title='Resume this conversation']")
+
+    @property
+    def delete_button(self) -> Locator:
+        return self._loc.locator("[title='Delete this conversation']")
+
+    def resume(self) -> None:
+        self.resume_button.click()
+
+    def delete(self) -> None:
+        self.delete_button.click()
+
+
 class ConversationsFlyout:
     """Sidebar flyout listing prior conversations with resume/delete actions."""
 
@@ -16,8 +45,15 @@ class ConversationsFlyout:
         return self.page.get_by_role("button", name="Conversations")
 
     @property
+    def items(self) -> Locator:
+        return self.page.locator("li[class*='item']")
+
+    @property
     def resume_buttons(self) -> Locator:
         return self.page.locator("[title='Resume this conversation']")
+
+    def item(self, index: int) -> ConversationItem:
+        return ConversationItem(self.items.nth(index))
 
     def open(self) -> "ConversationsFlyout":
         self.sidebar_button.click()
