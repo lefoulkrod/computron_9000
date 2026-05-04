@@ -51,6 +51,9 @@ class SettingsUpdate(BaseModel):
     setup_complete: bool | None = None
     default_agent: str | None = None
     vision_model: str | None = None
+    vision_model: str | None = None
+    vision_think: bool | None = None
+    vision_options: dict[str, Any] | None = None
     compaction_model: str | None = None
     llm_provider: str | None = None
     llm_base_url: str | None = None
