@@ -58,10 +58,9 @@ _AUTH_HEADERS_TO_STRIP = frozenset({"authorization", "x-api-key"})
 def _make_auth_headers(provider: str, api_key: str) -> dict[str, str]:
     """Return the auth header(s) to inject for this provider."""
     if provider == "anthropic":
-        return {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        }
+        # The Anthropic SDK sends anthropic-version itself; we only inject the
+        # credential header. Injecting our own copy would produce a duplicate.
+        return {"x-api-key": api_key}
     # OpenAI and all OpenAI-compatible providers
     return {"Authorization": f"Bearer {api_key}"}
 
@@ -154,7 +153,7 @@ async def _run() -> int:
                 # Long timeout to accommodate streaming completions that may
                 # run for many seconds (or minutes for long generation tasks).
                 timeout=aiohttp.ClientTimeout(total=600),
-                allow_redirects=True,
+                allow_redirects=False,
             ) as upstream_resp:
                 response = web.StreamResponse(
                     status=upstream_resp.status,
