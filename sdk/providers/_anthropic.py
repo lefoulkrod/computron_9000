@@ -76,7 +76,7 @@ class AnthropicProvider(BaseAPIProvider):
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": converted,
-            "max_tokens": opts.get("num_ctx", 16384),
+            "max_tokens": opts.get("num_predict") or opts.get("max_tokens") or 16384,
         }
         if system_prompt:
             kwargs["system"] = system_prompt

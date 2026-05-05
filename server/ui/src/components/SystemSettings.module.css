@@ -213,6 +213,11 @@
     box-shadow: var(--shadow-glow);
 }
 
+/* Picker row below a setting row */
+.pickerRow {
+    padding: 0 var(--sp-3) var(--sp-2);
+}
+
 /* Info note */
 .note {
     font-size: 0.72rem;

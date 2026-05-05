@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import ModelPicker from './ModelPicker.jsx';
 import styles from './SetupWizard.module.css';
 
 const STEPS = ['Welcome', 'Provider', 'Main Model', 'Vision Model', 'Ready'];
@@ -152,7 +153,7 @@ export default function SetupWizard({ onComplete }) {
 
     // Model step state
     const [allModels, setAllModels] = useState([]);
-    const [visionModels, setVisionModels] = useState([]);
+    const [visionModels, setVisionModels] = useState(null);
     const [selectedMain, setSelectedMain] = useState(null);
     // undefined = not chosen yet; null = explicit skip; string = model name
     const [selectedVision, setSelectedVision] = useState(undefined);
@@ -232,15 +233,15 @@ export default function SetupWizard({ onComplete }) {
         fetchModels('/api/models', setAllModels);
     }, [step, allModels.length, fetchModels]);
 
-    // Fetch vision models when entering step 3
+    // Fetch vision models when entering step 3 (same list as main models)
     useEffect(() => {
-        if (step !== 3 || visionModels.length > 0) return;
-        fetchModels('/api/models?capability=vision', setVisionModels);
-    }, [step, visionModels.length, fetchModels]);
+        if (step !== 3 || visionModels !== null) return;
+        fetchModels('/api/models', setVisionModels);
+    }, [step, visionModels, fetchModels]);
 
     const retryFetch = () => {
         if (step === 2) fetchModels('/api/models', setAllModels);
-        else if (step === 3) fetchModels('/api/models?capability=vision', setVisionModels);
+        else if (step === 3) fetchModels('/api/models', setVisionModels);
     };
 
     // ── Provider step: save settings and probe connection ───────────
@@ -333,7 +334,7 @@ export default function SetupWizard({ onComplete }) {
 
             // Cache probe results so step 2 doesn't re-fetch
             setAllModels(modelsData.models || []);
-            setVisionModels([]);
+            setVisionModels(null);
             setStep((s) => s + 1);
         } catch (err) {
             setProviderError(err.message);
@@ -621,17 +622,11 @@ export default function SetupWizard({ onComplete }) {
                         ) : modelsLoading ? (
                             <p className={styles.hint}>Loading models…</p>
                         ) : (
-                            <div className={styles.modelList}>
-                                {allModels.map((m) => (
-                                    <ModelCard
-                                        key={m.name}
-                                        name={m.name}
-                                        model={m}
-                                        selected={selectedMain === m.name}
-                                        onSelect={setSelectedMain}
-                                    />
-                                ))}
-                            </div>
+                            <ModelPicker
+                                models={allModels}
+                                selected={selectedMain}
+                                onSelect={setSelectedMain}
+                            />
                         )}
                     </div>
                 )}
@@ -648,8 +643,8 @@ export default function SetupWizard({ onComplete }) {
                             Choose a vision model
                         </h1>
                         <p className={styles.subtitle}>
-                            Used for understanding images and screenshots. This can be a
-                            smaller model since it only processes images.
+                            Used for understanding images and screenshots. Choose a model
+                            that supports vision (image input).
                         </p>
 
                         {selectedProvider === PROVIDER_CLOUD ? (
@@ -668,17 +663,11 @@ export default function SetupWizard({ onComplete }) {
                         ) : modelsLoading ? (
                             <p className={styles.hint}>Loading models…</p>
                         ) : (
-                            <div className={styles.modelList}>
-                                {visionModels.map((m) => (
-                                    <ModelCard
-                                        key={m.name}
-                                        name={m.name}
-                                        model={m}
-                                        selected={selectedVision === m.name}
-                                        onSelect={setSelectedVision}
-                                    />
-                                ))}
-                            </div>
+                            <ModelPicker
+                                models={visionModels || []}
+                                selected={selectedVision}
+                                onSelect={setSelectedVision}
+                            />
                         )}
 
                         <button

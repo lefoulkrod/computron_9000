@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './SystemSettings.module.css';
+import ModelPicker from './ModelPicker.jsx';
 import PackageIcon from './icons/PackageIcon';
 import EyeIcon from './icons/EyeIcon';
 import CompactionIcon from './icons/CompactionIcon';
@@ -17,7 +18,7 @@ export default function SystemSettings({ onRunWizard }) {
     const [refreshing, setRefreshing] = useState(false);
     const [visionAdvancedOpen, setVisionAdvancedOpen] = useState(false);
 
-    const visionModels = allModels.filter((m) => (m.capabilities || []).includes('vision'));
+    const visionModels = allModels;
 
     const fetchModels = useCallback(async () => {
         try {
@@ -120,19 +121,16 @@ export default function SystemSettings({ onRunWizard }) {
                     </div>
                     <div className={styles.settingInfo}>
                         <span className={styles.settingTitle}>Vision Model</span>
-                        <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Only models with vision capability are shown.</span>
+                        <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Choose a model that supports vision (image input).</span>
                     </div>
-                    <select
-                        className={styles.select}
-                        value={settings.vision_model}
-                        onChange={(e) => updateSetting('vision_model', e.target.value)}
-                        data-testid="vision-model-select"
-                    >
-                        <option value="">Select a model</option>
-                        {visionModels.map((m) => (
-                            <option key={m.name} value={m.name}>{m.name}</option>
-                        ))}
-                    </select>
+                </div>
+                <div className={styles.pickerRow}>
+                    <ModelPicker
+                        models={visionModels}
+                        selected={settings.vision_model || null}
+                        onSelect={(name) => updateSetting('vision_model', name || '')}
+                        placeholder="Search for a vision model…"
+                    />
                 </div>
 
                 <button
@@ -197,24 +195,24 @@ export default function SystemSettings({ onRunWizard }) {
             {/* Compaction Model */}
             <div className={styles.sectionLabel}>Compaction</div>
 
-            <div className={styles.settingRow}>
-                <div className={styles.settingIcon}>
-                    <CompactionIcon />
+            <div className={styles.groupCard}>
+                <div className={styles.settingRow}>
+                    <div className={styles.settingIcon}>
+                        <CompactionIcon />
+                    </div>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Compaction Model</span>
+                        <span className={styles.settingDesc}>Summarizes conversation history when context fills up.</span>
+                    </div>
                 </div>
-                <div className={styles.settingInfo}>
-                    <span className={styles.settingTitle}>Compaction Model</span>
-                    <span className={styles.settingDesc}>Summarizes conversation history when context fills up.</span>
+                <div className={styles.pickerRow}>
+                    <ModelPicker
+                        models={allModels}
+                        selected={settings.compaction_model || null}
+                        onSelect={(name) => updateSetting('compaction_model', name || '')}
+                        placeholder="Search for a compaction model…"
+                    />
                 </div>
-                <select
-                    className={styles.select}
-                    value={settings.compaction_model || ''}
-                    onChange={(e) => updateSetting('compaction_model', e.target.value)}
-                >
-                    <option value="">Select a model</option>
-                    {allModels.map((m) => (
-                        <option key={m.name} value={m.name}>{m.name}</option>
-                    ))}
-                </select>
             </div>
 
             <div className={styles.note}>

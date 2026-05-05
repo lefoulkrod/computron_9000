@@ -32,6 +32,8 @@ def setup_logging() -> None:
     logging.getLogger("tools.desktop").setLevel(logging.DEBUG)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
     logging.getLogger("ollama").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)

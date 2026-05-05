@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
+import ModelPicker from './ModelPicker.jsx';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
 import Button from './primitives/Button.jsx';
@@ -252,15 +253,11 @@ export default function ProfileBuilder({
                     {/* 2. Model */}
                     <section className={styles.section}>
                         <div className={styles.sectionLabel}>Model</div>
-                        <select
-                            className={styles.selectInput}
-                            value={draft.model || ''}
-                            onChange={(e) => update('model', e.target.value)}
-                        >
-                            {(models || []).map((m) => (
-                                <option key={m.name} value={m.name}>{m.name}</option>
-                            ))}
-                        </select>
+                        <ModelPicker
+                            models={models || []}
+                            selected={draft.model || null}
+                            onSelect={(name) => update('model', name || '')}
+                        />
                     </section>
 
                     {/* 3. System Prompt */}

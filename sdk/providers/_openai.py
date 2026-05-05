@@ -83,8 +83,10 @@ class OpenAIProvider(BaseAPIProvider):
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": _convert_messages_for_openai(messages),
-            "max_tokens": opts.get("num_predict") or opts.get("max_tokens") or 4096,
         }
+        max_tokens = opts.get("num_predict") or opts.get("max_tokens")
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
         if opts.get("temperature") is not None:
             kwargs["temperature"] = opts["temperature"]
         if opts.get("top_p") is not None:
@@ -127,6 +129,7 @@ class OpenAIProvider(BaseAPIProvider):
         kwargs["stream_options"] = {"include_usage": True}
 
         content_parts: list[str] = []
+        thinking_parts: list[str] = []
         # tool_call accumulator: index → {id, name, arguments_str}
         tc_accum: dict[int, dict[str, str]] = {}
         usage_data: Any = None
@@ -146,9 +149,15 @@ class OpenAIProvider(BaseAPIProvider):
                     finish_reason = choice.finish_reason
 
                 delta = choice.delta
-                if delta.content:
-                    content_parts.append(delta.content)
-                    yield ChatDelta(content=delta.content)
+                chunk_content = delta.content or None
+                chunk_thinking = getattr(delta, "reasoning", None) or getattr(delta, "reasoning_content", None) or None
+
+                if chunk_content:
+                    content_parts.append(chunk_content)
+                if chunk_thinking:
+                    thinking_parts.append(chunk_thinking)
+                if chunk_content or chunk_thinking:
+                    yield ChatDelta(content=chunk_content, thinking=chunk_thinking)
 
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -170,6 +179,7 @@ class OpenAIProvider(BaseAPIProvider):
         yield ChatResponse(
             message=ChatMessage(
                 content="".join(content_parts) or None,
+                thinking="".join(thinking_parts) or None,
                 tool_calls=tool_calls,
             ),
             usage=TokenUsage(
