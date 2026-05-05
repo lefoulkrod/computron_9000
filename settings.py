@@ -42,10 +42,8 @@ _BLOCKED_HOSTS = {"169.254.169.254", "fd00:ec2::254", "metadata.google.internal"
 class SettingsUpdate(BaseModel):
     """Allowed fields for a settings PUT request.
 
-    Using ``extra="forbid"`` ensures unknown keys are rejected with a 422
-    before they can be persisted to settings.json. ``llm_api_key`` is
-    intentionally absent — cloud API keys are now stored encrypted in the
-    supervisor vault via the ``llm_proxy`` integration broker.
+    Using ``extra="forbid"`` ensures unknown keys are rejected before
+    they can be persisted to settings.json.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -110,34 +108,4 @@ def save_settings(data: dict[str, Any]) -> dict[str, Any]:
     return current
 
 
-def pop_setting(key: str) -> None:
-    """Remove a single key from settings.json.
-
-    Used by the supervisor's migration path to clear ``llm_api_key`` after
-    moving it to the vault. No-op if the key is absent or the file doesn't
-    exist. Atomic write — same pattern as ``save_settings``.
-    """
-    path = _settings_path()
-    if not path.exists():
-        return
-    try:
-        data: dict[str, Any] = json.loads(path.read_text())
-    except Exception:
-        logger.warning("pop_setting: failed to read settings file")
-        return
-    if key not in data:
-        return
-    data.pop(key)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=".settings_tmp_")
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(json.dumps(data, indent=2))
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-__all__ = ["load_settings", "pop_setting", "save_settings", "SettingsUpdate"]
+__all__ = ["load_settings", "save_settings", "SettingsUpdate"]

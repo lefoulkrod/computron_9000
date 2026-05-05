@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-import { apiFetch } from '../utils/api.js';
 
 function _uuid() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -179,7 +178,7 @@ export default function useStreamingChat(callbacks) {
         // If already streaming, send as a nudge (fire-and-forget)
         if (isStreamingRef.current) {
             const body = _buildRequestBody(message, fileData, profileId, conversationIdRef.current);
-            apiFetch('/api/chat', {
+            fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -218,7 +217,7 @@ export default function useStreamingChat(callbacks) {
             abortControllerRef.current = controller;
             setIsStreaming(true);
 
-            const resp = await apiFetch('/api/chat', {
+            const resp = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -370,7 +369,7 @@ export default function useStreamingChat(callbacks) {
 
     /** Ask the backend to stop generation and update local state. */
     const stopGeneration = useCallback(() => {
-        apiFetch(`/api/chat/stop?conversation_id=${conversationIdRef.current}`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/chat/stop?conversation_id=${conversationIdRef.current}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
     }, []);
 
@@ -383,7 +382,7 @@ export default function useStreamingChat(callbacks) {
         setIsStreaming(false);
 
         try {
-            const resp = await apiFetch(`/api/conversations/sessions/${conversationId}/resume`, {
+            const resp = await fetch(`/api/conversations/sessions/${conversationId}/resume`, {
                 method: 'POST',
             });
             if (!resp.ok) return false;
@@ -408,7 +407,7 @@ export default function useStreamingChat(callbacks) {
             abortControllerRef.current = null;
         }
         const oldConversationId = conversationIdRef.current;
-        apiFetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/chat/stop?conversation_id=${oldConversationId}`, { method: 'POST' }).catch(() => {});
         setIsStreaming(false);
         setMessages([]);
         conversationIdRef.current = _uuid();

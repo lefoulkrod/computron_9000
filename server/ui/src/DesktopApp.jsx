@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { apiFetch } from './utils/api.js';
 
 import Header from './components/Header.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
@@ -187,7 +186,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const openDesktop = useCallback(async () => {
         if (userDesktopOpen) return;
         try {
-            const res = await apiFetch('/api/desktop/start', { method: 'POST' });
+            const res = await fetch('/api/desktop/start', { method: 'POST' });
             const data = await res.json();
             if (data.running) {
                 setUserDesktopOpen(true);

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../utils/api.js';
 
 /**
  * Agent profiles hook. Fetches profiles on mount and provides
@@ -34,7 +33,7 @@ export default function useAgentProfiles() {
     }, [refresh]);
 
     const createProfile = useCallback(async (profile) => {
-        const res = await apiFetch('/api/profiles', {
+        const res = await fetch('/api/profiles', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(profile),
@@ -46,7 +45,7 @@ export default function useAgentProfiles() {
     }, []);
 
     const updateProfile = useCallback(async (id, profile) => {
-        const res = await apiFetch(`/api/profiles/${id}`, {
+        const res = await fetch(`/api/profiles/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(profile),
@@ -62,7 +61,7 @@ export default function useAgentProfiles() {
     }, []);
 
     const deleteProfile = useCallback(async (id) => {
-        const res = await apiFetch(`/api/profiles/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
         if (res.status === 409) {
             const data = await res.json();
             return { conflict: true, ...data };
@@ -74,7 +73,7 @@ export default function useAgentProfiles() {
     }, [selectedProfileId]);
 
     const duplicateProfile = useCallback(async (id) => {
-        const res = await apiFetch(`/api/profiles/${id}/duplicate`, { method: 'POST' });
+        const res = await fetch(`/api/profiles/${id}/duplicate`, { method: 'POST' });
         const duplicated = await res.json();
         setProfiles(prev => [...prev, duplicated]);
         setRevision(r => r + 1);

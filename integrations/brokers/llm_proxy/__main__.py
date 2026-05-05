@@ -125,7 +125,9 @@ async def _run() -> int:
 
     # One persistent upstream session for all proxied requests. Reusing a session
     # keeps the TCP connection pool warm and avoids per-request TLS handshake overhead.
-    upstream_session = aiohttp.ClientSession()
+    # auto_decompress=False: the proxy must forward raw bytes with their original
+    # Content-Encoding intact — the SDK client handles decompression itself.
+    upstream_session = aiohttp.ClientSession(auto_decompress=False)
 
     async def proxy_handler(request: web.Request) -> web.StreamResponse:
         # Reconstruct the full upstream URL from the base plus the request's

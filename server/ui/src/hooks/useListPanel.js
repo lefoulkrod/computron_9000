@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { apiFetch } from '../utils/api.js';
 
 const _defaultGetId = (item) => item.id;
 const _defaultTransform = (data) => data;
@@ -67,7 +66,7 @@ export default function useListPanel(endpoint, {
     const handleDelete = useCallback(async (key, deleteEndpoint, matchFn) => {
         setDeleting(key);
         try {
-            const resp = await apiFetch(deleteEndpoint, { method: 'DELETE' });
+            const resp = await fetch(deleteEndpoint, { method: 'DELETE' });
             if (resp.ok || resp.status === 404) {
                 setItems((prev) => prev.filter(matchFn));
             }

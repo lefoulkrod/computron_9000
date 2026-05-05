@@ -98,7 +98,6 @@ class Supervisor:
         )
 
         await self._reconcile_from_disk()
-        await self._migrate_api_key_if_needed()
 
         self._handler = AppSockHandler(
             manager=self._manager,
@@ -137,74 +136,6 @@ class Supervisor:
                     "reconcile errored unexpectedly for %s",
                     integration_id, exc_info=result,
                 )
-
-    async def _migrate_api_key_if_needed(self) -> None:
-        """One-time migration: move llm_api_key from settings.json into the vault.
-
-        If settings.json contains a plaintext ``llm_api_key`` for a known cloud
-        provider (openai or anthropic), create the corresponding ``llm_proxy``
-        integration and remove the key from settings. Idempotent: if the
-        integration already exists from a previous boot, just clears the key.
-        """
-        # Lazy imports — settings is an app-layer module; the supervisor normally
-        # doesn't depend on it. This migration path is a one-time upgrade path.
-        from settings import load_settings, pop_setting
-
-        _DEFAULT_UPSTREAM: dict[str, str] = {
-            "openai": "https://api.openai.com",
-            "anthropic": "https://api.anthropic.com",
-        }
-
-        try:
-            s = load_settings()
-        except Exception as exc:
-            logger.warning("migration: could not load settings.json: %s", exc)
-            return
-
-        api_key = s.get("llm_api_key")
-        provider = s.get("llm_provider")
-        if not (isinstance(api_key, str) and api_key):
-            return
-        if provider not in _DEFAULT_UPSTREAM:
-            return
-
-        integration_id = f"llm_proxy_{provider}"
-
-        # Already migrated on a previous boot — just clear the plaintext key.
-        if self._registry is not None and self._registry.contains(integration_id):
-            logger.info(
-                "migration: %s already exists, clearing llm_api_key from settings",
-                integration_id,
-            )
-            pop_setting("llm_api_key")
-            return
-
-        base_url = s.get("llm_base_url") or _DEFAULT_UPSTREAM[provider]
-        # llm_base_url in settings may include /v1 (e.g. https://api.openai.com/v1);
-        # the proxy broker expects the root URL without /v1.
-        base_url = base_url.rstrip("/").removesuffix("/v1")
-
-        manager = self._manager
-        if manager is None:
-            return
-
-        logger.info("migration: moving llm_api_key into vault as %s", integration_id)
-        try:
-            await manager.add(
-                slug="llm_proxy",
-                user_suffix=provider,
-                label=f"{provider.title()} API",
-                auth_blob={
-                    "api_key": api_key,
-                    "provider": provider,
-                    "base_url": base_url,
-                },
-                write_allowed=False,
-            )
-            pop_setting("llm_api_key")
-            logger.info("migration: %s created, llm_api_key cleared from settings", integration_id)
-        except Exception as exc:
-            logger.warning("migration: failed to create %s: %s", integration_id, exc)
 
     async def stop(self) -> None:
         """Shut down every broker, close the listener.

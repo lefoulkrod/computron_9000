@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../utils/api.js';
 import styles from './SystemSettings.module.css';
 import PackageIcon from './icons/PackageIcon';
 import EyeIcon from './icons/EyeIcon';
@@ -56,7 +55,7 @@ export default function SystemSettings({ onRunWizard }) {
     const updateSetting = useCallback(async (key, value) => {
         setSettings((prev) => ({ ...prev, [key]: value }));
         try {
-            const res = await apiFetch('/api/settings', {
+            const res = await fetch('/api/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ [key]: value }),
@@ -73,7 +72,7 @@ export default function SystemSettings({ onRunWizard }) {
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
         try {
-            await apiFetch('/api/models/refresh', { method: 'POST' });
+            await fetch('/api/models/refresh', { method: 'POST' });
             await fetchModels();
         } catch {
             // silent

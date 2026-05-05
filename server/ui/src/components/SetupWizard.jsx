@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { apiFetch } from '../utils/api.js';
 import styles from './SetupWizard.module.css';
 
 const STEPS = ['Welcome', 'Provider', 'Main Model', 'Vision Model', 'Ready'];
@@ -275,10 +274,10 @@ export default function SetupWizard({ onComplete }) {
                 // Best-effort removal of any existing proxy for this provider
                 // (e.g. if the user navigated back and is re-configuring).
                 try {
-                    await apiFetch(`/api/integrations/llm_proxy_${providerName}`, { method: 'DELETE' });
+                    await fetch(`/api/integrations/llm_proxy_${providerName}`, { method: 'DELETE' });
                 } catch (_) { /* 404 or supervisor offline — handled below */ }
 
-                const integRes = await apiFetch('/api/integrations', {
+                const integRes = await fetch('/api/integrations', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -313,7 +312,7 @@ export default function SetupWizard({ onComplete }) {
             // For cloud and compat-with-key: the proxy broker knows the upstream URL;
             // llm_base_url is not needed in settings.
 
-            const settingsRes = await apiFetch('/api/settings', {
+            const settingsRes = await fetch('/api/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settingsBody),
@@ -325,7 +324,7 @@ export default function SetupWizard({ onComplete }) {
             }
 
             // Probe the connection by listing models
-            const modelsRes = await apiFetch('/api/models');
+            const modelsRes = await fetch('/api/models');
             const modelsData = await modelsRes.json().catch(() => ({}));
             if (!modelsRes.ok) {
                 setProviderError(modelsData.message || 'Could not connect to provider');
@@ -348,7 +347,7 @@ export default function SetupWizard({ onComplete }) {
         setSaving(true);
         setError(null);
         try {
-            const setModelRes = await apiFetch('/api/profiles/set-model', {
+            const setModelRes = await fetch('/api/profiles/set-model', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: selectedMain }),
@@ -358,7 +357,7 @@ export default function SetupWizard({ onComplete }) {
                 throw new Error(data.error || 'Failed to set model on profiles');
             }
 
-            const res = await apiFetch('/api/settings', {
+            const res = await fetch('/api/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
