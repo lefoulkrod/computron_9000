@@ -256,6 +256,16 @@ export default function SetupWizard({ onComplete }) {
                 : 'ollama';
 
         try {
+            // Remove all existing llm_proxy integrations — only one
+            // provider is active at a time.
+            try {
+                const existing = await fetch('/api/integrations').then(r => r.json());
+                const proxies = (existing.integrations || []).filter(i => i.slug === 'llm_proxy');
+                await Promise.all(proxies.map(i =>
+                    fetch(`/api/integrations/${encodeURIComponent(i.id)}`, { method: 'DELETE' }).catch(() => {})
+                ));
+            } catch (_) { /* supervisor offline — handled below */ }
+
             // Cloud API and OpenAI-compat with an API key: store the key encrypted
             // in the supervisor vault via the llm_proxy integration.
             const needsProxy = selectedProvider === PROVIDER_CLOUD ||
@@ -271,12 +281,6 @@ export default function SetupWizard({ onComplete }) {
                 const upstreamBase = selectedProvider === PROVIDER_OPENAI_COMPAT
                     ? stripV1(providerUrl || 'http://localhost:1234')
                     : (DEFAULT_UPSTREAM[cloudProvider] || DEFAULT_UPSTREAM.openai);
-
-                // Best-effort removal of any existing proxy for this provider
-                // (e.g. if the user navigated back and is re-configuring).
-                try {
-                    await fetch(`/api/integrations/llm_proxy_${providerName}`, { method: 'DELETE' });
-                } catch (_) { /* 404 or supervisor offline — handled below */ }
 
                 const integRes = await fetch('/api/integrations', {
                     method: 'POST',
