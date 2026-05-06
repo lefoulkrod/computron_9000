@@ -1,7 +1,8 @@
 """Vision-enabled browser tools.
 
-Uses Ollama for visual question answering (``inspect_page``) and the
-UI-TARS grounding server for action prediction (``browser_visual_action``).
+Uses the configured LLM provider for visual question answering
+(``inspect_page``) and the UI-TARS grounding server for action prediction
+(``browser_visual_action``).
 """
 
 from __future__ import annotations
@@ -9,14 +10,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from typing import Any, cast
 
-from ollama import AsyncClient, Image
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
-from pydantic import BaseModel, ConfigDict, Field
 
-from config import load_config
+from settings import load_settings
 from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
@@ -90,35 +88,29 @@ async def inspect_page(
         err_msg = f"Unexpected failure capturing screenshot: {exc}"
         raise BrowserToolError(err_msg, tool=_SCREENSHOT_TOOL_NAME) from exc
 
-    encoded_image = _encode_image(screenshot_bytes)
+    encoded_image = base64.b64encode(screenshot_bytes).decode("ascii")
 
-    client, vision_model, vision_options, vision_think = _make_vision_client(
-        tool_name=_SCREENSHOT_TOOL_NAME
-    )
+    from sdk.providers import ProviderError, vision_generate
 
     try:
-        response = await client.generate(
-            model=vision_model,
-            prompt=clean_prompt,
-            options=vision_options,
-            images=[Image(value=encoded_image)],
-            think=vision_think,
-        )
-    except Exception as exc:
+        answer = await vision_generate(clean_prompt, encoded_image)
+    except ValueError as exc:
+        raise BrowserToolError(str(exc), tool=_SCREENSHOT_TOOL_NAME) from exc
+    except ProviderError as exc:
         logger.exception("Failed to generate answer for screenshot question")
         msg = "Failed to generate answer from screenshot."
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME) from exc
 
-    answer = cast(str | None, getattr(response, "response", None))
-    if answer is None:
+    if not answer:
         msg = "Vision model did not return an answer."
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
 
     from tools._vision_logging import log_vision_panel
 
+    settings = load_settings()
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
-        "inspect_page", vision_model,
+        "inspect_page", settings.get("vision_model", ""),
         clean_prompt, answer, elapsed_ms,
         image_source="%s (%s)" % (view.url, normalized_mode),
     )
@@ -243,46 +235,6 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
     return await locator.screenshot(type="png")
 
 
-def _make_vision_client(
-    *, tool_name: str,
-) -> tuple[AsyncClient, str, dict[str, Any], bool]:
-    """Return ``(client, model_name, options, think)`` for a vision call.
-
-    All vision parameters are sourced from ``settings.json`` (UI-editable).
-    """
-    from settings import load_settings
-
-    config = load_config()
-    settings = load_settings()
-
-    vision_model = settings.get("vision_model")
-    if not vision_model:
-        msg = "No vision model configured. Set one in Settings > System."
-        raise BrowserToolError(msg, tool=tool_name)
-
-    if "vision_options" not in settings:
-        logger.warning(
-            "vision_options missing from settings.json — using empty dict. "
-            "Migration 003 may not have run."
-        )
-    if "vision_think" not in settings:
-        logger.warning(
-            "vision_think missing from settings.json — defaulting to False. "
-            "Migration 003 may not have run."
-        )
-
-    vision_options = dict(settings.get("vision_options") or {})
-    vision_think = bool(settings.get("vision_think") or False)
-
-    host = getattr(getattr(config, "llm", None), "host", None)
-    client = AsyncClient(host=host) if host else AsyncClient()
-
-    return client, vision_model, vision_options, vision_think
-
-
-def _encode_image(image_bytes: bytes) -> str:
-    """Encode screenshot bytes in base64 for the vision model."""
-    return base64.b64encode(image_bytes).decode("ascii")
 
 
 __all__ = [

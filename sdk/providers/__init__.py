@@ -11,6 +11,7 @@ from settings import load_settings
 from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._protocol import Provider
 from ._runtime_stats import LLMRuntimeStats, llm_runtime_stats
+from ._vision import vision_generate
 
 logger = logging.getLogger(__name__)
 
@@ -24,23 +25,16 @@ _cached_provider: Any | None = None
 
 
 def _get_llm_config() -> LLMConfig:
-    """Return LLM config merged from config.yaml defaults and settings.json overrides.
+    """Return LLM config from settings.json (written by the setup wizard).
 
-    Load order: env var (resolved by load_config) → settings.json → config.yaml defaults.
-    The ``host`` field is Ollama-specific and is never overridden by settings.json.
-    API keys for cloud providers are no longer stored in settings — they live
-    in the supervisor vault and are accessed via the llm_proxy broker.
+    API keys for cloud providers live in the supervisor vault and are accessed
+    via the llm_proxy broker — they are never stored in settings.
     """
-    base = load_config().llm
     s = load_settings()
-    overrides: dict[str, Any] = {}
-    if s.get("llm_provider"):
-        overrides["provider"] = s["llm_provider"]
-    if s.get("llm_base_url"):
-        overrides["base_url"] = s["llm_base_url"]
-    if not overrides:
-        return base
-    return base.model_copy(update=overrides)
+    return LLMConfig(
+        provider=s.get("llm_provider", "ollama"),
+        base_url=s.get("llm_base_url") or None,
+    )
 
 
 def _find_proxy_socket(provider: str) -> Path | None:
@@ -60,13 +54,12 @@ def _find_proxy_socket(provider: str) -> Path | None:
 def get_provider() -> Provider:
     """Return the configured LLM provider singleton.
 
-    Reads the merged LLM config (config.yaml + settings.json overrides) to
-    determine which provider to instantiate. For cloud providers (openai,
-    anthropic) it first checks for a running llm_proxy broker and, if found,
-    constructs the SDK client with a UDS transport so the broker handles auth.
-    Falls back to a direct connection (``from_config``) for local providers or
-    when no proxy socket is present. The result is cached for the process
-    lifetime (or until ``reset_provider()`` is called).
+    Reads provider settings from settings.json to determine which provider to
+    instantiate. For cloud providers (openai, anthropic) it first checks for a
+    running llm_proxy broker and, if found, constructs the SDK client with a
+    UDS transport so the broker handles auth. Falls back to a direct connection
+    for local providers or when no proxy socket is present. The result is cached
+    for the process lifetime (or until ``reset_provider()`` is called).
     """
     global _cached_provider  # noqa: PLW0603
     if _cached_provider is not None:
@@ -114,4 +107,5 @@ __all__ = [
     "get_provider",
     "llm_runtime_stats",
     "reset_provider",
+    "vision_generate",
 ]

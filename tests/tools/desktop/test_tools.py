@@ -80,57 +80,51 @@ async def test_read_screen_empty_a11y(_mock_desktop_deps):
 @pytest.fixture
 def _mock_vision_deps():
     """Mock vision model deps for describe_screen tests."""
-    mock_config = MagicMock()
-    mock_config.llm.host = None
-
     fake_settings = {
         "vision_model": "qwen3.5:4b",
         "vision_options": {"temperature": 0.1, "num_predict": 512},
         "vision_think": False,
     }
 
+    async def _fake_vision_generate(prompt, image_base64, *, media_type="image/png"):
+        return "A desktop with a terminal and file manager."
+
     with (
-        patch("tools.desktop._tools.load_config", return_value=mock_config),
         patch("settings.load_settings", return_value=fake_settings),
         patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
-        patch("tools.desktop._tools.AsyncClient") as mock_client_cls,
+        patch("sdk.providers.vision_generate", _fake_vision_generate),
     ):
-        mock_client = AsyncMock()
-        mock_client_cls.return_value = mock_client
         mock_capture.return_value = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-
-        yield {
-            "config": mock_config,
-            "capture": mock_capture,
-            "client_cls": mock_client_cls,
-            "client": mock_client,
-        }
+        yield {"capture": mock_capture}
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_describe_screen_returns_vision_response(_mock_vision_deps):
     """describe_screen() returns the vision model's text description."""
-    _mock_vision_deps["client"].chat.return_value = {
-        "message": {"content": "A desktop with a terminal and file manager."},
-    }
     result = await describe_screen()
     assert "terminal" in result.lower()
     assert "file manager" in result.lower()
-    _mock_vision_deps["client"].chat.assert_called_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_describe_screen_no_vision_model():
     """describe_screen() returns error when no vision model configured."""
-    mock_config = MagicMock()
+    from sdk.providers import ProviderError
+
     fake_settings = {"vision_model": "", "vision_options": {}, "vision_think": False}
+
+    async def _raises_no_model(*args, **kwargs):
+        raise ValueError("No vision model configured. Set one in Settings > System.")
+
     with (
         patch("tools.desktop._tools.ensure_desktop_running", new_callable=AsyncMock),
-        patch("tools.desktop._tools.load_config", return_value=mock_config),
         patch("settings.load_settings", return_value=fake_settings),
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
+        patch("sdk.providers.vision_generate", _raises_no_model),
     ):
+        mock_capture.return_value = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
         result = await describe_screen()
         assert "error" in result.lower()
 
@@ -147,22 +141,50 @@ async def test_describe_screen_capture_failure(_mock_vision_deps):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_describe_screen_vision_model_failure(_mock_vision_deps):
+async def test_describe_screen_vision_model_failure():
     """describe_screen() returns error when vision model fails."""
-    _mock_vision_deps["client"].chat.side_effect = Exception("model timeout")
-    result = await describe_screen()
+    from sdk.providers import ProviderError
+
+    fake_settings = {
+        "vision_model": "qwen3.5:4b",
+        "vision_options": {},
+        "vision_think": False,
+    }
+
+    async def _failing_vision(*args, **kwargs):
+        raise ProviderError("model timeout", retryable=False)
+
+    with (
+        patch("settings.load_settings", return_value=fake_settings),
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
+        patch("sdk.providers.vision_generate", _failing_vision),
+    ):
+        mock_capture.return_value = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        result = await describe_screen()
     assert "error" in result.lower()
     assert "model timeout" in result.lower()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_describe_screen_empty_response(_mock_vision_deps):
+async def test_describe_screen_empty_response():
     """describe_screen() returns error when vision model returns empty."""
-    _mock_vision_deps["client"].chat.return_value = {
-        "message": {"content": ""},
+    fake_settings = {
+        "vision_model": "qwen3.5:4b",
+        "vision_options": {},
+        "vision_think": False,
     }
-    result = await describe_screen()
+
+    async def _empty_vision(*args, **kwargs):
+        return ""
+
+    with (
+        patch("settings.load_settings", return_value=fake_settings),
+        patch("tools.desktop._tools.capture_screenshot", new_callable=AsyncMock) as mock_capture,
+        patch("sdk.providers.vision_generate", _empty_vision),
+    ):
+        mock_capture.return_value = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        result = await describe_screen()
     assert "error" in result.lower()
     assert "empty" in result.lower()
 

@@ -218,7 +218,7 @@ def _convert_messages_for_openai(messages: list[dict[str, Any]]) -> list[dict[st
 
     The internal format stores tool_call arguments as dicts; OpenAI expects
     them serialized as JSON strings.  Tool calls also need ``type: "function"``
-    added.
+    added.  Images are converted to content arrays with image_url blocks.
     """
     converted = []
     for msg in messages:
@@ -240,6 +240,18 @@ def _convert_messages_for_openai(messages: list[dict[str, Any]]) -> list[dict[st
                 "content": msg.get("content"),
                 "tool_calls": openai_tcs,
             })
+        elif msg.get("images"):
+            content_parts: list[dict[str, Any]] = []
+            text = msg.get("content")
+            if text:
+                content_parts.append({"type": "text", "text": text})
+            for img in msg["images"]:
+                media_type = img.get("media_type", "image/png")
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{img['data']}"},
+                })
+            converted.append({"role": msg.get("role", "user"), "content": content_parts})
         else:
             converted.append(msg)
     return converted
