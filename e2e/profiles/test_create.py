@@ -38,13 +38,13 @@ def test_create_profile_persists_all_settings(page: Page):
 
     # --- Advanced settings (set every inference field) ---
     builder.open_advanced()
-    builder.auto_field(0).fill("0.8")       # Temperature
-    builder.auto_field(1).fill("50")        # Top K
-    builder.auto_field(2).fill("0.9")       # Top P
-    builder.auto_field(3).fill("1.2")       # Repeat Penalty
-    builder.auto_field(4).fill("16000")     # num_ctx
-    builder.unlimited_field(0).fill("4096") # num_predict
-    builder.unlimited_field(1).fill("25")   # max_iterations
+    builder.field("temperature").fill("0.8")
+    builder.field("top_k").fill("50")
+    builder.field("top_p").fill("0.9")
+    builder.field("repeat_penalty").fill("1.2")
+    builder.field("num_ctx").fill("16000")
+    builder.field("num_predict").fill("4096")
+    builder.field("max_iterations").fill("25")
     page.locator("label", has_text="Thinking").click()
 
     # --- Save ---

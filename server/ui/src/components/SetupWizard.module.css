@@ -138,7 +138,7 @@
 
 .modelCard {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.75rem;
     padding: 0.65rem 0.85rem;
     background: var(--surface);
@@ -154,6 +154,11 @@
     border-color: var(--text-primary);
 }
 
+.modelCard:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
 .modelCardSelected {
     border-color: var(--accent);
     background: var(--accent-muted);
@@ -166,6 +171,7 @@
     border-radius: 50%;
     border: 2px solid var(--border);
     flex-shrink: 0;
+    margin-top: 1px;
     position: relative;
     transition: border-color 120ms ease;
 }
@@ -197,7 +203,14 @@
     font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
-    line-height: 1;
+    line-height: 1.2;
+}
+
+.modelDesc {
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    opacity: 0.5;
+    line-height: 1.3;
 }
 
 /* ── Badges ──────────────────────────────────────────────────── */
@@ -423,4 +436,124 @@
 .retryBtn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* ── Provider inline fields ──────────────────────────────────── */
+
+.providerFields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-top: 1rem;
+    width: 100%;
+    text-align: left;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.fieldLabel {
+    font-family: var(--font-brand);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fieldInput {
+    font-family: var(--font-brand);
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 120ms ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.fieldInput:focus {
+    border-color: var(--accent);
+}
+
+.fieldHint {
+    font-size: 0.72rem;
+    color: var(--text-primary);
+    opacity: 0.45;
+    line-height: 1.4;
+}
+
+/* Cloud provider sub-select */
+.cloudSelect {
+    font-family: var(--font-brand);
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text-primary);
+    width: 100%;
+    outline: none;
+    cursor: pointer;
+}
+
+.cloudSelect:focus {
+    border-color: var(--accent);
+}
+
+/* ── Provider error (step 1) ─────────────────────────────────── */
+
+.providerError {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--danger-muted);
+    border: 1px solid var(--danger-muted);
+    color: var(--danger);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+/* ── Vision info panel ───────────────────────────────────────── */
+
+.infoPanel {
+    margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    background: var(--accent-muted);
+    border: 1px solid var(--accent-muted);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    text-align: left;
+}
+
+/* ── Skip button ─────────────────────────────────────────────── */
+
+.skipBtn {
+    align-self: center;
+    margin-top: 0.75rem;
+    padding: 0.4rem 1rem;
+    font-family: var(--font-brand);
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    opacity: 0.55;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    cursor: pointer;
+    transition: opacity 120ms ease, background 120ms ease;
+}
+
+.skipBtn:hover {
+    opacity: 1;
+    background: var(--surface);
+}
+
+.skipBtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    opacity: 1;
 }

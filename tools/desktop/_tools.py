@@ -14,16 +14,13 @@ import base64
 import json
 import logging
 import shlex
-from typing import TYPE_CHECKING, cast
-
-from ollama import AsyncClient, Image
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rich.console import Console
 
     from tools._grounding import GroundingResponse
 
-from config import load_config
 from tools.desktop._exec import _run_desktop_cmd
 from tools.desktop._lifecycle import ensure_desktop_running
 from tools.desktop._screenshot import capture_screenshot
@@ -216,15 +213,11 @@ async def describe_screen() -> str:
     Returns:
         Text description of the desktop from the vision model.
     """
+    from sdk.providers import ProviderError, vision_generate
+    from settings import load_settings
+
     await ensure_desktop_running()
     t0 = asyncio.get_event_loop().time()
-
-    cfg = load_config()
-    from settings import load_settings
-    settings = load_settings()
-    vision_model = settings.get("vision_model")
-    if not vision_model:
-        return "Error: No vision model configured. Set one in Settings > System."
 
     try:
         screenshot_bytes = await capture_screenshot()
@@ -233,52 +226,24 @@ async def describe_screen() -> str:
         return "Error: Failed to capture screenshot: %s" % exc
 
     encoded = base64.b64encode(screenshot_bytes).decode("ascii")
-    host = getattr(getattr(cfg, "llm", None), "host", None)
-    client = AsyncClient(host=host) if host else AsyncClient()
-
-    if "vision_options" not in settings:
-        logger.warning(
-            "vision_options missing from settings.json — using empty dict. "
-            "Migration 003 may not have run."
-        )
-    if "vision_think" not in settings:
-        logger.warning(
-            "vision_think missing from settings.json — defaulting to False. "
-            "Migration 003 may not have run."
-        )
-
-    vision_options = dict(settings.get("vision_options") or {})
-    vision_think = bool(settings.get("vision_think") or False)
 
     try:
-        response = await client.chat(
-            model=vision_model,
-            messages=[{
-                "role": "user",
-                "content": _DESCRIBE_PROMPT,
-                "images": [Image(value=encoded)],
-            }],
-            options=vision_options,
-            think=vision_think,
-        )
-    except Exception as exc:
+        answer = await vision_generate(_DESCRIBE_PROMPT, encoded)
+    except ValueError as exc:
+        return "Error: %s" % exc
+    except ProviderError as exc:
         logger.exception("Vision model failed for describe_screen")
         return "Error: Vision model failed: %s" % exc
-
-    msg = response.get("message", {})
-    if isinstance(msg, dict):
-        answer = msg.get("content", "")
-    else:
-        answer = cast(str, getattr(msg, "content", ""))
 
     if not answer:
         return "Error: Vision model returned an empty response."
 
     from tools._vision_logging import log_vision_panel
 
+    settings = load_settings()
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
-        "describe_screen", vision_model,
+        "describe_screen", settings.get("vision_model", ""),
         _DESCRIBE_PROMPT, answer, elapsed_ms,
     )
 

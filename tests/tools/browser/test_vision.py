@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import importlib
-from types import SimpleNamespace
 
 import pytest
 
@@ -100,13 +99,6 @@ class _FakeBrowser:
         )
 
 
-class _FakeConfig:
-    class _LLM:
-        host = "http://fake-host"
-
-    llm = _LLM()
-
-
 _FAKE_SETTINGS = {
     "vision_model": "vision-model",
     "vision_options": {"temperature": 0.0},
@@ -114,18 +106,17 @@ _FAKE_SETTINGS = {
 }
 
 
-class _ScreenshotClient:
-    called: bool = False
-    last_kwargs: dict[str, object] = {}
-    last_host: str | None = None
+async def _fake_vision_generate(prompt, image_base64, *, media_type="image/png"):
+    """Stand-in for sdk.providers.vision_generate."""
+    _fake_vision_generate.called = True
+    _fake_vision_generate.last_prompt = prompt
+    _fake_vision_generate.last_image = image_base64
+    return "Mock answer"
 
-    def __init__(self, host: str | None = None) -> None:
-        _ScreenshotClient.last_host = host
 
-    async def generate(self, **kwargs: object) -> SimpleNamespace:
-        _ScreenshotClient.called = True
-        _ScreenshotClient.last_kwargs = kwargs
-        return SimpleNamespace(response="Mock answer")
+_fake_vision_generate.called = False
+_fake_vision_generate.last_prompt = None
+_fake_vision_generate.last_image = None
 
 
 # ── inspect_page tests ────────────────────────────────────────────────
@@ -134,43 +125,30 @@ class _ScreenshotClient:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    """inspect_page should capture a screenshot and forward it to the model."""
+    """inspect_page should capture a screenshot and forward it to the provider."""
+    from unittest.mock import patch
+
     page = _ScreenshotFakePage(b"fake-image-bytes")
     browser = _FakeBrowser(page)
 
-    async def fake_get_browser() -> _FakeBrowser:
-        return browser
-
-    _ScreenshotClient.called = False
-    _ScreenshotClient.last_kwargs = {}
-    _ScreenshotClient.last_host = None
+    _fake_vision_generate.called = False
+    _fake_vision_generate.last_prompt = None
+    _fake_vision_generate.last_image = None
 
     module = importlib.import_module("tools.browser.vision")
     import settings as settings_module
 
-    monkeypatch.setattr(module, "get_browser", fake_get_browser)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
-    monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
-
-    monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
     monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
-    answer = await inspect_page("What is in the header?")
+    with patch("sdk.providers.vision_generate", _fake_vision_generate):
+        answer = await inspect_page("What is in the header?")
 
     assert answer == "Mock answer"
-    assert _ScreenshotClient.last_host == _FakeConfig.llm.host
-    assert _ScreenshotClient.called
-
-    kwargs = _ScreenshotClient.last_kwargs
-    assert kwargs["prompt"] == "What is in the header?"
-    assert kwargs["model"] == "vision-model"
-    assert kwargs["options"] == {"temperature": 0.0}
-    assert kwargs["think"] is False
-    images = kwargs["images"]
-    assert isinstance(images, list)
-    assert len(images) == 1
+    assert _fake_vision_generate.called
+    assert _fake_vision_generate.last_prompt == "What is in the header?"
     encoded = base64.b64encode(b"fake-image-bytes").decode("ascii")
-    assert getattr(images[0], "value", None) == encoded
+    assert _fake_vision_generate.last_image == encoded
 
 
 @pytest.mark.unit
@@ -204,38 +182,31 @@ async def test_inspect_page_requires_navigation(monkeypatch: pytest.MonkeyPatch)
 @pytest.mark.asyncio
 async def test_inspect_page_selector_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Selector screenshots should focus on the requested element."""
+    from unittest.mock import patch
+
     locator = _ScreenshotFakeLocator(b"element-bytes")
     page = _ScreenshotFakePage(b"page-bytes", locator_map={"#hero": locator})
     browser = _FakeBrowser(page)
 
-    async def fake_get_browser() -> _FakeBrowser:
-        return browser
-
-    _ScreenshotClient.called = False
-    _ScreenshotClient.last_kwargs = {}
-    _ScreenshotClient.last_host = None
+    _fake_vision_generate.called = False
+    _fake_vision_generate.last_image = None
 
     module = importlib.import_module("tools.browser.vision")
     import settings as settings_module
 
-    monkeypatch.setattr(module, "get_browser", fake_get_browser)
-    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
-    monkeypatch.setattr(module, "AsyncClient", _ScreenshotClient)
+    async def _get_browser():
+        return browser
 
-    monkeypatch.setattr(module, "load_config", lambda: _FakeConfig())
+    monkeypatch.setattr(module, "get_browser", _get_browser)
+    monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
     monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
-    answer = await inspect_page("Describe the hero", mode="selector", selector="#hero")
+    with patch("sdk.providers.vision_generate", _fake_vision_generate):
+        answer = await inspect_page("Describe the hero", mode="selector", selector="#hero")
 
     assert answer == "Mock answer"
-    assert _ScreenshotClient.called
-
-    kwargs = _ScreenshotClient.last_kwargs
-
-    images = kwargs.get("images")
-    assert isinstance(images, list)
-    assert images
-    assert getattr(images[0], "value", None) == base64.b64encode(
+    assert _fake_vision_generate.called
+    assert _fake_vision_generate.last_image == base64.b64encode(
         b"element-bytes"
     ).decode("ascii")
 

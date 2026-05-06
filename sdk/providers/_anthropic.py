@@ -2,7 +2,9 @@
 
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator, Callable
+from pathlib import Path
 from typing import Any
 
 from ._base import BaseAPIProvider
@@ -10,6 +12,8 @@ from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenU
 from ._tool_schema import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
+
+_MODEL_CACHE_TTL = 300.0  # 5 minutes
 
 # Anthropic stop reason → normalized done_reason
 _STOP_REASON_MAP: dict[str, str] = {
@@ -23,16 +27,39 @@ _STOP_REASON_MAP: dict[str, str] = {
 class AnthropicProvider(BaseAPIProvider):
     """LLM provider backed by the Anthropic Messages API."""
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        *,
+        proxy_socket: Path | None = None,
+    ) -> None:
         super().__init__(api_key, base_url)
         import anthropic
 
-        kwargs: dict[str, Any] = {}
-        if api_key:
-            kwargs["api_key"] = api_key
-        if base_url:
-            kwargs["base_url"] = base_url
-        self._client = anthropic.AsyncAnthropic(**kwargs)
+        if proxy_socket is not None:
+            # Route all SDK traffic through the llm_proxy broker's UDS.
+            # The Anthropic SDK adds /v1/messages paths relative to base_url;
+            # using "http://localhost" means it sends to http://localhost/v1/...
+            # which the proxy receives and forwards to the real upstream.
+            import httpx
+            transport = httpx.AsyncHTTPTransport(uds=str(proxy_socket))
+            http_client = httpx.AsyncClient(transport=transport)
+            self._client = anthropic.AsyncAnthropic(
+                http_client=http_client,
+                base_url="http://localhost",
+                api_key="proxy",
+            )
+        else:
+            kwargs: dict[str, Any] = {}
+            if api_key:
+                kwargs["api_key"] = api_key
+            if base_url:
+                kwargs["base_url"] = base_url
+            self._client = anthropic.AsyncAnthropic(**kwargs)
+
+        self._model_cache: list[str] | None = None
+        self._model_cache_at: float = 0.0
 
     def _build_kwargs(
         self,
@@ -49,7 +76,7 @@ class AnthropicProvider(BaseAPIProvider):
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": converted,
-            "max_tokens": opts.get("num_ctx", 16384),
+            "max_tokens": opts.get("num_predict") or opts.get("max_tokens") or 16384,
         }
         if system_prompt:
             kwargs["system"] = system_prompt
@@ -113,9 +140,22 @@ class AnthropicProvider(BaseAPIProvider):
         yield _normalize_response(response)
 
     async def list_models(self) -> list[str]:
-        """Return available Anthropic model identifiers."""
-        response = await self._client.models.list(limit=100)
-        return [m.id for m in response.data]
+        """Return available Anthropic model identifiers, with a 5-minute in-memory cache."""
+        now = time.monotonic()
+        if self._model_cache is not None and now - self._model_cache_at < _MODEL_CACHE_TTL:
+            return self._model_cache
+        try:
+            response = await self._client.models.list(limit=100)
+            self._model_cache = [m.id for m in response.data]
+            self._model_cache_at = now
+            return self._model_cache
+        except Exception as exc:
+            raise _wrap_error(exc) from exc
+
+    def invalidate_model_cache(self) -> None:
+        """Clear the cached model list so the next call re-fetches."""
+        self._model_cache = None
+        self._model_cache_at = 0.0
 
 
 def _convert_messages(
@@ -167,7 +207,24 @@ def _convert_messages(
             continue
 
         # user messages
-        converted.append({"role": "user", "content": msg.get("content", "")})
+        images = msg.get("images")
+        if images:
+            content_blocks: list[dict[str, Any]] = []
+            text = msg.get("content")
+            if text:
+                content_blocks.append({"type": "text", "text": text})
+            for img in images:
+                content_blocks.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": img.get("media_type", "image/png"),
+                        "data": img["data"],
+                    },
+                })
+            converted.append({"role": "user", "content": content_blocks})
+        else:
+            converted.append({"role": "user", "content": msg.get("content", "")})
 
     return system_prompt, converted
 

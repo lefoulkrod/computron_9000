@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './SystemSettings.module.css';
+import ModelPicker from './ModelPicker.jsx';
 import PackageIcon from './icons/PackageIcon';
 import EyeIcon from './icons/EyeIcon';
 import CompactionIcon from './icons/CompactionIcon';
@@ -17,7 +18,11 @@ export default function SystemSettings({ onRunWizard }) {
     const [refreshing, setRefreshing] = useState(false);
     const [visionAdvancedOpen, setVisionAdvancedOpen] = useState(false);
 
-    const visionModels = allModels.filter((m) => (m.capabilities || []).includes('vision'));
+    const visionModels = allModels;
+    const provider = settings.llm_provider || 'ollama';
+    const providerLabel = provider === 'openai' && settings.llm_base_url
+        ? 'OpenAI Compatible'
+        : provider.charAt(0).toUpperCase() + provider.slice(1);
 
     const fetchModels = useCallback(async () => {
         try {
@@ -120,19 +125,16 @@ export default function SystemSettings({ onRunWizard }) {
                     </div>
                     <div className={styles.settingInfo}>
                         <span className={styles.settingTitle}>Vision Model</span>
-                        <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Only models with vision capability are shown.</span>
+                        <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Choose a model that supports vision (image input).</span>
                     </div>
-                    <select
-                        className={styles.select}
-                        value={settings.vision_model}
-                        onChange={(e) => updateSetting('vision_model', e.target.value)}
-                        data-testid="vision-model-select"
-                    >
-                        <option value="">Select a model</option>
-                        {visionModels.map((m) => (
-                            <option key={m.name} value={m.name}>{m.name}</option>
-                        ))}
-                    </select>
+                </div>
+                <div className={styles.pickerRow}>
+                    <ModelPicker
+                        models={visionModels}
+                        selected={settings.vision_model || null}
+                        onSelect={(name) => updateSetting('vision_model', name || '')}
+                        placeholder="Search for a vision model…"
+                    />
                 </div>
 
                 <button
@@ -161,10 +163,11 @@ export default function SystemSettings({ onRunWizard }) {
                         </label>
                         {[
                             { key: 'temperature', label: 'Temperature', desc: '0.0 = deterministic, 0.7 = general, 1.0+ = creative.', step: 0.1 },
-                            { key: 'top_k', label: 'Top K', desc: '10 = factual, 40 = general, 100+ = creative.' },
-                            { key: 'num_ctx', label: 'Context (num_ctx)', desc: 'Maximum context window in tokens.' },
+                            { key: 'top_k', label: 'Top K', desc: '10 = factual, 40 = general, 100+ = creative.', providers: ['ollama', 'anthropic'] },
+                            { key: 'top_p', label: 'Top P', desc: '0.5 = focused, 0.9 = general, 1.0 = everything.', step: 0.05 },
+                            { key: 'num_ctx', label: 'Context (num_ctx)', desc: 'Maximum context window in tokens.', providers: ['ollama'] },
                             { key: 'num_predict', label: 'Max Output (num_predict)', desc: 'Tokens the model can generate per call.' },
-                        ].map(({ key, label, desc, step }) => (
+                        ].filter(({ providers }) => !providers || providers.includes(provider)).map(({ key, label, desc, step }) => (
                             <div key={key} className={styles.groupRow}>
                                 <div className={styles.settingInfo}>
                                     <span className={styles.settingTitle}>{label}</span>
@@ -197,32 +200,32 @@ export default function SystemSettings({ onRunWizard }) {
             {/* Compaction Model */}
             <div className={styles.sectionLabel}>Compaction</div>
 
-            <div className={styles.settingRow}>
-                <div className={styles.settingIcon}>
-                    <CompactionIcon />
+            <div className={styles.groupCard}>
+                <div className={styles.settingRow}>
+                    <div className={styles.settingIcon}>
+                        <CompactionIcon />
+                    </div>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Compaction Model</span>
+                        <span className={styles.settingDesc}>Summarizes conversation history when context fills up.</span>
+                    </div>
                 </div>
-                <div className={styles.settingInfo}>
-                    <span className={styles.settingTitle}>Compaction Model</span>
-                    <span className={styles.settingDesc}>Summarizes conversation history when context fills up.</span>
+                <div className={styles.pickerRow}>
+                    <ModelPicker
+                        models={allModels}
+                        selected={settings.compaction_model || null}
+                        onSelect={(name) => updateSetting('compaction_model', name || '')}
+                        placeholder="Search for a compaction model…"
+                    />
                 </div>
-                <select
-                    className={styles.select}
-                    value={settings.compaction_model || ''}
-                    onChange={(e) => updateSetting('compaction_model', e.target.value)}
-                >
-                    <option value="">Select a model</option>
-                    {allModels.map((m) => (
-                        <option key={m.name} value={m.name}>{m.name}</option>
-                    ))}
-                </select>
             </div>
 
             <div className={styles.note}>
                 Compaction was fine-tuned to work with kimi-k2.5 — using a different model may produce lower quality summaries.
             </div>
 
-            {/* Ollama Connection */}
-            <div className={styles.sectionLabel}>Ollama Connection</div>
+            {/* LLM Provider */}
+            <div className={styles.sectionLabel}>LLM Provider</div>
 
             <div className={styles.settingRow}>
                 <div className={styles.settingIcon} style={{ opacity: 1 }}>
@@ -234,8 +237,8 @@ export default function SystemSettings({ onRunWizard }) {
                     </span>
                     <span className={styles.settingDesc}>
                         {connected
-                            ? `${allModels.length} model${allModels.length === 1 ? '' : 's'} available`
-                            : 'Unable to reach Ollama'}
+                            ? `${providerLabel} — ${allModels.length} model${allModels.length === 1 ? '' : 's'} available`
+                            : `Unable to reach ${providerLabel}`}
                     </span>
                 </div>
                 <Button

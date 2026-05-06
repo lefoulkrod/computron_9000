@@ -67,13 +67,13 @@ def test_profile_ui_reflects_saved_state(page: Page):
         # --- Advanced settings ---
         builder.open_advanced()
 
-        expect(builder.auto_field(0)).to_have_value("0.3")     # Temperature
-        expect(builder.auto_field(1)).to_have_value("")        # Top K — not set
-        expect(builder.auto_field(2)).to_have_value("")        # Top P — not set
-        expect(builder.auto_field(3)).to_have_value("")        # Repeat penalty — not set
-        expect(builder.auto_field(4)).to_have_value("32000")   # num_ctx
-        expect(builder.unlimited_field(0)).to_have_value("2048")  # num_predict
-        expect(builder.unlimited_field(1)).to_have_value("10")    # max_iterations
+        expect(builder.field("temperature")).to_have_value("0.3")
+        expect(builder.field("top_k")).to_have_value("")
+        expect(builder.field("top_p")).to_have_value("")
+        expect(builder.field("repeat_penalty")).to_have_value("")
+        expect(builder.field("num_ctx")).to_have_value("32000")
+        expect(builder.field("num_predict")).to_have_value("2048")
+        expect(builder.field("max_iterations")).to_have_value("10")
         expect(builder.thinking_switch).to_be_checked()
 
     finally:

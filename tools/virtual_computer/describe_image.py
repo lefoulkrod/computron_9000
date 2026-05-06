@@ -7,11 +7,8 @@ import base64
 import logging
 import mimetypes
 from pathlib import Path
-from typing import cast
 
-from ollama import AsyncClient, Image
-
-from config import load_config
+from settings import load_settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +39,6 @@ async def describe_image(
     """
     t0 = asyncio.get_event_loop().time()
 
-    cfg = load_config()
     file_path = Path(path)
 
     if not file_path.exists():
@@ -69,51 +65,26 @@ async def describe_image(
 
     encoded = base64.b64encode(raw).decode("ascii")
 
-    from settings import load_settings
-    settings = load_settings()
-    vision_model = settings.get("vision_model")
-    if not vision_model:
-        return "Error: No vision model configured. Set one in Settings > System."
-
-    host = cfg.llm.host if getattr(cfg, "llm", None) else None
-    client = AsyncClient(host=host) if host else AsyncClient()
-
-    if "vision_options" not in settings:
-        logger.warning(
-            "vision_options missing from settings.json — using empty dict. "
-            "Migration 003 may not have run."
-        )
-    if "vision_think" not in settings:
-        logger.warning(
-            "vision_think missing from settings.json — defaulting to False. "
-            "Migration 003 may not have run."
-        )
-
-    vision_options = dict(settings.get("vision_options") or {})
-    vision_think = bool(settings.get("vision_think") or False)
+    from sdk.providers import ProviderError, vision_generate
 
     try:
-        response = await client.generate(
-            model=vision_model,
-            prompt=prompt,
-            images=[Image(value=encoded)],
-            options=vision_options,
-            think=vision_think,
-        )
-    except Exception as exc:
+        answer = await vision_generate(prompt, encoded, media_type=content_type or "image/png")
+    except ValueError as exc:
+        return "Error: %s" % exc
+    except ProviderError as exc:
         logger.exception("Vision model failed for image %s", path)
         return "Error: Vision model failed: %s" % exc
 
-    answer = cast(str | None, getattr(response, "response", None))
-    if answer is None:
+    if not answer:
         return "Error: Vision model did not return a response."
 
     from tools._vision_logging import log_vision_panel
 
+    settings = load_settings()
     elapsed_ms = (asyncio.get_event_loop().time() - t0) * 1000
     log_vision_panel(
         "describe_image",
-        vision_model,
+        settings.get("vision_model", ""),
         prompt,
         answer,
         elapsed_ms,

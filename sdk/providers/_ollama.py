@@ -36,7 +36,7 @@ def _build_ollama_kwargs(
     """Build kwargs dict for the Ollama chat API."""
     kwargs: dict[str, Any] = {
         "model": model,
-        "messages": messages,
+        "messages": _convert_messages_for_ollama(messages),
         "stream": True,
         "think": think,
     }
@@ -45,6 +45,22 @@ def _build_ollama_kwargs(
     if options:
         kwargs["options"] = options
     return kwargs
+
+
+def _convert_messages_for_ollama(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert internal message format to Ollama's expected format.
+
+    Ollama expects images as a list of base64 strings on the message dict.
+    """
+    converted = []
+    for msg in messages:
+        images = msg.get("images")
+        if images:
+            ollama_images = [img["data"] for img in images]
+            converted.append({**msg, "images": ollama_images})
+        else:
+            converted.append(msg)
+    return converted
 
 
 class OllamaProvider:
@@ -56,7 +72,8 @@ class OllamaProvider:
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
         """Construct from application config."""
-        return cls(host=llm_config.host)
+        # base_url comes from settings.json (wizard); host comes from config.yaml/env var
+        return cls(host=llm_config.base_url or llm_config.host)
 
     async def chat(
         self,
