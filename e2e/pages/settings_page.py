@@ -68,6 +68,10 @@ class ProfileBuilder:
         self.page.get_by_text("Advanced Settings").click()
         return self
 
+    def field(self, name: str) -> Locator:
+        """Advanced inference field by name (e.g. 'temperature', 'top_k')."""
+        return self.page.get_by_test_id(f"field-{name}")
+
     def auto_field(self, idx: int) -> Locator:
         """Inference fields with placeholder='auto' (temperature, top_k, top_p,
         repeat_penalty, num_ctx — in that source order)."""

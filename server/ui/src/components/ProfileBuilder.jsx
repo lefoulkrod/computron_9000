@@ -26,7 +26,7 @@ const INFERENCE_FIELDS = ['temperature', 'top_k', 'top_p', 'repeat_penalty', 'th
 const HELP_SECTIONS = [
     { title: 'Name', body: 'How this profile appears in the profile list and agent selector.' },
     { title: 'Description', body: 'A short summary of what this profile is tuned for. Shown below the name in the profile list.' },
-    { title: 'Model', body: 'The Ollama model to use when this profile is active. Leave blank to use the system default.' },
+    { title: 'Model', body: 'The model to use when this profile is active.' },
     { title: 'System Prompt', body: 'Instructions prepended to every conversation. Controls the agent\'s personality, constraints, and behavior. Supports markdown.' },
     { title: 'Skills', body: 'Toggle which tool groups the agent can access. Disabled skills are not available during inference.' },
     { title: 'Inference Preset', body: 'Quick presets that set temperature, sampling, and thinking for common workloads. Selecting a preset fills in the advanced values.' },
@@ -40,9 +40,9 @@ const HELP_SECTIONS = [
     { title: 'Thinking', body: 'When enabled, the model reasons step-by-step before answering. Good for math, logic, and code generation.' },
 ];
 
-function _detectPreset(draft) {
+function _detectPreset(draft, provider) {
     for (const [id, fields] of Object.entries(PRESETS)) {
-        const presetKeys = Object.keys(fields);
+        const presetKeys = Object.keys(fields).filter((k) => _isSupported(k, provider));
         const allMatch = presetKeys.every((k) => {
             const draftVal = draft[k];
             const presetVal = fields[k];
@@ -51,7 +51,9 @@ function _detectPreset(draft) {
         });
         if (!allMatch) continue;
 
-        const otherKeys = INFERENCE_FIELDS.filter((k) => !presetKeys.includes(k));
+        const otherKeys = INFERENCE_FIELDS
+            .filter((k) => _isSupported(k, provider))
+            .filter((k) => !presetKeys.includes(k));
         const othersNull = otherKeys.every((k) => draft[k] == null || draft[k] === '');
         if (othersNull) return id;
     }
@@ -68,10 +70,26 @@ const ADVANCED_HELP = {
     top_p: '0.5 = focused, 0.9 = general, 1.0 = everything',
     repeat_penalty: '1.0 = off, 1.1 = general, 1.5+ = strongly discourages repetition',
     context: 'Context window in tokens. Higher = more memory, slower',
-    max_output: 'Max tokens per response. Leave empty for unlimited',
+    max_output: 'Max tokens per response. Leave empty for unlimited (required by Anthropic)',
     iterations: 'Tool-call rounds per turn. Leave empty for unlimited',
     thinking: 'Step-by-step reasoning before answering. Good for math, logic, code',
 };
+
+const FIELD_SUPPORT = {
+    temperature:    ['ollama', 'openai', 'anthropic'],
+    top_k:          ['ollama', 'anthropic'],
+    top_p:          ['ollama', 'openai', 'anthropic'],
+    repeat_penalty: ['ollama'],
+    num_ctx:        ['ollama'],
+    num_predict:    ['ollama', 'openai', 'anthropic'],
+    max_iterations: ['ollama', 'openai', 'anthropic'],
+    think:          ['ollama', 'openai', 'anthropic'],
+};
+
+function _isSupported(field, provider) {
+    const providers = FIELD_SUPPORT[field];
+    return !providers || providers.includes(provider);
+}
 
 export default function ProfileBuilder({
     profile,
@@ -79,6 +97,7 @@ export default function ProfileBuilder({
     onDelete,
     onDuplicate,
     models,
+    provider = 'ollama',
     availableSkills,
     deleteConflict,
     onDismissDeleteConflict,
@@ -100,8 +119,8 @@ export default function ProfileBuilder({
 
     const activePreset = useMemo(() => {
         if (!draft) return null;
-        return _detectPreset(draft);
-    }, [draft]);
+        return _detectPreset(draft, provider);
+    }, [draft, provider]);
 
     const update = useCallback((field, value) => {
         setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
@@ -325,53 +344,59 @@ export default function ProfileBuilder({
                                 <div className={styles.advancedField}>
                                     <label className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Temperature</span>
-                                        <input className={styles.numInput} type="number" value={draft.temperature ?? ''} onChange={(e) => updateInference('temperature', e.target.value === '' ? null : Number(e.target.value))} min={0} max={2} step={0.1} placeholder="auto" />
+                                        <input className={styles.numInput} type="number" data-testid="field-temperature" value={draft.temperature ?? ''} onChange={(e) => updateInference('temperature', e.target.value === '' ? null : Number(e.target.value))} min={0} max={2} step={0.1} placeholder="auto" />
                                     </label>
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.temperature}</span>
                                 </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Top K</span>
-                                        <input className={styles.numInput} type="number" value={draft.top_k ?? ''} onChange={(e) => updateInference('top_k', e.target.value === '' ? null : Number(e.target.value))} min={0} step={1} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.top_k}</span>
-                                </div>
+                                {_isSupported('top_k', provider) && (
+                                    <div className={styles.advancedField}>
+                                        <label className={styles.fieldRow}>
+                                            <span className={styles.fieldLabel}>Top K</span>
+                                            <input className={styles.numInput} type="number" data-testid="field-top_k" value={draft.top_k ?? ''} onChange={(e) => updateInference('top_k', e.target.value === '' ? null : Number(e.target.value))} min={0} step={1} placeholder="auto" />
+                                        </label>
+                                        <span className={styles.fieldHint}>{ADVANCED_HELP.top_k}</span>
+                                    </div>
+                                )}
                                 <div className={styles.advancedField}>
                                     <label className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Top P</span>
-                                        <input className={styles.numInput} type="number" value={draft.top_p ?? ''} onChange={(e) => updateInference('top_p', e.target.value === '' ? null : Number(e.target.value))} min={0} max={1} step={0.05} placeholder="auto" />
+                                        <input className={styles.numInput} type="number" data-testid="field-top_p" value={draft.top_p ?? ''} onChange={(e) => updateInference('top_p', e.target.value === '' ? null : Number(e.target.value))} min={0} max={1} step={0.05} placeholder="auto" />
                                     </label>
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.top_p}</span>
                                 </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Repeat Penalty</span>
-                                        <input className={styles.numInput} type="number" value={draft.repeat_penalty ?? ''} onChange={(e) => updateInference('repeat_penalty', e.target.value === '' ? null : Number(e.target.value))} min={0} step={0.05} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.repeat_penalty}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Context</span>
-                                        <input className={styles.numInput} type="number" value={draft.num_ctx ?? ''} onChange={(e) => update('num_ctx', e.target.value === '' ? null : Number(e.target.value))} min={1} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.context}</span>
-                                </div>
+                                {_isSupported('repeat_penalty', provider) && (
+                                    <div className={styles.advancedField}>
+                                        <label className={styles.fieldRow}>
+                                            <span className={styles.fieldLabel}>Repeat Penalty</span>
+                                            <input className={styles.numInput} type="number" data-testid="field-repeat_penalty" value={draft.repeat_penalty ?? ''} onChange={(e) => updateInference('repeat_penalty', e.target.value === '' ? null : Number(e.target.value))} min={0} step={0.05} placeholder="auto" />
+                                        </label>
+                                        <span className={styles.fieldHint}>{ADVANCED_HELP.repeat_penalty}</span>
+                                    </div>
+                                )}
+                                {_isSupported('num_ctx', provider) && (
+                                    <div className={styles.advancedField}>
+                                        <label className={styles.fieldRow}>
+                                            <span className={styles.fieldLabel}>Context</span>
+                                            <input className={styles.numInput} type="number" data-testid="field-num_ctx" value={draft.num_ctx ?? ''} onChange={(e) => update('num_ctx', e.target.value === '' ? null : Number(e.target.value))} min={1} placeholder="auto" />
+                                        </label>
+                                        <span className={styles.fieldHint}>{ADVANCED_HELP.context}</span>
+                                    </div>
+                                )}
                                 <div className={styles.advancedField}>
                                     <label className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Max Output</span>
-                                        <input className={styles.numInput} type="number" value={draft.num_predict ?? ''} onChange={(e) => update('num_predict', e.target.value === '' ? null : Number(e.target.value))} min={-1} step={1} placeholder="unlimited" />
+                                        <input className={styles.numInput} type="number" data-testid="field-num_predict" value={draft.num_predict ?? ''} onChange={(e) => update('num_predict', e.target.value === '' ? null : Number(e.target.value))} min={-1} step={1} placeholder={provider === 'anthropic' ? '16384' : 'unlimited'} />
                                     </label>
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.max_output}</span>
                                 </div>
                                 <div className={styles.advancedField}>
                                     <label className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Iterations</span>
-                                        <input className={styles.numInput} type="number" value={draft.max_iterations ?? ''} onChange={(e) => update('max_iterations', e.target.value === '' ? null : Number(e.target.value))} min={1} step={1} placeholder="unlimited" />
+                                        <input className={styles.numInput} type="number" data-testid="field-max_iterations" value={draft.max_iterations ?? ''} onChange={(e) => update('max_iterations', e.target.value === '' ? null : Number(e.target.value))} min={1} step={1} placeholder="unlimited" />
                                     </label>
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.iterations}</span>
                                 </div>
-                                <div className={styles.advancedField}>
+                                <div className={styles.advancedField} data-testid="field-think">
                                     <label className={styles.fieldRow}>
                                         <span className={styles.fieldLabel}>Thinking</span>
                                         <ToggleSwitch
