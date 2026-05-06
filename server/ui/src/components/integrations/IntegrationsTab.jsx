@@ -69,7 +69,8 @@ export default function IntegrationsTab() {
                 return;
             }
             const data = await resp.json();
-            setIntegrations(data.integrations || []);
+            const all = data.integrations || [];
+            setIntegrations(all.filter(i => i.slug !== 'llm_proxy'));
         } catch (err) {
             setLoadError({
                 code: 'NETWORK',

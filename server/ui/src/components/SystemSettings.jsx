@@ -20,6 +20,9 @@ export default function SystemSettings({ onRunWizard }) {
 
     const visionModels = allModels;
     const provider = settings.llm_provider || 'ollama';
+    const providerLabel = provider === 'openai' && settings.llm_base_url
+        ? 'OpenAI Compatible'
+        : provider.charAt(0).toUpperCase() + provider.slice(1);
 
     const fetchModels = useCallback(async () => {
         try {
@@ -221,8 +224,8 @@ export default function SystemSettings({ onRunWizard }) {
                 Compaction was fine-tuned to work with kimi-k2.5 — using a different model may produce lower quality summaries.
             </div>
 
-            {/* Ollama Connection */}
-            <div className={styles.sectionLabel}>Ollama Connection</div>
+            {/* LLM Provider */}
+            <div className={styles.sectionLabel}>LLM Provider</div>
 
             <div className={styles.settingRow}>
                 <div className={styles.settingIcon} style={{ opacity: 1 }}>
@@ -234,8 +237,8 @@ export default function SystemSettings({ onRunWizard }) {
                     </span>
                     <span className={styles.settingDesc}>
                         {connected
-                            ? `${allModels.length} model${allModels.length === 1 ? '' : 's'} available`
-                            : 'Unable to reach Ollama'}
+                            ? `${providerLabel} — ${allModels.length} model${allModels.length === 1 ? '' : 's'} available`
+                            : `Unable to reach ${providerLabel}`}
                     </span>
                 </div>
                 <Button
