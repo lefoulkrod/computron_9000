@@ -246,21 +246,39 @@ def _convert_tools(tools: list[Callable[..., Any]]) -> list[dict[str, Any]]:
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504, 529}
 
 
+def _extract_api_message(exc: Exception) -> str:
+    """Pull the human-readable message out of an Anthropic API error."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        # Direct shape: body = {message: "..."}
+        if body.get("message"):
+            return body["message"]
+        # Nested shape: body = {error: {type, message}}
+        err = body.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            msg = err["message"]
+            err_type = err.get("type", "")
+            if err_type:
+                return f"{err_type}: {msg}"
+            return msg
+    return str(exc)
+
+
 def _wrap_error(exc: Exception) -> ProviderError:
     """Convert an Anthropic SDK exception into a ProviderError."""
     import anthropic
 
     if isinstance(exc, anthropic.APIStatusError):
         retryable = exc.status_code in _RETRYABLE_STATUS_CODES
+        msg = _extract_api_message(exc)
         return ProviderError(
-            str(exc),
+            msg,
             retryable=retryable,
             status_code=exc.status_code,
             cause=exc,
         )
     if isinstance(exc, anthropic.APIConnectionError):
         return ProviderError(str(exc), retryable=True, cause=exc)
-    # Unknown errors are not retryable by default
     return ProviderError(str(exc), retryable=False, cause=exc)
 
 

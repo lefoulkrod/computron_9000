@@ -331,13 +331,28 @@ def _normalize_response(raw: Any) -> ChatResponse:
 # ---------------------------------------------------------------------------
 
 
+def _extract_api_message(exc: Exception) -> str:
+    """Pull the human-readable message out of an OpenAI API error."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        # Direct shape: body = {message: "..."}  (proxy broker path)
+        if body.get("message"):
+            return body["message"]
+        # Nested shape: body = {error: {message: "..."}}  (direct API path)
+        err = body.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return err["message"]
+    return str(exc)
+
+
 def _wrap_error(exc: Exception) -> ProviderError:
     """Convert an OpenAI SDK exception into a ProviderError."""
     import openai
 
     if isinstance(exc, openai.APIStatusError):
         retryable = exc.status_code in _RETRYABLE_STATUS_CODES
-        return ProviderError(str(exc), retryable=retryable, status_code=exc.status_code, cause=exc)
+        msg = _extract_api_message(exc)
+        return ProviderError(msg, retryable=retryable, status_code=exc.status_code, cause=exc)
     if isinstance(exc, openai.APIConnectionError):
         return ProviderError(str(exc), retryable=True, cause=exc)
     return ProviderError(str(exc), retryable=False, cause=exc)
