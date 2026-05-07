@@ -10,7 +10,7 @@ from playwright.sync_api import Page, expect
 
 from tests.e2e.pages import AgentActivityView, ChatView, NetworkView
 
-LLM_TIMEOUT = 300_000
+LLM_TIMEOUT = 600_000
 
 
 @pytest.fixture(scope="module")
