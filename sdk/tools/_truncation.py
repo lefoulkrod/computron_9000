@@ -1,10 +1,4 @@
-"""Helpers for truncating large tool call arguments in message history.
-
-The ``truncate_args`` decorator lives in ``tools._truncation`` (dependency-free)
-so tool modules can import it without circular imports.  This module re-exports
-the decorator and provides the ``truncate_tool_call_args`` helper used by the
-tool loop.
-"""
+"""Helpers for truncating large tool call arguments in message history."""
 
 from __future__ import annotations
 
@@ -13,7 +7,9 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from tools import TRUNCATE_ATTR, truncate_args
+# Must match tools._truncation.TRUNCATE_ATTR — duplicated here to avoid a
+# circular import (sdk → tools → sdk).
+TRUNCATE_ATTR = "_truncate_args"
 
 logger = logging.getLogger(__name__)
 
@@ -99,4 +95,4 @@ def truncate_tool_call_args(
     return result
 
 
-__all__ = ["truncate_args", "truncate_tool_call_args"]
+__all__ = ["truncate_tool_call_args"]
