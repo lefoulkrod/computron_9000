@@ -10,6 +10,7 @@ Turn lifecycle management (``turn_scope``, stop signaling, nudge queues) lives
 in ``sdk.turn``.
 """
 
+from ._cleanup import register_agent_span_exit_hook
 from ._context import (
     agent_span,
     get_current_agent_id,
@@ -38,6 +39,7 @@ from ._models import (
 )
 
 __all__ = [
+    "register_agent_span_exit_hook",
     "AgentCompletedPayload",
     "AgentEvent",
     "AgentEventPayload",

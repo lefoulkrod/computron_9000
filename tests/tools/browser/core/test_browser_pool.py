@@ -158,6 +158,66 @@ async def test_release_nonexistent_agent_is_noop() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_root_agent_reuses_conversation_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Subsequent turns of a root agent reuse the conversation-scoped context."""
+    root = _make_browser()
+    prior_ctx = _FakeContext([_FakePage()])
+    prior_browser = Browser(
+        context=prior_ctx, extra_headers={}, pw=None, profile_dir=""
+    )
+    prior_browser._downloads_dir = "/tmp/dl"
+    _agent_browsers["conv:abc-123"] = prior_browser
+
+    monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.computron_kimi.2")
+    monkeypatch.setattr("sdk.events.get_current_depth", lambda: 0)
+    monkeypatch.setattr("sdk.turn.get_conversation_id", lambda: "abc-123")
+
+    with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
+        result = await get_browser()
+
+    assert result is prior_browser
+    assert "conv:abc-123" in _agent_browsers
+    root._pw_browser.new_context.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_different_conversation_gets_separate_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A new conversation creates a fresh browser context, not the prior one."""
+    root = _make_browser()
+    old_browser = Browser(
+        context=_FakeContext([_FakePage()]), extra_headers={}, pw=None, profile_dir=""
+    )
+    old_browser._downloads_dir = "/tmp/dl"
+    _agent_browsers["conv:old-conv"] = old_browser
+
+    monkeypatch.setattr("sdk.events.get_current_agent_id", lambda: "root.computron_kimi.3")
+    monkeypatch.setattr("sdk.events.get_current_depth", lambda: 0)
+    monkeypatch.setattr("sdk.turn.get_conversation_id", lambda: "new-conv")
+
+    with patch("tools.browser.core.browser._get_root_browser", new_callable=AsyncMock, return_value=root):
+        result = await get_browser()
+
+    assert result is not old_browser
+    assert "conv:new-conv" in _agent_browsers
+    assert "conv:old-conv" in _agent_browsers
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_release_conversation_browser_by_key() -> None:
+    """release_agent_browser with a conv: key releases the conversation context."""
+    browser = _make_browser()
+    _agent_browsers["conv:target-conv"] = browser
+
+    await release_agent_browser("conv:target-conv")
+
+    assert "conv:target-conv" not in _agent_browsers
+    assert browser._closed is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_ephemeral_inherits_storage_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ephemeral context is seeded with root's storage state."""
     root = _make_browser()
