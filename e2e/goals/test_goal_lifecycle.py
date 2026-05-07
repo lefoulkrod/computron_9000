@@ -19,10 +19,16 @@ GOAL_DESCRIPTION = "E2E lifecycle test goal"
 @pytest.fixture
 def test_goal(page: Page):
     """Seed a goal with one noop task. Tears down on exit."""
+    # Clean up any stale goals with the same description from prior runs.
+    existing = page.request.get("/api/goals").json().get("goals", [])
+    for g in existing:
+        if g["description"] == GOAL_DESCRIPTION:
+            page.request.delete(f"/api/goals/{g['id']}", fail_on_status_code=False)
+
     goal_id = container_exec(
         "from tasks import get_store\n"
         "s = get_store()\n"
-        f"g = s.create_goal({GOAL_DESCRIPTION!r})\n"
+        f"g = s.create_goal({GOAL_DESCRIPTION!r}, auto_run=False)\n"
         "s.create_task(g.id, 'lifecycle task', 'noop')\n"
         "print(g.id)\n"
     )

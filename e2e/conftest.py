@@ -20,4 +20,7 @@ pytest_plugins = ["e2e._setup"]
 @pytest.fixture(scope="session")
 def browser_context_args():
     """Configure the browser context for all e2e tests."""
-    return {"base_url": BASE_URL}
+    return {
+        "base_url": BASE_URL,
+        "extra_http_headers": {"X-Requested-With": "XMLHttpRequest"},
+    }

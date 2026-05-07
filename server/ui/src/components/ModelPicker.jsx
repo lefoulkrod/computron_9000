@@ -30,7 +30,7 @@ export default function ModelPicker({ models, selected, onSelect, placeholder = 
     };
 
     return (
-        <div className={styles.picker}>
+        <div className={styles.picker} data-testid="model-picker">
             <input
                 ref={inputRef}
                 type="text"
@@ -56,6 +56,8 @@ export default function ModelPicker({ models, selected, onSelect, placeholder = 
                             key={m.name}
                             type="button"
                             className={styles.item}
+                            data-testid="model-item"
+                            data-model-name={m.name}
                             onClick={() => onSelect(m.name)}
                         >
                             <span className={styles.itemName}>{m.name}</span>

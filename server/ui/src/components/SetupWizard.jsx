@@ -149,7 +149,7 @@ function ModelsErrorPanel({ error, onRetry, loading, selectedProvider }) {
     );
 }
 
-export default function SetupWizard({ onComplete }) {
+export default function SetupWizard({ isRerun = false, onComplete }) {
     const [step, setStep] = useState(0);
 
     // Provider step state
@@ -171,21 +171,11 @@ export default function SetupWizard({ onComplete }) {
     const [modelsLoading, setModelsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Re-run detection: when setup was already completed, give the user the
-    // option to overwrite model assignments on existing agent profiles.
-    const [isRerun, setIsRerun] = useState(false);
     const [updateAllProfiles, setUpdateAllProfiles] = useState(true);
 
     // Refs for a11y
     const cardRef = useRef(null);
     const stepTitleRef = useRef(null);
-
-    // Detect re-run: if setup was already completed, this is a provider switch.
-    useEffect(() => {
-        fetch('/api/settings').then(r => r.json()).then(data => {
-            if (data.setup_complete) setIsRerun(true);
-        }).catch(() => {});
-    }, []);
 
     // Focus first element in dialog on mount
     useEffect(() => {
@@ -635,7 +625,7 @@ export default function SetupWizard({ onComplete }) {
                             />
                         )}
                         {isRerun && (
-                            <label className={styles.checkRow}>
+                            <label className={styles.checkRow} data-testid="update-profiles-check">
                                 <input
                                     type="checkbox"
                                     checked={updateAllProfiles}

@@ -270,7 +270,7 @@ export default function ProfileBuilder({
                     </section>
 
                     {/* 2. Model */}
-                    <section className={styles.section}>
+                    <section className={styles.section} data-testid="profile-model-picker">
                         <div className={styles.sectionLabel}>Model</div>
                         <ModelPicker
                             models={models || []}

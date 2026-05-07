@@ -7,6 +7,39 @@ from playwright.sync_api import Locator, Page
 from e2e.pages.integrations_tab import IntegrationsTab
 
 
+class ModelPickerLocator:
+    """Interaction helper for the ModelPicker component."""
+
+    def __init__(self, root: Locator):
+        self._root = root
+        self.input = root.locator("input[type='text']")
+
+    def selected_value(self) -> str:
+        return self.input.input_value()
+
+    def open(self) -> None:
+        self.input.focus()
+
+    def items(self) -> Locator:
+        return self._root.get_by_test_id("model-item")
+
+    def select(self, model_name: str) -> None:
+        self.open()
+        self._root.locator(f"[data-model-name='{model_name}']").click()
+
+    def select_different(self, current: str) -> str:
+        """Open and pick the first model whose name differs from *current*."""
+        self.open()
+        items = self.items()
+        items.first.wait_for(state="visible", timeout=10_000)
+        for i in range(items.count()):
+            name = items.nth(i).get_attribute("data-model-name")
+            if name != current:
+                items.nth(i).click()
+                return name
+        raise AssertionError("No alternative model found")
+
+
 class ProfileList:
     """Left-hand pane of the Agent Profiles tab — the list of profiles."""
 
@@ -49,8 +82,8 @@ class ProfileBuilder:
         return self.page.locator("textarea[placeholder='System prompt...']")
 
     @property
-    def model_select(self) -> Locator:
-        return self.page.locator("select").first
+    def model_picker(self) -> ModelPickerLocator:
+        return ModelPickerLocator(self.page.get_by_test_id("profile-model-picker"))
 
     @property
     def enabled_toggle(self) -> Locator:
@@ -129,12 +162,12 @@ class SystemTab:
         return self.page.locator("select").first
 
     @property
-    def vision_model_select(self) -> Locator:
-        return self.page.locator("select").nth(1)
+    def vision_model_picker(self) -> ModelPickerLocator:
+        return ModelPickerLocator(self.page.get_by_test_id("vision-model-picker"))
 
     @property
-    def compaction_model_select(self) -> Locator:
-        return self.page.locator("select").nth(2)
+    def compaction_model_picker(self) -> ModelPickerLocator:
+        return ModelPickerLocator(self.page.get_by_test_id("compaction-model-picker"))
 
     def open_vision_advanced(self) -> "SystemTab":
         self.page.get_by_test_id("vision-advanced-toggle").click()

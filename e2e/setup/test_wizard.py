@@ -27,6 +27,12 @@ def test_settings_default_agent(page: Page):
     assert settings["default_agent"] == "computron"
 
 
+def test_settings_provider(page: Page):
+    """The LLM provider should be set to ollama."""
+    settings = page.request.get("/api/settings").json()
+    assert settings["llm_provider"] == "ollama"
+
+
 def test_settings_vision_model(page: Page, wizard_choices):
     """The vision model should match what was picked in the wizard."""
     settings = page.request.get("/api/settings").json()

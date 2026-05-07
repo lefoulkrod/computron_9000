@@ -22,10 +22,13 @@ def test_create_profile_persists_all_settings(page: Page):
     builder.description_input.fill("A test profile created by e2e")
 
     # --- Model (first available) ---
-    model_options = builder.model_select.locator("option").all()
-    selected_model = model_options[0].get_attribute("value") if model_options else ""
+    picker = builder.model_picker
+    picker.open()
+    items = picker.items()
+    items.first.wait_for(state="visible", timeout=10_000)
+    selected_model = items.first.get_attribute("data-model-name") or ""
     if selected_model:
-        builder.model_select.select_option(selected_model)
+        items.first.click()
 
     # --- System prompt ---
     builder.system_prompt.fill("You are a test agent.")

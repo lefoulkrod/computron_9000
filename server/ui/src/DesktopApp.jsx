@@ -67,11 +67,14 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     // Setup wizard state
     const [setupComplete, setSetupComplete] = useState(null); // null = loading
+    const wasSetupComplete = useRef(false);
     const [settingsTab, setSettingsTab] = useState('profiles');
 
     useEffect(() => {
         fetch('/api/settings').then(r => r.json()).then(data => {
-            setSetupComplete(data.setup_complete || false);
+            const done = data.setup_complete || false;
+            wasSetupComplete.current = done;
+            setSetupComplete(done);
         }).catch(() => setSetupComplete(false));
     }, []);
 
@@ -257,7 +260,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     // Show setup wizard if setup is not complete
     if (setupComplete === false) {
         return (
-            <SetupWizard onComplete={() => {
+            <SetupWizard isRerun={wasSetupComplete.current} onComplete={() => {
                 setSetupComplete(true);
                 profilesHook.refresh();
             }} />

@@ -128,7 +128,7 @@ export default function SystemSettings({ onRunWizard }) {
                         <span className={styles.settingDesc}>Used for image descriptions and screenshot analysis. Choose a model that supports vision (image input).</span>
                     </div>
                 </div>
-                <div className={styles.pickerRow}>
+                <div className={styles.pickerRow} data-testid="vision-model-picker">
                     <ModelPicker
                         models={visionModels}
                         selected={settings.vision_model || null}
@@ -210,7 +210,7 @@ export default function SystemSettings({ onRunWizard }) {
                         <span className={styles.settingDesc}>Summarizes conversation history when context fills up.</span>
                     </div>
                 </div>
-                <div className={styles.pickerRow}>
+                <div className={styles.pickerRow} data-testid="compaction-model-picker">
                     <ModelPicker
                         models={allModels}
                         selected={settings.compaction_model || null}

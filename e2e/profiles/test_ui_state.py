@@ -43,7 +43,7 @@ def test_profile_ui_reflects_saved_state(page: Page):
 
         # --- Model ---
         if model_name:
-            expect(builder.model_select).to_have_value(model_name)
+            expect(builder.model_picker.input).to_have_value(model_name)
 
         # --- System prompt ---
         expect(builder.system_prompt).to_have_value("You are a test agent for UI verification.")

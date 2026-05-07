@@ -30,13 +30,9 @@ def test_change_vision_model(page: Page):
     """Change the vision model and verify it persists."""
     settings = SettingsPage(page).goto_system()
 
-    select = settings.system.vision_model_select
-    options = select.locator("option").all()
-    assert len(options) >= 2, "Need at least 1 vision model"
-
-    original = select.input_value()
-    new_model = options[1].get_attribute("value")
-    select.select_option(new_model)
+    picker = settings.system.vision_model_picker
+    original = picker.selected_value()
+    new_model = picker.select_different(original)
     page.wait_for_timeout(500)
 
     server_settings = page.request.get("/api/settings").json()
@@ -44,7 +40,7 @@ def test_change_vision_model(page: Page):
 
     # Restore
     if original:
-        select.select_option(original)
+        picker.select(original)
         page.wait_for_timeout(500)
 
 
@@ -52,13 +48,9 @@ def test_change_compaction_model(page: Page):
     """Change the compaction model and verify it persists."""
     settings = SettingsPage(page).goto_system()
 
-    select = settings.system.compaction_model_select
-    options = select.locator("option").all()
-    assert len(options) >= 2, "Need at least 1 model for compaction"
-
-    original = select.input_value()
-    new_model = options[1].get_attribute("value")
-    select.select_option(new_model)
+    picker = settings.system.compaction_model_picker
+    original = picker.selected_value()
+    new_model = picker.select_different(original)
     page.wait_for_timeout(500)
 
     server_settings = page.request.get("/api/settings").json()
@@ -66,7 +58,7 @@ def test_change_compaction_model(page: Page):
 
     # Restore
     if original:
-        select.select_option(original)
+        picker.select(original)
         page.wait_for_timeout(500)
 
 
