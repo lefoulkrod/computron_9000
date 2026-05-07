@@ -20,11 +20,11 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - `just logs` — Tail app + inference logs
 
 ### Testing
-- `just test` — Run all unit tests (`PYTHONPATH=. uv run pytest`)
-- `just test-unit` — Run unit tests only (`PYTHONPATH=. uv run pytest -m unit`)
+- `just unit` — Run unit tests (`tests/unit/`)
+- `just e2e` — Run Playwright e2e in a throwaway container (`tests/e2e/`)
+- `just integration` — Run integration tests against a running container (`tests/integration/`)
 - `just test-file <path>` — Run tests for a specific file
 - `just test-ui` — Run Vitest UI tests
-- `just e2e` — Run Playwright e2e in a throwaway container with fresh state (does NOT rebuild the image)
 
 ### Quality (only run when asked)
 - `just lint` — Lint with ruff (`uv run ruff check .`)

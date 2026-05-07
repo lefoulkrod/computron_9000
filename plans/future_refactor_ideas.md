@@ -41,10 +41,6 @@ This makes it hard to customize hook sets for different agent types — for exam
 
 A better approach might be a declarative hook configuration (e.g. a list of hook classes/names on the agent definition) or a builder pattern that lets callers include/exclude specific hooks. This would also make it easier to test individual hooks in isolation without standing up the full default set.
 
-## Delete NudgeCompactionStrategy
-
-`NudgeCompactionStrategy` in `sdk/context/_strategy.py` (~90 lines) plus `_NUDGE_MESSAGE` and `_NUDGE_PREFIX` are dead code — the class is defined and exported but never instantiated. All three `strategies=[...]` call sites use `ToolClearingStrategy` and `LLMCompactionStrategy`. Note that `NudgeHook` (`sdk/hooks/_nudge_hook.py`) is a separate mechanism and is still in use.
-
 ## Eliminate integration tests
 
 Server tests (tests/server/) trigger real Ollama HTTP calls during `create_app()` import/startup, even though test logic uses monkeypatched fakes. All tests should run without external services. Audit the app startup path to eliminate the Ollama call.

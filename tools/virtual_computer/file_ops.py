@@ -7,8 +7,6 @@ import logging
 import shutil
 from pathlib import Path
 
-from tools._truncation import truncate_args
-
 from ._fs_internal import is_binary_file
 from .models import (
     DirectoryReadResult,
@@ -26,7 +24,6 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-@truncate_args(content=0)
 def write_file(path: str, content: str) -> WriteFileResult:
     """Write UTF-8 text to a file, creating parent directories as needed.
 
@@ -144,7 +141,6 @@ def copy_path(src: str, dst: str) -> MoveCopyResult:
         return MoveCopyResult(success=True, src=src, dst=dst)
 
 
-@truncate_args(content=0)
 def append_to_file(path: str, content: str) -> WriteFileResult:
     """Append UTF-8 text to a file, creating the file and parents if needed.
 
@@ -168,7 +164,6 @@ def append_to_file(path: str, content: str) -> WriteFileResult:
     return WriteFileResult(success=True, file_path=path)
 
 
-@truncate_args(content=0)
 def prepend_to_file(path: str, content: str) -> WriteFileResult:
     """Prepend UTF-8 text to a file, creating the file if needed.
 

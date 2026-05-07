@@ -6,7 +6,6 @@ from ._models import ContextStats, TokenUsage
 from ._strategy import (
     ContextStrategy,
     LLMCompactionStrategy,
-    NudgeCompactionStrategy,
     ToolClearingStrategy,
     TriggerPoint,
 )
@@ -23,7 +22,6 @@ __all__ = [
     "ConversationHistory",
     "OllamaTokenCounter",
     "LLMCompactionStrategy",
-    "NudgeCompactionStrategy",
     "SummarizeStrategy",
     "ToolClearingStrategy",
     "TokenCounter",
