@@ -101,17 +101,36 @@ _GMAIL = CatalogEntry(
 )
 
 
-_LLM_PROXY = CatalogEntry(
-    slug="llm_proxy",
+_LLM_OPENAI = CatalogEntry(
+    slug="llm_openai",
     command=["python", "-m", "integrations.brokers.llm_proxy"],
     capabilities=frozenset({"llm_proxy"}),
-    # All three fields come from the auth_blob: api_key is the secret,
-    # provider and base_url are stored encrypted alongside it for convenience.
-    env_injection={
-        "api_key": "LLM_API_KEY",
-        "provider": "LLM_PROVIDER",
-        "base_url": "LLM_BASE_URL",
+    static_env={
+        "LLM_PROVIDER": "openai",
+        "LLM_BASE_URL": "https://api.openai.com",
     },
+    env_injection={"api_key": "LLM_API_KEY"},
+    host_paths=(),
+)
+
+_LLM_ANTHROPIC = CatalogEntry(
+    slug="llm_anthropic",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities=frozenset({"llm_proxy"}),
+    static_env={
+        "LLM_PROVIDER": "anthropic",
+        "LLM_BASE_URL": "https://api.anthropic.com",
+    },
+    env_injection={"api_key": "LLM_API_KEY"},
+    host_paths=(),
+)
+
+_LLM_OPENAI_COMPAT = CatalogEntry(
+    slug="llm_openai_compat",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities=frozenset({"llm_proxy"}),
+    static_env={"LLM_PROVIDER": "openai"},
+    env_injection={"api_key": "LLM_API_KEY", "base_url": "LLM_BASE_URL"},
     host_paths=(),
 )
 
@@ -119,7 +138,9 @@ _LLM_PROXY = CatalogEntry(
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
     "gmail": _GMAIL,
-    "llm_proxy": _LLM_PROXY,
+    "llm_openai": _LLM_OPENAI,
+    "llm_anthropic": _LLM_ANTHROPIC,
+    "llm_openai_compat": _LLM_OPENAI_COMPAT,
 }
 
 

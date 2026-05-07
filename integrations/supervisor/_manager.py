@@ -96,7 +96,7 @@ class BrokerManager:
         self,
         *,
         slug: str,
-        user_suffix: str,
+        user_suffix: str | None = None,
         label: str,
         auth_blob: dict,
         write_allowed: bool,
@@ -108,7 +108,7 @@ class BrokerManager:
         """
         if slug not in self._catalog:
             raise RpcError("BAD_REQUEST", f"unknown slug: {slug}")
-        if not _SUFFIX_PATTERN.match(user_suffix):
+        if user_suffix is not None and not _SUFFIX_PATTERN.match(user_suffix):
             raise RpcError(
                 "BAD_REQUEST",
                 "user_suffix must match [a-z0-9_-]{1,48}",
@@ -117,7 +117,7 @@ class BrokerManager:
             raise RpcError("BAD_REQUEST", "auth_blob must be a dict")
 
         entry = self._catalog[slug]
-        integration_id = f"{slug}_{user_suffix}"
+        integration_id = f"{slug}_{user_suffix}" if user_suffix else slug
         if self._registry.contains(integration_id):
             raise RpcError("BAD_REQUEST", f"integration already exists: {integration_id}")
 

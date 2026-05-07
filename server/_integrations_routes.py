@@ -42,29 +42,19 @@ _SUFFIX_DASH_RUNS = re.compile(r"-+")
 
 
 def _derive_suffix(auth_blob: dict[str, Any] | None) -> str | None:
-    """Derive a usable user suffix from auth_blob.
+    """Derive a user suffix from auth_blob for multi-instance integrations.
 
-    For email-based integrations (gmail, icloud) uses the email local-part.
-    For provider-based integrations (llm_proxy) falls back to ``provider``.
-    Returns ``None`` if neither field is present or yields a non-empty result.
-    The supervisor enforces the actual format invariant.
+    Email-based integrations use the email local-part so multiple accounts
+    of the same provider can coexist. Returns ``None`` if no suffix can be
+    derived (callers that don't need a suffix skip this entirely).
     """
     if not isinstance(auth_blob, dict):
         return None
 
-    # Email-based integrations: use the local part of the email address.
     email = auth_blob.get("email")
     if isinstance(email, str) and email:
         local = email.split("@", 1)[0].lower()
         cleaned = _SUFFIX_DASH_RUNS.sub("-", _SUFFIX_NON_ALLOWED.sub("-", local)).strip("-")
-        return cleaned[:48] or None
-
-    # Provider-based integrations (e.g. llm_proxy): use the provider name.
-    provider = auth_blob.get("provider")
-    if isinstance(provider, str) and provider:
-        cleaned = _SUFFIX_DASH_RUNS.sub(
-            "-", _SUFFIX_NON_ALLOWED.sub("-", provider.lower())
-        ).strip("-")
         return cleaned[:48] or None
 
     return None
@@ -156,14 +146,9 @@ async def handle_add_integration(request: web.Request) -> web.Response:
             status=400,
         )
 
-    # user_suffix is derived from auth_blob (email local-part or provider name).
-    # Clients never set it; keeps integration IDs deterministic.
-    derived = _derive_suffix(body.get("auth_blob"))
-    if not derived:
-        return _error_response(
-            {"code": "BAD_REQUEST", "message": "auth_blob must include 'email' or 'provider'"}
-        )
-    body["user_suffix"] = derived
+    suffix = _derive_suffix(body.get("auth_blob"))
+    if suffix:
+        body["user_suffix"] = suffix
 
     try:
         resp = await _supervisor_rpc("add", body)

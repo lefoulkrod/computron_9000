@@ -70,7 +70,7 @@ export default function IntegrationsTab() {
             }
             const data = await resp.json();
             const all = data.integrations || [];
-            setIntegrations(all.filter(i => i.slug !== 'llm_proxy'));
+            setIntegrations(all.filter(i => !i.capabilities?.includes('llm_proxy')));
         } catch (err) {
             setLoadError({
                 code: 'NETWORK',

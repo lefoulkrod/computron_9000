@@ -9,6 +9,14 @@ const PROVIDER_OLLAMA = 'ollama';
 const PROVIDER_OPENAI_COMPAT = 'openai-compat';
 const PROVIDER_CLOUD = 'cloud';
 
+const PROVIDER_LABELS = {
+    openai: 'OpenAI API',
+    anthropic: 'Anthropic API',
+    openai_compat: 'OpenAI-compatible',
+};
+
+const stripTrailingV1 = (url) => url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+
 function ProgressBar({ currentStep }) {
     return (
         <div className={styles.progressBar} role="list" aria-label="Setup progress">
@@ -252,51 +260,46 @@ export default function SetupWizard({ onComplete }) {
         const providerName = selectedProvider === PROVIDER_CLOUD
             ? cloudProvider
             : selectedProvider === PROVIDER_OPENAI_COMPAT
-                ? 'openai'
+                ? 'openai_compat'
                 : 'ollama';
 
         try {
-            // Remove all existing llm_proxy integrations — only one
-            // provider is active at a time.
+            // Remove any existing LLM integration — only one provider active at a time.
             try {
                 const existing = await fetch('/api/integrations').then(r => r.json());
-                const proxies = (existing.integrations || []).filter(i => i.slug === 'llm_proxy');
-                await Promise.all(proxies.map(i =>
-                    fetch(`/api/integrations/${encodeURIComponent(i.id)}`, { method: 'DELETE' }).catch(() => {})
+                const llmIntegrations = (existing.integrations || []).filter(i =>
+                    i.capabilities?.includes('llm_proxy')
+                );
+                await Promise.all(llmIntegrations.map(i =>
+                    fetch(`/api/integrations/${encodeURIComponent(i.id)}`, { method: 'DELETE' }).catch(() => { })
                 ));
             } catch (_) { /* supervisor offline — handled below */ }
 
-            // Cloud API and OpenAI-compat with an API key: store the key encrypted
-            // in the supervisor vault via the llm_proxy integration.
-            const needsProxy = selectedProvider === PROVIDER_CLOUD ||
-                (selectedProvider === PROVIDER_OPENAI_COMPAT && !!providerApiKey);
+            const settingsBody = { llm_provider: providerName, llm_base_url: null };
 
-            if (needsProxy) {
-                const DEFAULT_UPSTREAM = {
-                    anthropic: 'https://api.anthropic.com',
-                    openai: 'https://api.openai.com',
-                };
-                // Strip trailing /v1 so the proxy can reconstruct full paths.
-                const stripV1 = (url) => url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
-                const upstreamBase = selectedProvider === PROVIDER_OPENAI_COMPAT
-                    ? stripV1(providerUrl || 'http://localhost:1234')
-                    : (DEFAULT_UPSTREAM[cloudProvider] || DEFAULT_UPSTREAM.openai);
+            if (selectedProvider === PROVIDER_OLLAMA) {
+                // Direct connection — no API key, just a base URL.
+                settingsBody.llm_base_url = providerUrl || 'http://host.docker.internal:11434';
+            } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && !providerApiKey) {
+                // Direct connection — compat endpoint that doesn't require auth.
+                if (providerUrl) settingsBody.llm_base_url = providerUrl;
+            } else {
+                // Proxied connection — API key stored in vault, broker handles auth.
+                // No llm_base_url in settings; its absence tells the provider
+                // factory to connect through the broker socket.
+                const slug = `llm_${providerName}`;
+                const label = PROVIDER_LABELS[providerName];
+                const authBlob = { api_key: providerApiKey };
+                if (selectedProvider === PROVIDER_OPENAI_COMPAT) {
+                    // Compat endpoints have a user-supplied upstream URL that
+                    // the broker needs — stored alongside the key in the vault.
+                    authBlob.base_url = stripTrailingV1(providerUrl || 'http://localhost:1234');
+                }
 
                 const integRes = await fetch('/api/integrations', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        slug: 'llm_proxy',
-                        label: selectedProvider === PROVIDER_CLOUD
-                            ? `${cloudProvider.charAt(0).toUpperCase() + cloudProvider.slice(1)} API`
-                            : 'OpenAI-compatible',
-                        auth_blob: {
-                            api_key: providerApiKey,
-                            provider: providerName,
-                            base_url: upstreamBase,
-                        },
-                        write_allowed: false,
-                    }),
+                    body: JSON.stringify({ slug, label, auth_blob: authBlob, write_allowed: false }),
                 });
                 if (!integRes.ok) {
                     const data = await integRes.json().catch(() => ({}));
@@ -305,17 +308,6 @@ export default function SetupWizard({ onComplete }) {
                     return;
                 }
             }
-
-            // Save provider + connection settings (no api_key — it's in the vault).
-            const settingsBody = { llm_provider: providerName };
-            if (selectedProvider === PROVIDER_OLLAMA) {
-                settingsBody.llm_base_url = providerUrl || 'http://host.docker.internal:11434';
-            } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && !providerApiKey) {
-                // No API key: direct connection using the user-supplied base URL.
-                if (providerUrl) settingsBody.llm_base_url = providerUrl;
-            }
-            // For cloud and compat-with-key: the proxy broker knows the upstream URL;
-            // llm_base_url is not needed in settings.
 
             const settingsRes = await fetch('/api/settings', {
                 method: 'PUT',
@@ -471,7 +463,7 @@ export default function SetupWizard({ onComplete }) {
                                 {
                                     key: PROVIDER_OLLAMA,
                                     name: 'Ollama (local)',
-                                    desc: 'Run models on your own machine',
+                                    desc: 'Run models on your own machine or in the cloud',
                                 },
                                 {
                                     key: PROVIDER_OPENAI_COMPAT,

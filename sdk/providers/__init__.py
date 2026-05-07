@@ -18,54 +18,46 @@ logger = logging.getLogger(__name__)
 _PROVIDER_PATHS: dict[str, str] = {
     "ollama": "sdk.providers._ollama:OllamaProvider",
     "openai": "sdk.providers._openai:OpenAIProvider",
+    "openai_compat": "sdk.providers._openai:OpenAIProvider",
     "anthropic": "sdk.providers._anthropic:AnthropicProvider",
 }
 
 _cached_provider: Any | None = None
 
 
-def _get_llm_config() -> LLMConfig:
-    """Return LLM config from settings.json (written by the setup wizard).
-
-    API keys for cloud providers live in the supervisor vault and are accessed
-    via the llm_proxy broker — they are never stored in settings.
-    """
-    s = load_settings()
+def _get_llm_config(settings: dict[str, Any]) -> LLMConfig:
+    """Build LLM config from the given settings dict."""
     return LLMConfig(
-        provider=s.get("llm_provider", "ollama"),
-        base_url=s.get("llm_base_url") or None,
+        provider=settings.get("llm_provider", "ollama"),
+        base_url=settings.get("llm_base_url") or None,
     )
 
 
-def _find_proxy_socket(provider: str) -> Path | None:
-    """Return the running llm_proxy broker socket path for ``provider``, or None.
+def _proxy_socket_path(provider: str) -> Path:
+    """Return the broker socket path for the given provider.
 
-    The supervisor spawns the llm_proxy broker as ``llm_proxy_{provider}``
-    (e.g. ``llm_proxy_openai``). The socket lives at
-    ``{sockets_dir}/llm_proxy_{provider}.sock``. If the file exists the
-    broker is running (or was running and left a stale socket — the provider
-    will see a connection error on first use, which is retryable).
+    LLM integrations are singletons — no suffix — so the integration ID
+    is just ``llm_{provider}`` and the socket is ``llm_{provider}.sock``.
     """
     sockets_dir = Path(load_config().integrations.sockets_dir)
-    sock = sockets_dir / f"llm_proxy_{provider}.sock"
-    return sock if sock.exists() else None
+    return sockets_dir / f"llm_{provider}.sock"
 
 
 def get_provider() -> Provider:
     """Return the configured LLM provider singleton.
 
-    Reads provider settings from settings.json to determine which provider to
-    instantiate. For cloud providers (openai, anthropic) it first checks for a
-    running llm_proxy broker and, if found, constructs the SDK client with a
-    UDS transport so the broker handles auth. Falls back to a direct connection
-    for local providers or when no proxy socket is present. The result is cached
-    for the process lifetime (or until ``reset_provider()`` is called).
+    Reads settings.json to determine the provider and connection mode.
+    When ``llm_base_url`` is set the provider connects directly. When it's
+    absent the provider routes through the broker at the well-known socket
+    path for that provider. The result is cached for the process lifetime
+    (or until ``reset_provider()`` is called).
     """
     global _cached_provider  # noqa: PLW0603
     if _cached_provider is not None:
         return _cached_provider
 
-    llm_cfg = _get_llm_config()
+    settings = load_settings()
+    llm_cfg = _get_llm_config(settings)
     path = _PROVIDER_PATHS.get(llm_cfg.provider)
     if path is None:
         msg = f"Unknown LLM provider: {llm_cfg.provider!r}. Available: {sorted(_PROVIDER_PATHS)}"
@@ -75,16 +67,16 @@ def get_provider() -> Provider:
     module = importlib.import_module(module_path)
     cls = getattr(module, cls_name)
 
-    proxy_socket = _find_proxy_socket(llm_cfg.provider)
-    if proxy_socket is not None:
+    if llm_cfg.base_url:
+        _cached_provider = cls.from_config(llm_cfg)
+        logger.info("Initialized LLM provider: %s (direct)", llm_cfg.provider)
+    else:
+        proxy_socket = _proxy_socket_path(llm_cfg.provider)
         _cached_provider = cls(proxy_socket=proxy_socket)
         logger.info(
-            "Initialized LLM provider: %s (via proxy socket %s)",
+            "Initialized LLM provider: %s (via broker at %s)",
             llm_cfg.provider, proxy_socket,
         )
-    else:
-        _cached_provider = cls.from_config(llm_cfg)
-        logger.info("Initialized LLM provider: %s", llm_cfg.provider)
     return _cached_provider
 
 

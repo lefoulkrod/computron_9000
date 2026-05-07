@@ -69,7 +69,7 @@ class AppSockHandler:
     async def _add(self, args: dict[str, Any]) -> dict[str, Any]:
         record = await self._manager.add(
             slug=_require_str(args, "slug"),
-            user_suffix=_require_str(args, "user_suffix"),
+            user_suffix=args.get("user_suffix") or None,
             label=_require_str(args, "label"),
             auth_blob=args.get("auth_blob"),
             write_allowed=bool(args.get("write_allowed", False)),
