@@ -171,9 +171,21 @@ export default function SetupWizard({ onComplete }) {
     const [modelsLoading, setModelsLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // Re-run detection: when setup was already completed, give the user the
+    // option to overwrite model assignments on existing agent profiles.
+    const [isRerun, setIsRerun] = useState(false);
+    const [updateAllProfiles, setUpdateAllProfiles] = useState(true);
+
     // Refs for a11y
     const cardRef = useRef(null);
     const stepTitleRef = useRef(null);
+
+    // Detect re-run: if setup was already completed, this is a provider switch.
+    useEffect(() => {
+        fetch('/api/settings').then(r => r.json()).then(data => {
+            if (data.setup_complete) setIsRerun(true);
+        }).catch(() => {});
+    }, []);
 
     // Focus first element in dialog on mount
     useEffect(() => {
@@ -340,10 +352,11 @@ export default function SetupWizard({ onComplete }) {
         setSaving(true);
         setError(null);
         try {
+            const force = isRerun && updateAllProfiles;
             const setModelRes = await fetch('/api/profiles/set-model', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: selectedMain }),
+                body: JSON.stringify({ model: selectedMain, force }),
             });
             if (!setModelRes.ok) {
                 const data = await setModelRes.json().catch(() => ({}));
@@ -371,7 +384,7 @@ export default function SetupWizard({ onComplete }) {
             setError(`Connection error: ${err.message}`);
             setSaving(false);
         }
-    }, [selectedMain, selectedVision, onComplete]);
+    }, [selectedMain, selectedVision, isRerun, updateAllProfiles, onComplete]);
 
     const canContinue =
         step === 0 ||
@@ -620,6 +633,18 @@ export default function SetupWizard({ onComplete }) {
                                 selected={selectedMain}
                                 onSelect={setSelectedMain}
                             />
+                        )}
+                        {isRerun && (
+                            <label className={styles.checkRow}>
+                                <input
+                                    type="checkbox"
+                                    checked={updateAllProfiles}
+                                    onChange={(e) => setUpdateAllProfiles(e.target.checked)}
+                                />
+                                <span className={styles.checkLabel}>
+                                    Update all agent profiles to use this model
+                                </span>
+                            </label>
                         )}
                     </div>
                 )}

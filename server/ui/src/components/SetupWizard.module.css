@@ -557,3 +557,22 @@
     outline-offset: 2px;
     opacity: 1;
 }
+
+.checkRow {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: var(--sp-2);
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    margin-top: var(--sp-3);
+}
+
+.checkRow input[type="checkbox"] {
+    margin: 0;
+}
+
+.checkLabel {
+    font-size: 13px;
+    color: var(--text-secondary);
+}

@@ -111,12 +111,16 @@ def save_agent_profile(profile: AgentProfile) -> AgentProfile:
     return profile
 
 
-def set_model_on_profiles(model: str) -> None:
-    """Set the model on all profiles that have no model. Used by setup wizard."""
+def set_model_on_profiles(model: str, *, force: bool = False) -> None:
+    """Set the model on agent profiles.
+
+    When *force* is False (default), only profiles with no model are updated.
+    When True, all profiles are updated unconditionally.
+    """
     d = _profiles_dir()
     d.mkdir(parents=True, exist_ok=True)
     for profile in _load_all().values():
-        if not profile.model:
+        if force or not profile.model:
             updated = profile.model_copy(update={"model": model})
             path = d / f"{updated.id}.json"
             path.write_text(json.dumps(updated.model_dump(), indent=2))
