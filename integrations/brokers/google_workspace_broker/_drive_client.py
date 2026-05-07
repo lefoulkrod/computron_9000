@@ -1,4 +1,4 @@
-"""Google Drive read operations via the Drive API v3."""
+"""Google Drive operations via the Drive API v3."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaInMemoryUpload, MediaIoBaseDownload
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,102 @@ class DriveClient:
         while not done:
             _, done = downloader.next_chunk()
         return buf.getvalue(), name, mime
+
+    def upload_file(
+        self,
+        name: str,
+        content: bytes,
+        mime_type: str,
+        parent_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Upload a file to Drive. Returns the created file resource."""
+        file_metadata: dict[str, Any] = {"name": name}
+        if parent_id:
+            file_metadata["parents"] = [parent_id]
+        media = MediaInMemoryUpload(content, mimetype=mime_type, resumable=True)
+        return (
+            self._service.files()
+            .create(body=file_metadata, media_body=media, fields=_FILE_FIELDS)
+            .execute()
+        )
+
+    def create_folder(
+        self,
+        name: str,
+        parent_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a folder on Drive. Returns the created folder resource."""
+        file_metadata: dict[str, Any] = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        if parent_id:
+            file_metadata["parents"] = [parent_id]
+        return (
+            self._service.files()
+            .create(body=file_metadata, fields=_FILE_FIELDS)
+            .execute()
+        )
+
+    def update_file(
+        self,
+        file_id: str,
+        content: bytes | None = None,
+        mime_type: str | None = None,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing file's content and/or name."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        kwargs: dict[str, Any] = {"fileId": file_id, "fields": _FILE_FIELDS}
+        if body:
+            kwargs["body"] = body
+        if content is not None:
+            mt = mime_type or "application/octet-stream"
+            kwargs["media_body"] = MediaInMemoryUpload(
+                content, mimetype=mt, resumable=True,
+            )
+        return self._service.files().update(**kwargs).execute()
+
+    def trash_file(self, file_id: str) -> dict[str, Any]:
+        """Move a file to the trash. Returns the updated file resource."""
+        return (
+            self._service.files()
+            .update(fileId=file_id, body={"trashed": True}, fields=_FILE_FIELDS)
+            .execute()
+        )
+
+    def share_file(
+        self,
+        file_id: str,
+        role: str,
+        share_type: str,
+        email: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a permission on a file.
+
+        Args:
+            file_id: The file to share.
+            role: ``"reader"``, ``"commenter"``, or ``"writer"``.
+            share_type: ``"user"``, ``"group"``, ``"domain"``, or ``"anyone"``.
+            email: Required when share_type is ``"user"`` or ``"group"``.
+
+        Returns:
+            The created permission resource (id, role, type, emailAddress).
+        """
+        permission: dict[str, str] = {"role": role, "type": share_type}
+        if email:
+            permission["emailAddress"] = email
+        return (
+            self._service.permissions()
+            .create(
+                fileId=file_id,
+                body=permission,
+                fields="id, role, type, emailAddress",
+            )
+            .execute()
+        )
 
 
 async def _run_sync(fn, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202

@@ -92,6 +92,19 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_get_drive_file_metadata_tool(drive_ids))
         tools.append(build_export_drive_file_tool(drive_ids))
 
+    drive_write_ids = _ids_with_access(records, Capability.DRIVE, Access.READ_WRITE)
+    if drive_write_ids:
+        from tools.integrations.drive.create_folder import build_create_drive_folder_tool
+        from tools.integrations.drive.share_file import build_share_drive_file_tool
+        from tools.integrations.drive.trash_file import build_trash_drive_file_tool
+        from tools.integrations.drive.update_file import build_update_drive_file_tool
+        from tools.integrations.drive.upload_file import build_upload_drive_file_tool
+        tools.append(build_upload_drive_file_tool(drive_write_ids))
+        tools.append(build_create_drive_folder_tool(drive_write_ids))
+        tools.append(build_update_drive_file_tool(drive_write_ids))
+        tools.append(build_trash_drive_file_tool(drive_write_ids))
+        tools.append(build_share_drive_file_tool(drive_write_ids))
+
     contacts_ids = _ids_with_access(records, Capability.CONTACTS, Access.READ)
     if contacts_ids:
         from tools.integrations.contacts.list_contacts import build_list_contacts_tool

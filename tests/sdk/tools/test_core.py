@@ -69,6 +69,14 @@ _DRIVE_READ_TOOLS = {
     "export_drive_file",
 }
 
+_DRIVE_WRITE_TOOLS = {
+    "upload_drive_file",
+    "create_drive_folder",
+    "update_drive_file",
+    "trash_drive_file",
+    "share_drive_file",
+}
+
 _CONTACTS_READ_TOOLS = {
     "list_contacts",
     "search_contacts",
@@ -191,6 +199,26 @@ async def test_drive_read_includes_drive_tools(
     names = _tool_names(await get_core_tools())
     assert _DRIVE_READ_TOOLS <= names
     assert not names & (_EMAIL_READ_TOOLS | _CALENDAR_READ_TOOLS | _CONTACTS_READ_TOOLS)
+    assert not names & _DRIVE_WRITE_TOOLS
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_drive_read_write_includes_all_drive_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An integration with drive:rw gets both read and write tools."""
+    _stub_integrations(monkeypatch, {
+        "gw_work": _FakeRecord(
+            id="gw_work",
+            slug="google_workspace",
+            permissions={Capability.DRIVE: Access.READ_WRITE},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS) <= names
 
 
 @pytest.mark.asyncio
@@ -275,7 +303,7 @@ async def test_full_workspace_integration_includes_all_capabilities(
     names = _tool_names(await get_core_tools())
     all_integration_tools = (
         _EMAIL_READ_TOOLS | _EMAIL_WRITE_TOOLS | _CALENDAR_READ_TOOLS
-        | _DRIVE_READ_TOOLS | _CONTACTS_READ_TOOLS
+        | _DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS | _CONTACTS_READ_TOOLS
     )
     assert all_integration_tools <= names
 

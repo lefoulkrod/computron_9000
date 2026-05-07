@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import mimetypes
 import secrets
@@ -23,11 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 _VERB_REQUIREMENT: dict[str, tuple[Capability, Access]] = {
-    # Drive
+    # Drive (read)
     "list_drive_files": (Capability.DRIVE, Access.READ),
     "search_drive_files": (Capability.DRIVE, Access.READ),
     "get_drive_file_metadata": (Capability.DRIVE, Access.READ),
     "export_drive_file": (Capability.DRIVE, Access.READ),
+    # Drive (write)
+    "upload_drive_file": (Capability.DRIVE, Access.READ_WRITE),
+    "create_drive_folder": (Capability.DRIVE, Access.READ_WRITE),
+    "update_drive_file": (Capability.DRIVE, Access.READ_WRITE),
+    "trash_drive_file": (Capability.DRIVE, Access.READ_WRITE),
+    "share_drive_file": (Capability.DRIVE, Access.READ_WRITE),
     # Calendar
     "list_calendars": (Capability.CALENDAR, Access.READ),
     "list_events": (Capability.CALENDAR, Access.READ),
@@ -66,11 +73,20 @@ class VerbDispatcher:
         self._contacts: ContactsClient | None = None
 
         scopes = set(creds.scopes or ())
-        if "https://www.googleapis.com/auth/drive.readonly" in scopes:
+        if scopes & {
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/drive.file",
+        }:
             self._drive = DriveClient(creds)
-        if "https://www.googleapis.com/auth/calendar.readonly" in scopes:
+        if scopes & {
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/calendar.events",
+        }:
             self._calendar = CalendarClient(creds)
-        if "https://www.googleapis.com/auth/gmail.readonly" in scopes:
+        if scopes & {
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.modify",
+        }:
             self._gmail = GmailClient(creds)
         if "https://www.googleapis.com/auth/contacts.readonly" in scopes:
             self._contacts = ContactsClient(creds)
@@ -81,6 +97,11 @@ class VerbDispatcher:
             self._handlers["search_drive_files"] = self._handle_search_drive_files
             self._handlers["get_drive_file_metadata"] = self._handle_get_drive_file_metadata
             self._handlers["export_drive_file"] = self._handle_export_drive_file
+            self._handlers["upload_drive_file"] = self._handle_upload_drive_file
+            self._handlers["create_drive_folder"] = self._handle_create_drive_folder
+            self._handlers["update_drive_file"] = self._handle_update_drive_file
+            self._handlers["trash_drive_file"] = self._handle_trash_drive_file
+            self._handlers["share_drive_file"] = self._handle_share_drive_file
         if self._calendar is not None:
             self._handlers["list_calendars"] = self._handle_list_calendars
             self._handlers["list_events"] = self._handle_list_events
@@ -160,6 +181,82 @@ class VerbDispatcher:
             "mime_type": mime_type,
             "size": len(content),
         }
+
+    async def _handle_upload_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = _require_str(args, "name")
+        data_b64 = _require_str(args, "data_b64")
+        mime_type = _require_str(args, "mime_type")
+        parent_id = args.get("parent_id") or None
+        try:
+            content = base64.b64decode(data_b64)
+        except Exception as exc:
+            raise RpcError("BAD_REQUEST", f"invalid base64 in data_b64: {exc}") from exc
+        try:
+            result = await _run_sync(
+                self._drive.upload_file, name, content, mime_type, parent_id,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"file": result}
+
+    async def _handle_create_drive_folder(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = _require_str(args, "name")
+        parent_id = args.get("parent_id") or None
+        try:
+            result = await _run_sync(
+                self._drive.create_folder, name, parent_id,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"file": result}
+
+    async def _handle_update_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        file_id = _require_str(args, "file_id")
+        name = args.get("name") or None
+        data_b64 = args.get("data_b64") or None
+        mime_type = args.get("mime_type") or None
+        if name is None and data_b64 is None:
+            raise RpcError("BAD_REQUEST", "update requires 'name' and/or 'data_b64'")
+        content: bytes | None = None
+        if data_b64 is not None:
+            try:
+                content = base64.b64decode(data_b64)
+            except Exception as exc:
+                raise RpcError("BAD_REQUEST", f"invalid base64 in data_b64: {exc}") from exc
+        try:
+            result = await _run_sync(
+                self._drive.update_file, file_id, content, mime_type, name,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"file": result}
+
+    async def _handle_trash_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        file_id = _require_str(args, "file_id")
+        try:
+            result = await _run_sync(self._drive.trash_file, file_id)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"file": result}
+
+    async def _handle_share_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        file_id = _require_str(args, "file_id")
+        role = _require_str(args, "role")
+        share_type = _require_str(args, "type")
+        if role not in ("reader", "commenter", "writer"):
+            raise RpcError("BAD_REQUEST", f"role must be reader, commenter, or writer (got {role!r})")
+        if share_type not in ("user", "group", "domain", "anyone"):
+            raise RpcError("BAD_REQUEST", f"type must be user, group, domain, or anyone (got {share_type!r})")
+        email = args.get("email") or None
+        if share_type in ("user", "group") and not email:
+            raise RpcError("BAD_REQUEST", f"'email' required when type is {share_type!r}")
+        try:
+            result = await _run_sync(
+                self._drive.share_file, file_id, role, share_type, email,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"permission": result}
 
     # --- Calendar handlers ---------------------------------------------------
 
