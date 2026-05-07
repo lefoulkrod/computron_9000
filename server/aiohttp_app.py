@@ -302,7 +302,7 @@ async def delete_conversation_handler(request: Request) -> Response:
 async def resume_conversation_handler(request: Request) -> Response:
     """Resume a past conversation by loading its full-fidelity history."""
     conversation_id = request.match_info["conversation_id"]
-    messages = resume_conversation(conversation_id)
+    messages = await resume_conversation(conversation_id)
     if messages is None:
         return web.json_response({"error": "Conversation not found"}, status=404)
     return web.json_response({"conversation_id": conversation_id, "messages": messages})

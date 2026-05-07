@@ -28,6 +28,9 @@ from playwright.async_api import (
 )
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+from sdk.events import get_current_agent_id, get_current_depth, register_agent_span_exit_hook
+from sdk.turn import get_conversation_id
 from pydantic import BaseModel, ConfigDict
 
 import tools.browser.core.waits as browser_waits
@@ -1099,6 +1102,8 @@ async def _get_root_browser() -> Browser:
     """Return the persistent root browser, initializing it on first call."""
     global _browser
     if _browser is None:
+        register_agent_span_exit_hook(release_agent_browser)
+
         config = load_config()
         profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
         downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
@@ -1120,32 +1125,46 @@ async def get_browser() -> Browser:
     seeded with the root browser's cookies and localStorage for session
     inheritance.  The root browser is never navigated directly — it serves
     as the persistent profile template (manageable via VNC).
-    """
-    from sdk.events import get_current_agent_id
 
+    Root agents (depth=0) share a single context per conversation — page
+    state persists across turns. Sub-agents get their own isolated context
+    keyed by agent_id, released when the sub-agent completes.
+    """
     root = await _get_root_browser()
-    agent_id = get_current_agent_id() or "default"
+    depth = get_current_depth()
+    conv_id = get_conversation_id()
+
+    # Root agents: scope browser to the conversation so page state persists.
+    # Sub-agents: scope to agent_id (isolated, released on completion).
+    if depth == 0 and conv_id:
+        key = f"conv:{conv_id}"
+    else:
+        agent_id = get_current_agent_id()
+        if agent_id is None:
+            raise RuntimeError("get_browser() called outside an agent span")
+        key = agent_id
+
     async with _agent_browser_lock:
-        if agent_id in _agent_browsers:
-            return _agent_browsers[agent_id]
+        if key in _agent_browsers:
+            return _agent_browsers[key]
 
         state = await root._context.storage_state()
         ephemeral = await Browser.start_ephemeral(root, storage_state=state)
-        _agent_browsers[agent_id] = ephemeral
-        logger.info("Created ephemeral browser context for agent '%s'", agent_id)
+        _agent_browsers[key] = ephemeral
+        logger.info("Created ephemeral browser context for key '%s'", key)
         return ephemeral
 
 
-async def release_agent_browser(agent_id: str) -> None:
-    """Close and remove the ephemeral browser context for an agent."""
+async def release_agent_browser(key: str) -> None:
+    """Close and remove an ephemeral browser context by its storage key."""
     async with _agent_browser_lock:
-        browser = _agent_browsers.pop(agent_id, None)
+        browser = _agent_browsers.pop(key, None)
     if browser is not None:
         try:
             await browser.close_context()
-            logger.info("Released ephemeral browser context for agent '%s'", agent_id)
+            logger.info("Released browser context for '%s'", key)
         except Exception:  # noqa: BLE001
-            logger.warning("Failed to release browser context for agent '%s'", agent_id)
+            logger.warning("Failed to release browser context for '%s'", key)
 
 
 async def close_browser() -> None:
