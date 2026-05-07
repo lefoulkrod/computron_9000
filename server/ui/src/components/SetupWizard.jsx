@@ -12,6 +12,7 @@ const PROVIDER_CLOUD = 'cloud';
 const PROVIDER_LABELS = {
     openai: 'OpenAI API',
     anthropic: 'Anthropic API',
+    openrouter: 'OpenRouter',
     openai_compat: 'OpenAI-compatible',
 };
 
@@ -207,12 +208,7 @@ export default function SetupWizard({ onComplete }) {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // Auto-skip vision when cloud provider is selected (cloud models include vision)
-    useEffect(() => {
-        if (step === 3 && selectedProvider === PROVIDER_CLOUD && selectedVision === undefined) {
-            setSelectedVision(null);
-        }
-    }, [step, selectedProvider, selectedVision]);
+
 
     const fetchModels = useCallback(async (url, setter) => {
         setModelsLoading(true);
@@ -473,7 +469,7 @@ export default function SetupWizard({ onComplete }) {
                                 {
                                     key: PROVIDER_CLOUD,
                                     name: 'Cloud API',
-                                    desc: 'Anthropic or OpenAI cloud',
+                                    desc: 'Anthropic, OpenAI, or OpenRouter',
                                 },
                             ].map(({ key, name, desc }) => (
                                 <ModelCard
@@ -561,6 +557,7 @@ export default function SetupWizard({ onComplete }) {
                                     >
                                         <option value="anthropic">Anthropic</option>
                                         <option value="openai">OpenAI</option>
+                                        <option value="openrouter">OpenRouter</option>
                                     </select>
                                 </div>
                                 <div className={styles.field}>
@@ -643,12 +640,7 @@ export default function SetupWizard({ onComplete }) {
                             that supports vision (image input).
                         </p>
 
-                        {selectedProvider === PROVIDER_CLOUD ? (
-                            <div className={styles.infoPanel} role="note">
-                                Your cloud provider handles vision natively — no separate
-                                vision model is needed.
-                            </div>
-                        ) : modelsError ? (
+                        {modelsError ? (
                             <ModelsErrorPanel
                                 key={modelsError.message}
                                 error={modelsError}

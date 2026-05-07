@@ -96,6 +96,15 @@ class TestGetProvider:
         from sdk.providers._openai import OpenAIProvider
         assert isinstance(provider, OpenAIProvider)
 
+    def test_openrouter_uses_openai_provider(self, tmp_path):
+        """openrouter maps to OpenAIProvider (OpenAI-compatible API)."""
+        settings = {"llm_provider": "openrouter"}
+        with patch("sdk.providers.load_settings", return_value=settings), \
+             patch("sdk.providers.load_config", return_value=_fake_config(str(tmp_path))):
+            provider = get_provider()
+        from sdk.providers._openai import OpenAIProvider
+        assert isinstance(provider, OpenAIProvider)
+
 
 @pytest.mark.unit
 class TestGetLLMConfig:
@@ -144,3 +153,8 @@ class TestProxySocketPath:
         with patch("sdk.providers.load_config", return_value=_fake_config(str(tmp_path))):
             result = _proxy_socket_path("openai_compat")
         assert result == tmp_path / "llm_openai_compat.sock"
+
+    def test_openrouter(self, tmp_path):
+        with patch("sdk.providers.load_config", return_value=_fake_config(str(tmp_path))):
+            result = _proxy_socket_path("openrouter")
+        assert result == tmp_path / "llm_openrouter.sock"

@@ -125,6 +125,18 @@ _LLM_ANTHROPIC = CatalogEntry(
     host_paths=(),
 )
 
+_LLM_OPENROUTER = CatalogEntry(
+    slug="llm_openrouter",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities=frozenset({"llm_proxy"}),
+    static_env={
+        "LLM_PROVIDER": "openai",
+        "LLM_BASE_URL": "https://openrouter.ai/api",
+    },
+    env_injection={"api_key": "LLM_API_KEY"},
+    host_paths=(),
+)
+
 _LLM_OPENAI_COMPAT = CatalogEntry(
     slug="llm_openai_compat",
     command=["python", "-m", "integrations.brokers.llm_proxy"],
@@ -140,6 +152,7 @@ DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "gmail": _GMAIL,
     "llm_openai": _LLM_OPENAI,
     "llm_anthropic": _LLM_ANTHROPIC,
+    "llm_openrouter": _LLM_OPENROUTER,
     "llm_openai_compat": _LLM_OPENAI_COMPAT,
 }
 
