@@ -30,7 +30,7 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from sdk.events import get_current_agent_id, get_current_depth, register_agent_span_exit_hook
-from sdk.turn import get_conversation_id
+from sdk.turn._turn import get_conversation_id
 from pydantic import BaseModel, ConfigDict
 
 import tools.browser.core.waits as browser_waits
