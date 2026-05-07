@@ -3,15 +3,12 @@
 import logging
 from pathlib import Path
 
-from tools._truncation import truncate_args
-
 from ._fs_internal import is_binary_file, read_text_lines, write_text_lines
 from .models import ApplyPatchResult
 
 logger = logging.getLogger(__name__)
 
 
-@truncate_args(old_text=200, new_text=200)
 def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
     """Replace a unique block of text in a file with new content.
 
@@ -63,7 +60,6 @@ def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResul
         return ApplyPatchResult(success=False, file_path=path, error=str(exc))
 
 
-@truncate_args(patch_text=300)
 def apply_unified_diff(patch_text: str) -> list[ApplyPatchResult]:
     """Apply unified diff patches to existing text files.
 
