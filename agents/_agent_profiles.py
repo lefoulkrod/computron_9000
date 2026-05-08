@@ -38,6 +38,9 @@ class AgentProfile(BaseModel):
     repeat_penalty: float | None = None
     num_predict: int | None = None
     think: bool | None = None
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
+    thinking_budget: str | None = None
     num_ctx: int | None = None
     max_iterations: int | None = None
 

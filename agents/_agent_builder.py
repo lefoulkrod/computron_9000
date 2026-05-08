@@ -34,6 +34,9 @@ def build_agent(
         "top_k": profile.top_k,
         "top_p": profile.top_p,
         "repeat_penalty": profile.repeat_penalty,
+        "reasoning_effort": profile.reasoning_effort,
+        "reasoning_summary": profile.reasoning_summary,
+        "thinking_budget": profile.thinking_budget,
     }
     options = {k: v for k, v in raw_options.items() if v is not None}
 

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _PROVIDER_PATHS: dict[str, str] = {
     "ollama": "sdk.providers._ollama:OllamaProvider",
-    "openai": "sdk.providers._openai:OpenAIProvider",
+    "openai": "sdk.providers._openai_responses:OpenAIResponsesProvider",
     "openai_compat": "sdk.providers._openai:OpenAIProvider",
     "openrouter": "sdk.providers._openai:OpenAIProvider",
     "anthropic": "sdk.providers._anthropic:AnthropicProvider",

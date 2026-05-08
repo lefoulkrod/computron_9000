@@ -14,6 +14,15 @@ const PRESETS = {
     code:     { temperature: 0.3, think: true },
 };
 
+// Default values for thinking-related fields. Preset detection and application
+// treat null/missing draft values as equal to these defaults so the Code preset
+// lights up without requiring the profile to explicitly store every default.
+const THINKING_DEFAULTS = {
+    reasoning_effort: 'medium',
+    reasoning_summary: 'auto',
+    thinking_budget: 'standard',
+};
+
 const PRESET_META = [
     { id: 'balanced', label: 'Balanced', hint: '0.7 temp' },
     { id: 'creative', label: 'Creative', hint: '1.0 temp, 0.95 top_p' },
@@ -21,7 +30,7 @@ const PRESET_META = [
     { id: 'code',     label: 'Code',     hint: '0.3 temp, think' },
 ];
 
-const INFERENCE_FIELDS = ['temperature', 'top_k', 'top_p', 'repeat_penalty', 'think'];
+const INFERENCE_FIELDS = ['temperature', 'top_k', 'top_p', 'repeat_penalty', 'think', 'reasoning_effort', 'reasoning_summary', 'thinking_budget'];
 
 const HELP_SECTIONS = [
     { title: 'Name', body: 'How this profile appears in the profile list and agent selector.' },
@@ -47,6 +56,7 @@ function _detectPreset(draft, provider) {
             const draftVal = draft[k];
             const presetVal = fields[k];
             if (typeof presetVal === 'boolean') return draftVal === presetVal;
+            if (typeof presetVal === 'string') return draftVal === presetVal;
             return Number(draftVal) === presetVal;
         });
         if (!allMatch) continue;
@@ -54,7 +64,13 @@ function _detectPreset(draft, provider) {
         const otherKeys = INFERENCE_FIELDS
             .filter((k) => _isSupported(k, provider))
             .filter((k) => !presetKeys.includes(k));
-        const othersNull = otherKeys.every((k) => draft[k] == null || draft[k] === '');
+        const othersNull = otherKeys.every((k) => {
+            const val = draft[k];
+            if (val == null || val === '') return true;
+            // Thinking fields at their default value count as "null" for preset detection
+            if (k in THINKING_DEFAULTS) return val === THINKING_DEFAULTS[k];
+            return false;
+        });
         if (othersNull) return id;
     }
     return null;
@@ -73,6 +89,9 @@ const ADVANCED_HELP = {
     max_output: 'Max tokens per response. Leave empty for unlimited (required by Anthropic)',
     iterations: 'Tool-call rounds per turn. Leave empty for unlimited',
     thinking: 'Step-by-step reasoning before answering. Good for math, logic, code',
+    reasoning_effort: 'Low = faster/cheaper, medium = balanced, high = thorough reasoning',
+    reasoning_summary: 'How much of the model\'s reasoning to show. Auto lets the model decide',
+    thinking_budget: 'How many tokens the model can use for reasoning before answering',
 };
 
 const FIELD_SUPPORT = {
@@ -84,6 +103,9 @@ const FIELD_SUPPORT = {
     num_predict:    ['ollama', 'openai', 'anthropic'],
     max_iterations: ['ollama', 'openai', 'anthropic'],
     think:          ['ollama', 'openai', 'anthropic'],
+    reasoning_effort: ['openai'],
+    reasoning_summary: ['openai'],
+    thinking_budget: ['anthropic'],
 };
 
 function _isSupported(field, provider) {
@@ -406,6 +428,60 @@ export default function ProfileBuilder({
                                     </label>
                                     <span className={styles.fieldHint}>{ADVANCED_HELP.thinking}</span>
                                 </div>
+                                {draft.think && _isSupported('reasoning_effort', provider) && (
+                                    <div className={styles.advancedField} data-testid="field-reasoning_effort">
+                                        <label className={styles.fieldRow}>
+                                            <span className={styles.fieldLabel}>Reasoning Effort</span>
+                                            <select
+                                                className={styles.selectInput}
+                                                value={draft.reasoning_effort || 'medium'}
+                                                onChange={(e) => update('reasoning_effort', e.target.value === 'medium' ? null : e.target.value)}
+                                                data-testid="reasoning-effort-select"
+                                            >
+                                                <option value="low">Low</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="high">High</option>
+                                            </select>
+                                        </label>
+                                        <span className={styles.fieldHint}>{ADVANCED_HELP.reasoning_effort}</span>
+                                    </div>
+                                )}
+                                {draft.think && _isSupported('reasoning_summary', provider) && (
+                                    <div className={styles.advancedField} data-testid="field-reasoning_summary">
+                                        <label className={styles.fieldRow}>
+                                            <span className={styles.fieldLabel}>Reasoning Summary</span>
+                                            <select
+                                                className={styles.selectInput}
+                                                value={draft.reasoning_summary || 'auto'}
+                                                onChange={(e) => update('reasoning_summary', e.target.value === 'auto' ? null : e.target.value)}
+                                                data-testid="reasoning-summary-select"
+                                            >
+                                                <option value="auto">Auto</option>
+                                                <option value="concise">Concise</option>
+                                                <option value="detailed">Detailed</option>
+                                            </select>
+                                        </label>
+                                        <span className={styles.fieldHint}>{ADVANCED_HELP.reasoning_summary}</span>
+                                    </div>
+                                )}
+                                {draft.think && _isSupported('thinking_budget', provider) && (
+                                    <div className={styles.advancedField} data-testid="field-thinking_budget">
+                                        <label className={styles.fieldRow}>
+                                            <span className={styles.fieldLabel}>Thinking Budget</span>
+                                            <select
+                                                className={styles.selectInput}
+                                                value={draft.thinking_budget || 'standard'}
+                                                onChange={(e) => update('thinking_budget', e.target.value === 'standard' ? null : e.target.value)}
+                                                data-testid="thinking-budget-select"
+                                            >
+                                                <option value="minimal">Minimal (1,024 tokens)</option>
+                                                <option value="standard">Standard ({Math.max(1024, Math.floor((draft.num_predict || 16384) / 2)).toLocaleString()} tokens)</option>
+                                                <option value="extended">Extended ({(draft.num_predict || 16384).toLocaleString()} tokens)</option>
+                                            </select>
+                                        </label>
+                                        <span className={styles.fieldHint}>{ADVANCED_HELP.thinking_budget}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </section>
