@@ -1,8 +1,12 @@
-"""Gmail read operations via the Gmail API v1."""
+"""Gmail operations via the Gmail API v1."""
 
 from __future__ import annotations
 
 import base64
+import email.encoders
+import email.mime.base
+import email.mime.multipart
+import email.mime.text
 import logging
 from typing import Any
 
@@ -112,6 +116,72 @@ class GmailClient:
                     part.get("mimeType", "application/octet-stream"),
                 )
         return ("", "application/octet-stream")
+
+    # --- write operations -----------------------------------------------------
+
+    def send_message(
+        self,
+        to: list[str],
+        subject: str,
+        body: str,
+        attachments: list[dict[str, str]] | None = None,
+    ) -> str:
+        """Send an email. Returns the Gmail message ID.
+
+        Args:
+            to: Recipient addresses.
+            subject: Subject line.
+            body: Plain-text body.
+            attachments: Optional list of ``{filename, mime_type, data_b64}`` dicts.
+        """
+        if attachments:
+            msg = email.mime.multipart.MIMEMultipart()
+            msg.attach(email.mime.text.MIMEText(body, "plain"))
+            for att in attachments:
+                part = email.mime.base.MIMEBase(*att["mime_type"].split("/", 1))
+                part.set_payload(base64.b64decode(att["data_b64"]))
+                email.encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition", "attachment",
+                    filename=att.get("filename", "attachment"),
+                )
+                msg.attach(part)
+        else:
+            msg = email.mime.text.MIMEText(body, "plain")
+
+        msg["To"] = ", ".join(to)
+        msg["Subject"] = subject
+
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii")
+        result = (
+            self._service.users().messages()
+            .send(userId="me", body={"raw": raw})
+            .execute()
+        )
+        return result.get("id", "")
+
+    def move_messages(
+        self,
+        folder: str,
+        uids: list[str],
+        dest_folder: str,
+    ) -> None:
+        """Move messages from one label to another.
+
+        Translates the IMAP-style folder/move semantics into Gmail
+        label add/remove operations.
+        """
+        remove_id = self._resolve_label_id(folder)
+        add_id = self._resolve_label_id(dest_folder)
+        for uid in uids:
+            self._service.users().messages().modify(
+                userId="me",
+                id=uid,
+                body={
+                    "addLabelIds": [add_id],
+                    "removeLabelIds": [remove_id],
+                },
+            ).execute()
 
     # --- internal helpers ----------------------------------------------------
 

@@ -42,12 +42,15 @@ _VERB_REQUIREMENT: dict[str, tuple[Capability, Access]] = {
     "create_event": (Capability.CALENDAR, Access.READ_WRITE),
     "update_event": (Capability.CALENDAR, Access.READ_WRITE),
     "delete_event": (Capability.CALENDAR, Access.READ_WRITE),
-    # Email (Gmail)
+    # Email (Gmail, read)
     "list_mailboxes": (Capability.EMAIL, Access.READ),
     "list_messages": (Capability.EMAIL, Access.READ),
     "search_messages": (Capability.EMAIL, Access.READ),
     "fetch_message": (Capability.EMAIL, Access.READ),
     "fetch_attachment": (Capability.EMAIL, Access.READ),
+    # Email (Gmail, write)
+    "send_message": (Capability.EMAIL, Access.READ_WRITE),
+    "move_messages": (Capability.EMAIL, Access.READ_WRITE),
     # Contacts
     "list_contacts": (Capability.CONTACTS, Access.READ),
     "search_contacts": (Capability.CONTACTS, Access.READ),
@@ -118,6 +121,8 @@ class VerbDispatcher:
             self._handlers["search_messages"] = self._handle_search_messages
             self._handlers["fetch_message"] = self._handle_fetch_message
             self._handlers["fetch_attachment"] = self._handle_fetch_attachment
+            self._handlers["send_message"] = self._handle_send_message
+            self._handlers["move_messages"] = self._handle_move_messages
         if self._contacts is not None:
             self._handlers["list_contacts"] = self._handle_list_contacts
             self._handlers["search_contacts"] = self._handle_search_contacts
@@ -451,6 +456,40 @@ class VerbDispatcher:
             "size": len(content),
         }
 
+    async def _handle_send_message(self, args: dict[str, Any]) -> dict[str, Any]:
+        to = _require_str_list(args, "to")
+        subject = _require_str(args, "subject")
+        body = _require_str(args, "body")
+        attachments = args.get("attachments") or None
+        if attachments is not None and not isinstance(attachments, list):
+            raise RpcError("BAD_REQUEST", "'attachments' must be a list")
+        try:
+            message_id = await _run_sync(
+                self._gmail.send_message, to, subject, body, attachments,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"sent": True, "message_id": message_id}
+
+    async def _handle_move_messages(self, args: dict[str, Any]) -> dict[str, Any]:
+        folder = _require_str(args, "folder")
+        uids = _require_str_list(args, "uids")
+        dest_folder = _require_str(args, "dest_folder")
+        if not uids:
+            raise RpcError("BAD_REQUEST", "'uids' must not be empty")
+        if len(uids) > 200:
+            raise RpcError(
+                "BAD_REQUEST",
+                f"cannot move more than 200 messages per call (got {len(uids)})",
+            )
+        try:
+            await _run_sync(
+                self._gmail.move_messages, folder, uids, dest_folder,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"moved": True}
+
     # --- Contacts handlers ---------------------------------------------------
 
     async def _handle_list_contacts(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -479,6 +518,16 @@ def _require_str(args: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value:
         raise RpcError("BAD_REQUEST", f"{key!r} required (non-empty string)")
     return value
+
+
+def _require_str_list(args: dict[str, Any], key: str) -> list[str]:
+    """Require ``key`` to be a non-empty JSON array of non-empty strings."""
+    value = args.get(key)
+    if not isinstance(value, list) or not value:
+        raise RpcError("BAD_REQUEST", f"{key!r} required (non-empty array of strings)")
+    if not all(isinstance(v, str) and v for v in value):
+        raise RpcError("BAD_REQUEST", f"{key!r} must contain non-empty strings")
+    return list(value)
 
 
 def _require_int(args: dict[str, Any], key: str, *, default: int) -> int:
