@@ -68,11 +68,13 @@ async def list_events(
 
 
 def _format_event(e: dict[str, Any]) -> str:
+    uid = e.get("uid") or ""
     start = e.get("start") or "(no start)"
     summary = e.get("summary") or "(no title)"
     location = e.get("location") or ""
     suffix = f"  @ {location}" if location else ""
-    return f"- {start}  {summary}{suffix}"
+    id_tag = f"  [id: {uid}]" if uid else ""
+    return f"- {start}  {summary}{suffix}{id_tag}"
 
 
 def build_list_events_tool(integration_ids: Iterable[str]) -> Callable[..., Any]:
@@ -106,6 +108,8 @@ def build_list_events_tool(integration_ids: Iterable[str]) -> Callable[..., Any]
         "    limit: Maximum events to return (1-200, default 50).\n\n"
         "Returns:\n"
         "    Plain text — one event per line as "
-        '"- start  summary [@ location]", or a short empty/error notice.\n'
+        '"- start  summary [@ location]  [id: event_id]", '
+        "or a short empty/error notice. The event ID can be passed to "
+        "update_event or delete_event.\n"
     )
     return _list_events

@@ -62,6 +62,12 @@ _CALENDAR_READ_TOOLS = {
     "list_events",
 }
 
+_CALENDAR_WRITE_TOOLS = {
+    "create_event",
+    "update_event",
+    "delete_event",
+}
+
 _DRIVE_READ_TOOLS = {
     "list_drive_files",
     "search_drive_files",
@@ -179,7 +185,27 @@ async def test_calendar_read_includes_calendar_tools(
 
     names = _tool_names(await get_core_tools())
     assert _CALENDAR_READ_TOOLS <= names
+    assert not names & _CALENDAR_WRITE_TOOLS
     assert not names & _EMAIL_READ_TOOLS
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_calendar_read_write_includes_all_calendar_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An integration with calendar:rw gets both read and write tools."""
+    _stub_integrations(monkeypatch, {
+        "gw_work": _FakeRecord(
+            id="gw_work",
+            slug="google_workspace",
+            permissions={Capability.CALENDAR: Access.READ_WRITE},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert (_CALENDAR_READ_TOOLS | _CALENDAR_WRITE_TOOLS) <= names
 
 
 @pytest.mark.asyncio
@@ -292,7 +318,7 @@ async def test_full_workspace_integration_includes_all_capabilities(
             slug="google_workspace",
             permissions={
                 Capability.EMAIL: Access.READ_WRITE,
-                Capability.CALENDAR: Access.READ,
+                Capability.CALENDAR: Access.READ_WRITE,
                 Capability.DRIVE: Access.READ_WRITE,
                 Capability.CONTACTS: Access.READ,
             },
@@ -302,7 +328,8 @@ async def test_full_workspace_integration_includes_all_capabilities(
 
     names = _tool_names(await get_core_tools())
     all_integration_tools = (
-        _EMAIL_READ_TOOLS | _EMAIL_WRITE_TOOLS | _CALENDAR_READ_TOOLS
+        _EMAIL_READ_TOOLS | _EMAIL_WRITE_TOOLS
+        | _CALENDAR_READ_TOOLS | _CALENDAR_WRITE_TOOLS
         | _DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS | _CONTACTS_READ_TOOLS
     )
     assert all_integration_tools <= names

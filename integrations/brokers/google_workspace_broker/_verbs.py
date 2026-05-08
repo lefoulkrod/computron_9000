@@ -35,9 +35,13 @@ _VERB_REQUIREMENT: dict[str, tuple[Capability, Access]] = {
     "update_drive_file": (Capability.DRIVE, Access.READ_WRITE),
     "trash_drive_file": (Capability.DRIVE, Access.READ_WRITE),
     "share_drive_file": (Capability.DRIVE, Access.READ_WRITE),
-    # Calendar
+    # Calendar (read)
     "list_calendars": (Capability.CALENDAR, Access.READ),
     "list_events": (Capability.CALENDAR, Access.READ),
+    # Calendar (write)
+    "create_event": (Capability.CALENDAR, Access.READ_WRITE),
+    "update_event": (Capability.CALENDAR, Access.READ_WRITE),
+    "delete_event": (Capability.CALENDAR, Access.READ_WRITE),
     # Email (Gmail)
     "list_mailboxes": (Capability.EMAIL, Access.READ),
     "list_messages": (Capability.EMAIL, Access.READ),
@@ -105,6 +109,9 @@ class VerbDispatcher:
         if self._calendar is not None:
             self._handlers["list_calendars"] = self._handle_list_calendars
             self._handlers["list_events"] = self._handle_list_events
+            self._handlers["create_event"] = self._handle_create_event
+            self._handlers["update_event"] = self._handle_update_event
+            self._handlers["delete_event"] = self._handle_delete_event
         if self._gmail is not None:
             self._handlers["list_mailboxes"] = self._handle_list_mailboxes
             self._handlers["list_messages"] = self._handle_list_messages
@@ -305,6 +312,71 @@ class VerbDispatcher:
             return meta.get("summary")
         except HttpError:
             return None
+
+    async def _handle_create_event(self, args: dict[str, Any]) -> dict[str, Any]:
+        calendar_id = _require_str(args, "calendar_id")
+        summary = _require_str(args, "summary")
+        start = _require_str(args, "start")
+        end = _require_str(args, "end")
+        description = args.get("description") or None
+        location = args.get("location") or None
+        attendees = args.get("attendees") or None
+        if attendees is not None and not isinstance(attendees, list):
+            raise RpcError("BAD_REQUEST", "'attendees' must be a list of email addresses")
+        try:
+            event = await _run_sync(
+                self._calendar.create_event,
+                calendar_id, summary, start, end,
+                description=description,
+                location=location,
+                attendees=attendees,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"event": _flatten_event(event)}
+
+    async def _handle_update_event(self, args: dict[str, Any]) -> dict[str, Any]:
+        calendar_id = _require_str(args, "calendar_id")
+        event_id = _require_str(args, "event_id")
+        summary = args.get("summary") or None
+        start = args.get("start") or None
+        end = args.get("end") or None
+        description = args.get("description")
+        location = args.get("location")
+        attendees = args.get("attendees")
+        if attendees is not None and not isinstance(attendees, list):
+            raise RpcError("BAD_REQUEST", "'attendees' must be a list of email addresses")
+        has_update = any(
+            v is not None
+            for v in (summary, start, end, description, location, attendees)
+        )
+        if not has_update:
+            raise RpcError("BAD_REQUEST", "update requires at least one field to change")
+        try:
+            event = await _run_sync(
+                self._calendar.update_event,
+                calendar_id, event_id,
+                summary=summary,
+                start=start,
+                end=end,
+                description=description,
+                location=location,
+                attendees=attendees,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"event": _flatten_event(event)}
+
+    async def _handle_delete_event(self, args: dict[str, Any]) -> dict[str, Any]:
+        calendar_id = _require_str(args, "calendar_id")
+        event_id = _require_str(args, "event_id")
+        try:
+            await _run_sync(
+                self._calendar.delete_event, calendar_id, event_id,
+            )
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"deleted": True}
 
     # --- Gmail handlers ------------------------------------------------------
 

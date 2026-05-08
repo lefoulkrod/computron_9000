@@ -81,6 +81,15 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_list_calendars_tool(calendar_ids))
         tools.append(build_list_events_tool(calendar_ids))
 
+    calendar_write_ids = _ids_with_access(records, Capability.CALENDAR, Access.READ_WRITE)
+    if calendar_write_ids:
+        from tools.integrations.create_event import build_create_event_tool
+        from tools.integrations.delete_event import build_delete_event_tool
+        from tools.integrations.update_event import build_update_event_tool
+        tools.append(build_create_event_tool(calendar_write_ids))
+        tools.append(build_update_event_tool(calendar_write_ids))
+        tools.append(build_delete_event_tool(calendar_write_ids))
+
     drive_ids = _ids_with_access(records, Capability.DRIVE, Access.READ)
     if drive_ids:
         from tools.integrations.drive.export_file import build_export_drive_file_tool
