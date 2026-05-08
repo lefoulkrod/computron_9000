@@ -43,6 +43,7 @@ from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
 from sdk.turn import is_turn_active, turn_scope
 from sdk.turn._turn import StopRequestedError
+from tools.browser.core import release_agent_browser
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
@@ -107,7 +108,7 @@ _conversations: OrderedDict[str, _Conversation] = OrderedDict()
 _background_tasks: set[asyncio.Task] = set()
 
 
-def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
+async def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
     """Return ``(conversation, is_new)`` for the given ID, creating it if needed.
 
     ``is_new`` is True only when the conversation has no in-memory entry
@@ -134,11 +135,11 @@ def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
     _conversations[conversation_id] = _Conversation(
         history=ConversationHistory(persisted, instance_id=conversation_id),
     )
-    _evict_lru(exclude=conversation_id)
+    await _evict_lru_conversation(exclude=conversation_id)
     return _conversations[conversation_id], is_new
 
 
-def _evict_lru(exclude: str | None = None) -> None:
+async def _evict_lru_conversation(exclude: str | None = None) -> None:
     """Drop the oldest non-active entries until we are at or below the cap.
 
     Conversations whose turn is currently in flight are skipped — popping
@@ -158,6 +159,7 @@ def _evict_lru(exclude: str | None = None) -> None:
                 continue
             if not is_turn_active(cid):
                 _conversations.pop(cid)
+                await release_agent_browser(f"conv:{cid}")
                 logger.info(
                     "Evicted LRU conversation %s from in-memory cache", cid,
                 )
@@ -169,7 +171,7 @@ def _evict_lru(exclude: str | None = None) -> None:
             return
 
 
-def resume_conversation(conversation_id: str) -> list[dict] | None:
+async def resume_conversation(conversation_id: str) -> list[dict] | None:
     """Load a conversation's full-fidelity history and install it.
 
     Returns the raw messages for the UI to display, or None if not found.
@@ -183,7 +185,7 @@ def resume_conversation(conversation_id: str) -> list[dict] | None:
     )
     _conversations[conversation_id] = conversation
     _conversations.move_to_end(conversation_id)
-    _evict_lru(exclude=conversation_id)
+    await _evict_lru_conversation(exclude=conversation_id)
     return messages
 
 
@@ -386,7 +388,7 @@ async def handle_user_message(
     if not conversation_id:
         msg = "conversation_id is required"
         raise ValueError(msg)
-    conversation, is_new_conversation = _get_conversation(conversation_id)
+    conversation, is_new_conversation = await _get_conversation(conversation_id)
 
     user_content = message
     if data:

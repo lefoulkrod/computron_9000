@@ -18,6 +18,8 @@ import itertools
 import logging
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+
+from ._cleanup import run_agent_span_exit_hooks
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
@@ -144,12 +146,7 @@ async def agent_span(
         status = "stopped" if isinstance(exc, StopRequestedError) else "error"
         raise
     finally:
-        # Release ephemeral browser context for this agent.
-        try:
-            from tools.browser.core import release_agent_browser
-            await release_agent_browser(context_id)
-        except Exception:  # noqa: BLE001
-            logger.debug("No browser context to release for '%s'", context_id)
+        await run_agent_span_exit_hooks(context_id)
 
         logger.info(
             "Agent completed: %s (id=%s, status=%s, depth=%d)",

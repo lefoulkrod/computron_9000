@@ -1,20 +1,28 @@
-/* Status dot — shared across agent cards, activity view, and network badge */
 .dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
     background: var(--text-tertiary);
 }
+
+.ready {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success-muted);
+}
+
 .running {
     background: var(--success);
     box-shadow: 0 0 6px var(--success-muted);
     animation: pulse 2s infinite;
 }
+
 .complete { background: var(--accent); }
-.success { background: var(--accent); }
 .error { background: var(--danger); }
-.stopped { background: var(--text-tertiary); }
+.idle { background: var(--text-tertiary); }
+.warning { background: var(--warning); }
 
 @keyframes pulse {
     0%, 100% { opacity: 1; }

@@ -14,7 +14,6 @@ from pydantic import BaseModel
 
 from config import load_config
 from sdk.events import AgentEvent, TerminalOutputPayload, publish_event
-from tools._truncation import truncate_args
 from tools.virtual_computer._policy import is_allowed_command as _is_allowed_command
 
 logger = logging.getLogger(__name__)
@@ -56,7 +55,6 @@ def _kill_process_group(pid: int) -> None:
         logger.warning("Permission denied killing process group %d", pid)
 
 
-@truncate_args(cmd=500)
 async def run_bash_cmd(cmd: str, timeout: float = BASH_CMD_TIMEOUT) -> BashCmdResult:
     """Execute a bash command.
 

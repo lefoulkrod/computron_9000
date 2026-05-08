@@ -226,26 +226,6 @@
     opacity: 0.7;
 }
 
-/* Status dot used inline in rows */
-.statusDot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--text-tertiary);
-}
-.statusDotRunning {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-muted);
-    animation: pulse 2s infinite;
-}
-.statusDotComplete { background: var(--accent); }
-.statusDotError { background: var(--danger); }
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
 
 /* Row badge — small status pill */
 .rowBadge {
@@ -381,7 +361,6 @@
     vertical-align: middle;
 }
 .resultsTable tr:last-child td { border-bottom: none; }
-.resultsTable .statusDot { display: inline-block; vertical-align: middle; }
 
 .viewOutputBtn {
     font-family: var(--font-brand);

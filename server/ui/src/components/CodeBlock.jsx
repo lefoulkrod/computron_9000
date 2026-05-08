@@ -20,7 +20,7 @@ function CodeHeader({ lang, onCopy, copied }) {
 export function InlineCode({ className, children, ...props }) {
   const cls = className ? `${styles.inlineCode} ${className}` : styles.inlineCode;
   return (
-    <code className={cls} {...props}>{children}</code>
+    <code className={cls} data-testid="inline-code" {...props}>{children}</code>
   );
 }
 
@@ -63,7 +63,7 @@ export function PreCodeBlock({ children }) {
   };
 
   return (
-    <div className={styles.codeblock}>
+    <div className={styles.codeblock} data-testid="code-block" data-lang={lang}>
       <CodeHeader lang={lang} onCopy={handleCopy} copied={copied} />
       <pre className={styles.codeblockBody}>
         {highlighted ? (
