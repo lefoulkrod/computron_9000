@@ -171,8 +171,8 @@ export function OauthGcpSetupStep({
                                 <span className={styles.linkBtnHint}>console.cloud.google.com/auth</span>
                             </a>
                             <p>
-                                On first run you'll see a four-step
-                                <strong> Create branding</strong> wizard:
+                                Click <strong>Get started</strong>, then
+                                fill in the four-step branding wizard:
                             </p>
                             <ul>
                                 <li><strong>App Information:</strong> any name, your email as support contact.</li>
