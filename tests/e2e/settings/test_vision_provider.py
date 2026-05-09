@@ -2,7 +2,7 @@
 
 from playwright.sync_api import Page, expect
 
-from e2e.pages import SettingsPage
+from tests.e2e.pages import SettingsPage
 
 
 def _set_provider(page: Page, provider: str) -> None:

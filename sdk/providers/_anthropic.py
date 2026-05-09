@@ -91,6 +91,7 @@ class AnthropicProvider(BaseAPIProvider):
             kwargs["tools"] = _convert_tools(tools)
 
         if think:
+            kwargs["temperature"] = 1
             max_tok = kwargs["max_tokens"]
             thinking_budget = opts.get("thinking_budget", "standard")
             budget_map = {"minimal": 1024, "standard": max_tok // 2, "extended": max_tok}

@@ -1,36 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
 import ModelPicker from './ModelPicker.jsx';
-import ChevronRightIcon from './icons/ChevronRightIcon';
-import ToggleSwitch from './ToggleSwitch.jsx';
 import Button from './primitives/Button.jsx';
 import Callout from './primitives/Callout.jsx';
 import ConfirmButton from './primitives/ConfirmButton.jsx';
-
-const PRESETS = {
-    balanced: { temperature: 0.7 },
-    creative: { temperature: 1.0, top_p: 0.95 },
-    precise:  { temperature: 0.2, top_k: 40 },
-    code:     { temperature: 0.3, think: true },
-};
-
-// Default values for thinking-related fields. Preset detection and application
-// treat null/missing draft values as equal to these defaults so the Code preset
-// lights up without requiring the profile to explicitly store every default.
-const THINKING_DEFAULTS = {
-    reasoning_effort: 'medium',
-    reasoning_summary: 'auto',
-    thinking_budget: 'standard',
-};
-
-const PRESET_META = [
-    { id: 'balanced', label: 'Balanced', hint: '0.7 temp' },
-    { id: 'creative', label: 'Creative', hint: '1.0 temp, 0.95 top_p' },
-    { id: 'precise',  label: 'Precise',  hint: '0.2 temp, 40 top_k' },
-    { id: 'code',     label: 'Code',     hint: '0.3 temp, think' },
-];
-
-const INFERENCE_FIELDS = ['temperature', 'top_k', 'top_p', 'repeat_penalty', 'think', 'reasoning_effort', 'reasoning_summary', 'thinking_budget'];
+import { InferenceSettings, resolvePreset, detectPreset, INFERENCE_FIELDS, isSupported } from './inference';
 
 const HELP_SECTIONS = [
     { title: 'Name', body: 'How this profile appears in the profile list and agent selector.' },
@@ -49,68 +23,8 @@ const HELP_SECTIONS = [
     { title: 'Thinking', body: 'When enabled, the model reasons step-by-step before answering. Good for math, logic, and code generation.' },
 ];
 
-function _detectPreset(draft, provider) {
-    for (const [id, fields] of Object.entries(PRESETS)) {
-        const presetKeys = Object.keys(fields).filter((k) => _isSupported(k, provider));
-        const allMatch = presetKeys.every((k) => {
-            const draftVal = draft[k];
-            const presetVal = fields[k];
-            if (typeof presetVal === 'boolean') return draftVal === presetVal;
-            if (typeof presetVal === 'string') return draftVal === presetVal;
-            return Number(draftVal) === presetVal;
-        });
-        if (!allMatch) continue;
-
-        const otherKeys = INFERENCE_FIELDS
-            .filter((k) => _isSupported(k, provider))
-            .filter((k) => !presetKeys.includes(k));
-        const othersNull = otherKeys.every((k) => {
-            const val = draft[k];
-            if (val == null || val === '') return true;
-            // Thinking fields at their default value count as "null" for preset detection
-            if (k in THINKING_DEFAULTS) return val === THINKING_DEFAULTS[k];
-            return false;
-        });
-        if (othersNull) return id;
-    }
-    return null;
-}
-
 function _cloneProfile(profile) {
     return JSON.parse(JSON.stringify(profile));
-}
-
-const ADVANCED_HELP = {
-    temperature: '0.0 = deterministic, 0.7 = general, 1.0+ = creative',
-    top_k: '10 = factual, 40 = general, 100+ = creative',
-    top_p: '0.5 = focused, 0.9 = general, 1.0 = everything',
-    repeat_penalty: '1.0 = off, 1.1 = general, 1.5+ = strongly discourages repetition',
-    context: 'Context window in tokens. Higher = more memory, slower',
-    max_output: 'Max tokens per response. Leave empty for unlimited (required by Anthropic)',
-    iterations: 'Tool-call rounds per turn. Leave empty for unlimited',
-    thinking: 'Step-by-step reasoning before answering. Good for math, logic, code',
-    reasoning_effort: 'Low = faster/cheaper, medium = balanced, high = thorough reasoning',
-    reasoning_summary: 'How much of the model\'s reasoning to show. Auto lets the model decide',
-    thinking_budget: 'How many tokens the model can use for reasoning before answering',
-};
-
-const FIELD_SUPPORT = {
-    temperature:    ['ollama', 'openai', 'anthropic'],
-    top_k:          ['ollama', 'anthropic'],
-    top_p:          ['ollama', 'openai', 'anthropic'],
-    repeat_penalty: ['ollama'],
-    num_ctx:        ['ollama'],
-    num_predict:    ['ollama', 'openai', 'anthropic'],
-    max_iterations: ['ollama', 'openai', 'anthropic'],
-    think:          ['ollama', 'openai', 'anthropic'],
-    reasoning_effort: ['openai'],
-    reasoning_summary: ['openai'],
-    thinking_budget: ['anthropic'],
-};
-
-function _isSupported(field, provider) {
-    const providers = FIELD_SUPPORT[field];
-    return !providers || providers.includes(provider);
 }
 
 export default function ProfileBuilder({
@@ -125,12 +39,9 @@ export default function ProfileBuilder({
     onDismissDeleteConflict,
 }) {
     const [draft, setDraft] = useState(null);
-    const [showAdvanced, setShowAdvanced] = useState(false);
     const [saveError, setSaveError] = useState(null);
 
-    // Clone profile into local draft whenever the prop changes
     useEffect(() => {
-        setShowAdvanced(false);
         setSaveError(null);
         if (profile) {
             setDraft(_cloneProfile(profile));
@@ -141,34 +52,30 @@ export default function ProfileBuilder({
 
     const activePreset = useMemo(() => {
         if (!draft) return null;
-        return _detectPreset(draft, provider);
+        return detectPreset(draft, provider);
     }, [draft, provider]);
 
     const update = useCallback((field, value) => {
         setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
     }, []);
 
-    const updateInference = useCallback((field, value) => {
-        setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
-    }, []);
-
     const applyPreset = useCallback((presetId) => {
-        const values = PRESETS[presetId];
+        const values = resolvePreset(presetId, provider);
         if (!values) return;
         setDraft((prev) => {
             if (!prev) return prev;
             const next = { ...prev };
-            // Clear all inference fields first
             for (const k of INFERENCE_FIELDS) {
                 next[k] = null;
             }
-            // Apply preset values
             for (const [k, v] of Object.entries(values)) {
-                next[k] = v;
+                if (isSupported(k, provider)) {
+                    next[k] = v;
+                }
             }
             return next;
         });
-    }, []);
+    }, [provider]);
 
     const toggleSkill = useCallback((skill) => {
         setDraft((prev) => {
@@ -192,17 +99,14 @@ export default function ProfileBuilder({
         if (!draft || !onSave) return;
         setSaveError(null);
         const result = await onSave(draft);
-        // onSave may return { ok, error } from useAgentProfiles
         if (result && result.ok === false && result.error) {
             setSaveError(result.error);
-            // Revert enabled toggle locally so the UI matches server state
             if (result.error.error === 'default_agent_cannot_be_disabled') {
                 setDraft((prev) => (prev ? { ...prev, enabled: true } : prev));
             }
         }
     }, [draft, onSave]);
 
-    // Empty state
     if (!profile) {
         return (
             <div className={styles.wrapper}>
@@ -214,7 +118,6 @@ export default function ProfileBuilder({
     }
 
     if (!draft) return null;
-
 
     return (
         <div className={styles.wrapper}>
@@ -334,157 +237,15 @@ export default function ProfileBuilder({
                         </div>
                     </section>
 
-                    {/* 5. Inference Preset */}
-                    <section className={styles.section}>
-                        <div className={styles.sectionLabel}>Inference Preset</div>
-                        <div className={styles.presetGrid}>
-                            {PRESET_META.map((p) => (
-                                <button
-                                    key={p.id}
-                                    className={`${styles.presetBtn} ${activePreset === p.id ? styles.presetActive : ''}`}
-                                    onClick={() => applyPreset(p.id)}
-                                    >
-                                    <span className={styles.presetLabel}>{p.label}</span>
-                                    <span className={styles.presetHint}>{p.hint}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* 6. Advanced Settings */}
-                    <section className={styles.section}>
-                        <button
-                            className={styles.advancedToggle}
-                            onClick={() => setShowAdvanced((v) => !v)}
-                        >
-                            <ChevronRightIcon className={`${styles.chevron} ${showAdvanced ? styles.chevronOpen : ''}`} />
-                            Advanced Settings
-                        </button>
-
-                        {showAdvanced && (
-                            <div className={styles.advancedBody}>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Temperature</span>
-                                        <input className={styles.numInput} type="number" data-testid="field-temperature" value={draft.temperature ?? ''} onChange={(e) => updateInference('temperature', e.target.value === '' ? null : Number(e.target.value))} min={0} max={2} step={0.1} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.temperature}</span>
-                                </div>
-                                {_isSupported('top_k', provider) && (
-                                    <div className={styles.advancedField}>
-                                        <label className={styles.fieldRow}>
-                                            <span className={styles.fieldLabel}>Top K</span>
-                                            <input className={styles.numInput} type="number" data-testid="field-top_k" value={draft.top_k ?? ''} onChange={(e) => updateInference('top_k', e.target.value === '' ? null : Number(e.target.value))} min={0} step={1} placeholder="auto" />
-                                        </label>
-                                        <span className={styles.fieldHint}>{ADVANCED_HELP.top_k}</span>
-                                    </div>
-                                )}
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Top P</span>
-                                        <input className={styles.numInput} type="number" data-testid="field-top_p" value={draft.top_p ?? ''} onChange={(e) => updateInference('top_p', e.target.value === '' ? null : Number(e.target.value))} min={0} max={1} step={0.05} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.top_p}</span>
-                                </div>
-                                {_isSupported('repeat_penalty', provider) && (
-                                    <div className={styles.advancedField}>
-                                        <label className={styles.fieldRow}>
-                                            <span className={styles.fieldLabel}>Repeat Penalty</span>
-                                            <input className={styles.numInput} type="number" data-testid="field-repeat_penalty" value={draft.repeat_penalty ?? ''} onChange={(e) => updateInference('repeat_penalty', e.target.value === '' ? null : Number(e.target.value))} min={0} step={0.05} placeholder="auto" />
-                                        </label>
-                                        <span className={styles.fieldHint}>{ADVANCED_HELP.repeat_penalty}</span>
-                                    </div>
-                                )}
-                                {_isSupported('num_ctx', provider) && (
-                                    <div className={styles.advancedField}>
-                                        <label className={styles.fieldRow}>
-                                            <span className={styles.fieldLabel}>Context</span>
-                                            <input className={styles.numInput} type="number" data-testid="field-num_ctx" value={draft.num_ctx ?? ''} onChange={(e) => update('num_ctx', e.target.value === '' ? null : Number(e.target.value))} min={1} placeholder="auto" />
-                                        </label>
-                                        <span className={styles.fieldHint}>{ADVANCED_HELP.context}</span>
-                                    </div>
-                                )}
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Max Output</span>
-                                        <input className={styles.numInput} type="number" data-testid="field-num_predict" value={draft.num_predict ?? ''} onChange={(e) => update('num_predict', e.target.value === '' ? null : Number(e.target.value))} min={-1} step={1} placeholder={provider === 'anthropic' ? '16384' : 'unlimited'} />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.max_output}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Iterations</span>
-                                        <input className={styles.numInput} type="number" data-testid="field-max_iterations" value={draft.max_iterations ?? ''} onChange={(e) => update('max_iterations', e.target.value === '' ? null : Number(e.target.value))} min={1} step={1} placeholder="unlimited" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.iterations}</span>
-                                </div>
-                                <div className={styles.advancedField} data-testid="field-think">
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Thinking</span>
-                                        <ToggleSwitch
-                                            checked={draft.think || false}
-                                            onChange={(e) => updateInference('think', e.target.checked || null)}
-                                        />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.thinking}</span>
-                                </div>
-                                {draft.think && _isSupported('reasoning_effort', provider) && (
-                                    <div className={styles.advancedField} data-testid="field-reasoning_effort">
-                                        <label className={styles.fieldRow}>
-                                            <span className={styles.fieldLabel}>Reasoning Effort</span>
-                                            <select
-                                                className={styles.selectInput}
-                                                value={draft.reasoning_effort || 'medium'}
-                                                onChange={(e) => update('reasoning_effort', e.target.value === 'medium' ? null : e.target.value)}
-                                                data-testid="reasoning-effort-select"
-                                            >
-                                                <option value="low">Low</option>
-                                                <option value="medium">Medium</option>
-                                                <option value="high">High</option>
-                                            </select>
-                                        </label>
-                                        <span className={styles.fieldHint}>{ADVANCED_HELP.reasoning_effort}</span>
-                                    </div>
-                                )}
-                                {draft.think && _isSupported('reasoning_summary', provider) && (
-                                    <div className={styles.advancedField} data-testid="field-reasoning_summary">
-                                        <label className={styles.fieldRow}>
-                                            <span className={styles.fieldLabel}>Reasoning Summary</span>
-                                            <select
-                                                className={styles.selectInput}
-                                                value={draft.reasoning_summary || 'auto'}
-                                                onChange={(e) => update('reasoning_summary', e.target.value === 'auto' ? null : e.target.value)}
-                                                data-testid="reasoning-summary-select"
-                                            >
-                                                <option value="auto">Auto</option>
-                                                <option value="concise">Concise</option>
-                                                <option value="detailed">Detailed</option>
-                                            </select>
-                                        </label>
-                                        <span className={styles.fieldHint}>{ADVANCED_HELP.reasoning_summary}</span>
-                                    </div>
-                                )}
-                                {draft.think && _isSupported('thinking_budget', provider) && (
-                                    <div className={styles.advancedField} data-testid="field-thinking_budget">
-                                        <label className={styles.fieldRow}>
-                                            <span className={styles.fieldLabel}>Thinking Budget</span>
-                                            <select
-                                                className={styles.selectInput}
-                                                value={draft.thinking_budget || 'standard'}
-                                                onChange={(e) => update('thinking_budget', e.target.value === 'standard' ? null : e.target.value)}
-                                                data-testid="thinking-budget-select"
-                                            >
-                                                <option value="minimal">Minimal (1,024 tokens)</option>
-                                                <option value="standard">Standard ({Math.max(1024, Math.floor((draft.num_predict || 16384) / 2)).toLocaleString()} tokens)</option>
-                                                <option value="extended">Extended ({(draft.num_predict || 16384).toLocaleString()} tokens)</option>
-                                            </select>
-                                        </label>
-                                        <span className={styles.fieldHint}>{ADVANCED_HELP.thinking_budget}</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </section>
+                    {/* 5. Inference (presets + advanced) */}
+                    <InferenceSettings
+                        key={draft.id}
+                        draft={draft}
+                        provider={provider}
+                        activePreset={activePreset}
+                        onFieldChange={update}
+                        onApplyPreset={applyPreset}
+                    />
                 </div>
 
             </div>
@@ -494,8 +255,6 @@ export default function ProfileBuilder({
 }
 
 function DeleteConflictCallout({ conflict, onDismiss }) {
-    // Group usage rows by goal — multiple tasks in the same goal collapse
-    // into a single line. The user only needs to know which goals to clear.
     const goals = useMemo(() => {
         const seen = new Set();
         const rows = [];
