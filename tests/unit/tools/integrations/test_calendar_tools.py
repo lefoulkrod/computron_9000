@@ -12,8 +12,11 @@ from typing import Any
 import pytest
 
 from integrations import broker_client
+from tools.integrations.create_event import create_event
+from tools.integrations.delete_event import delete_event
 from tools.integrations.list_calendars import list_calendars
 from tools.integrations.list_events import list_events
+from tools.integrations.update_event import update_event
 
 
 def _patch_call(monkeypatch: pytest.MonkeyPatch, *, result: Any = None, exc: Exception | None = None) -> None:
@@ -127,8 +130,8 @@ async def test_list_events_renders_with_start_summary_and_location(monkeypatch: 
     out = await list_events("icloud_personal", "https://caldav.icloud.com/123/calendars/work/")
     assert out == (
         "Events on 'Work' (2):\n"
-        "- 2026-04-26T09:00:00+00:00  Standup  @ Zoom\n"
-        "- 2026-04-26T12:30:00+00:00  Lunch"
+        "- 2026-04-26T09:00:00+00:00  Standup  @ Zoom  [id: abc]\n"
+        "- 2026-04-26T12:30:00+00:00  Lunch  [id: def]"
     )
 
 
@@ -142,7 +145,7 @@ async def test_list_events_substitutes_placeholders(monkeypatch: pytest.MonkeyPa
     out = await list_events("icloud_personal", "https://x/")
     assert out == (
         "Events on 'Home' (1):\n"
-        "- (no start)  (no title)"
+        "- (no start)  (no title)  [id: x]"
     )
 
 
@@ -200,3 +203,225 @@ async def test_list_events_reports_generic_error(monkeypatch: pytest.MonkeyPatch
     _patch_call(monkeypatch, exc=broker_client.IntegrationError("upstream boom"))
     out = await list_events("icloud_personal", "https://x/")
     assert out == "Failed to list events for 'icloud_personal': upstream boom"
+
+
+# ── create_event ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_event_confirms_with_event_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={
+        "event": {
+            "uid": "ev_abc123",
+            "summary": "Team standup",
+            "start": "2026-05-10T09:00:00-05:00",
+            "end": "2026-05-10T09:30:00-05:00",
+            "location": "",
+        },
+    })
+    out = await create_event(
+        "gw_work", "primary", "Team standup",
+        "2026-05-10T09:00:00-05:00", "2026-05-10T09:30:00-05:00",
+    )
+    assert "ev_abc123" in out
+    assert "Team standup" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_event_passes_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def _capture(
+        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
+    ) -> Any:
+        captured.update(args)
+        return {"event": {"uid": "x", "summary": "s", "start": "", "end": "", "location": ""}}
+
+    monkeypatch.setattr(broker_client, "call", _capture)
+
+    await create_event(
+        "gw_work", "primary", "Lunch",
+        "2026-05-10T12:00:00Z", "2026-05-10T13:00:00Z",
+        description="Team lunch",
+        location="Cafeteria",
+        attendees=["alice@example.com", "bob@example.com"],
+    )
+    assert captured["description"] == "Team lunch"
+    assert captured["location"] == "Cafeteria"
+    assert captured["attendees"] == ["alice@example.com", "bob@example.com"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_event_omits_empty_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def _capture(
+        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
+    ) -> Any:
+        captured.update(args)
+        return {"event": {"uid": "x", "summary": "s", "start": "", "end": "", "location": ""}}
+
+    monkeypatch.setattr(broker_client, "call", _capture)
+
+    await create_event(
+        "gw_work", "primary", "Quick sync",
+        "2026-05-10T14:00:00Z", "2026-05-10T14:30:00Z",
+    )
+    assert "description" not in captured
+    assert "location" not in captured
+    assert "attendees" not in captured
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_event_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("gw_work"))
+    out = await create_event(
+        "gw_work", "primary", "Meeting",
+        "2026-05-10T09:00:00Z", "2026-05-10T10:00:00Z",
+    )
+    assert "not connected" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_event_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("gw_work"))
+    out = await create_event(
+        "gw_work", "primary", "Meeting",
+        "2026-05-10T09:00:00Z", "2026-05-10T10:00:00Z",
+    )
+    assert "disabled" in out.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_event_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationError("quota exceeded"))
+    out = await create_event(
+        "gw_work", "primary", "Meeting",
+        "2026-05-10T09:00:00Z", "2026-05-10T10:00:00Z",
+    )
+    assert "Failed" in out
+
+
+# ── update_event ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_event_confirms_with_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={
+        "event": {
+            "uid": "ev_abc123",
+            "summary": "Updated standup",
+            "start": "2026-05-10T09:00:00-05:00",
+            "end": "2026-05-10T09:30:00-05:00",
+            "location": "",
+        },
+    })
+    out = await update_event(
+        "gw_work", "primary", "ev_abc123", summary="Updated standup",
+    )
+    assert "Updated standup" in out
+    assert "ev_abc123" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_event_passes_only_provided_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def _capture(
+        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
+    ) -> Any:
+        captured.update(args)
+        return {"event": {"uid": "ev1", "summary": "x", "start": "", "end": "", "location": ""}}
+
+    monkeypatch.setattr(broker_client, "call", _capture)
+
+    await update_event("gw_work", "primary", "ev1", location="Room 42")
+    assert captured["location"] == "Room 42"
+    assert "summary" not in captured
+    assert "start" not in captured
+    assert "attendees" not in captured
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_event_no_fields_returns_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={})
+    out = await update_event("gw_work", "primary", "ev1")
+    assert "No fields" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_event_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("gw_work"))
+    out = await update_event("gw_work", "primary", "ev1", summary="Changed")
+    assert "not connected" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_event_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("gw_work"))
+    out = await update_event("gw_work", "primary", "ev1", summary="Changed")
+    assert "disabled" in out.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_event_attendees(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def _capture(
+        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
+    ) -> Any:
+        captured.update(args)
+        return {"event": {"uid": "ev1", "summary": "x", "start": "", "end": "", "location": ""}}
+
+    monkeypatch.setattr(broker_client, "call", _capture)
+
+    await update_event("gw_work", "primary", "ev1", attendees=["alice@example.com"])
+    assert captured["attendees"] == ["alice@example.com"]
+
+
+# ── delete_event ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_event_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={"deleted": True})
+    out = await delete_event("gw_work", "primary", "ev_abc123")
+    assert "Deleted" in out
+    assert "ev_abc123" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_event_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("gw_work"))
+    out = await delete_event("gw_work", "primary", "ev1")
+    assert "not connected" in out
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_event_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("gw_work"))
+    out = await delete_event("gw_work", "primary", "ev1")
+    assert "disabled" in out.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_event_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationError("not found"))
+    out = await delete_event("gw_work", "primary", "ev1")
+    assert "Failed" in out

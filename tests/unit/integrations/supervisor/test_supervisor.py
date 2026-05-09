@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 
+from integrations.permissions import Access, Capability
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from integrations.supervisor._store import enc_path, meta_path
@@ -66,6 +67,10 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
         "icloud": CatalogEntry(
             slug="icloud",
             command=["python", "-m", "integrations.brokers.email_broker"],
+            capabilities={
+                Capability.EMAIL: Access.READ_WRITE,
+                Capability.CALENDAR: Access.READ_WRITE,
+            },
             static_env={
                 "IMAP_HOST": fake.imap_host,
                 "IMAP_PORT": str(fake.imap_port),
@@ -106,7 +111,7 @@ async def test_add_then_call_broker_then_resolve_then_remove(tmp_path: Path) -> 
                 "user_suffix": "personal",
                 "label": "iCloud test",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "r"},
             },
         )
         assert "error" not in add_resp, add_resp
@@ -118,7 +123,7 @@ async def test_add_then_call_broker_then_resolve_then_remove(tmp_path: Path) -> 
         assert meta_path(sup.vault_dir, "icloud_personal").exists()
         assert enc_path(sup.vault_dir, "icloud_personal").exists()
 
-        # --- call broker directly: the real payoff of the walking skeleton ---
+        # --- call broker directly ---
         mb_resp = await _rpc_call(broker_socket, "list_mailboxes", {})
         assert "error" not in mb_resp, mb_resp
         names = sorted(m["name"] for m in mb_resp["result"]["mailboxes"])
@@ -128,18 +133,16 @@ async def test_add_then_call_broker_then_resolve_then_remove(tmp_path: Path) -> 
         resolve_resp = await _rpc_call(
             sup.app_sock_path, "resolve", {"id": "icloud_personal"},
         )
-        assert resolve_resp["result"] == {
-            "id": "icloud_personal",
-            "socket": str(broker_socket),
-            "write_allowed": False,
-        }
+        assert resolve_resp["result"]["id"] == "icloud_personal"
+        assert resolve_resp["result"]["socket"] == str(broker_socket)
+        assert resolve_resp["result"]["permissions"] == {"email": "r", "calendar": "off"}
 
         # --- list surfaces the integration ---
         list_resp = await _rpc_call(sup.app_sock_path, "list", {})
         integrations = list_resp["result"]["integrations"]
         assert len(integrations) == 1
         assert integrations[0]["id"] == "icloud_personal"
-        assert integrations[0]["write_allowed"] is False
+        assert integrations[0]["permissions"] == {"email": "r", "calendar": "off"}
 
         # --- remove kills the broker and deletes vault files ---
         remove_resp = await _rpc_call(
@@ -185,7 +188,7 @@ async def test_add_with_bad_credentials_returns_auth_error(tmp_path: Path) -> No
                 "user_suffix": "personal",
                 "label": "iCloud bad",
                 "auth_blob": {"email": fake.user, "password": "wrong"},
-                "write_allowed": False,
+                "permissions": {"email": "rw", "calendar": "rw"},
             },
         )
         assert resp["error"]["code"] == "AUTH"
@@ -222,7 +225,7 @@ async def test_add_with_unknown_slug_returns_bad_request(tmp_path: Path) -> None
                 "user_suffix": "x",
                 "label": "x",
                 "auth_blob": {},
-                "write_allowed": False,
+                "permissions": {"email": "rw"},
             },
         )
         assert resp["error"]["code"] == "BAD_REQUEST"
@@ -252,15 +255,14 @@ async def test_resolve_unknown_id_returns_not_found(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) -> None:
-    """``update {id, write_allowed}`` rewrites meta on disk, replaces the
-    broker subprocess with a new one carrying the new ``WRITE_ALLOWED`` env,
-    and the broker's WRITE_DENIED gate now reflects the flip.
+async def test_update_elevates_permissions_and_respawns_broker(tmp_path: Path) -> None:
+    """``update {id, permissions}`` rewrites meta on disk, replaces the broker
+    subprocess with one carrying the new permissions env, and the broker's
+    permission gate now reflects the change.
 
-    Strategy: add with write_allowed=False, observe send_message returns
-    WRITE_DENIED, flip to True via update, observe send_message no longer
-    returns WRITE_DENIED. Different broker PID before vs after proves the
-    respawn happened.
+    Strategy: add with email:r, observe send_message returns
+    PERMISSION_DENIED, upgrade to email:rw via update, observe send_message
+    succeeds. Different broker PID before vs after proves the respawn happened.
     """
     fake = FakeEmail()
     await fake.start()
@@ -281,36 +283,36 @@ async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) ->
                 "user_suffix": "personal",
                 "label": "iCloud test",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "r"},
             },
         )
         assert "error" not in add_resp, add_resp
         old_pid = sup._registry.get("icloud_personal").broker.proc.pid
         broker_socket_old = Path(add_resp["result"]["socket"])
 
-        # Confirm the gate is currently active: send_message → WRITE_DENIED.
+        # Confirm the gate is currently active: send_message → PERMISSION_DENIED.
         denied = await _rpc_call(
             broker_socket_old,
             "send_message",
             {"to": ["a@b.com"], "subject": "x", "body": "y"},
         )
-        assert denied["error"]["code"] == "WRITE_DENIED"
+        assert denied["error"]["code"] == "PERMISSION_DENIED"
 
-        # Flip the policy.
+        # Elevate the permissions.
         upd_resp = await _rpc_call(
             sup.app_sock_path,
             "update",
-            {"id": "icloud_personal", "write_allowed": True},
+            {"id": "icloud_personal", "permissions": {"email": "rw", "calendar": "rw"}},
         )
         assert "error" not in upd_resp, upd_resp
-        assert upd_resp["result"]["write_allowed"] is True
+        assert upd_resp["result"]["permissions"] == {"email": "rw", "calendar": "rw"}
 
         # New broker with a different PID is now serving.
         new_record = sup._registry.get("icloud_personal")
         assert new_record.broker.proc.pid != old_pid
         assert new_record.state == "running"
 
-        # Old socket got rebound to the new broker — WRITE_DENIED is gone.
+        # Old socket got rebound to the new broker — permission gate passes now.
         broker_socket_new = Path(upd_resp["result"]["socket"])
         send_resp = await _rpc_call(
             broker_socket_new,
@@ -320,13 +322,13 @@ async def test_update_flips_write_allowed_and_respawns_broker(tmp_path: Path) ->
         assert "error" not in send_resp, send_resp
         assert send_resp["result"]["sent"] is True
 
-        # On-disk meta reflects the new policy too — would survive restart.
+        # On-disk meta reflects the new permissions — would survive restart.
         list_resp = await _rpc_call(sup.app_sock_path, "list", {})
         listed = next(
             i for i in list_resp["result"]["integrations"]
             if i["id"] == "icloud_personal"
         )
-        assert listed["write_allowed"] is True
+        assert listed["permissions"] == {"email": "rw", "calendar": "rw"}
     finally:
         await sup.stop()
         await fake.stop()
@@ -347,7 +349,7 @@ async def test_update_unknown_id_returns_not_found(tmp_path: Path) -> None:
         resp = await _rpc_call(
             sup.app_sock_path,
             "update",
-            {"id": "never_added", "write_allowed": True},
+            {"id": "never_added", "permissions": {"email": "rw"}},
         )
         assert resp["error"]["code"] == "NOT_FOUND"
     finally:
@@ -379,7 +381,7 @@ async def test_update_changes_label_via_app_sock(tmp_path: Path) -> None:
                 "user_suffix": "personal",
                 "label": "Original",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "rw", "calendar": "rw"},
             },
         )
 
@@ -405,7 +407,7 @@ async def test_update_changes_label_via_app_sock(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_update_rejects_empty_body(tmp_path: Path) -> None:
     """``update {id}`` with no fields to change is BAD_REQUEST — caller has
-    to specify at least one of write_allowed or label."""
+    to specify at least one of permissions or label."""
     fake = FakeEmail()
     await fake.start()
     sup = Supervisor(
@@ -425,7 +427,7 @@ async def test_update_rejects_empty_body(tmp_path: Path) -> None:
                 "user_suffix": "personal",
                 "label": "iCloud",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "rw", "calendar": "rw"},
             },
         )
 
@@ -440,7 +442,7 @@ async def test_update_rejects_empty_body(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
-    """Setting ``write_allowed`` to its current value doesn't restart the
+    """Setting ``permissions`` to their current value doesn't restart the
     broker — the manager short-circuits and returns the existing record.
     No respawn means the broker PID is unchanged.
     """
@@ -463,7 +465,7 @@ async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
                 "user_suffix": "personal",
                 "label": "iCloud test",
                 "auth_blob": {"email": fake.user, "password": fake.password},
-                "write_allowed": False,
+                "permissions": {"email": "r"},
             },
         )
         old_pid = sup._registry.get("icloud_personal").broker.proc.pid
@@ -471,7 +473,7 @@ async def test_update_no_op_when_value_unchanged(tmp_path: Path) -> None:
         upd_resp = await _rpc_call(
             sup.app_sock_path,
             "update",
-            {"id": "icloud_personal", "write_allowed": False},
+            {"id": "icloud_personal", "permissions": {"email": "r"}},
         )
         assert "error" not in upd_resp, upd_resp
         assert sup._registry.get("icloud_personal").broker.proc.pid == old_pid

@@ -47,6 +47,8 @@ Computron 9000 is an AI assistant platform with a Python/aiohttp backend and Rea
 - No backward compatible refactors unless prompted
 - Write python code compatible with Python 3.12.10
 - Never put implementation details in docstrings
+- Add comments to explain non-obvious code
+- **Never name specific paths, callers, or doc files in comments or docstrings.** Cross-file references rot the moment anything moves: a "see ``server/_oauth.py``" line written in `integrations/...` keeps pointing at the old location forever after a rename, because the rename author isn't the one updating the comment. Same with "used by X", "called from Y", or "see plan.md / CLAUDE.md / docs/...". Describe the *concept* the reader needs (the rationale, the invariant, the bug class) — never the location. Same-package siblings are fine; the rule is for cross-package and cross-doc references. Greps to run before submitting: `\bsee \(?[\\\`\"]?[a-zA-Z_]*/[a-zA-Z_]`, `used by`, `called from`, `plan\.md|CLAUDE\.md`.
 - You may ignore Ruff(I001)
 
 ## Module Structure

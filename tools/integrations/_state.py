@@ -11,11 +11,12 @@ individual mutations in between.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from collections.abc import Iterable
 
 from config import load_config
+from integrations import supervisor_client
+from integrations.permissions import Permissions, permissions_from_dict
+from integrations.supervisor_client import SupervisorError
 from tools.integrations.types import RegisteredIntegration
 
 logger = logging.getLogger(__name__)
@@ -40,22 +41,15 @@ def cache_loaded() -> bool:
 def mark_added(
     integration_id: str,
     slug: str,
-    capabilities: Iterable[str],
+    permissions: Permissions,
     state: str = "running",
-    write_allowed: bool = False,
 ) -> None:
-    """Record that an integration has been successfully added.
-
-    Filters non-string entries out of ``capabilities`` so a malformed RPC
-    response can't poison the cache with junk that ``in`` checks would
-    silently miss against the documented ``str`` capability vocabulary.
-    """
+    """Record that an integration has been successfully added."""
     _registered[integration_id] = RegisteredIntegration(
         id=integration_id,
         slug=slug,
-        capabilities=frozenset(c for c in (capabilities or ()) if isinstance(c, str)),
+        permissions=dict(permissions),
         state=state if isinstance(state, str) else "running",
-        write_allowed=bool(write_allowed),
     )
 
 
@@ -107,7 +101,7 @@ async def refresh_registered_integrations() -> None:
     global _load_future
     sock_path = load_config().integrations.app_sock_path
     try:
-        reader, writer = await asyncio.open_unix_connection(sock_path)
+        result = await supervisor_client.call("list", {}, app_sock_path=sock_path)
     except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
         logger.warning(
             "integrations source not reachable at %s (%s); "
@@ -116,34 +110,24 @@ async def refresh_registered_integrations() -> None:
         )
         _load_future = None
         return
-
-    try:
-        body = json.dumps({"id": 1, "verb": "list", "args": {}}).encode("utf-8")
-        writer.write(len(body).to_bytes(4, "big") + body)
-        await writer.drain()
-        length = int.from_bytes(await reader.readexactly(4), "big")
-        resp = json.loads(await reader.readexactly(length))
-    finally:
-        writer.close()
-        await writer.wait_closed()
-
-    if "error" in resp:
-        logger.warning("list error from integrations source: %s", resp["error"])
+    except SupervisorError as exc:
+        logger.warning("list error from integrations source: %s: %s", exc.code, exc.message)
         _load_future = None
         return
 
     _registered.clear()
-    for entry in resp.get("result", {}).get("integrations", []):
+    for entry in result.get("integrations", []):
         integration_id = entry.get("id")
         slug = entry.get("slug")
         if not (isinstance(integration_id, str) and isinstance(slug, str)):
             continue
+        perms_raw = entry.get("permissions")
+        perms = permissions_from_dict(perms_raw) if isinstance(perms_raw, dict) else {}
         mark_added(
             integration_id,
             slug,
-            entry.get("capabilities") or (),
+            perms,
             entry.get("state") or "running",
-            bool(entry.get("write_allowed", False)),
         )
 
     logger.info("loaded %d registered integration(s)", len(_registered))

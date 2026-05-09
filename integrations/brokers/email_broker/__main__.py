@@ -36,6 +36,7 @@ from integrations.brokers.email_broker._caldav_client import CalDavAuthError, Ca
 from integrations.brokers.email_broker._imap_client import ImapAuthError, ImapClient
 from integrations.brokers.email_broker._smtp_client import SmtpAuthError, SmtpClient
 from integrations.brokers.email_broker._verbs import VerbDispatcher
+from integrations.permissions import permissions_from_env
 
 logger = logging.getLogger("email_broker")
 
@@ -55,7 +56,7 @@ async def _run() -> int:
     imap_port = int(env_required("IMAP_PORT"))
     user = env_required("EMAIL_USER")
     password = env_required("EMAIL_PASS")
-    write_allowed = parse_bool(env_required("WRITE_ALLOWED"))
+    permissions = permissions_from_env(env_required("PERMISSIONS"))
     attachments_dir = Path(env_required("ATTACHMENTS_DIR"))
 
     # Wipe the password from the process environ once we've captured it into
@@ -138,7 +139,7 @@ async def _run() -> int:
         imap=imap,
         smtp=smtp_client,
         caldav=caldav_client,
-        write_allowed=write_allowed,
+        permissions=permissions,
         attachments_dir=attachments_dir,
     )
 
@@ -147,8 +148,8 @@ async def _run() -> int:
 
     server = await serve_rpc(socket_path, handler)
     log.info(
-        "listening on %s (write_allowed=%s, host=%s:%d)",
-        socket_path, write_allowed, imap_host, imap_port,
+        "listening on %s (permissions=%s, host=%s:%d)",
+        socket_path, permissions, imap_host, imap_port,
     )
 
     # READY sentinel: the supervisor watches stdout for this exact line and

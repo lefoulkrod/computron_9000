@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from integrations._rpc import RpcError
+from integrations.permissions import Access, Capability, Permissions, permissions_from_dict
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._crypto import DecryptError
 from integrations.supervisor._registry import IntegrationRecord, Registry
@@ -42,7 +43,7 @@ from integrations.supervisor._spawn import BrokerHandle, BrokerSpawnError, spawn
 from integrations.supervisor.types import HostPath
 from integrations.supervisor._store import (
     delete_integration,
-    read_meta,
+    read_raw_meta,
     read_secrets,
     write_meta,
     write_secrets,
@@ -99,7 +100,7 @@ class BrokerManager:
         user_suffix: str | None = None,
         label: str,
         auth_blob: dict,
-        write_allowed: bool,
+        permissions: Permissions,
     ) -> IntegrationRecord:
         """Register a brand-new integration: validate, persist, spawn, watch.
 
@@ -121,12 +122,15 @@ class BrokerManager:
         if self._registry.contains(integration_id):
             raise RpcError("BAD_REQUEST", f"integration already exists: {integration_id}")
 
+        max_access = entry.resolve_capabilities(auth_blob)
+        clamped = _clamp_permissions(permissions, max_access)
+
         now = datetime.now(UTC)
         meta = IntegrationMeta(
             id=integration_id,
             slug=slug,
             label=label,
-            write_allowed=write_allowed,
+            permissions=clamped,
             added_at=now,
             updated_at=now,
         )
@@ -142,7 +146,7 @@ class BrokerManager:
                 entry=entry,
                 integration_id=integration_id,
                 secret_bundle=auth_blob,
-                write_allowed=write_allowed,
+                permissions=clamped,
                 sockets_dir=self._sockets_dir,
                 host_paths=self._host_paths,
             )
@@ -156,7 +160,7 @@ class BrokerManager:
         record = IntegrationRecord(
             meta=meta,
             broker=handle,
-            capabilities=frozenset(entry.capabilities),
+            max_access=max_access,
         )
         self._registry.add(record)
         self._start_watcher(integration_id)
@@ -170,11 +174,18 @@ class BrokerManager:
         (Supervisor.start) can log and skip a single bad integration without
         bringing the whole supervisor down.
         """
-        meta = read_meta(self._vault_dir, integration_id)
-        entry = self._catalog.get(meta.slug)
+        raw = read_raw_meta(self._vault_dir, integration_id)
+
+        slug = raw.get("slug", "")
+        entry = self._catalog.get(slug)
         if entry is None:
-            msg = f"catalog has no entry for slug {meta.slug!r}"
+            msg = f"catalog has no entry for slug {slug!r}"
             raise ReconcileError(msg)
+
+        if raw.get("version", 1) < 2:
+            raw = _migrate_v1_to_v2(raw, entry)
+
+        meta = IntegrationMeta.model_validate(raw)
 
         try:
             secret_bundle = read_secrets(self._vault_dir, integration_id, self._master_key)
@@ -182,12 +193,18 @@ class BrokerManager:
             msg = f"decrypt failed for {integration_id}: {exc}"
             raise ReconcileError(msg) from exc
 
+        max_access = entry.resolve_capabilities(secret_bundle)
+        clamped = _clamp_permissions(meta.permissions, max_access)
+        if clamped != meta.permissions:
+            meta = meta.model_copy(update={"permissions": clamped})
+            write_meta(self._vault_dir, meta)
+
         try:
             handle = await spawn_broker(
                 entry=entry,
                 integration_id=integration_id,
                 secret_bundle=secret_bundle,
-                write_allowed=meta.write_allowed,
+                permissions=clamped,
                 sockets_dir=self._sockets_dir,
                 host_paths=self._host_paths,
             )
@@ -199,7 +216,7 @@ class BrokerManager:
         record = IntegrationRecord(
             meta=meta,
             broker=handle,
-            capabilities=frozenset(entry.capabilities),
+            max_access=max_access,
         )
         self._registry.add(record)
         self._start_watcher(integration_id)
@@ -233,18 +250,17 @@ class BrokerManager:
         self,
         integration_id: str,
         *,
-        write_allowed: bool | None = None,
+        permissions: Permissions | None = None,
         label: str | None = None,
     ) -> IntegrationRecord:
         """Update mutable fields on an existing integration.
 
-        Mutables today are ``write_allowed`` and ``label``. Both are
-        optional — pass only the fields that should change. ``label`` is a
-        string the broker never sees, so a label-only update rewrites the
-        meta on disk and that's it. ``write_allowed`` is read from the
-        broker's env at spawn time, so flipping it means rewrite + SIGTERM
-        + respawn with the new env (brief gap during which the broker
-        socket is gone).
+        Mutables today are ``permissions`` and ``label``. Both are optional
+        — pass only the fields that should change. ``label`` is a string the
+        broker never sees, so a label-only update rewrites the meta on disk
+        and that's it. ``permissions`` is read from the broker's env at spawn
+        time, so changing it means rewrite + SIGTERM + respawn with the new
+        env (brief gap during which the broker socket is gone).
 
         Raises :class:`RpcError` (NOT_FOUND) if the id isn't registered.
         Returns the updated record on success. If the respawn fails, the
@@ -255,24 +271,27 @@ class BrokerManager:
         if record is None:
             raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
 
-        if write_allowed is None and label is None:
+        if permissions is None and label is None:
             raise RpcError("BAD_REQUEST", "update requires at least one field")
 
         if label is not None and not label:
             raise RpcError("BAD_REQUEST", "'label' must be a non-empty string")
 
-        write_changed = (
-            write_allowed is not None and record.meta.write_allowed != write_allowed
+        if permissions is not None:
+            permissions = _clamp_permissions(permissions, record.max_access)
+
+        perms_changed = (
+            permissions is not None and record.meta.permissions != permissions
         )
         label_changed = label is not None and record.meta.label != label
 
         # No-op shortcut: nothing actually different, skip the work.
-        if not write_changed and not label_changed:
+        if not perms_changed and not label_changed:
             return record
 
         meta_updates: dict[str, Any] = {"updated_at": datetime.now(UTC)}
-        if write_changed:
-            meta_updates["write_allowed"] = write_allowed
+        if perms_changed:
+            meta_updates["permissions"] = permissions
         if label_changed:
             meta_updates["label"] = label
         new_meta = record.meta.model_copy(update=meta_updates)
@@ -282,16 +301,14 @@ class BrokerManager:
         write_meta(self._vault_dir, new_meta)
 
         # Label-only: no env change, no respawn. Update in place and return.
-        if not write_changed:
+        if not perms_changed:
             record.meta = new_meta
             logger.info("updated integration %s (label=%r)", integration_id, label)
             return record
 
-        # write_allowed changed — broker needs a new env, which means respawn.
+        # Permissions changed — broker needs a new env, which means respawn.
         entry = self._catalog.get(record.meta.slug)
         if entry is None:
-            # The slug existed when the integration was added but no longer
-            # does — same shape as the reconcile path's catalog-drift error.
             raise RpcError(
                 "BAD_REQUEST",
                 f"catalog has no entry for slug {record.meta.slug!r}",
@@ -319,7 +336,7 @@ class BrokerManager:
                 entry=entry,
                 integration_id=integration_id,
                 secret_bundle=secret_bundle,
-                write_allowed=new_meta.write_allowed,
+                permissions=new_meta.permissions,
                 sockets_dir=self._sockets_dir,
                 host_paths=self._host_paths,
             )
@@ -340,8 +357,8 @@ class BrokerManager:
         record.expected_termination = False
         self._start_watcher(integration_id)
         logger.info(
-            "updated integration %s (write_allowed=%s, label=%r)",
-            integration_id, new_meta.write_allowed, new_meta.label,
+            "updated integration %s (permissions=%s, label=%r)",
+            integration_id, new_meta.permissions, new_meta.label,
         )
         return record
 
@@ -471,7 +488,7 @@ class BrokerManager:
                 entry=entry,
                 integration_id=integration_id,
                 secret_bundle=secret_bundle,
-                write_allowed=record.meta.write_allowed,
+                permissions=record.meta.permissions,
                 sockets_dir=self._sockets_dir,
                 host_paths=self._host_paths,
             )
@@ -495,3 +512,39 @@ class _RespawnError(Exception):
     def __init__(self, message: str, *, exit_code: int | None = None) -> None:
         super().__init__(message)
         self.exit_code = exit_code
+
+
+def _clamp_permissions(
+    requested: Permissions,
+    max_access: dict[Capability, Access],
+) -> Permissions:
+    """Enforce the provider's limits on what the user asked for.
+
+    For each capability the provider supports, use the user's choice or
+    OFF if they didn't mention it. If they asked for more than the
+    provider allows (e.g. read+write on a read-only scope), lower it to
+    the max. Capabilities the provider doesn't support are ignored.
+    """
+    clamped: Permissions = {}
+    for cap, cap_max in max_access.items():
+        requested_access = requested.get(cap, Access.OFF)
+        clamped[cap] = min(requested_access, cap_max)
+    return clamped
+
+
+def _migrate_v1_to_v2(raw: dict, entry: CatalogEntry) -> dict:
+    """Upgrade a v1 meta dict to v2 shape in memory.
+
+    v1 stored ``write_allowed: bool``. v2 stores per-capability
+    ``permissions``. The catalog entry tells us which capabilities this
+    slug actually supports, so we only set those.
+    """
+    write_allowed = raw.pop("write_allowed", False)
+    access = "rw" if write_allowed else "r"
+    raw["permissions"] = {cap.value: access for cap in entry.capabilities}
+    raw["version"] = 2
+    logger.info(
+        "migrated meta for %s from v1 (write_allowed=%s) to v2",
+        raw.get("id", "?"), write_allowed,
+    )
+    return raw

@@ -4,9 +4,14 @@ import Button from '../primitives/Button.jsx';
 import Callout from '../primitives/Callout.jsx';
 import ConfirmButton from '../primitives/ConfirmButton.jsx';
 import StatusDot from '../StatusDot.jsx';
-import AddIntegrationModal from './AddIntegrationModal.jsx';
+import AddIntegrationModal from './add-wizard/AddIntegrationModal.jsx';
 import styles from './IntegrationsTab.module.css';
 
+// Per-slug display metadata. Categories must match the Add wizard's
+// PROVIDERS list — otherwise a user picks "Google Workspace" under
+// "Productivity Suites" in the wizard and finds it under "Other" here.
+// Two sources of truth right now; followups plan moves both to a
+// server-side catalog endpoint.
 const SLUG_META = {
     icloud: {
         label: 'iCloud',
@@ -17,6 +22,11 @@ const SLUG_META = {
         label: 'Gmail',
         icon: 'bi-envelope-at',
         category: 'Email & Calendar',
+    },
+    google_workspace: {
+        label: 'Google Workspace',
+        icon: 'bi-google',
+        category: 'Productivity Suites',
     },
 };
 
@@ -326,30 +336,46 @@ function ListRow({ row, selected, onClick }) {
     );
 }
 
+const CAP_LABELS = {
+    email: 'Email',
+    calendar: 'Calendar',
+    drive: 'Drive',
+    contacts: 'Contacts',
+};
+
+function permsDirty(draft, original) {
+    const keys = new Set([...Object.keys(draft), ...Object.keys(original)]);
+    for (const k of keys) {
+        if ((draft[k] || 'off') !== (original[k] || 'off')) return true;
+    }
+    return false;
+}
+
 function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }) {
     const [labelDraft, setLabelDraft] = useState(record.label);
-    const [writesDraft, setWritesDraft] = useState(record.write_allowed);
+    const [permsDraft, setPermsDraft] = useState(record.permissions || {});
 
     const view = STATE_VIEW[record.state] ?? STATE_VIEW.running;
-    const canEditWrites = record.state === 'running';
+    const canEditPerms = record.state === 'running';
+    const maxAccess = record.max_access || {};
 
     const labelTrimmed = labelDraft.trim();
     const dirty = (
-        labelTrimmed !== record.label || writesDraft !== record.write_allowed
+        labelTrimmed !== record.label || permsDirty(permsDraft, record.permissions || {})
     );
     const canSave = dirty && labelTrimmed.length > 0 && !saving;
 
     const handleSave = useCallback(async () => {
         const updates = {};
         if (labelTrimmed !== record.label) updates.label = labelTrimmed;
-        if (writesDraft !== record.write_allowed) updates.write_allowed = writesDraft;
+        if (permsDirty(permsDraft, record.permissions || {})) updates.permissions = permsDraft;
         if (Object.keys(updates).length === 0) return;
         await onSave(updates);
-    }, [labelTrimmed, writesDraft, record, onSave]);
+    }, [labelTrimmed, permsDraft, record, onSave]);
 
     const handleCancel = useCallback(() => {
         setLabelDraft(record.label);
-        setWritesDraft(record.write_allowed);
+        setPermsDraft(record.permissions || {});
     }, [record]);
 
     return (
@@ -403,36 +429,53 @@ function DetailPane({ record, saving, saveError, removeError, onSave, onRemove }
 
                 <section className={styles.section}>
                     <div className={styles.sectionLabel}>Permissions</div>
-                    <label className={styles.checkRow}>
-                        <input
-                            type="checkbox"
-                            checked={writesDraft}
-                            onChange={(e) => setWritesDraft(e.target.checked)}
-                            disabled={!canEditWrites}
-                            data-testid={`integrations-toggle-write-${record.id}`}
-                        />
-                        <span className={styles.checkLabel}>
-                            Allow writes
-                        </span>
-                        <span className={styles.checkHelp}>
-                            When off, this integration is read-only — it can fetch
-                            information but can't send, move, or change anything.
-                        </span>
-                    </label>
+                    {Object.entries(maxAccess).map(([cap, capMax]) => (
+                        <div key={cap} className={styles.permRow}>
+                            <span className={styles.permLabel}>
+                                {CAP_LABELS[cap] || cap}
+                            </span>
+                            <div className={styles.toggleGroup}>
+                                {['off', 'r', 'rw'].map(level => {
+                                    const current = permsDraft[cap] || 'off';
+                                    const isActive = current === level;
+                                    const disabled = !canEditPerms
+                                        || (level === 'rw' && capMax !== 'rw');
+                                    const activeClass = isActive
+                                        ? level === 'rw' ? styles.toggleActive
+                                        : level === 'r' ? styles.toggleActiveRead
+                                        : styles.toggleActiveOff
+                                        : '';
+                                    return (
+                                        <button
+                                            key={level}
+                                            type="button"
+                                            className={`${styles.toggleOpt} ${activeClass}`}
+                                            disabled={disabled}
+                                            title={
+                                                level === 'rw' && capMax !== 'rw'
+                                                    ? 'Reconnect with broader scopes to enable'
+                                                    : undefined
+                                            }
+                                            onClick={() => setPermsDraft(
+                                                p => ({ ...p, [cap]: level }),
+                                            )}
+                                            data-testid={`integrations-perm-${cap}-${level}`}
+                                        >
+                                            {level === 'off' ? 'Off'
+                                                : level === 'r' ? 'Read'
+                                                : 'Read + Write'}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
                 </section>
 
                 <section className={styles.section}>
                     <div className={styles.sectionLabel}>Status</div>
                     <KvRow label="State" value={view.label} />
                     <KvRow label="Provider" value={record.slug} />
-                    <KvRow
-                        label="Capabilities"
-                        value={
-                            (record.capabilities || []).length > 0
-                                ? record.capabilities.join(' · ')
-                                : '—'
-                        }
-                    />
                 </section>
 
                 {saveError && (

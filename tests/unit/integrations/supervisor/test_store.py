@@ -11,7 +11,7 @@ from integrations.supervisor._store import (
     enc_path,
     list_integration_ids,
     meta_path,
-    read_meta,
+    read_raw_meta,
     read_secrets,
     write_meta,
     write_secrets,
@@ -31,11 +31,12 @@ def _meta(id_: str = "icloud_personal") -> IntegrationMeta:
 
 
 def test_meta_round_trip(tmp_path: Path) -> None:
-    """write_meta then read_meta returns an equivalent model."""
+    """write_meta then read_raw_meta + validate returns an equivalent model."""
     meta = _meta()
 
     write_meta(tmp_path, meta)
-    loaded = read_meta(tmp_path, meta.id)
+    raw = read_raw_meta(tmp_path, meta.id)
+    loaded = IntegrationMeta.model_validate(raw)
 
     assert loaded == meta
 

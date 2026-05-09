@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+from integrations.permissions import Access, Capability
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._lifecycle import Supervisor
 from integrations.supervisor._store import enc_path, meta_path
@@ -46,7 +47,10 @@ def _test_catalog(fake: FakeEmail) -> dict[str, CatalogEntry]:
         "icloud": CatalogEntry(
             slug="icloud",
             command=["python", "-m", "integrations.brokers.email_broker"],
-            capabilities=frozenset({"email"}),
+            capabilities={
+                Capability.EMAIL: Access.READ_WRITE,
+                Capability.CALENDAR: Access.READ_WRITE,
+            },
             static_env={
                 "IMAP_HOST": fake.imap_host,
                 "IMAP_PORT": str(fake.imap_port),
@@ -102,7 +106,7 @@ async def test_reconcile_respawns_persisted_integration(tmp_path: Path) -> None:
                     "user_suffix": "personal",
                     "label": "iCloud test",
                     "auth_blob": {"email": fake.user, "password": fake.password},
-                    "write_allowed": False,
+                    "permissions": {"email": "rw", "calendar": "rw"},
                 },
             )
             assert "error" not in add_resp, add_resp
@@ -161,7 +165,7 @@ async def test_reconcile_skips_integration_when_slug_missing_from_catalog(
                     "user_suffix": "personal",
                     "label": "iCloud test",
                     "auth_blob": {"email": fake.user, "password": fake.password},
-                    "write_allowed": False,
+                    "permissions": {"email": "rw", "calendar": "rw"},
                 },
             )
             assert "error" not in add_resp, add_resp
@@ -208,7 +212,7 @@ async def test_reconcile_skips_integration_when_auth_now_rejected(
                     "user_suffix": "personal",
                     "label": "iCloud test",
                     "auth_blob": {"email": fake.user, "password": fake.password},
-                    "write_allowed": False,
+                    "permissions": {"email": "rw", "calendar": "rw"},
                 },
             )
             assert "error" not in add_resp, add_resp

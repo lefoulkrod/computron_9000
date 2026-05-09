@@ -26,6 +26,6 @@ Internal modules inside this package continue to import from their defining
 submodule, not through this facade.
 """
 
-from integrations import broker_client
+from integrations import broker_client, supervisor_client
 
-__all__ = ["broker_client"]
+__all__ = ["broker_client", "supervisor_client"]

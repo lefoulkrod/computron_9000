@@ -1,10 +1,10 @@
 """Tests for ``brokers/email_broker/_verbs.py`` — the dispatcher logic only.
 
 The dispatcher is pure routing: verb name -> client method -> response dict,
-with a WRITE_ALLOWED gate in the middle. Tests use a tiny stub IMAP client
-instead of the real ``ImapClient`` because what's under test is the dispatcher,
-not IMAP. (Real IMAP coverage lives in ``test_imap_client.py`` and, later, in
-subprocess-level broker tests.)
+with a per-capability permission gate in the middle. Tests use a tiny stub IMAP
+client instead of the real ``ImapClient`` because what's under test is the
+dispatcher, not IMAP. (Real IMAP coverage lives in ``test_imap_client.py`` and,
+later, in subprocess-level broker tests.)
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ import pytest
 from integrations._rpc import RpcError
 from integrations.brokers.email_broker._verbs import VerbDispatcher
 from integrations.brokers.email_broker.types import Mailbox, OutboundAttachment
+from integrations.permissions import Access, Capability
 
 
 class _StubImapClient:
@@ -95,7 +96,7 @@ async def test_dispatch_list_mailboxes_calls_session_and_wraps_result(tmp_path: 
     expects.
     """
     imap = _StubImapClient()
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=False, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     result = await dispatcher.dispatch("list_mailboxes", {})
 
@@ -110,10 +111,10 @@ async def test_dispatch_list_mailboxes_calls_session_and_wraps_result(tmp_path: 
 
 @pytest.mark.asyncio
 async def test_dispatch_unknown_verb_raises_bad_request(tmp_path: Path) -> None:
-    """A verb that isn't in ``_VERB_TYPE`` is a typo or a client bug — the
-    response distinguishes it from "declared but not yet implemented" below.
+    """A verb that isn't in ``_VERB_REQUIREMENT`` is a typo or a client bug —
+    the response distinguishes it from "declared but not yet implemented" below.
     """
-    dispatcher = VerbDispatcher(imap=_StubImapClient(), smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=_StubImapClient(), smtp=None, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch("does_not_exist", {})
@@ -123,34 +124,36 @@ async def test_dispatch_unknown_verb_raises_bad_request(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatch_write_verb_denied_when_write_not_allowed(tmp_path: Path) -> None:
-    """WRITE_ALLOWED=false must refuse every write-classified verb locally,
-    before the session is even consulted. This is the real security gate; a
-    bash-run-capable agent bypassing the app-server registry still hits it.
+async def test_dispatch_write_verb_denied_when_access_insufficient(tmp_path: Path) -> None:
+    """Read-only email permissions must refuse every write-requiring verb
+    locally, before the session is even consulted. This is the real security
+    gate; a bash-run-capable agent bypassing the app-server registry still
+    hits it.
 
-    We use ``send_message`` because it's tagged ``write`` in the verb table and
-    doesn't have a handler yet — proving the gate fires before handler lookup,
-    not after.
+    We use ``send_message`` because it requires ``email:rw`` in the verb table
+    and doesn't have a handler when smtp is None — proving the gate fires
+    before handler lookup, not after.
     """
     imap = _StubImapClient()
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=False, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch("send_message", {"to": "a@b"})
 
-    assert excinfo.value.code == "WRITE_DENIED"
-    assert excinfo.value.message == "writes disabled for this integration"
+    assert excinfo.value.code == "PERMISSION_DENIED"
+    assert "email:read" in excinfo.value.message
     # And the client was not called — the gate fires before handler dispatch.
     assert imap.list_mailboxes_calls == 0
 
 
 @pytest.mark.asyncio
 async def test_dispatch_write_verb_allowed_falls_through_to_not_implemented(tmp_path: Path) -> None:
-    """When WRITE_ALLOWED=true and SMTP isn't configured, ``send_message``
-    is declared but unhandled and returns ``BAD_REQUEST "verb not implemented"``.
-    Proves the gate passes and handler lookup is reached for the SMTP-less case.
+    """When permissions grant email:rw and SMTP isn't configured,
+    ``send_message`` is declared but unhandled and returns
+    ``BAD_REQUEST "verb not implemented"``. Proves the gate passes and
+    handler lookup is reached for the SMTP-less case.
     """
-    dispatcher = VerbDispatcher(imap=_StubImapClient(), smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=_StubImapClient(), smtp=None, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch("send_message", {"to": ["a@b"]})
@@ -161,12 +164,12 @@ async def test_dispatch_write_verb_allowed_falls_through_to_not_implemented(tmp_
 
 @pytest.mark.asyncio
 async def test_dispatch_send_message_calls_smtp_and_returns_message_id(tmp_path: Path) -> None:
-    """Happy path: ``send_message`` with WRITE_ALLOWED=true and an SMTP
+    """Happy path: ``send_message`` with email:rw permissions and an SMTP
     client wired drives the SMTP call and returns the assigned Message-ID.
     """
     imap = _StubImapClient()
     smtp = _StubSmtp()
-    dispatcher = VerbDispatcher(imap=imap, smtp=smtp, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=smtp, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     result = await dispatcher.dispatch(
         "send_message",
@@ -183,7 +186,7 @@ async def test_dispatch_send_message_calls_smtp_and_returns_message_id(tmp_path:
 async def test_dispatch_send_message_rejects_missing_to(tmp_path: Path) -> None:
     """``to`` is required and must be a non-empty array of strings."""
     smtp = _StubSmtp()
-    dispatcher = VerbDispatcher(imap=_StubImapClient(), smtp=smtp, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=_StubImapClient(), smtp=smtp, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
@@ -203,7 +206,7 @@ async def test_dispatch_send_message_decodes_attachments_and_passes_bytes(
     smtp = _StubSmtp()
     dispatcher = VerbDispatcher(
         imap=_StubImapClient(), smtp=smtp,
-        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
 
     payload = b"\x89PNG fake png"
@@ -232,7 +235,7 @@ async def test_dispatch_send_message_rejects_invalid_base64(tmp_path: Path) -> N
     smtp = _StubSmtp()
     dispatcher = VerbDispatcher(
         imap=_StubImapClient(), smtp=smtp,
-        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
@@ -258,7 +261,7 @@ async def test_dispatch_send_message_rejects_missing_attachment_fields(
     smtp = _StubSmtp()
     dispatcher = VerbDispatcher(
         imap=_StubImapClient(), smtp=smtp,
-        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
@@ -286,7 +289,7 @@ async def test_dispatch_send_message_rejects_total_size_over_cap(
     smtp = _StubSmtp()
     dispatcher = VerbDispatcher(
         imap=_StubImapClient(), smtp=smtp,
-        write_allowed=True, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
     # 31MB of zeros — one byte over the cap. b64 of 0x00*N is "AAAA..."
     big = base64.b64encode(b"\x00" * (31 * 1024 * 1024)).decode("ascii")
@@ -309,13 +312,13 @@ async def test_dispatch_send_message_rejects_total_size_over_cap(
 
 @pytest.mark.asyncio
 async def test_dispatch_move_messages_calls_imap_and_returns_ack(tmp_path: Path) -> None:
-    """Happy path: ``move_messages`` with WRITE_ALLOWED=true calls
+    """Happy path: ``move_messages`` with email:rw permissions calls
     ``ImapClient.move_messages`` with the args from the frame and returns
     a thin ack. We don't surface a count because IMAP doesn't reliably
     report which UIDs actually moved.
     """
     imap = _StubImapClient()
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     result = await dispatcher.dispatch(
         "move_messages",
@@ -333,7 +336,7 @@ async def test_dispatch_move_messages_translates_lookup_error_to_not_found(tmp_p
     """
     imap = _StubImapClient()
     imap.move_raises = LookupError("no such mailbox")
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
@@ -350,7 +353,7 @@ async def test_dispatch_move_messages_rejects_empty_uids(tmp_path: Path) -> None
     caller sees a clear "you didn't pass anything" error rather than a
     silent no-op."""
     imap = _StubImapClient()
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
@@ -366,7 +369,7 @@ async def test_dispatch_move_messages_rejects_oversize_batch(tmp_path: Path) -> 
     """200-uid cap is enforced at the verb layer so the broker never
     builds a wire frame the server might reject with a parse error."""
     imap = _StubImapClient()
-    dispatcher = VerbDispatcher(imap=imap, smtp=None, write_allowed=True, attachments_dir=tmp_path)  # type: ignore[arg-type]
+    dispatcher = VerbDispatcher(imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ_WRITE}, attachments_dir=tmp_path)  # type: ignore[arg-type]
 
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(
@@ -391,7 +394,7 @@ async def test_dispatch_fetch_attachment_writes_bytes_to_dir(tmp_path: Path) -> 
     imap.attachment_filename = "photo.png"
     imap.attachment_mime_type = "image/png"
     dispatcher = VerbDispatcher(
-        imap=imap, smtp=None, write_allowed=False, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
 
     result = await dispatcher.dispatch(
@@ -424,7 +427,7 @@ async def test_dispatch_fetch_attachment_dedupes_on_filename_collision(
     imap.attachment_filename = "doc.txt"
     imap.attachment_mime_type = "text/plain"
     dispatcher = VerbDispatcher(
-        imap=imap, smtp=None, write_allowed=False, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
 
     first = await dispatcher.dispatch(
@@ -457,7 +460,7 @@ async def test_dispatch_fetch_attachment_translates_lookup_error_to_not_found(
     imap = _StubImapClient()
     imap.attachment_raises = LookupError("no attachment 99")
     dispatcher = VerbDispatcher(
-        imap=imap, smtp=None, write_allowed=False, attachments_dir=tmp_path,  # type: ignore[arg-type]
+        imap=imap, smtp=None, permissions={Capability.EMAIL: Access.READ}, attachments_dir=tmp_path,  # type: ignore[arg-type]
     )
     with pytest.raises(RpcError) as excinfo:
         await dispatcher.dispatch(

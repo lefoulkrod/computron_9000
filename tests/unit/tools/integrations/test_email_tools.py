@@ -363,11 +363,11 @@ async def test_send_email_reports_not_connected(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_send_email_reports_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    """If the broker rejects under WRITE_DENIED (writes off for this
-    integration), the agent gets a specific message — different from a
-    generic upstream failure so the caller knows the fix is to flip the
-    write_allowed bit, not to retry.
+async def test_send_email_reports_permission_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If the broker rejects under PERMISSION_DENIED (insufficient access for
+    this integration), the agent gets a specific message — different from a
+    generic upstream failure so the caller knows the fix is to grant write
+    permissions, not to retry.
     """
     _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
     out = await send_email(
@@ -520,7 +520,7 @@ async def test_move_email_reports_not_connected(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_move_email_reports_write_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_move_email_reports_permission_denied(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
     out = await move_email("icloud_personal", "INBOX", ["42"], "Archive")
     assert out == "Writes are disabled for 'icloud_personal'."
