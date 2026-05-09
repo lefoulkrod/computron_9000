@@ -28,7 +28,10 @@ class DriveClient:
     """Thin wrapper around the Drive v3 API."""
 
     def __init__(self, creds: Credentials) -> None:
-        self._service = build("drive", "v3", credentials=creds)
+        self._creds = creds
+
+    def _service(self):  # noqa: ANN202
+        return build("drive", "v3", credentials=self._creds, cache_discovery=False)
 
     def list_files(
         self,
@@ -42,7 +45,7 @@ class DriveClient:
         while len(results) < limit:
             page_size = min(limit - len(results), 100)
             resp = (
-                self._service.files()
+                self._service().files()
                 .list(
                     q=q,
                     fields=_LIST_FIELDS,
@@ -70,7 +73,7 @@ class DriveClient:
         while len(results) < limit:
             page_size = min(limit - len(results), 100)
             resp = (
-                self._service.files()
+                self._service().files()
                 .list(
                     q=q,
                     fields=_LIST_FIELDS,
@@ -88,7 +91,7 @@ class DriveClient:
     def get_file_metadata(self, file_id: str) -> dict[str, Any]:
         """Get metadata for a single file."""
         return (
-            self._service.files()
+            self._service().files()
             .get(fileId=file_id, fields=_FILE_FIELDS)
             .execute()
         )
@@ -109,7 +112,7 @@ class DriveClient:
         if mime in _GOOGLE_DOC_EXPORTS:
             export_mime, ext = _GOOGLE_DOC_EXPORTS[mime]
             buf = io.BytesIO()
-            request = self._service.files().export_media(
+            request = self._service().files().export_media(
                 fileId=file_id, mimeType=export_mime,
             )
             downloader = MediaIoBaseDownload(buf, request)
@@ -121,7 +124,7 @@ class DriveClient:
             return content, export_name, export_mime
 
         buf = io.BytesIO()
-        request = self._service.files().get_media(fileId=file_id)
+        request = self._service().files().get_media(fileId=file_id)
         downloader = MediaIoBaseDownload(buf, request)
         done = False
         while not done:
@@ -141,7 +144,7 @@ class DriveClient:
             file_metadata["parents"] = [parent_id]
         media = MediaInMemoryUpload(content, mimetype=mime_type, resumable=True)
         return (
-            self._service.files()
+            self._service().files()
             .create(body=file_metadata, media_body=media, fields=_FILE_FIELDS)
             .execute()
         )
@@ -159,7 +162,7 @@ class DriveClient:
         if parent_id:
             file_metadata["parents"] = [parent_id]
         return (
-            self._service.files()
+            self._service().files()
             .create(body=file_metadata, fields=_FILE_FIELDS)
             .execute()
         )
@@ -183,12 +186,12 @@ class DriveClient:
             kwargs["media_body"] = MediaInMemoryUpload(
                 content, mimetype=mt, resumable=True,
             )
-        return self._service.files().update(**kwargs).execute()
+        return self._service().files().update(**kwargs).execute()
 
     def trash_file(self, file_id: str) -> dict[str, Any]:
         """Move a file to the trash. Returns the updated file resource."""
         return (
-            self._service.files()
+            self._service().files()
             .update(fileId=file_id, body={"trashed": True}, fields=_FILE_FIELDS)
             .execute()
         )
@@ -215,7 +218,7 @@ class DriveClient:
         if email:
             permission["emailAddress"] = email
         return (
-            self._service.permissions()
+            self._service().permissions()
             .create(
                 fileId=file_id,
                 body=permission,

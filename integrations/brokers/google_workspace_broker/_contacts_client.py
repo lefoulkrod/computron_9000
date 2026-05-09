@@ -17,7 +17,10 @@ class ContactsClient:
     """Thin wrapper around the People API v1."""
 
     def __init__(self, creds: Credentials) -> None:
-        self._service = build("people", "v1", credentials=creds)
+        self._creds = creds
+
+    def _service(self):  # noqa: ANN202
+        return build("people", "v1", credentials=self._creds, cache_discovery=False)
 
     def list_contacts(self, limit: int = 50) -> list[dict[str, Any]]:
         """List the user's contacts."""
@@ -26,7 +29,7 @@ class ContactsClient:
         while len(results) < limit:
             page_size = min(limit - len(results), 100)
             resp = (
-                self._service.people()
+                self._service().people()
                 .connections()
                 .list(
                     resourceName="people/me",
@@ -46,7 +49,7 @@ class ContactsClient:
     def search_contacts(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Search the user's contacts by name, email, or phone."""
         resp = (
-            self._service.people()
+            self._service().people()
             .searchContacts(
                 query=query,
                 readMask=_PERSON_FIELDS,

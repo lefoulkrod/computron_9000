@@ -20,12 +20,15 @@ class GmailClient:
     """Thin wrapper around the Gmail v1 API."""
 
     def __init__(self, creds: Credentials) -> None:
-        self._service = build("gmail", "v1", credentials=creds)
+        self._creds = creds
         self._label_cache: dict[str, str] | None = None
+
+    def _service(self):  # noqa: ANN202
+        return build("gmail", "v1", credentials=self._creds, cache_discovery=False)
 
     def list_labels(self) -> list[dict[str, Any]]:
         """List all labels visible to the user."""
-        resp = self._service.users().labels().list(userId="me").execute()
+        resp = self._service().users().labels().list(userId="me").execute()
         labels = resp.get("labels", [])
         self._label_cache = {l["name"]: l["id"] for l in labels if "name" in l and "id" in l}
         return labels
@@ -66,7 +69,7 @@ class GmailClient:
     def get_message(self, message_id: str) -> dict[str, Any]:
         """Fetch a full message with body and attachment metadata."""
         msg = (
-            self._service.users().messages()
+            self._service().users().messages()
             .get(userId="me", id=message_id, format="full")
             .execute()
         )
@@ -89,7 +92,7 @@ class GmailClient:
     ) -> tuple[bytes, str, str]:
         """Download one attachment. Returns (bytes, filename, mime_type)."""
         resp = (
-            self._service.users().messages().attachments()
+            self._service().users().messages().attachments()
             .get(userId="me", messageId=message_id, id=attachment_id)
             .execute()
         )
@@ -104,7 +107,7 @@ class GmailClient:
     ) -> tuple[str, str]:
         """Look up filename and mime_type for an attachment ID."""
         msg = (
-            self._service.users().messages()
+            self._service().users().messages()
             .get(userId="me", id=message_id, format="full")
             .execute()
         )
@@ -154,7 +157,7 @@ class GmailClient:
 
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii")
         result = (
-            self._service.users().messages()
+            self._service().users().messages()
             .send(userId="me", body={"raw": raw})
             .execute()
         )
@@ -174,7 +177,7 @@ class GmailClient:
         remove_id = self._resolve_label_id(folder)
         add_id = self._resolve_label_id(dest_folder)
         for uid in uids:
-            self._service.users().messages().modify(
+            self._service().users().messages().modify(
                 userId="me",
                 id=uid,
                 body={
@@ -208,7 +211,7 @@ class GmailClient:
             if page_token:
                 kwargs["pageToken"] = page_token
 
-            resp = self._service.users().messages().list(**kwargs).execute()
+            resp = self._service().users().messages().list(**kwargs).execute()
             for m in resp.get("messages", []):
                 results.append(m["id"])
             page_token = resp.get("nextPageToken")
@@ -219,7 +222,7 @@ class GmailClient:
     def _get_metadata(self, message_id: str) -> dict[str, Any]:
         """Fetch just the envelope headers for one message."""
         msg = (
-            self._service.users().messages()
+            self._service().users().messages()
             .get(
                 userId="me",
                 id=message_id,

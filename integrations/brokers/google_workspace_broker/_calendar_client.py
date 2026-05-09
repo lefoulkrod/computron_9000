@@ -16,7 +16,10 @@ class CalendarClient:
     """Thin wrapper around the Calendar v3 API."""
 
     def __init__(self, creds: Credentials) -> None:
-        self._service = build("calendar", "v3", credentials=creds)
+        self._creds = creds
+
+    def _service(self):  # noqa: ANN202
+        return build("calendar", "v3", credentials=self._creds, cache_discovery=False)
 
     def list_calendars(self) -> list[dict[str, Any]]:
         """List all calendar entries visible to the user."""
@@ -24,7 +27,7 @@ class CalendarClient:
         page_token: str | None = None
         while True:
             resp = (
-                self._service.calendarList()
+                self._service().calendarList()
                 .list(pageToken=page_token)
                 .execute()
             )
@@ -41,18 +44,23 @@ class CalendarClient:
         days_forward: int = 30,
         days_back: int = 0,
         limit: int = 50,
-    ) -> list[dict[str, Any]]:
-        """List events in a date range, recurring events expanded."""
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """List events in a date range, recurring events expanded.
+
+        Returns (events, calendar_name) where calendar_name is the
+        display name from the first page of results.
+        """
         now = datetime.now(timezone.utc)
         time_min = (now - timedelta(days=days_back)).isoformat()
         time_max = (now + timedelta(days=days_forward)).isoformat()
 
         results: list[dict[str, Any]] = []
+        cal_name: str | None = None
         page_token: str | None = None
         while len(results) < limit:
             page_size = min(limit - len(results), 250)
             resp = (
-                self._service.events()
+                self._service().events()
                 .list(
                     calendarId=calendar_id,
                     timeMin=time_min,
@@ -64,11 +72,13 @@ class CalendarClient:
                 )
                 .execute()
             )
+            if cal_name is None:
+                cal_name = resp.get("summary")
             results.extend(resp.get("items", []))
             page_token = resp.get("nextPageToken")
             if not page_token:
                 break
-        return results[:limit]
+        return results[:limit], cal_name
 
     def create_event(
         self,
@@ -92,7 +102,7 @@ class CalendarClient:
         if attendees:
             body["attendees"] = [{"email": a} for a in attendees]
         return (
-            self._service.events()
+            self._service().events()
             .insert(calendarId=calendar_id, body=body)
             .execute()
         )
@@ -124,14 +134,14 @@ class CalendarClient:
         if attendees is not None:
             body["attendees"] = [{"email": a} for a in attendees]
         return (
-            self._service.events()
+            self._service().events()
             .patch(calendarId=calendar_id, eventId=event_id, body=body)
             .execute()
         )
 
     def delete_event(self, calendar_id: str, event_id: str) -> None:
         """Delete an event from a calendar."""
-        self._service.events().delete(
+        self._service().events().delete(
             calendarId=calendar_id, eventId=event_id,
         ).execute()
 

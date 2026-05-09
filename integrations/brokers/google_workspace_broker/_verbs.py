@@ -291,7 +291,7 @@ class VerbDispatcher:
         days_back = _require_int(args, "days_back", default=0)
         limit = _require_int(args, "limit", default=50)
         try:
-            items = await _run_sync(
+            items, cal_name = await _run_sync(
                 self._calendar.list_events,
                 calendar_id,
                 days_forward=days_forward,
@@ -302,21 +302,10 @@ class VerbDispatcher:
             raise _wrap_http_error(exc) from exc
 
         events = [_flatten_event(e) for e in items]
-        cal_name = await _run_sync(self._resolve_calendar_name, calendar_id)
         result: dict[str, Any] = {"events": events}
         if cal_name:
             result["calendar_name"] = cal_name
         return result
-
-    def _resolve_calendar_name(self, calendar_id: str) -> str | None:
-        """Best-effort lookup of a calendar's display name (blocking)."""
-        try:
-            meta = self._calendar._service.calendarList().get(
-                calendarId=calendar_id,
-            ).execute()
-            return meta.get("summary")
-        except HttpError:
-            return None
 
     async def _handle_create_event(self, args: dict[str, Any]) -> dict[str, Any]:
         calendar_id = _require_str(args, "calendar_id")
