@@ -48,7 +48,7 @@ export const PROVIDERS = [
                 description: 'Events, scheduling',
                 readScopes: ['https://www.googleapis.com/auth/calendar.readonly'],
                 writeScopes: ['https://www.googleapis.com/auth/calendar.events'],
-                defaultAccess: 'r',
+                defaultAccess: 'rw',
             },
             {
                 id: 'drive',
