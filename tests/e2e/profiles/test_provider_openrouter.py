@@ -35,14 +35,14 @@ def test_openrouter_code_preset(page, provider_profile):
     expect(settings.builder.preset("Code")).to_have_class(re.compile(r"presetActive"))
 
 
-def test_openrouter_no_reasoning_fields(page, provider_profile):
-    """OpenRouter has no reasoning effort/summary or thinking budget."""
-    provider_profile("test_prov_or_noreason", "openrouter", think=True)
+def test_openrouter_reasoning_fields_with_think(page, provider_profile):
+    """OpenRouter shows reasoning_effort when think is enabled."""
+    provider_profile("test_prov_or_reason", "openrouter", think=True)
 
     settings = SettingsPage(page).goto()
-    settings.profiles.select("test_prov_or_noreason")
+    settings.profiles.select("test_prov_or_reason")
     settings.builder.open_advanced()
 
-    expect(settings.builder.field("reasoning_effort")).not_to_be_attached()
+    expect(settings.builder.field("reasoning_effort")).to_be_visible()
     expect(settings.builder.field("reasoning_summary")).not_to_be_attached()
     expect(settings.builder.field("thinking_budget")).not_to_be_attached()
