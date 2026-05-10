@@ -14,6 +14,8 @@ import json
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e.conftest import BASE_URL
+
 
 def _put_json(page, url, data):
     """PUT JSON to an API endpoint."""
@@ -23,8 +25,6 @@ def _put_json(page, url, data):
 @pytest.fixture(scope="module", autouse=True)
 def _restore_state(browser):
     """Snapshot profiles and settings before the module, restore after."""
-    from e2e._setup import BASE_URL
-
     context = browser.new_context(base_url=BASE_URL)
     page = context.new_page()
 
