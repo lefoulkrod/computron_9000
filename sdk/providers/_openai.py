@@ -77,6 +77,7 @@ class OpenAIProvider(BaseAPIProvider):
         messages: list[dict[str, Any]],
         tools: list[Callable[..., Any]] | None,
         options: dict[str, Any] | None,
+        think: bool = False,
     ) -> dict[str, Any]:
         """Build kwargs dict for the OpenAI chat completions API."""
         opts = options or {}
@@ -94,6 +95,9 @@ class OpenAIProvider(BaseAPIProvider):
         if tools:
             kwargs["tools"] = _convert_tools(tools)
             kwargs["tool_choice"] = "auto"
+        if think:
+            effort = opts.get("reasoning_effort", "medium")
+            kwargs["reasoning_effort"] = effort
         return kwargs
 
     async def chat(
@@ -106,7 +110,7 @@ class OpenAIProvider(BaseAPIProvider):
         think: bool = False,
     ) -> ChatResponse:
         """Send a chat request via OpenAI and return a normalized response."""
-        kwargs = self._build_kwargs(model, messages, tools, options)
+        kwargs = self._build_kwargs(model, messages, tools, options, think)
         try:
             response = await self._client.chat.completions.create(**kwargs, stream=False)
         except Exception as exc:
@@ -123,7 +127,7 @@ class OpenAIProvider(BaseAPIProvider):
         think: bool = False,
     ) -> AsyncGenerator[ChatDelta | ChatResponse, None]:
         """Stream token deltas followed by a final ChatResponse."""
-        kwargs = self._build_kwargs(model, messages, tools, options)
+        kwargs = self._build_kwargs(model, messages, tools, options, think)
         kwargs["stream"] = True
         # Request usage in the last chunk; some compat servers silently ignore this.
         kwargs["stream_options"] = {"include_usage": True}
@@ -366,10 +370,13 @@ def _normalize_response(raw: Any) -> ChatResponse:
                 function=ToolCallFunction(name=tc.function.name, arguments=args),
             ))
 
+    thinking = getattr(msg, "reasoning", None) or getattr(msg, "reasoning_content", None) or None
+
     usage = raw.usage
     return ChatResponse(
         message=ChatMessage(
             content=msg.content,
+            thinking=thinking,
             tool_calls=tool_calls or None,
         ),
         usage=TokenUsage(

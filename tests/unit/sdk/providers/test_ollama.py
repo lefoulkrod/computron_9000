@@ -117,6 +117,8 @@ class TestOllamaProviderChat:
         )
         provider = OllamaProvider.__new__(OllamaProvider)
         provider._client = AsyncMock()
+        provider._model_cache = None
+        provider._model_cache_at = 0.0
         provider._client.chat.return_value = _async_iter([chunk1, chunk2, final])
 
         result = await provider.chat(
@@ -166,6 +168,8 @@ class TestOllamaProviderListModels:
     async def test_list_models(self):
         provider = OllamaProvider.__new__(OllamaProvider)
         provider._client = AsyncMock()
+        provider._model_cache = None
+        provider._model_cache_at = 0.0
         model1 = MagicMock()
         model1.model = "llama3:8b"
         model1.details = MagicMock(parameter_size="8B", quantization_level="Q4_K_M", family="llama")

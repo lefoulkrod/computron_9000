@@ -29,7 +29,7 @@ from aiohttp import web
 
 from integrations._env import env_required
 from integrations._perms import PROCESS_UMASK, SOCKET_MODE, disable_core_dumps
-from integrations.brokers._common._exit_codes import AUTH_FAIL, CLEAN_SHUTDOWN, GENERIC_ERROR
+from integrations.brokers._common._exit_codes import CLEAN_SHUTDOWN
 from integrations.brokers._common._ready import print_ready
 
 os.umask(PROCESS_UMASK)
@@ -58,50 +58,9 @@ _AUTH_HEADERS_TO_STRIP = frozenset({"authorization", "x-api-key"})
 def _make_auth_headers(provider: str, api_key: str) -> dict[str, str]:
     """Return the auth header(s) to inject for this provider."""
     if provider == "anthropic":
-        # The Anthropic SDK sends anthropic-version itself; we only inject the
-        # credential header. Injecting our own copy would produce a duplicate.
-        return {"x-api-key": api_key}
-    # OpenAI and all OpenAI-compatible providers
+        return {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
     return {"Authorization": f"Bearer {api_key}"}
 
-
-async def _validate_key(
-    provider: str,
-    api_key: str,
-    upstream_base: str,
-    log: logging.Logger,
-) -> int:
-    """Hit the upstream /v1/models endpoint to validate the API key before accepting traffic.
-
-    Returns AUTH_FAIL on 401/403, GENERIC_ERROR on connection failure, 0 on success.
-    Non-auth failures (network, 5xx) are returned as GENERIC_ERROR so the supervisor
-    can apply backoff restart rather than marking the integration permanently failed.
-    """
-    url = f"{upstream_base}/v1/models"
-    headers = _make_auth_headers(provider, api_key)
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                if resp.status in (401, 403):
-                    log.error("API key rejected by upstream (status=%d)", resp.status)
-                    return AUTH_FAIL
-                # 5xx or unexpected 4xx: upstream is up but unhappy for a non-auth reason.
-                # Don't treat as auth failure — let the supervisor retry with backoff.
-                if resp.status >= 500:
-                    log.error("upstream returned %d on startup validation", resp.status)
-                    return GENERIC_ERROR
-    except aiohttp.ClientConnectionError as exc:
-        log.error("could not reach upstream during startup validation: %s", exc)
-        return GENERIC_ERROR
-    except Exception as exc:
-        # Timeout, SSL errors, etc. Not an auth failure; let the supervisor retry.
-        log.error("startup validation failed unexpectedly: %s", exc)
-        return GENERIC_ERROR
-    return 0
 
 
 async def _run() -> int:
@@ -119,9 +78,9 @@ async def _run() -> int:
 
     log = logging.getLogger(f"llm_proxy[{integration_id}]")
 
-    rc = await _validate_key(provider, api_key, upstream_base, log)
-    if rc != 0:
-        return rc
+    # Skip startup key validation — the wizard's model probe (GET /api/models)
+    # exercises the real SDK path and gives the user immediate feedback. The
+    # broker just proxies; it doesn't need to second-guess the key.
 
     # One persistent upstream session for all proxied requests. Reusing a session
     # keeps the TCP connection pool warm and avoids per-request TLS handshake overhead.

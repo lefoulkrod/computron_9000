@@ -24,6 +24,7 @@ _console = Console(stderr=True)
 # manually in chat().
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=10, read=None, write=10, pool=10)
 _FIRST_TOKEN_TIMEOUT = 120.0
+_MODEL_CACHE_TTL = 300.0  # 5 minutes
 
 
 def _build_ollama_kwargs(
@@ -68,6 +69,8 @@ class OllamaProvider:
 
     def __init__(self, host: str | None = None) -> None:
         self._client = AsyncClient(host=host, timeout=_DEFAULT_TIMEOUT)
+        self._model_cache: list[ModelInfo] | None = None
+        self._model_cache_at: float = 0.0
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
@@ -200,8 +203,13 @@ class OllamaProvider:
         """Return available models with metadata from the Ollama server.
 
         Calls ``show`` concurrently for each model to get capabilities and
-        context window size.
+        context window size. Results are cached for 5 minutes since show()
+        per model is expensive.
         """
+        now = time.monotonic()
+        if self._model_cache is not None and now - self._model_cache_at < _MODEL_CACHE_TTL:
+            return self._model_cache
+
         response = await self._client.list()
         models = [m for m in response.models if m.model is not None]
 
@@ -209,7 +217,6 @@ class OllamaProvider:
             try:
                 show_resp = await self._client.show(name)
                 caps = list(getattr(show_resp, "capabilities", None) or [])
-                # Extract context window from model_info dict
                 model_info = getattr(show_resp, "model_info", None) or {}
                 ctx: int | None = None
                 for key, val in model_info.items():
@@ -241,10 +248,14 @@ class OllamaProvider:
                 is_cloud=name.endswith(":cloud"),
             ))
 
+        self._model_cache = results
+        self._model_cache_at = now
         return results
 
     def invalidate_model_cache(self) -> None:
-        """No-op kept for protocol compatibility; model list is never cached."""
+        """Clear the cached model list so the next call re-queries Ollama."""
+        self._model_cache = None
+        self._model_cache_at = 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -11,8 +11,8 @@ export const FIELD_SUPPORT = {
     num_ctx:          ['ollama'],
     num_predict:      ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
     max_iterations:   ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
-    think:            ['ollama', 'openai', 'anthropic', 'openrouter'],
-    reasoning_effort: ['openai'],
+    think:            ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
+    reasoning_effort: ['openai', 'openrouter', 'openai_compat'],
     reasoning_summary: ['openai'],
     thinking_budget:  ['anthropic'],
 };

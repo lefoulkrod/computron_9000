@@ -68,7 +68,8 @@ def get_provider() -> Provider:
     module = importlib.import_module(module_path)
     cls = getattr(module, cls_name)
 
-    if llm_cfg.base_url:
+    if llm_cfg.base_url or llm_cfg.provider == "ollama":
+        # Ollama always connects directly — no broker proxy.
         _cached_provider = cls.from_config(llm_cfg)
         logger.info("Initialized LLM provider: %s (direct)", llm_cfg.provider)
     else:
