@@ -16,7 +16,7 @@ export default function CollapsibleThinking({ text, compact = false, streaming =
     if (!text) return null;
 
     return (
-        <div className={`${styles.block} ${expanded ? styles.expanded : ''} ${compact ? styles.compact : ''}`}>
+        <div className={`${styles.block} ${expanded ? styles.expanded : ''} ${compact ? styles.compact : ''}`} data-testid="entry-thinking">
             <div className={styles.header} onClick={() => setExpanded((e) => !e)}>
                 <span>{expanded ? 'Hide thoughts' : 'Show thoughts'}</span>
                 <ChevronIcon size={12} direction={expanded ? 'up' : 'down'} />
