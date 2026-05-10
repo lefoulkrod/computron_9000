@@ -117,10 +117,19 @@ async def handle_add_integration(request: web.Request) -> web.Response:
 
     # user_suffix is derived from auth_blob.email — clients never set it.
     # Keeps integration IDs deterministic and out of the user's mental model.
-    derived = _derive_suffix_from_email(body.get("auth_blob"))
-    if not derived:
-        return error_response("BAD_REQUEST", "Email address is required.")
-    body["user_suffix"] = derived
+    # LLM integrations are singletons — no suffix, so the ID is just the slug
+    # and the socket path matches what the provider factory expects.
+    slug = body.get("slug", "")
+    if slug.startswith("llm_"):
+        # LLM integrations have no per-capability permissions (no email, calendar,
+        # etc.) but the supervisor's add verb requires the field as a dict.
+        if "permissions" not in body:
+            body["permissions"] = {}
+    else:
+        derived = _derive_suffix_from_email(body.get("auth_blob"))
+        if not derived:
+            return error_response("BAD_REQUEST", "Email address is required.")
+        body["user_suffix"] = derived
 
     try:
         result = await _supervisor_call("add", body)

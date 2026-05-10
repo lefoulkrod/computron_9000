@@ -5,7 +5,7 @@ from typing import Any
 
 from config import LLMConfig
 
-from ._models import ChatDelta, ChatResponse, ProviderError
+from ._models import ChatDelta, ChatResponse, ModelInfo
 
 
 class BaseAPIProvider:
@@ -49,28 +49,8 @@ class BaseAPIProvider:
             model=model, messages=messages, tools=tools, options=options, think=think,
         )
 
-    async def list_models(self) -> list[str]:
+    async def list_models(self) -> list[ModelInfo]:
         raise NotImplementedError(f"{type(self).__name__} is not yet implemented")
-
-    async def list_models_detailed(self) -> list[dict[str, Any]]:
-        """Return models with metadata. Default wraps list_models() for cloud providers."""
-        try:
-            names = await self.list_models()
-        except ProviderError:
-            raise
-        except Exception as exc:
-            raise ProviderError(str(exc), retryable=False, cause=exc) from exc
-        return [
-            {
-                "name": name,
-                "parameter_size": None,
-                "quantization_level": None,
-                "family": None,
-                "capabilities": [],
-                "is_cloud": True,
-            }
-            for name in names
-        ]
 
     def invalidate_model_cache(self) -> None:
         """Clear the model cache. Subclasses that cache should override this."""

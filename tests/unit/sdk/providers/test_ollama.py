@@ -168,11 +168,24 @@ class TestOllamaProviderListModels:
         provider._client = AsyncMock()
         model1 = MagicMock()
         model1.model = "llama3:8b"
+        model1.details = MagicMock(parameter_size="8B", quantization_level="Q4_K_M", family="llama")
         model2 = MagicMock()
         model2.model = "mistral:7b"
+        model2.details = MagicMock(parameter_size="7B", quantization_level="Q4_0", family="mistral")
         model3 = MagicMock()
         model3.model = None
         provider._client.list.return_value = MagicMock(models=[model1, model2, model3])
 
+        # show() returns capabilities and model_info with context_length
+        show_resp = MagicMock()
+        show_resp.capabilities = ["completion", "vision"]
+        show_resp.model_info = {"llama.context_length": 131072}
+        provider._client.show = AsyncMock(return_value=show_resp)
+
         result = await provider.list_models()
-        assert result == ["llama3:8b", "mistral:7b"]
+        assert len(result) == 2
+        assert result[0].name == "llama3:8b"
+        assert result[0].context_window == 131072
+        assert result[0].supports_images is True
+        assert result[0].parameter_size == "8B"
+        assert result[1].name == "mistral:7b"

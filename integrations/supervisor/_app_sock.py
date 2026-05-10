@@ -141,6 +141,7 @@ def _record_to_dict(record: IntegrationRecord) -> dict[str, Any]:
         "label": record.meta.label,
         "permissions": permissions_to_dict(record.meta.permissions),
         "max_access": {cap.value: access_to_str(a) for cap, a in record.max_access.items()},
+        "capabilities": sorted(cap.value for cap in record.max_access),
         "state": record.state,
         "socket": str(record.broker.socket_path),
     }

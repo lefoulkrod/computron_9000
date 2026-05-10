@@ -10,12 +10,13 @@ from enum import IntEnum, StrEnum
 
 
 class Capability(StrEnum):
-    """What an integration can do — each maps to a family of agent tools."""
+    """What an integration is."""
 
     EMAIL = "email"
     CALENDAR = "calendar"
     DRIVE = "drive"
     CONTACTS = "contacts"
+    LLM_PROXY = "llm_proxy"
 
 
 class Access(IntEnum):
@@ -83,8 +84,7 @@ def permissions_from_dict(d: dict[str, str]) -> Permissions:
 def permissions_to_env(perms: Permissions) -> str:
     """Encode as an env-var value: ``email:rw,calendar:r,...``."""
     return ",".join(
-        f"{cap.value}:{access_to_str(access)}"
-        for cap, access in sorted(perms.items(), key=lambda p: p[0].value)
+        f"{cap.value}:{access_to_str(access)}" for cap, access in sorted(perms.items(), key=lambda p: p[0].value)
     )
 
 

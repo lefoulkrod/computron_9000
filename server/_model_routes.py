@@ -28,10 +28,8 @@ def _sanitize(msg: str, api_key: str | None = None) -> str:
     return msg
 
 
-async def handle_list_models(request: web.Request) -> web.Response:
+async def handle_list_models(_request: web.Request) -> web.Response:
     """Return available models with metadata from the provider.
-
-    Supports ``?capability=vision`` to filter by capability.
 
     Returns 503 with a structured error if the provider is unreachable,
     so the setup wizard can display a clear message instead of a silent
@@ -39,7 +37,7 @@ async def handle_list_models(request: web.Request) -> web.Response:
     """
     provider = get_provider()
     try:
-        models = await provider.list_models_detailed()
+        models = await provider.list_models()
     except ProviderError as exc:
         cfg = load_config()
         safe_msg = _sanitize(str(exc), cfg.llm.api_key)
@@ -64,10 +62,7 @@ async def handle_list_models(request: web.Request) -> web.Response:
             },
             status=503,
         )
-    capability = request.query.get("capability")
-    if capability:
-        models = [m for m in models if capability in m.get("capabilities", [])]
-    return web.json_response({"models": models})
+    return web.json_response({"models": [m.model_dump() for m in models]})
 
 
 async def handle_refresh_models(_request: web.Request) -> web.Response:

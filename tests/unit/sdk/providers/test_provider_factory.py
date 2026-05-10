@@ -64,8 +64,8 @@ class TestGetProvider:
         with patch("sdk.providers.load_settings", return_value=settings), \
              patch("sdk.providers.load_config", return_value=_fake_config(str(tmp_path))):
             provider = get_provider()
-        from sdk.providers._openai import OpenAIProvider
-        assert isinstance(provider, OpenAIProvider)
+        from sdk.providers._openai_responses import OpenAIResponsesProvider
+        assert isinstance(provider, OpenAIResponsesProvider)
         assert provider._client.base_url.host == "localhost"
 
     def test_proxy_anthropic(self, tmp_path):
@@ -83,8 +83,8 @@ class TestGetProvider:
         with patch("sdk.providers.load_settings", return_value=settings), \
              patch("sdk.providers.load_config", return_value=_fake_config()):
             provider = get_provider()
-        from sdk.providers._openai import OpenAIProvider
-        assert isinstance(provider, OpenAIProvider)
+        from sdk.providers._openai_responses import OpenAIResponsesProvider
+        assert isinstance(provider, OpenAIResponsesProvider)
         assert "lm-studio" in str(provider._client.base_url)
 
     def test_openai_compat_uses_openai_provider(self, tmp_path):

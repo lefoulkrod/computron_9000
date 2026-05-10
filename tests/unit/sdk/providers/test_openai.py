@@ -260,14 +260,17 @@ class TestOpenAIProviderModelCache:
     @pytest.mark.asyncio
     async def test_cache_hit_skips_client(self):
         """Cached result is returned without calling the client."""
+        from sdk.providers._models import ModelInfo
+
         provider = self._make_provider()
-        provider._model_cache = ["gpt-4", "gpt-3.5-turbo"]
+        cached = [ModelInfo(name="gpt-4"), ModelInfo(name="gpt-3.5-turbo")]
+        provider._model_cache = cached
         provider._model_cache_at = time.monotonic()  # fresh
 
         provider._client = AsyncMock()
         result = await provider.list_models()
 
-        assert result == ["gpt-4", "gpt-3.5-turbo"]
+        assert [m.name for m in result] == ["gpt-4", "gpt-3.5-turbo"]
         provider._client.models.list.assert_not_called()
 
     @pytest.mark.asyncio
@@ -283,13 +286,15 @@ class TestOpenAIProviderModelCache:
         provider._client.models.list.return_value = MagicMock(data=[m1, m2])
 
         result = await provider.list_models()
-        assert result == ["gpt-4", "gpt-3.5-turbo"]
-        assert provider._model_cache == ["gpt-4", "gpt-3.5-turbo"]
+        assert [m.name for m in result] == ["gpt-4", "gpt-3.5-turbo"]
+        assert provider._model_cache is not None
 
     def test_invalidate_clears_cache(self):
         """invalidate_model_cache resets both cache fields."""
+        from sdk.providers._models import ModelInfo
+
         provider = self._make_provider()
-        provider._model_cache = ["gpt-4"]
+        provider._model_cache = [ModelInfo(name="gpt-4")]
         provider._model_cache_at = time.monotonic()
 
         provider.invalidate_model_cache()
@@ -300,8 +305,10 @@ class TestOpenAIProviderModelCache:
     @pytest.mark.asyncio
     async def test_invalidate_then_fetch(self):
         """After invalidation, next list_models call fetches fresh data."""
+        from sdk.providers._models import ModelInfo
+
         provider = self._make_provider()
-        provider._model_cache = ["old-model"]
+        provider._model_cache = [ModelInfo(name="old-model")]
         provider._model_cache_at = time.monotonic()
         provider.invalidate_model_cache()
 
@@ -311,4 +318,4 @@ class TestOpenAIProviderModelCache:
         provider._client.models.list.return_value = MagicMock(data=[m])
 
         result = await provider.list_models()
-        assert result == ["new-model"]
+        assert [m.name for m in result] == ["new-model"]

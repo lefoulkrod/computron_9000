@@ -200,7 +200,17 @@ export default function ProfileBuilder({
                         <ModelPicker
                             models={models || []}
                             selected={draft.model || null}
-                            onSelect={(name) => update('model', name || '')}
+                            onSelect={(name) => {
+                                const meta = (models || []).find((m) => m.name === name);
+                                setDraft((prev) => {
+                                    if (!prev) return prev;
+                                    const next = { ...prev, model: name || '' };
+                                    if (meta?.context_window != null) {
+                                        next.num_ctx = meta.context_window;
+                                    }
+                                    return next;
+                                });
+                            }}
                         />
                     </section>
 

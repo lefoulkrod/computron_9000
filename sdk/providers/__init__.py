@@ -8,7 +8,7 @@ from typing import Any
 from config import LLMConfig, load_config
 from settings import load_settings
 
-from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._protocol import Provider
 from ._runtime_stats import LLMRuntimeStats, llm_runtime_stats
 from ._vision import vision_generate
@@ -92,6 +92,7 @@ __all__ = [
     "ChatMessage",
     "ChatResponse",
     "LLMRuntimeStats",
+    "ModelInfo",
     "Provider",
     "ProviderError",
     "TokenUsage",

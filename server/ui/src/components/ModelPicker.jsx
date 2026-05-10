@@ -1,6 +1,13 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './ModelPicker.module.css';
 
+function formatContextWindow(tokens) {
+    if (tokens == null) return null;
+    if (tokens >= 1_000_000) return `${Math.round(tokens / 1_000_000 * 10) / 10}M`;
+    if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K`;
+    return String(tokens);
+}
+
 export default function ModelPicker({ models, selected, onSelect, placeholder = 'Search or paste model name…' }) {
     const [query, setQuery] = useState('');
     const inputRef = useRef(null);
@@ -51,21 +58,27 @@ export default function ModelPicker({ models, selected, onSelect, placeholder = 
                             No matches — press Enter to use "{query}" directly
                         </div>
                     )}
-                    {filtered.map((m) => (
-                        <button
-                            key={m.name}
-                            type="button"
-                            className={styles.item}
-                            data-testid="model-item"
-                            data-model-name={m.name}
-                            onClick={() => onSelect(m.name)}
-                        >
-                            <span className={styles.itemName}>{m.name}</span>
-                            {m.parameter_size && (
-                                <span className={styles.badge}>{m.parameter_size}</span>
-                            )}
-                        </button>
-                    ))}
+                    {filtered.map((m) => {
+                        const ctx = formatContextWindow(m.context_window);
+                        return (
+                            <button
+                                key={m.name}
+                                type="button"
+                                className={styles.item}
+                                data-testid="model-item"
+                                data-model-name={m.name}
+                                onClick={() => onSelect(m.name)}
+                            >
+                                <span className={styles.itemName}>{m.name}</span>
+                                <span className={styles.badges}>
+                                    {m.supports_thinking && <span className={styles.capBadge} title="Thinking">think</span>}
+                                    {m.supports_images && <span className={styles.capBadge} title="Vision">vision</span>}
+                                    {ctx && <span className={styles.badge} title="Context window">{ctx}</span>}
+                                    {m.parameter_size && <span className={styles.badge}>{m.parameter_size}</span>}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
             )}
         </div>

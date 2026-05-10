@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ._base import BaseAPIProvider
-from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._tool_schema import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class AnthropicProvider(BaseAPIProvider):
                 kwargs["base_url"] = base_url
             self._client = anthropic.AsyncAnthropic(**kwargs)
 
-        self._model_cache: list[str] | None = None
+        self._model_cache: list[ModelInfo] | None = None
         self._model_cache_at: float = 0.0
 
     def _build_kwargs(
@@ -144,14 +144,23 @@ class AnthropicProvider(BaseAPIProvider):
             raise _wrap_error(exc) from exc
         yield _normalize_response(response)
 
-    async def list_models(self) -> list[str]:
-        """Return available Anthropic model identifiers, with a 5-minute in-memory cache."""
+    async def list_models(self) -> list[ModelInfo]:
+        """Return available Anthropic models with metadata, cached for 5 minutes."""
         now = time.monotonic()
         if self._model_cache is not None and now - self._model_cache_at < _MODEL_CACHE_TTL:
             return self._model_cache
         try:
             response = await self._client.models.list(limit=100)
-            self._model_cache = [m.id for m in response.data]
+            results: list[ModelInfo] = []
+            for m in response.data:
+                results.append(ModelInfo(
+                    name=m.id,
+                    context_window=getattr(m, "max_input_tokens", None),
+                    max_output_tokens=getattr(m, "max_tokens", None),
+                    supports_images=_supports_images(m.id),
+                    supports_thinking=_supports_thinking(m.id),
+                ))
+            self._model_cache = results
             self._model_cache_at = now
             return self._model_cache
         except Exception as exc:
@@ -161,6 +170,22 @@ class AnthropicProvider(BaseAPIProvider):
         """Clear the cached model list so the next call re-fetches."""
         self._model_cache = None
         self._model_cache_at = 0.0
+
+
+def _supports_images(model_id: str) -> bool:
+    """All Claude 3+ models support image input."""
+    return any(
+        prefix in model_id
+        for prefix in ("claude-3", "claude-sonnet-4", "claude-opus-4", "claude-haiku-4")
+    )
+
+
+def _supports_thinking(model_id: str) -> bool:
+    """Claude 3.7 Sonnet and Claude 4+ support extended thinking."""
+    return any(
+        prefix in model_id
+        for prefix in ("claude-3-7-sonnet", "claude-sonnet-4", "claude-opus-4")
+    )
 
 
 def _convert_messages(

@@ -14,7 +14,7 @@ from rich.text import Text
 
 from config import LLMConfig
 
-from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -196,44 +196,50 @@ class OllamaProvider:
         _log_stream_complete(model, elapsed, chunk_count, response.usage)
         yield response
 
-    async def list_models(self) -> list[str]:
-        """Return available model names from the Ollama server."""
-        response = await self._client.list()
-        return [m.model for m in response.models if m.model is not None]
+    async def list_models(self) -> list[ModelInfo]:
+        """Return available models with metadata from the Ollama server.
 
-    async def list_models_detailed(self) -> list[dict[str, Any]]:
-        """Return models with metadata from the Ollama server.
-
-        For each model, calls ``show`` to retrieve capabilities. ``show`` is
-        dispatched concurrently for all models.
+        Calls ``show`` concurrently for each model to get capabilities and
+        context window size.
         """
         response = await self._client.list()
         models = [m for m in response.models if m.model is not None]
 
-        async def _capabilities(name: str) -> list[str]:
+        async def _show_details(name: str) -> tuple[list[str], int | None]:
             try:
                 show_resp = await self._client.show(name)
-                return list(getattr(show_resp, "capabilities", None) or [])
+                caps = list(getattr(show_resp, "capabilities", None) or [])
+                # Extract context window from model_info dict
+                model_info = getattr(show_resp, "model_info", None) or {}
+                ctx: int | None = None
+                for key, val in model_info.items():
+                    if key.endswith(".context_length") and isinstance(val, int):
+                        ctx = val
+                        break
+                return caps, ctx
             except Exception:
-                logger.debug("Failed to fetch capabilities for model '%s'", name)
-                return []
+                logger.debug("Failed to fetch details for model '%s'", name)
+                return [], None
 
-        capability_lists = await asyncio.gather(
-            *(_capabilities(m.model) for m in models)
+        detail_lists = await asyncio.gather(
+            *(_show_details(m.model) for m in models)
         )
 
-        results: list[dict[str, Any]] = []
-        for m, capabilities in zip(models, capability_lists, strict=True):
+        results: list[ModelInfo] = []
+        for m, (capabilities, context_window) in zip(models, detail_lists, strict=True):
             name = m.model
             details = getattr(m, "details", None)
-            results.append({
-                "name": name,
-                "parameter_size": getattr(details, "parameter_size", None) if details else None,
-                "quantization_level": getattr(details, "quantization_level", None) if details else None,
-                "family": getattr(details, "family", None) if details else None,
-                "capabilities": capabilities,
-                "is_cloud": name.endswith(":cloud"),
-            })
+            results.append(ModelInfo(
+                name=name,
+                context_window=context_window,
+                supports_images="vision" in capabilities,
+                supports_thinking="thinking" in capabilities,
+                parameter_size=getattr(details, "parameter_size", None) if details else None,
+                quantization_level=getattr(details, "quantization_level", None) if details else None,
+                family=getattr(details, "family", None) if details else None,
+                capabilities=capabilities,
+                is_cloud=name.endswith(":cloud"),
+            ))
 
         return results
 

@@ -5,7 +5,7 @@ from typing import Any, Protocol
 
 from config import LLMConfig
 
-from ._models import ChatDelta, ChatResponse
+from ._models import ChatDelta, ChatResponse, ModelInfo
 
 
 class Provider(Protocol):
@@ -40,14 +40,9 @@ class Provider(Protocol):
         """Stream token deltas followed by a final ChatResponse."""
         ...
 
-    async def list_models(self) -> list[str]:
-        """Return a list of available model identifiers."""
+    async def list_models(self) -> list[ModelInfo]:
+        """Return available models with metadata."""
         ...
-
-    async def list_models_detailed(self) -> list[dict[str, Any]]:
-        """Return models with metadata (capabilities, parameter_size, etc.)."""
-        # Default: fall back to basic list
-        return [{"name": n} for n in await self.list_models()]
 
     def invalidate_model_cache(self) -> None:
         """Clear cached model metadata."""

@@ -10,7 +10,7 @@ from typing import Any
 from config import LLMConfig
 
 from ._base import BaseAPIProvider
-from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._tool_schema import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class OpenAIProvider(BaseAPIProvider):
             kwargs["api_key"] = api_key or "not-required"
             self._client = openai.AsyncOpenAI(**kwargs)
 
-        self._model_cache: list[str] | None = None
+        self._model_cache: list[ModelInfo] | None = None
         self._model_cache_at: float = 0.0
 
     @classmethod
@@ -189,14 +189,22 @@ class OpenAIProvider(BaseAPIProvider):
             done_reason=_DONE_REASON_MAP.get(finish_reason or "", finish_reason),
         )
 
-    async def list_models(self) -> list[str]:
-        """Return available model names, with a 5-minute in-memory cache."""
+    async def list_models(self) -> list[ModelInfo]:
+        """Return available models with metadata, cached for 5 minutes.
+
+        Attempts to parse rich fields (context_length, input_modalities) that
+        OpenRouter and some compatible endpoints include in model objects.
+        Falls back to minimal ModelInfo for endpoints that only return id.
+        """
         now = time.monotonic()
         if self._model_cache is not None and now - self._model_cache_at < _MODEL_CACHE_TTL:
             return self._model_cache
         try:
             response = await self._client.models.list()
-            self._model_cache = [m.id for m in response.data]
+            results: list[ModelInfo] = []
+            for m in response.data:
+                results.append(_parse_model_object(m))
+            self._model_cache = results
             self._model_cache_at = now
             return self._model_cache
         except Exception as exc:
@@ -206,6 +214,53 @@ class OpenAIProvider(BaseAPIProvider):
         """Clear the cached model list so the next call re-fetches."""
         self._model_cache = None
         self._model_cache_at = 0.0
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Model metadata parsing
+# ---------------------------------------------------------------------------
+
+
+def _parse_model_object(m: Any) -> ModelInfo:
+    """Extract ModelInfo from an OpenAI SDK model object.
+
+    OpenRouter includes extra fields (context_length, architecture, etc.)
+    that the SDK may preserve as extra attributes. Parse them when present.
+    """
+    ctx: int | None = getattr(m, "context_length", None)
+    max_out: int | None = None
+    images = False
+
+    # OpenRouter: top_provider.max_completion_tokens
+    top_provider = getattr(m, "top_provider", None)
+    if top_provider is not None:
+        max_out = getattr(top_provider, "max_completion_tokens", None)
+        if isinstance(top_provider, dict):
+            max_out = top_provider.get("max_completion_tokens")
+
+    # OpenRouter: architecture.input_modalities
+    arch = getattr(m, "architecture", None)
+    if arch is not None:
+        modalities = getattr(arch, "input_modalities", None)
+        if isinstance(arch, dict):
+            modalities = arch.get("input_modalities")
+        if isinstance(modalities, list):
+            images = "image" in modalities
+
+    # OpenRouter: supported_parameters contains "reasoning" for thinking models
+    thinking = False
+    supported_params = getattr(m, "supported_parameters", None)
+    if isinstance(supported_params, list):
+        thinking = "reasoning" in supported_params
+
+    return ModelInfo(
+        name=m.id,
+        context_window=ctx if isinstance(ctx, int) else None,
+        max_output_tokens=max_out if isinstance(max_out, int) else None,
+        supports_images=images,
+        supports_thinking=thinking,
+    )
 
 
 # ---------------------------------------------------------------------------

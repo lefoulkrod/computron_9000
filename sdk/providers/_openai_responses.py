@@ -14,12 +14,44 @@ from typing import Any
 from config import LLMConfig
 
 from ._base import BaseAPIProvider
-from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._tool_schema import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
 
 _MODEL_CACHE_TTL = 300.0  # 5 minutes
+
+# (context_window, max_output_tokens, supports_images, supports_thinking)
+# Longer prefixes first so "gpt-4o-mini" matches before "gpt-4o".
+_OPENAI_KNOWN_MODELS: list[tuple[str, int, int, bool, bool]] = [
+    ("gpt-5.5-pro",  1_050_000, 128_000, True,  True),
+    ("gpt-5.5",      1_050_000, 128_000, True,  True),
+    ("gpt-5.4-nano", 400_000,   128_000, True,  True),
+    ("gpt-5.4-mini", 400_000,   128_000, True,  True),
+    ("gpt-5.4",      1_050_000, 128_000, True,  True),
+    ("gpt-5-mini",   400_000,   128_000, True,  True),
+    ("gpt-5",        400_000,   128_000, True,  True),
+    ("gpt-4.1-nano", 1_047_576, 32_768,  True,  False),
+    ("gpt-4.1-mini", 1_047_576, 32_768,  True,  False),
+    ("gpt-4.1",      1_047_576, 32_768,  True,  False),
+    ("gpt-4o-mini",  128_000,   16_384,  True,  False),
+    ("gpt-4o",       128_000,   16_384,  True,  False),
+    ("gpt-4-turbo",  128_000,   4_096,   True,  False),
+    ("o4-mini",      200_000,   100_000, True,  True),
+    ("o3-mini",      200_000,   100_000, False, True),
+    ("o3",           200_000,   100_000, True,  True),
+    ("o1-pro",       200_000,   100_000, True,  True),
+    ("o1-mini",      128_000,   65_536,  False, True),
+    ("o1",           200_000,   100_000, True,  True),
+]
+
+
+def _lookup_openai_model(model_id: str) -> tuple[int, int, bool, bool] | None:
+    for prefix, ctx, out, images, thinking in _OPENAI_KNOWN_MODELS:
+        if model_id.startswith(prefix):
+            return ctx, out, images, thinking
+    return None
+
 
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
@@ -60,7 +92,7 @@ class OpenAIResponsesProvider(BaseAPIProvider):
             kwargs["api_key"] = api_key or "not-required"
             self._client = openai.AsyncOpenAI(**kwargs)
 
-        self._model_cache: list[str] | None = None
+        self._model_cache: list[ModelInfo] | None = None
         self._model_cache_at: float = 0.0
 
     @classmethod
@@ -190,14 +222,24 @@ class OpenAIResponsesProvider(BaseAPIProvider):
             done_reason=_DONE_REASON_MAP.get(status or "", status),
         )
 
-    async def list_models(self) -> list[str]:
-        """Return available model names, with a 5-minute in-memory cache."""
+    async def list_models(self) -> list[ModelInfo]:
+        """Return available models with metadata, cached for 5 minutes."""
         now = time.monotonic()
         if self._model_cache is not None and now - self._model_cache_at < _MODEL_CACHE_TTL:
             return self._model_cache
         try:
             response = await self._client.models.list()
-            self._model_cache = [m.id for m in response.data]
+            results: list[ModelInfo] = []
+            for m in response.data:
+                meta = _lookup_openai_model(m.id)
+                results.append(ModelInfo(
+                    name=m.id,
+                    context_window=meta[0] if meta else None,
+                    max_output_tokens=meta[1] if meta else None,
+                    supports_images=meta[2] if meta else False,
+                    supports_thinking=meta[3] if meta else False,
+                ))
+            self._model_cache = results
             self._model_cache_at = now
             return self._model_cache
         except Exception as exc:

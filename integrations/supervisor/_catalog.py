@@ -129,7 +129,7 @@ _GMAIL = CatalogEntry(
 _LLM_OPENAI = CatalogEntry(
     slug="llm_openai",
     command=["python", "-m", "integrations.brokers.llm_proxy"],
-    capabilities=frozenset({"llm_proxy"}),
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
     static_env={
         "LLM_PROVIDER": "openai",
         "LLM_BASE_URL": "https://api.openai.com",
@@ -141,7 +141,7 @@ _LLM_OPENAI = CatalogEntry(
 _LLM_ANTHROPIC = CatalogEntry(
     slug="llm_anthropic",
     command=["python", "-m", "integrations.brokers.llm_proxy"],
-    capabilities=frozenset({"llm_proxy"}),
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
     static_env={
         "LLM_PROVIDER": "anthropic",
         "LLM_BASE_URL": "https://api.anthropic.com",
@@ -153,7 +153,7 @@ _LLM_ANTHROPIC = CatalogEntry(
 _LLM_OPENROUTER = CatalogEntry(
     slug="llm_openrouter",
     command=["python", "-m", "integrations.brokers.llm_proxy"],
-    capabilities=frozenset({"llm_proxy"}),
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
     static_env={
         "LLM_PROVIDER": "openai",
         "LLM_BASE_URL": "https://openrouter.ai/api",
@@ -165,7 +165,7 @@ _LLM_OPENROUTER = CatalogEntry(
 _LLM_OPENAI_COMPAT = CatalogEntry(
     slug="llm_openai_compat",
     command=["python", "-m", "integrations.brokers.llm_proxy"],
-    capabilities=frozenset({"llm_proxy"}),
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
     static_env={"LLM_PROVIDER": "openai"},
     env_injection={"api_key": "LLM_API_KEY", "base_url": "LLM_BASE_URL"},
     host_paths=(),

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from sdk.providers._models import ProviderError
+from sdk.providers._models import ModelInfo, ProviderError
 from server._model_routes import handle_list_models, handle_refresh_models
 
 
@@ -34,19 +34,21 @@ class TestHandleListModels:
     async def test_returns_models_list(self):
         """Successful provider response is forwarded as JSON."""
         models = [
-            {"name": "gpt-4", "capabilities": ["vision"]},
-            {"name": "gpt-3.5", "capabilities": []},
+            ModelInfo(name="gpt-4", supports_images=True, capabilities=["vision"]),
+            ModelInfo(name="gpt-3.5"),
         ]
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.return_value = models
+            mock_provider.list_models.return_value = models
             mock_get.return_value = mock_provider
 
             resp = await handle_list_models(_make_request())
 
         assert resp.status == 200
         body = json.loads(resp.body)
-        assert body["models"] == models
+        assert len(body["models"]) == 2
+        assert body["models"][0]["name"] == "gpt-4"
+        assert body["models"][1]["name"] == "gpt-3.5"
 
     async def test_provider_error_no_status_code_message_is_sanitized(self):
         """ProviderError without status_code passes through the message with keys redacted."""
@@ -57,7 +59,7 @@ class TestHandleListModels:
         )
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.side_effect = exc
+            mock_provider.list_models.side_effect = exc
             mock_get.return_value = mock_provider
 
             resp = await handle_list_models(_make_request())
@@ -77,7 +79,7 @@ class TestHandleListModels:
         )
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.side_effect = exc
+            mock_provider.list_models.side_effect = exc
             mock_get.return_value = mock_provider
 
             resp = await handle_list_models(_make_request())
@@ -92,7 +94,7 @@ class TestHandleListModels:
         """Unexpected exceptions pass through a sanitized message."""
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.side_effect = RuntimeError(
+            mock_provider.list_models.side_effect = RuntimeError(
                 "internal error with token=sk-top-secret"
             )
             mock_get.return_value = mock_provider
@@ -109,7 +111,7 @@ class TestHandleListModels:
         exc = ProviderError("auth failed: myspecialtoken", retryable=False, status_code=None)
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.side_effect = exc
+            mock_provider.list_models.side_effect = exc
             mock_get.return_value = mock_provider
             with patch("server._model_routes.load_config") as mock_cfg:
                 mock_cfg.return_value.llm.host = "http://localhost:11434"
@@ -120,45 +122,11 @@ class TestHandleListModels:
         assert "myspecialtoken" not in body["message"]
         assert "auth failed" in body["message"]
 
-    async def test_capability_filter_vision(self):
-        """?capability=vision returns only models with that capability."""
-        models = [
-            {"name": "vision-model", "capabilities": ["vision"]},
-            {"name": "text-only", "capabilities": []},
-            {"name": "multi", "capabilities": ["vision", "code"]},
-        ]
-        with patch("server._model_routes.get_provider") as mock_get:
-            mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.return_value = models
-            mock_get.return_value = mock_provider
-
-            resp = await handle_list_models(_make_request(query={"capability": "vision"}))
-
-        body = json.loads(resp.body)
-        names = [m["name"] for m in body["models"]]
-        assert "vision-model" in names
-        assert "multi" in names
-        assert "text-only" not in names
-
-    async def test_capability_filter_empty_result(self):
-        """Filter returns empty list when no models match."""
-        with patch("server._model_routes.get_provider") as mock_get:
-            mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.return_value = [
-                {"name": "text-model", "capabilities": []}
-            ]
-            mock_get.return_value = mock_provider
-
-            resp = await handle_list_models(_make_request(query={"capability": "vision"}))
-
-        body = json.loads(resp.body)
-        assert body["models"] == []
-
     async def test_503_includes_llm_host(self):
         """Error response includes llm_host for wizard display."""
         with patch("server._model_routes.get_provider") as mock_get:
             mock_provider = AsyncMock()
-            mock_provider.list_models_detailed.side_effect = ProviderError("nope")
+            mock_provider.list_models.side_effect = ProviderError("nope")
             mock_get.return_value = mock_provider
 
             resp = await handle_list_models(_make_request())
