@@ -1,10 +1,10 @@
 """HTTP routes for iCloud Drive pre-authentication and re-authentication.
 
-These handle the SRP + 2FA flow that sets up the rclone config before
-(or instead of) the normal integration add flow.  The preauth routes
-are called *before* ``POST /api/integrations`` (the integration doesn't
-exist yet).  The reauth routes are called on an existing integration
-whose trust token has expired.
+These handle the Apple ID signin + 2FA flow that produces a trust_token.
+The trust_token is returned to the UI, which passes it through the normal
+``POST /api/integrations`` flow as part of the auth_blob.  The supervisor
+injects it as ``RCLONE_CONFIG_DEFAULT_TRUST_TOKEN`` at spawn time — no
+config file needed.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_preauth_icloud_drive(request: web.Request) -> web.Response:
-    """``POST /api/integrations/preauth/icloud-drive`` — step 1: initiate SRP + 2FA.
+    """``POST /api/integrations/preauth/icloud-drive`` — step 1: signin + trigger 2FA.
 
     Body: ``{email, password}`` (Apple ID credentials, NOT app-specific).
     Returns ``{session_id, requires_2fa}``.
@@ -58,7 +58,7 @@ async def handle_preauth_icloud_drive(request: web.Request) -> web.Response:
     )
 
     try:
-        result = initiate_auth(email, password)
+        result = await initiate_auth(email, password)
     except IcloudAuthPasswordError as exc:
         return _error_response({"code": "AUTH", "message": str(exc)})
     except IcloudAuthError as exc:
@@ -71,7 +71,7 @@ async def handle_preauth_icloud_drive_verify(request: web.Request) -> web.Respon
     """``POST /api/integrations/preauth/icloud-drive/verify`` — step 2: validate 2FA code.
 
     Body: ``{session_id, code}``.
-    Returns ``{ok: true}`` on success.
+    Returns ``{trust_token: "<token>"}`` on success.
     """
     try:
         body = await request.json()
@@ -96,7 +96,7 @@ async def handle_preauth_icloud_drive_verify(request: web.Request) -> web.Respon
     from integrations._icloud_auth import IcloudAuthError, complete_auth
 
     try:
-        result = complete_auth(session_id, code)
+        result = await complete_auth(session_id, code)
     except IcloudAuthError as exc:
         return _error_response({"code": "AUTH", "message": str(exc)})
 
@@ -110,7 +110,7 @@ async def handle_reauth(request: web.Request) -> web.Response:
     """``POST /api/integrations/{id}/reauth`` — initiate re-authentication.
 
     The supervisor reads the stored password from the vault and starts a
-    new SRP handshake.  Returns ``{session_id, requires_2fa}``.
+    new signin + 2FA flow.  Returns ``{session_id, requires_2fa}``.
     """
     integration_id = request.match_info.get("id", "")
     if not integration_id:
@@ -133,7 +133,7 @@ async def handle_reauth_verify(request: web.Request) -> web.Response:
     """``POST /api/integrations/{id}/reauth/verify`` — complete re-authentication.
 
     Body: ``{session_id, code}``.  The supervisor validates the 2FA code,
-    writes a new trust token to the rclone config, and respawns the broker.
+    updates the stored trust_token, and respawns the broker.
     Returns the updated integration record on success.
     """
     integration_id = request.match_info.get("id", "")

@@ -94,8 +94,13 @@ _ICLOUD_DRIVE = CatalogEntry(
         BrokerSpec(
             capability="storage",
             command=["python", "-m", "integrations.brokers.rclone_broker"],
-            static_env={},
-            env_injection={"email": "RCLONE_CONFIG_DEFAULT_USER"},
+            static_env={
+                "RCLONE_CONFIG_DEFAULT_TYPE": "iclouddrive",
+            },
+            env_injection={
+                "email": "RCLONE_CONFIG_DEFAULT_USER",
+                "trust_token": "RCLONE_CONFIG_DEFAULT_TRUST_TOKEN",
+            },
             host_paths=_RCLONE_HOST_PATHS,
         ),
     ),

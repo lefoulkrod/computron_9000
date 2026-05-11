@@ -304,8 +304,8 @@ class BrokerManager:
     async def reauth_init(self, integration_id: str) -> dict[str, Any]:
         """Start re-authentication for an iCloud Drive integration.
 
-        Reads the stored password from the vault and initiates a new SRP
-        handshake with Apple.  Returns ``{session_id, requires_2fa}``.
+        Reads the stored password from the vault and initiates a new signin
+        with Apple.  Returns ``{session_id, requires_2fa}``.
 
         Raises :class:`RpcError` (NOT_FOUND) if the id isn't registered,
         or (INTERNAL) if the vault can't be read.
@@ -333,7 +333,7 @@ class BrokerManager:
         )
 
         try:
-            result = initiate_auth(email, password)
+            result = await initiate_auth(email, password)
         except IcloudAuthPasswordError as exc:
             raise RpcError("AUTH", str(exc)) from exc
         except IcloudAuthError as exc:
@@ -344,7 +344,7 @@ class BrokerManager:
     async def reauth_verify(
         self, integration_id: str, session_id: str, code: str,
     ) -> IntegrationRecord:
-        """Complete re-authentication: validate 2FA code, write new trust token, respawn.
+        """Complete re-authentication: validate 2FA code, update trust_token, respawn.
 
         Returns the updated :class:`IntegrationRecord` on success.
 
@@ -358,19 +358,27 @@ class BrokerManager:
         from integrations._icloud_auth import IcloudAuthError, complete_auth
 
         try:
-            complete_auth(session_id, code)
+            result = await complete_auth(session_id, code)
         except IcloudAuthError as exc:
             raise RpcError("AUTH", str(exc)) from exc
+
+        trust_token = result.get("trust_token", "")
+        if not trust_token:
+            raise RpcError("AUTH", "no trust token returned from auth")
+
+        # Update the stored secrets with the new trust_token
+        try:
+            secret_bundle = read_secrets(self._vault_dir, integration_id, self._master_key)
+        except DecryptError as exc:
+            raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
+
+        secret_bundle["trust_token"] = trust_token
+        write_secrets(self._vault_dir, integration_id, self._master_key, secret_bundle)
 
         # Respawn the storage broker with the new trust token
         entry = self._catalog.get(record.meta.slug)
         if entry is None:
             raise RpcError("INTERNAL", f"catalog has no entry for slug {record.meta.slug!r}")
-
-        try:
-            secret_bundle = read_secrets(self._vault_dir, integration_id, self._master_key)
-        except DecryptError as exc:
-            raise RpcError("INTERNAL", f"decrypt failed: {exc}") from exc
 
         # Stop existing watcher and terminate old broker if still running
         cap = "storage"

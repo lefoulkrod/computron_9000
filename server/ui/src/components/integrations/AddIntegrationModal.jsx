@@ -150,7 +150,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                     return;
                 }
                 // No 2FA needed (rare) — proceed to add integration
-                await doAddIntegration(email, label);
+                await doAddIntegration(email, label, preBody.trust_token);
             } catch (err) {
                 setError({ code: 'NETWORK', message: err?.message || 'Request failed' });
                 setSubmitting(false);
@@ -161,7 +161,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
 
         // Non-iCloud-Drive: normal flow
         setStep(3);
-        await doAddIntegration(email, label);
+        await doAddIntegration(email, label, null);
     };
 
     const handleTwoFactorSubmit = async (code) => {
@@ -181,10 +181,10 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                 setStep(4);
                 return;
             }
-            // 2FA verified — now add the integration
+            // 2FA verified — now add the integration with trust_token
             const email = form.email.trim();
             const label = form.label.trim() || `${provider.title} · ${email}`;
-            await doAddIntegration(email, label);
+            await doAddIntegration(email, label, verifyBody.trust_token);
         } catch (err) {
             setTwoFactorError(err?.message || 'Request failed');
             setSubmitting(false);
@@ -192,18 +192,18 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         }
     };
 
-    const doAddIntegration = async (email, label) => {
+    const doAddIntegration = async (email, label, trustToken) => {
         try {
+            const authBlob = isIcloudDrive
+                ? { email, trust_token: trustToken }
+                : { email, password: form.password.replace(/\s+/g, '') };
             const resp = await fetch('/api/integrations', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     slug: provider.slug,
                     label,
-                    auth_blob: {
-                        email,
-                        password: form.password.replace(/\s+/g, ''),
-                    },
+                    auth_blob: authBlob,
                     write_allowed: form.writeAllowed,
                     enabled_capabilities: form.enabledCapabilities,
                 }),
