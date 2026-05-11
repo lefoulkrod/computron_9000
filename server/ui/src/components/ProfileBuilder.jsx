@@ -17,7 +17,7 @@ const HELP_SECTIONS = [
     { title: 'Top K', body: 'Limits sampling to the K most probable tokens. 10 = factual, 40 = general, 100+ = creative.' },
     { title: 'Top P', body: 'Nucleus sampling — considers tokens whose cumulative probability exceeds P. 0.5 = focused, 0.9 = general, 1.0 = everything.' },
     { title: 'Repeat Penalty', body: '1.0 = off, 1.1 = general use, 1.5+ = strongly discourages repetition in long outputs.' },
-    { title: 'Context (num_ctx)', body: 'Maximum context window in K tokens. Higher values allow longer conversations but use more memory.' },
+    { title: 'Context Window', body: 'Maximum context window in tokens. Higher values allow longer conversations but use more memory (Ollama only).' },
     { title: 'Max Output (num_predict)', body: 'Maximum tokens the model can generate per turn. -1 = unlimited.' },
     { title: 'Iterations (max_iterations)', body: 'How many tool-call rounds the agent can chain per user message before stopping.' },
     { title: 'Thinking', body: 'When enabled, the model reasons step-by-step before answering. Good for math, logic, and code generation.' },
@@ -206,7 +206,7 @@ export default function ProfileBuilder({
                                     if (!prev) return prev;
                                     const next = { ...prev, model: name || '' };
                                     if (meta?.context_window != null) {
-                                        next.num_ctx = meta.context_window;
+                                        next.context_window = meta.context_window;
                                     }
                                     return next;
                                 });

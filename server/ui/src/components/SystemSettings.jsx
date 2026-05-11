@@ -165,7 +165,7 @@ export default function SystemSettings({ onRunWizard }) {
                             { key: 'temperature', label: 'Temperature', desc: '0.0 = deterministic, 0.7 = general, 1.0+ = creative.', step: 0.1 },
                             { key: 'top_k', label: 'Top K', desc: '10 = factual, 40 = general, 100+ = creative.', providers: ['ollama', 'anthropic'] },
                             { key: 'top_p', label: 'Top P', desc: '0.5 = focused, 0.9 = general, 1.0 = everything.', step: 0.05 },
-                            { key: 'num_ctx', label: 'Context (num_ctx)', desc: 'Maximum context window in tokens.', providers: ['ollama'] },
+                            { key: 'num_ctx', label: 'Context Window', desc: 'Maximum context window in tokens.', providers: ['ollama'] },
                             { key: 'num_predict', label: 'Max Output (num_predict)', desc: 'Tokens the model can generate per call.' },
                         ].filter(({ providers }) => !providers || providers.includes(provider)).map(({ key, label, desc, step }) => (
                             <div key={key} className={styles.groupRow}>

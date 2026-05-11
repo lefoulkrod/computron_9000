@@ -23,9 +23,11 @@ class Agent(BaseModel):
         description: Description of the agent.
         instruction: The root prompt or instruction for the agent.
         model: The model name to use.
-        options: Model options (e.g., num_ctx).
+        options: Model options passed to the provider (temperature, top_p, etc.).
         tools: List of callable tools available to the agent.
         think: Whether the model should think. Not all models support thinking.
+        context_window: Model's context window in tokens, used as the compaction denominator.
+        compaction_threshold: Fill ratio (0.0–1.0) at which compaction fires.
         max_iterations: Maximum tool-call loop iterations before forced stop.
     """
 
@@ -36,6 +38,8 @@ class Agent(BaseModel):
     options: dict[str, Any]
     tools: list[Callable[..., Any]]
     think: bool = False
+    context_window: int = 0
+    compaction_threshold: float = 0.75
     max_iterations: int = 0
 
 

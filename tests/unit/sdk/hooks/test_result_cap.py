@@ -8,7 +8,7 @@ from sdk.hooks._result_cap import ToolResultCapHook, _CHARS_PER_TOKEN
 @pytest.fixture()
 def hook():
     """Hook with a 100-token context window (400 char limit)."""
-    return ToolResultCapHook(num_ctx=100)
+    return ToolResultCapHook(context_window=100)
 
 
 def test_short_result_passes_through(hook):
@@ -47,13 +47,13 @@ def test_empty_string_passes_through(hook):
 
 
 def test_zero_ctx_means_zero_limit():
-    hook = ToolResultCapHook(num_ctx=0)
+    hook = ToolResultCapHook(context_window=0)
     result = hook.after_tool("read_file", {}, "any text")
     assert result.startswith("Error: tool result too large")
 
 
 def test_large_ctx_allows_large_results():
-    hook = ToolResultCapHook(num_ctx=128_000)
+    hook = ToolResultCapHook(context_window=128_000)
     text = "x" * 500_000
     result = hook.after_tool("read_file", {}, text)
     assert result == text

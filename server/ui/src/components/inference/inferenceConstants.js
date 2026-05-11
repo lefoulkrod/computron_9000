@@ -4,17 +4,18 @@ export const INFERENCE_FIELDS = [
 ];
 
 export const FIELD_SUPPORT = {
-    temperature:      ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
-    top_k:            ['ollama', 'anthropic'],
-    top_p:            ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
-    repeat_penalty:   ['ollama'],
-    num_ctx:          ['ollama'],
-    num_predict:      ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
-    max_iterations:   ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
-    think:            ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
-    reasoning_effort: ['openai', 'openrouter', 'openai_compat'],
-    reasoning_summary: ['openai'],
-    thinking_budget:  ['anthropic'],
+    temperature:            ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
+    top_k:                  ['ollama', 'anthropic'],
+    top_p:                  ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
+    repeat_penalty:         ['ollama'],
+    context_window:         ['ollama'],
+    num_predict:            ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
+    max_iterations:         ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
+    think:                  ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
+    reasoning_effort:       ['openai', 'openrouter', 'openai_compat'],
+    reasoning_summary:      ['openai'],
+    thinking_budget:        ['anthropic'],
+    compaction_threshold:   ['ollama', 'openai', 'anthropic', 'openai_compat', 'openrouter'],
 };
 
 export const THINKING_DEFAULTS = {

@@ -8,7 +8,7 @@ from tests.e2e.pages import SettingsPage
 
 
 VISIBLE_FIELDS = ("temperature", "top_p", "num_predict", "max_iterations", "think")
-HIDDEN_FIELDS = ("top_k", "repeat_penalty", "num_ctx")
+HIDDEN_FIELDS = ("top_k", "repeat_penalty", "context_window")
 
 
 def test_compat_field_visibility(page, provider_profile):

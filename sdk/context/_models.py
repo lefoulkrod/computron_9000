@@ -15,7 +15,7 @@ class ContextStats(BaseModel):
 
     Attributes:
         context_used: Prompt + completion tokens from the last LLM call.
-        context_limit: The model's context window size (num_ctx).
+        context_limit: The model's context window size in tokens.
     """
 
     context_used: int = 0

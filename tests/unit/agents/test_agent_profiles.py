@@ -61,11 +61,11 @@ class TestAgentProfileModel:
             system_prompt="prompt", skills=["coder", "browser"],
             temperature=0.5, top_k=40, top_p=0.9,
             repeat_penalty=1.1, num_predict=1000,
-            think=True, num_ctx=32000, max_iterations=10,
+            think=True, context_window=32000, max_iterations=10,
         )
         assert p.skills == ["coder", "browser"]
         assert p.temperature == 0.5
-        assert p.num_ctx == 32000
+        assert p.context_window == 32000
 
     def test_roundtrip_serialization(self):
         """Profile survives JSON round-trip."""

@@ -7,7 +7,7 @@ from playwright.sync_api import expect
 from tests.e2e.pages import SettingsPage
 
 
-OLLAMA_FIELDS = ("temperature", "top_k", "top_p", "repeat_penalty", "num_ctx", "num_predict", "max_iterations", "think")
+OLLAMA_FIELDS = ("temperature", "top_k", "top_p", "repeat_penalty", "context_window", "num_predict", "max_iterations", "think")
 
 
 def test_ollama_shows_all_fields(page, provider_profile):

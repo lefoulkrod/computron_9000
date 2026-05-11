@@ -29,9 +29,9 @@ def default_hooks(
     hooks.append(LoggingHook(agent))
     hooks.append(ScratchpadHook())
     hooks.append(LoadedSkillHook())
-    num_ctx = (agent.options or {}).get("num_ctx", 0)
-    if num_ctx > 0:
-        hooks.append(ToolResultCapHook(num_ctx))
+    context_window = getattr(agent, "context_window", 0) or 0
+    if context_window > 0:
+        hooks.append(ToolResultCapHook(context_window))
     if ctx_manager is not None:
         hooks.append(ContextHook(ctx_manager, max_iterations=max_iterations))
     return hooks

@@ -27,7 +27,7 @@ def test_profile_ui_reflects_saved_state(page: Page):
         "top_p": None,
         "repeat_penalty": None,
         "think": True,
-        "num_ctx": 32000,
+        "context_window": 32000,
         "num_predict": 2048,
         "max_iterations": 10,
     })
@@ -71,7 +71,8 @@ def test_profile_ui_reflects_saved_state(page: Page):
         expect(builder.field("top_k")).to_have_value("")
         expect(builder.field("top_p")).to_have_value("")
         expect(builder.field("repeat_penalty")).to_have_value("")
-        expect(builder.field("num_ctx")).to_have_value("32000")
+        expect(builder.field("context_window")).to_have_value("32000")
+        expect(page.get_by_test_id("compaction-threshold-select")).to_have_value("0.75")
         expect(builder.field("num_predict")).to_have_value("2048")
         expect(builder.field("max_iterations")).to_have_value("10")
         expect(builder.thinking_switch).to_be_checked()

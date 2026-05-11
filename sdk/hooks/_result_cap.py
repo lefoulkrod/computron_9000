@@ -6,21 +6,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Approximate characters per token for converting num_ctx to a char limit.
+# Approximate characters per token for converting context_window to a char limit.
 _CHARS_PER_TOKEN = 4
 
 
 class ToolResultCapHook:
     """Discard tool results that exceed the model's context window.
 
-    Constructed with ``num_ctx`` (the context window size in tokens).
-    If a tool result's character count exceeds ``num_ctx * _CHARS_PER_TOKEN``,
-    it is replaced with a short error message so the agent can retry with a
-    more targeted request.
+    If a tool result's character count exceeds the token limit multiplied
+    by the chars-per-token estimate, it is replaced with a short error
+    message so the agent can retry with a more targeted request.
     """
 
-    def __init__(self, num_ctx: int) -> None:
-        self._max_chars = num_ctx * _CHARS_PER_TOKEN
+    def __init__(self, context_window: int) -> None:
+        self._max_chars = context_window * _CHARS_PER_TOKEN
 
     def after_tool(
         self, tool_name: str, tool_arguments: object, tool_result: str,

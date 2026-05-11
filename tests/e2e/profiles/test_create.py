@@ -45,9 +45,10 @@ def test_create_profile_persists_all_settings(page: Page):
     builder.field("top_k").fill("50")
     builder.field("top_p").fill("0.9")
     builder.field("repeat_penalty").fill("1.2")
-    builder.field("num_ctx").fill("16000")
+    builder.field("context_window").fill("16000")
     builder.field("num_predict").fill("4096")
     builder.field("max_iterations").fill("25")
+    page.get_by_test_id("compaction-threshold-select").select_option("0.85")
     page.locator("label", has_text="Thinking").click()
 
     # --- Save ---
@@ -84,7 +85,8 @@ def test_create_profile_persists_all_settings(page: Page):
     assert created["think"] is True
 
     # Resource limits
-    assert created["num_ctx"] == 16000
+    assert created["context_window"] == 16000
+    assert created["compaction_threshold"] == 0.85
     assert created["num_predict"] == 4096
     assert created["max_iterations"] == 25
 

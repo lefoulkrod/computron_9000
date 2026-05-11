@@ -69,10 +69,22 @@ def _log_turn_start(profile: AgentProfile) -> None:
         params.append(f"top_k={profile.top_k}")
     if profile.top_p is not None:
         params.append(f"top_p={profile.top_p}")
+    if profile.repeat_penalty is not None:
+        params.append(f"repeat_penalty={profile.repeat_penalty}")
+    if profile.num_predict is not None:
+        params.append(f"num_predict={profile.num_predict}")
+    if profile.context_window is not None:
+        params.append(f"ctx={profile.context_window}")
+    if profile.compaction_threshold is not None:
+        params.append(f"compact@{int(profile.compaction_threshold * 100)}%")
     if profile.think:
         params.append("think")
-    if profile.num_ctx is not None:
-        params.append(f"ctx={profile.num_ctx}")
+    if profile.reasoning_effort is not None:
+        params.append(f"reasoning_effort={profile.reasoning_effort}")
+    if profile.reasoning_summary is not None:
+        params.append(f"reasoning_summary={profile.reasoning_summary}")
+    if profile.thinking_budget is not None:
+        params.append(f"thinking_budget={profile.thinking_budget}")
     if profile.max_iterations is not None:
         params.append(f"max_iter={profile.max_iterations}")
     if params:
@@ -236,12 +248,14 @@ def _ensure_context_manager(
 ) -> ContextManager:
     """Return the conversation's context manager, creating it if needed."""
     if conversation.context_manager is None:
-        num_ctx = active_agent.options.get("num_ctx", 0) if active_agent.options else 0
         conversation.context_manager = ContextManager(
             history=conversation.history,
-            context_limit=num_ctx,
+            context_limit=active_agent.context_window,
             agent_name=active_agent.name,
-            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
+            strategies=[
+                ToolClearingStrategy(),
+                LLMCompactionStrategy(threshold=active_agent.compaction_threshold),
+            ],
         )
     return conversation.context_manager
 

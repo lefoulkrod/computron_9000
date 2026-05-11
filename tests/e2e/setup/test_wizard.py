@@ -55,3 +55,16 @@ def test_ootb_profiles_all_have_same_model(page: Page, wizard_choices):
                 f"Profile '{profile['id']}' has model '{profile['model']}', "
                 f"expected '{wizard_choices['main_model']}'"
             )
+
+
+def test_ootb_profiles_have_context_window(page: Page):
+    """All OOTB profiles should have a non-zero context_window after setup."""
+    profiles = page.request.get("/api/profiles").json()
+    ootb_ids = {"computron", "code_expert", "research_agent", "creative_writer"}
+    for profile in profiles:
+        if profile["id"] in ootb_ids:
+            ctx = profile.get("context_window")
+            assert ctx and ctx > 0, (
+                f"Profile '{profile['id']}' has context_window={ctx}, "
+                f"expected a positive value from model metadata"
+            )

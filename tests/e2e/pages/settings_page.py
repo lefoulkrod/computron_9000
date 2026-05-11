@@ -107,7 +107,7 @@ class ProfileBuilder:
 
     def auto_field(self, idx: int) -> Locator:
         """Inference fields with placeholder='auto' (temperature, top_k, top_p,
-        repeat_penalty, num_ctx — in that source order)."""
+        repeat_penalty, context_window — in that source order)."""
         return self.page.locator("input[placeholder='auto']").nth(idx)
 
     def unlimited_field(self, idx: int) -> Locator:

@@ -26,13 +26,15 @@ class TestBuildAgent:
 
     def test_basic_conversion(self):
         """Profile fields flow through to the Agent."""
-        p = _make_profile(temperature=0.5, top_k=40, think=True, num_ctx=16000)
+        p = _make_profile(temperature=0.5, top_k=40, think=True, context_window=16000)
         agent = build_agent(p, tools=[_noop])
         assert agent.name == "TEST"
         assert agent.model == "test-model:7b"
         assert agent.think is True
         assert agent.instruction == "You are a test agent."
         assert agent.options == {"temperature": 0.5, "top_k": 40, "num_ctx": 16000}
+        assert agent.context_window == 16000
+        assert agent.compaction_threshold == 0.75
         assert agent.tools == [_noop]
 
     def test_none_fields_omitted_from_options(self):

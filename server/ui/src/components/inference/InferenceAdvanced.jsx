@@ -12,6 +12,7 @@ const ADVANCED_HELP = {
     context: 'Context window in tokens. Higher = more memory, slower',
     max_output: 'Max tokens per response. Leave empty for unlimited (required by Anthropic)',
     iterations: 'Tool-call rounds per turn. Leave empty for unlimited',
+    compaction: 'How full the context window gets before old messages are summarized',
     thinking: 'Step-by-step reasoning before answering. Good for math, logic, code',
     reasoning_effort: 'Low = faster/cheaper, medium = balanced, high = thorough reasoning',
     reasoning_summary: 'How much of the model\'s reasoning to show. Auto lets the model decide',
@@ -65,11 +66,11 @@ export default function InferenceAdvanced({ draft, provider, onChange }) {
                             <span className={styles.fieldHint}>{ADVANCED_HELP.repeat_penalty}</span>
                         </div>
                     )}
-                    {isSupported('num_ctx', provider) && (
+                    {isSupported('context_window', provider) && (
                         <div className={styles.advancedField}>
                             <label className={styles.fieldRow}>
-                                <span className={styles.fieldLabel}>Context</span>
-                                <input className={styles.numInput} type="number" data-testid="field-num_ctx" value={draft.num_ctx ?? ''} onChange={(e) => onChange('num_ctx', e.target.value === '' ? null : Number(e.target.value))} min={1} placeholder="auto" />
+                                <span className={styles.fieldLabel}>Context Window</span>
+                                <input className={styles.numInput} type="number" data-testid="field-context_window" value={draft.context_window ?? ''} onChange={(e) => onChange('context_window', e.target.value === '' ? null : Number(e.target.value))} min={1} placeholder="auto" />
                             </label>
                             <span className={styles.fieldHint}>{ADVANCED_HELP.context}</span>
                         </div>
@@ -88,6 +89,26 @@ export default function InferenceAdvanced({ draft, provider, onChange }) {
                         </label>
                         <span className={styles.fieldHint}>{ADVANCED_HELP.iterations}</span>
                     </div>
+                    {isSupported('compaction_threshold', provider) && (
+                        <div className={styles.advancedField} data-testid="field-compaction_threshold">
+                            <label className={styles.fieldRow}>
+                                <span className={styles.fieldLabel}>Compaction</span>
+                                <select
+                                    className={styles.selectInput}
+                                    value={draft.compaction_threshold ?? 0.75}
+                                    onChange={(e) => onChange('compaction_threshold', e.target.value === '0.75' ? null : Number(e.target.value))}
+                                    data-testid="compaction-threshold-select"
+                                >
+                                    <option value={0.5}>50% — Aggressive</option>
+                                    <option value={0.65}>65% — Early</option>
+                                    <option value={0.75}>75% — Standard</option>
+                                    <option value={0.85}>85% — Late</option>
+                                    <option value={0.9}>90% — Maximum</option>
+                                </select>
+                            </label>
+                            <span className={styles.fieldHint}>{ADVANCED_HELP.compaction}</span>
+                        </div>
+                    )}
                     {isSupported('think', provider) && (
                         <div className={styles.advancedField} data-testid="field-think">
                             <label className={styles.fieldRow}>

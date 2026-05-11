@@ -343,10 +343,15 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         setError(null);
         try {
             const force = isRerun && updateAllProfiles;
+            const meta = allModels.find((m) => m.name === selectedMain);
             const setModelRes = await fetch('/api/profiles/set-model', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: selectedMain, force }),
+                body: JSON.stringify({
+                    model: selectedMain,
+                    force,
+                    context_window: meta?.context_window ?? null,
+                }),
             });
             if (!setModelRes.ok) {
                 const data = await setModelRes.json().catch(() => ({}));
@@ -374,7 +379,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
             setError(`Connection error: ${err.message}`);
             setSaving(false);
         }
-    }, [selectedMain, selectedVision, isRerun, updateAllProfiles, onComplete]);
+    }, [selectedMain, selectedVision, isRerun, updateAllProfiles, allModels, onComplete]);
 
     const canContinue =
         step === 0 ||

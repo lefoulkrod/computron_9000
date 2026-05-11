@@ -8,11 +8,11 @@ from tests.e2e.pages import SettingsPage
 
 
 VISIBLE_FIELDS = ("temperature", "top_k", "top_p", "num_predict", "max_iterations", "think")
-HIDDEN_FIELDS = ("repeat_penalty", "num_ctx")
+HIDDEN_FIELDS = ("repeat_penalty", "context_window")
 
 
 def test_anthropic_field_visibility(page, provider_profile):
-    """Anthropic shows top_k but hides repeat_penalty and num_ctx."""
+    """Anthropic shows top_k but hides repeat_penalty and context_window."""
     provider_profile("test_prov_anth_vis", "anthropic")
 
     settings = SettingsPage(page).goto()
