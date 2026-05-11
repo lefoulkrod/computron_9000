@@ -201,18 +201,6 @@ export default function useStreamingChat(callbacks) {
     const sendMessage = useCallback(async (message, fileData, profileId) => {
         if (!message && !fileData) return;
 
-        // If already streaming, send as a nudge (fire-and-forget)
-        if (isStreamingRef.current) {
-            const body = _buildRequestBody(message, fileData, profileId, conversationIdRef.current);
-            fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            }).catch(() => {});
-            if (callbacks.onNudgeSent) callbacks.onNudgeSent(message || '');
-            return;
-        }
-
         // Build user message with optional attachment preview
         const userMsg = {
             id: `u_${Date.now()}_${Math.random().toString(36).slice(2)}`,
