@@ -226,7 +226,7 @@ manual-test:
     echo "🏗️  Building ${image}"
     docker build -f container/Dockerfile -t "$image" .
     name="computron_manual_test"
-    port=9090
+    port=9091
     state=$(mktemp -d)
     mkdir -p "$state/home" "$state/state"
     cleanup() {

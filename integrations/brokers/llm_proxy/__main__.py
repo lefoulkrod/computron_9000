@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import signal
 import sys
 from pathlib import Path
 
@@ -58,7 +57,7 @@ _AUTH_HEADERS_TO_STRIP = frozenset({"authorization", "x-api-key"})
 def _make_auth_headers(provider: str, api_key: str) -> dict[str, str]:
     """Return the auth header(s) to inject for this provider."""
     if provider == "anthropic":
-        return {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+        return {"x-api-key": api_key}
     return {"Authorization": f"Bearer {api_key}"}
 
 
@@ -157,15 +156,12 @@ async def _run() -> int:
     log.info("listening on %s (provider=%s, upstream=%s)", socket_path, provider, upstream_base)
     print_ready()
 
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, stop.set)
-
     try:
-        await stop.wait()
-    finally:
+        # Block until SIGTERM cancels this task (same pattern as the other brokers).
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
         log.info("shutting down")
+    finally:
         await upstream_session.close()
         await runner.cleanup()
 
