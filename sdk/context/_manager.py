@@ -130,5 +130,7 @@ def _log_context_bar(stats: ContextStats, usage: TokenUsage, agent_name: str = "
     line.append(f" / {stats.context_limit:,}", style="dim")
     line.append(f"  ({pct:.1f}%)", style=bar_style)
     line.append(f"   prompt={usage.prompt_tokens:,}  completion={usage.completion_tokens:,}", style="dim")
+    if usage.cache_read_tokens or usage.cache_creation_tokens:
+        line.append(f"  cache_read={usage.cache_read_tokens:,}  cache_write={usage.cache_creation_tokens:,}", style="dim cyan")
 
     _console.print(line)

@@ -40,6 +40,8 @@ class ChatResponseTokenCounter:
         return TokenUsage(
             prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            cache_read_tokens=getattr(usage, "cache_read_tokens", 0) or 0,
+            cache_creation_tokens=getattr(usage, "cache_creation_tokens", 0) or 0,
         )
 
 

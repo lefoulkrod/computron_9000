@@ -8,6 +8,8 @@ class TokenUsage(BaseModel):
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
 
 
 class ContextStats(BaseModel):

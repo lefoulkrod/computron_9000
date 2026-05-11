@@ -98,6 +98,11 @@ class AnthropicProvider(BaseAPIProvider):
             budget = budget_map.get(thinking_budget, max_tok // 2)
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": max(1024, budget)}
 
+        # Automatic prompt caching — Anthropic places a cache breakpoint at
+        # the end of the cacheable prefix. Subsequent turns with the same
+        # prefix read from cache at 90% discount.
+        kwargs["cache_control"] = {"type": "ephemeral"}
+
         return kwargs
 
     async def chat(
@@ -335,6 +340,14 @@ def _normalize_response(raw: Any) -> ChatResponse:
                 ),
             ))
 
+    cache_read = getattr(raw.usage, "cache_read_input_tokens", 0) or 0
+    cache_creation = getattr(raw.usage, "cache_creation_input_tokens", 0) or 0
+    if cache_read or cache_creation:
+        logger.debug(
+            "cache tokens: read=%d creation=%d (prompt=%d, completion=%d)",
+            cache_read, cache_creation, raw.usage.input_tokens, raw.usage.output_tokens,
+        )
+
     return ChatResponse(
         message=ChatMessage(
             content="\n".join(content_parts) if content_parts else None,
@@ -344,6 +357,8 @@ def _normalize_response(raw: Any) -> ChatResponse:
         usage=TokenUsage(
             prompt_tokens=raw.usage.input_tokens,
             completion_tokens=raw.usage.output_tokens,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
         ),
         done_reason=_STOP_REASON_MAP.get(raw.stop_reason, raw.stop_reason),
         raw=raw,
