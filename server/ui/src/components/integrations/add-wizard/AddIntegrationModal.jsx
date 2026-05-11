@@ -167,7 +167,13 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                 }
                 if (body.status === 'success') {
                     setOauth(o => ({...o, status: 'success'}));
-                    setResult({id: body.integration_id});
+                    const perms = {};
+                    for (const group of provider.capabilityGroups || []) {
+                        if (oauth.capabilities[group.id]) {
+                            perms[group.id] = oauth.access[group.id] || 'r';
+                        }
+                    }
+                    setResult({id: body.integration_id, permissions: perms});
                     return;
                 }
                 if (body.status === 'denied' || body.status === 'expired'

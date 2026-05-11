@@ -7,14 +7,13 @@ This package provides:
 """
 
 from ._execution import ToolLoopError, run_turn
+from ._nudge_queue import drain_nudges, queue_nudge, register_nudge_queue, unregister_nudge_queue
 from ._turn import (
     StopRequestedError,
     any_turn_active,
     check_stop,
-    drain_nudges,
     get_conversation_id,
     is_turn_active,
-    queue_nudge,
     request_stop,
     turn_scope,
 )
@@ -28,7 +27,9 @@ __all__ = [
     "get_conversation_id",
     "is_turn_active",
     "queue_nudge",
+    "register_nudge_queue",
     "request_stop",
     "run_turn",
     "turn_scope",
+    "unregister_nudge_queue",
 ]

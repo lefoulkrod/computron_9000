@@ -123,6 +123,13 @@ async def agent_span(
     # lifetime; a borrowed instance also preserves skills across spans.
     ls_token = _active_agent_state.set(agent_state if agent_state is not None else AgentState([]))
 
+    # Lazy import: sdk.turn._nudge_queue is a leaf module with no internal
+    # deps, but importing it at module level triggers sdk.turn.__init__ which
+    # pulls in _execution.py → sdk.events (circular).
+    from sdk.turn._nudge_queue import register_nudge_queue, unregister_nudge_queue
+
+    register_nudge_queue(context_id)
+
     logger.info(
         "Agent started: %s (id=%s, parent=%s, depth=%d)",
         agent_name, context_id, parent_id, depth,
@@ -158,6 +165,7 @@ async def agent_span(
             agent_name=agent_name or "",
             status=status,
         )))
+        unregister_nudge_queue(context_id)
         _active_agent_state.reset(ls_token)
         _context_stack.reset(token)
 

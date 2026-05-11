@@ -75,6 +75,14 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
 
 
+class NudgeRequest(BaseModel):
+    """Request model for nudging a running agent."""
+
+    message: str
+    conversation_id: str
+    agent_id: str
+
+
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
@@ -192,11 +200,6 @@ async def chat_handler(request: Request) -> StreamResponse:
             {"error": "conversation_id is required."}, status=400,
         )
 
-    # If this conversation already has an active agent, queue the message as a nudge
-    if is_turn_active(payload.conversation_id):
-        queue_nudge(payload.conversation_id, user_query)
-        return web.json_response({"ok": True})
-
     data_objs: list[Data] | None = None
     if payload.data:
         data_objs = [
@@ -211,6 +214,25 @@ async def chat_handler(request: Request) -> StreamResponse:
             conversation_id=payload.conversation_id,
         ),
     )
+
+
+async def nudge_handler(request: Request) -> Response:
+    """Send a nudge message to a running agent."""
+    raw_body = await request.text()
+    try:
+        payload = NudgeRequest.model_validate_json(raw_body)
+    except ValidationError as ve:
+        logger.warning("Invalid nudge request: %s", ve)
+        raise
+    text = payload.message.strip()
+    if not text:
+        return web.json_response({"error": "message is required."}, status=400)
+    if not is_turn_active(payload.conversation_id):
+        return web.json_response(
+            {"error": "No active turn for this conversation."}, status=409,
+        )
+    queue_nudge(payload.agent_id, text)
+    return web.json_response({"ok": True})
 
 
 async def container_file_handler(request: Request) -> StreamResponse:
@@ -364,6 +386,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # API routes
     app.router.add_route("POST", "/api/chat", chat_handler)
     app.router.add_route("POST", "/api/chat/stop", stop_handler)
+    app.router.add_route("POST", "/api/nudge", nudge_handler)
     app.router.add_route("GET", "/api/custom-tools", list_custom_tools_handler)
     app.router.add_route("DELETE", "/api/custom-tools/{name}", delete_custom_tool_handler)
     app.router.add_route("GET", "/api/memory", list_memory_handler)

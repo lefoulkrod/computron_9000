@@ -26,9 +26,9 @@ by all agents, in this order:
 ## Hook catalog
 
 ### NudgeHook
-- **File:** `sdk/hooks/_nudge_hook.py` (34 lines)
+- **File:** `sdk/hooks/_nudge_hook.py` (28 lines)
 - **Methods:** `before_model`
-- **Purpose:** Drains queued nudge messages and injects them into the conversation history. Only acts for the root agent (depth 0) so sub-agents don't steal nudges.
+- **Purpose:** Drains queued nudge messages and injects them into the conversation history. Each agent has its own nudge queue keyed by agent ID, so nudges can target any agent (root or sub-agent).
 
 ### StopHook
 - **File:** `sdk/hooks/_stop_hook.py` (32 lines)

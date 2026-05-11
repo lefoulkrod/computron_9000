@@ -20,7 +20,7 @@ export default function AgentOutput({ entries, streaming, showFileOutputs = true
             return <CollapsibleThinking key={i} text={entry.thinking} streaming={streaming && i === entries.length - 1} />;
         }
         if (entry.type === 'content') {
-            return <MarkdownContent key={i} streaming={streaming && i === entries.length - 1}>{entry.content}</MarkdownContent>;
+            return <div key={i} data-testid="entry-content"><MarkdownContent streaming={streaming && i === entries.length - 1}>{entry.content}</MarkdownContent></div>;
         }
         if (entry.type === 'tool_call') {
             return <ToolCallBlock key={i} name={entry.name} />;
