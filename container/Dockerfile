@@ -66,6 +66,13 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get install -y --no-install-recommends gh && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ── rclone — backend for the rclone_broker (iCloud Drive, etc.) ───────────────
+RUN curl -fsSL https://downloads.rclone.org/rclone-current-linux-amd64.deb \
+      -o /tmp/rclone.deb && \
+    apt-get install -y /tmp/rclone.deb && \
+    rm /tmp/rclone.deb && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # ── Node.js LTS ───────────────────────────────────────────────────────────────
 # Node distributes: linux-x64 (amd64), linux-arm64 (arm64), linux-armv7l (arm/v7).
 RUN set -eux; \
