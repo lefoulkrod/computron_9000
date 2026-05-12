@@ -356,3 +356,81 @@ async def test_off_capability_excluded(
     names = _tool_names(await get_core_tools())
     assert _EMAIL_READ_TOOLS <= names
     assert not names & _CALENDAR_READ_TOOLS
+
+
+_ICLOUD_DRIVE_READ_TOOLS = {
+    "icloud_drive_list_directory",
+    "icloud_drive_search",
+    "icloud_drive_size",
+    "icloud_drive_about",
+    "icloud_drive_read_file",
+    "icloud_drive_download",
+}
+
+_ICLOUD_DRIVE_WRITE_TOOLS = {
+    "icloud_drive_upload",
+    "icloud_drive_move",
+    "icloud_drive_delete",
+    "icloud_drive_mkdir",
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_icloud_drive_read_includes_storage_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """drive:r on an icloud_drive integration gets the rclone read tools only."""
+    _stub_integrations(monkeypatch, {
+        "icloud_drive_me": _FakeRecord(
+            id="icloud_drive_me",
+            slug="icloud_drive",
+            permissions={Capability.DRIVE: Access.READ},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert _ICLOUD_DRIVE_READ_TOOLS <= names
+    assert not names & _ICLOUD_DRIVE_WRITE_TOOLS
+    # The Google Drive API tools must not leak onto an iCloud Drive integration.
+    assert not names & (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_icloud_drive_read_write_includes_all_storage_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_integrations(monkeypatch, {
+        "icloud_drive_me": _FakeRecord(
+            id="icloud_drive_me",
+            slug="icloud_drive",
+            permissions={Capability.DRIVE: Access.READ_WRITE},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert (_ICLOUD_DRIVE_READ_TOOLS | _ICLOUD_DRIVE_WRITE_TOOLS) <= names
+    assert not names & (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_google_workspace_drive_does_not_get_storage_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A google_workspace integration with drive:rw gets Drive-API tools, not rclone ones."""
+    _stub_integrations(monkeypatch, {
+        "gw_work": _FakeRecord(
+            id="gw_work",
+            slug="google_workspace",
+            permissions={Capability.DRIVE: Access.READ_WRITE},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS) <= names
+    assert not names & (_ICLOUD_DRIVE_READ_TOOLS | _ICLOUD_DRIVE_WRITE_TOOLS)

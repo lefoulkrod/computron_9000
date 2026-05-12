@@ -91,28 +91,65 @@ async def get_core_tools() -> list[Callable[..., Any]]:
         tools.append(build_delete_event_tool(calendar_write_ids))
 
     drive_ids = _ids_with_access(records, Capability.DRIVE, Access.READ)
-    if drive_ids:
+    drive_write_ids = _ids_with_access(records, Capability.DRIVE, Access.READ_WRITE)
+
+    # Two providers expose DRIVE today and their tool sets don't overlap yet:
+    # Google Workspace uses the Drive-API tools (opaque file IDs, exports,
+    # sharing); iCloud Drive uses the rclone-backed tools (POSIX-style paths).
+    # Until the vocabularies are unified, registration is split by slug.
+    gdrive_ids = frozenset(i for i in drive_ids if records[i].slug == "google_workspace")
+    if gdrive_ids:
         from tools.integrations.drive.export_file import build_export_drive_file_tool
         from tools.integrations.drive.get_file_metadata import build_get_drive_file_metadata_tool
         from tools.integrations.drive.list_files import build_list_drive_files_tool
         from tools.integrations.drive.search_files import build_search_drive_files_tool
-        tools.append(build_list_drive_files_tool(drive_ids))
-        tools.append(build_search_drive_files_tool(drive_ids))
-        tools.append(build_get_drive_file_metadata_tool(drive_ids))
-        tools.append(build_export_drive_file_tool(drive_ids))
+        tools.append(build_list_drive_files_tool(gdrive_ids))
+        tools.append(build_search_drive_files_tool(gdrive_ids))
+        tools.append(build_get_drive_file_metadata_tool(gdrive_ids))
+        tools.append(build_export_drive_file_tool(gdrive_ids))
 
-    drive_write_ids = _ids_with_access(records, Capability.DRIVE, Access.READ_WRITE)
-    if drive_write_ids:
+    gdrive_write_ids = frozenset(i for i in drive_write_ids if records[i].slug == "google_workspace")
+    if gdrive_write_ids:
         from tools.integrations.drive.create_folder import build_create_drive_folder_tool
         from tools.integrations.drive.share_file import build_share_drive_file_tool
         from tools.integrations.drive.trash_file import build_trash_drive_file_tool
         from tools.integrations.drive.update_file import build_update_drive_file_tool
         from tools.integrations.drive.upload_file import build_upload_drive_file_tool
-        tools.append(build_upload_drive_file_tool(drive_write_ids))
-        tools.append(build_create_drive_folder_tool(drive_write_ids))
-        tools.append(build_update_drive_file_tool(drive_write_ids))
-        tools.append(build_trash_drive_file_tool(drive_write_ids))
-        tools.append(build_share_drive_file_tool(drive_write_ids))
+        tools.append(build_upload_drive_file_tool(gdrive_write_ids))
+        tools.append(build_create_drive_folder_tool(gdrive_write_ids))
+        tools.append(build_update_drive_file_tool(gdrive_write_ids))
+        tools.append(build_trash_drive_file_tool(gdrive_write_ids))
+        tools.append(build_share_drive_file_tool(gdrive_write_ids))
+
+    icloud_drive_ids = frozenset(i for i in drive_ids if records[i].slug == "icloud_drive")
+    if icloud_drive_ids:
+        from tools.integrations.icloud_drive import (
+            build_icloud_drive_about_tool,
+            build_icloud_drive_download_tool,
+            build_icloud_drive_list_directory_tool,
+            build_icloud_drive_read_file_tool,
+            build_icloud_drive_search_tool,
+            build_icloud_drive_size_tool,
+        )
+        tools.append(build_icloud_drive_list_directory_tool(icloud_drive_ids))
+        tools.append(build_icloud_drive_search_tool(icloud_drive_ids))
+        tools.append(build_icloud_drive_size_tool(icloud_drive_ids))
+        tools.append(build_icloud_drive_about_tool(icloud_drive_ids))
+        tools.append(build_icloud_drive_read_file_tool(icloud_drive_ids))
+        tools.append(build_icloud_drive_download_tool(icloud_drive_ids))
+
+    icloud_drive_write_ids = frozenset(i for i in drive_write_ids if records[i].slug == "icloud_drive")
+    if icloud_drive_write_ids:
+        from tools.integrations.icloud_drive import (
+            build_icloud_drive_delete_tool,
+            build_icloud_drive_mkdir_tool,
+            build_icloud_drive_move_tool,
+            build_icloud_drive_upload_tool,
+        )
+        tools.append(build_icloud_drive_upload_tool(icloud_drive_write_ids))
+        tools.append(build_icloud_drive_move_tool(icloud_drive_write_ids))
+        tools.append(build_icloud_drive_delete_tool(icloud_drive_write_ids))
+        tools.append(build_icloud_drive_mkdir_tool(icloud_drive_write_ids))
 
     contacts_ids = _ids_with_access(records, Capability.CONTACTS, Access.READ)
     if contacts_ids:
