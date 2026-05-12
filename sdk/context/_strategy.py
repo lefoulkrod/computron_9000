@@ -10,7 +10,7 @@ from typing import Protocol
 
 from rich.console import Console
 
-from sdk.providers import get_provider
+from sdk.providers import get_default_provider
 from rich.panel import Panel
 from rich.text import Text
 
@@ -616,7 +616,7 @@ class LLMCompactionStrategy:
     ) -> tuple[str, str]:
         """Call the summarization LLM and return (summary_text, model_name)."""
         cfg = load_config()
-        provider = get_provider()
+        provider = get_default_provider()
 
         model, options = self._resolve_model(cfg)
 
@@ -653,7 +653,7 @@ class LLMCompactionStrategy:
         the same model as the summarizer.
         """
         cfg = load_config()
-        provider = get_provider()
+        provider = get_default_provider()
         model, options = self._resolve_model(cfg)
 
         # Build the user content with numbered messages.

@@ -39,6 +39,7 @@ from server._integrations_oauth_routes import register_oauth_routes
 from server._integrations_routes import register_integrations_routes
 from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
+from server._provider_routes import register_provider_routes
 from server._settings_routes import register_settings_routes
 from server._task_routes import register_task_routes
 from server.message_handler import handle_user_message, resume_conversation
@@ -396,8 +397,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Feature flags
     register_feature_routes(app)
 
-    # Models + agents
+    # Models + agents + providers
     register_model_routes(app)
+    register_provider_routes(app)
 
     # Agent profiles
     register_profile_routes(app)

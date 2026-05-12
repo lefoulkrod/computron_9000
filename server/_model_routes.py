@@ -8,7 +8,7 @@ import re
 from aiohttp import web
 
 from config import load_config
-from sdk.providers import get_provider
+from sdk.providers import get_default_provider, get_provider
 from sdk.providers._models import ProviderError
 
 logger = logging.getLogger(__name__)
@@ -28,14 +28,18 @@ def _sanitize(msg: str, api_key: str | None = None) -> str:
     return msg
 
 
-async def handle_list_models(_request: web.Request) -> web.Response:
+async def handle_list_models(request: web.Request) -> web.Response:
     """Return available models with metadata from the provider.
+
+    Accepts an optional ``?provider=X`` query parameter to list models
+    for a specific provider. Falls back to the system default.
 
     Returns 503 with a structured error if the provider is unreachable,
     so the setup wizard can display a clear message instead of a silent
     empty list.
     """
-    provider = get_provider()
+    provider_name = request.query.get("provider")
+    provider = get_provider(provider_name) if provider_name else get_default_provider()
     try:
         models = await provider.list_models()
     except ProviderError as exc:
@@ -65,9 +69,10 @@ async def handle_list_models(_request: web.Request) -> web.Response:
     return web.json_response({"models": [m.model_dump() for m in models]})
 
 
-async def handle_refresh_models(_request: web.Request) -> web.Response:
+async def handle_refresh_models(request: web.Request) -> web.Response:
     """Invalidate the cached model list so the next fetch re-queries the provider."""
-    provider = get_provider()
+    provider_name = request.query.get("provider")
+    provider = get_provider(provider_name) if provider_name else get_default_provider()
     provider.invalidate_model_cache()
     return web.json_response({"ok": True})
 

@@ -8,7 +8,7 @@ import logging
 import pydantic
 
 from config import load_config
-from sdk.providers import get_provider
+from sdk.providers import get_default_provider
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ async def _summarize_text_full(text: str) -> str:
         if len(summaries) > 1:
             combined_summary = " ".join(summaries)
             final_prompt = final_prompt_template.format(combined_summary=combined_summary)
-            provider = get_provider()
+            provider = get_default_provider()
             messages = [
                 {"role": "system", "content": "You are an expert summarizer. Create a concise summary from the provided section summaries."},
                 {"role": "user", "content": final_prompt},
@@ -119,7 +119,7 @@ async def summarize_text_sections(text: str) -> list[SectionSummary]:
                 total_parts=total_parts,
                 section=section,
             )
-            provider = get_provider()
+            provider = get_default_provider()
             messages = [
                 {"role": "system", "content": "You are an expert summarizer. Create a concise summary of the provided text section."},
                 {"role": "user", "content": prompt},

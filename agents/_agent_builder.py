@@ -23,8 +23,8 @@ def build_agent(
     Raises:
         RuntimeError: If the profile has no model configured.
     """
-    if not profile.model:
-        msg = f"Profile '{profile.id}' has no model configured — run setup wizard"
+    if not profile.provider or not profile.model:
+        msg = f"Profile '{profile.id}' is not fully configured"
         raise RuntimeError(msg)
 
     raw_options: dict[str, Any] = {
@@ -45,6 +45,7 @@ def build_agent(
         description=profile.description,
         instruction=profile.system_prompt,
         tools=tools,
+        provider=profile.provider,
         model=profile.model,
         think=profile.think or False,
         options=options,

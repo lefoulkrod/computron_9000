@@ -8,7 +8,7 @@ to generate concise titles (3-5 words) that capture the essence of the conversat
 import logging
 
 from config import load_config
-from sdk.providers import get_provider
+from sdk.providers import get_default_provider
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def generate_conversation_title(first_message: str) -> str:
             logger.debug("No summary model configured, skipping title generation")
             return _truncate_for_title(first_message)
         
-        provider = get_provider()
+        provider = get_default_provider()
         
         # Prepare messages for title generation
         messages = [

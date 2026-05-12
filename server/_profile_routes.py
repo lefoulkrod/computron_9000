@@ -9,12 +9,12 @@ from aiohttp import web
 
 from agents._agent_profiles import (
     AgentProfile,
+    apply_llm_config_to_profiles,
     delete_agent_profile,
     duplicate_agent_profile,
     get_agent_profile,
     list_agent_profiles,
     save_agent_profile,
-    set_model_on_profiles,
 )
 
 logger = logging.getLogger(__name__)
@@ -157,11 +157,17 @@ async def handle_apply_model_to_profiles(request: web.Request) -> web.Response:
     model = body.get("model")
     if not model:
         return web.json_response({"error": "model is required"}, status=400)
+    provider = body.get("provider") or None
     context_window = body.get("context_window")
     if context_window is not None:
         context_window = int(context_window)
     try:
-        set_model_on_profiles(model, force=bool(body.get("force")), context_window=context_window)
+        apply_llm_config_to_profiles(
+            model,
+            provider=provider,
+            force=bool(body.get("force")),
+            context_window=context_window,
+        )
         return web.json_response({"ok": True})
     except Exception as exc:
         return web.json_response({"error": str(exc)}, status=500)

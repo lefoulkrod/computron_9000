@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ModelPicker from './ModelPicker.jsx';
 import styles from './SetupWizard.module.css';
 
@@ -173,6 +173,16 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
 
     const [updateAllProfiles, setUpdateAllProfiles] = useState(true);
 
+    // The provider name as stored in settings / on profiles ('ollama',
+    // 'openai_compat', 'anthropic', 'openai', ...).
+    const resolvedProviderName = useMemo(() => (
+        selectedProvider === PROVIDER_CLOUD
+            ? cloudProvider
+            : selectedProvider === PROVIDER_OPENAI_COMPAT
+                ? 'openai_compat'
+                : 'ollama'
+    ), [selectedProvider, cloudProvider]);
+
     // Refs for a11y
     const cardRef = useRef(null);
     const stepTitleRef = useRef(null);
@@ -255,11 +265,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         setProviderSaving(true);
         setProviderError(null);
 
-        const providerName = selectedProvider === PROVIDER_CLOUD
-            ? cloudProvider
-            : selectedProvider === PROVIDER_OPENAI_COMPAT
-                ? 'openai_compat'
-                : 'ollama';
+        const providerName = resolvedProviderName;
 
         try {
             // Remove any existing LLM integration — only one provider active at a time.
@@ -335,7 +341,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         } finally {
             setProviderSaving(false);
         }
-    }, [selectedProvider, cloudProvider, providerUrl, providerApiKey]);
+    }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey]);
 
     // ── Final save: mark setup complete ─────────────────────────────
     const handleFinish = useCallback(async () => {
@@ -349,6 +355,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: selectedMain,
+                    provider: resolvedProviderName,
                     force,
                     context_window: meta?.context_window ?? null,
                 }),
@@ -379,7 +386,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
             setError(`Connection error: ${err.message}`);
             setSaving(false);
         }
-    }, [selectedMain, selectedVision, isRerun, updateAllProfiles, allModels, onComplete]);
+    }, [selectedMain, selectedVision, resolvedProviderName, isRerun, updateAllProfiles, allModels, onComplete]);
 
     const canContinue =
         step === 0 ||

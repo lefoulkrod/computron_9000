@@ -14,9 +14,13 @@ from server._model_routes import handle_list_models, handle_refresh_models
 
 
 def _make_request(query: dict | None = None) -> MagicMock:
-    """Build a minimal aiohttp.web.Request-ish double."""
+    """Build a minimal aiohttp.web.Request-ish double.
+
+    Defaults to a ``?provider=ollama`` query so the handler takes the
+    explicit-provider path (``get_provider``) that these tests patch.
+    """
     req = MagicMock()
-    req.query = query or {}
+    req.query = query if query is not None else {"provider": "ollama"}
     return req
 
 

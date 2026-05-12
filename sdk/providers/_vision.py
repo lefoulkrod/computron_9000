@@ -40,8 +40,8 @@ async def vision_generate(
     vision_options: dict[str, Any] = dict(settings.get("vision_options") or {})
     vision_think: bool = bool(settings.get("vision_think") or False)
 
-    from . import get_provider
-    provider = get_provider()
+    from . import get_default_provider
+    provider = get_default_provider()
     messages: list[dict[str, Any]] = [{
         "role": "user",
         "content": prompt,

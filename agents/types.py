@@ -34,6 +34,7 @@ class Agent(BaseModel):
     name: str
     description: str
     instruction: str
+    provider: str
     model: str
     options: dict[str, Any]
     tools: list[Callable[..., Any]]
