@@ -26,7 +26,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 import asyncio
 
 from agents.types import Data
-from config import load_config
+from config import AppConfig, load_config
 from conversations import (
     delete_conversation as _delete_conversation,
 )
@@ -42,6 +42,7 @@ from server._profile_routes import register_profile_routes
 from server._settings_routes import register_settings_routes
 from server._task_routes import register_task_routes
 from server.message_handler import handle_user_message, resume_conversation
+from telegram import TelegramChannel
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.desktop._exec import DesktopExecError
 from tools.desktop._lifecycle import start_desktop
@@ -458,6 +459,10 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     app.on_startup.append(_start_deferred_subsystems)
     app.on_cleanup.append(_stop_deferred_subsystems)
 
+    # Telegram bot lifecycle
+    app.on_startup.append(_start_telegram_bot)
+    app.on_cleanup.append(_stop_telegram_bot)
+
     return app
 
 
@@ -614,6 +619,23 @@ async def _stop_deferred_subsystems(app: web.Application) -> None:
     if init_task and not init_task.done():
         init_task.cancel()
     runner = app.get("task_runner")
+    if runner:
+        await runner.stop()
+
+
+async def _start_telegram_bot(app: web.Application) -> None:
+    """Start the Telegram bot if enabled in config."""
+    config: AppConfig = app["config"]
+    if not config.telegram_bot.enabled:
+        return
+    runner = TelegramChannel(config.telegram_bot, default_model=config.telegram_bot.model)
+    await runner.start()
+    app["telegram_bot_runner"] = runner
+
+
+async def _stop_telegram_bot(app: web.Application) -> None:
+    """Stop the Telegram bot runner if present."""
+    runner: TelegramChannel | None = app.get("telegram_bot_runner")
     if runner:
         await runner.stop()
 
