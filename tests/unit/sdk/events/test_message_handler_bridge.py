@@ -50,6 +50,7 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
         return "done"
 
     import server.message_handler as mh
+    import sdk.turn._executor as executor_mod
 
     mock_profile = AgentProfile(
         id="computron",
@@ -59,7 +60,7 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
         skills=[],
     )
     monkeypatch.setattr(mh, "get_agent_profile", lambda _pid: mock_profile)
-    monkeypatch.setattr(mh, "run_turn", _fake_tool_loop)
+    monkeypatch.setattr(executor_mod, "run_turn", _fake_tool_loop)
     seen: list[AgentEvent] = []
     async for ev in handle_user_message(
         "hi", data=None, profile_id="computron", conversation_id="test-conv",

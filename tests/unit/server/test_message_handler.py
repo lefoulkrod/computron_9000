@@ -10,6 +10,7 @@ import pytest
 
 from conversations._store import save_conversation_history
 from sdk.context import ConversationHistory
+from sdk.turn import Conversation
 from server import message_handler as mh
 
 
@@ -54,7 +55,8 @@ async def test_get_conversation_cold_cache_with_disk_hydrates_and_marks_not_new(
 
 async def test_get_conversation_warm_cache_does_not_reread_disk() -> None:
     """An in-memory entry wins over whatever is on disk and is_new=False."""
-    cached = mh._Conversation(
+    cached = Conversation(
+        id="cid",
         history=ConversationHistory(
             [{"role": "user", "content": "from-memory"}],
             instance_id="cid",
@@ -71,7 +73,7 @@ async def test_get_conversation_warm_cache_does_not_reread_disk() -> None:
 
 
 async def test_get_conversation_subsequent_call_returns_same_instance() -> None:
-    """Two calls for the same id return the same _Conversation object."""
+    """Two calls for the same id return the same Conversation object."""
     first, first_new = await mh._get_conversation("same-id")
     second, second_new = await mh._get_conversation("same-id")
     assert first is second

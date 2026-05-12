@@ -3,6 +3,9 @@
 This package provides:
 - ``run_turn``: Async function driving the chat/tool loop.
 - ``turn_scope``: Async context manager for conversation turn lifecycle.
+- ``TurnExecutor``: High-level executor that encapsulates agent resolution,
+  memory injection, skill restoration, hook wiring, and persistence.
+- ``Conversation``: Per-conversation state owned by a channel.
 - Stop/nudge signaling utilities for user-initiated control.
 """
 
@@ -19,8 +22,10 @@ from ._turn import (
 )
 
 __all__ = [
+    "Conversation",
     "StopRequestedError",
     "ToolLoopError",
+    "TurnExecutor",
     "any_turn_active",
     "check_stop",
     "drain_nudges",
@@ -33,3 +38,13 @@ __all__ = [
     "turn_scope",
     "unregister_nudge_queue",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Lazy imports to avoid circular dependency with sdk top-level."""
+    if name in ("Conversation", "TurnExecutor"):
+        from ._executor import Conversation, TurnExecutor
+
+        return {"Conversation": Conversation, "TurnExecutor": TurnExecutor}[name]
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
