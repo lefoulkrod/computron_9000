@@ -5,6 +5,13 @@ import { slugifyEmail } from './providers.js';
 import { ProviderPicker, SuccessScreen } from './SharedSteps.jsx';
 import { ExplainerStep, CredentialsStep, VerifyingStep } from './AppPasswordSteps.jsx';
 import { OauthCapabilitiesStep, OauthGcpSetupStep, OauthRedirectStep } from './OAuthSteps.jsx';
+import {
+    IcloudDriveExplainerStep,
+    IcloudDriveCredentialsStep,
+    IcloudDriveTwoFactorStep,
+} from './IcloudDriveSteps.jsx';
+
+const TWO_FACTOR_INITIAL = { sessionId: null, code: '' };
 
 export default function AddIntegrationModal({ onClose, onAdded }) {
     const [provider, setProvider] = useState(null);
@@ -23,6 +30,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         pending: null,
         status: null,
     });
+    const [twoFactor, setTwoFactor] = useState(TWO_FACTOR_INITIAL);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
     const [result, setResult] = useState(null);
@@ -82,6 +90,89 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
             });
             setSubmitting(false);
             setStep(2);
+        }
+    };
+
+    // iCloud Drive: step 2 → POST credentials, which makes Apple push a 2FA
+    // code; on success advance to the code-entry step.
+    const handleIcloudPreauthStart = async () => {
+        setSubmitting(true);
+        setError(null);
+        const email = form.email.trim();
+        try {
+            const resp = await fetch('/api/integrations/preauth/icloud-drive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: form.password }),
+            });
+            const body = await resp.json().catch(() => ({}));
+            if (!resp.ok || !body?.session_id) {
+                setError({
+                    code: body?.error?.code || 'ERROR',
+                    message: body?.error?.message || `HTTP ${resp.status}`,
+                });
+                setSubmitting(false);
+                return;
+            }
+            setTwoFactor({ sessionId: body.session_id, code: '' });
+            setStep(3);
+            setSubmitting(false);
+        } catch (err) {
+            setError({ code: 'NETWORK', message: err?.message || 'Request failed' });
+            setSubmitting(false);
+        }
+    };
+
+    // iCloud Drive: step 3 → verify the 2FA code (yields a trust token), then
+    // run the normal add with {email, password, trust_token} in the auth blob.
+    const handleIcloudVerifyAndAdd = async () => {
+        setSubmitting(true);
+        setError(null);
+        const email = form.email.trim();
+        const label = form.label.trim() || `${provider.title} · ${email}`;
+        try {
+            const verifyResp = await fetch('/api/integrations/preauth/icloud-drive/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: twoFactor.sessionId, code: twoFactor.code.trim() }),
+            });
+            const verifyBody = await verifyResp.json().catch(() => ({}));
+            if (!verifyResp.ok || !verifyBody?.trust_token) {
+                setError({
+                    code: verifyBody?.error?.code || 'ERROR',
+                    message: verifyBody?.error?.message || `HTTP ${verifyResp.status}`,
+                });
+                setSubmitting(false);
+                return;
+            }
+            const addResp = await fetch('/api/integrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    slug: provider.slug,
+                    label,
+                    auth_blob: {
+                        email,
+                        password: form.password,
+                        trust_token: verifyBody.trust_token,
+                    },
+                    permissions: { drive: form.permissions.drive || 'r' },
+                }),
+            });
+            const addBody = await addResp.json().catch(() => ({}));
+            if (!addResp.ok) {
+                setError({
+                    code: addBody?.error?.code || 'ERROR',
+                    message: addBody?.error?.message || `HTTP ${addResp.status}`,
+                });
+                setSubmitting(false);
+                return;
+            }
+            setResult(addBody);
+            setSubmitting(false);
+        } catch (err) {
+            setError({ code: 'NETWORK', message: err?.message || 'Request failed' });
+            setSubmitting(false);
         }
     };
 
@@ -210,6 +301,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         onPick={(p) => {
                             setProvider(p);
                             setStep(1);
+                            setTwoFactor(TWO_FACTOR_INITIAL);
                             if (p.authFlow === 'oauth_device') {
                                 const caps = {};
                                 const access = {};
@@ -243,6 +335,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                                 capabilities: {}, access: {},
                                 pending: null, status: null,
                             });
+                            setTwoFactor(TWO_FACTOR_INITIAL);
                             setError(null);
                         }}
                         onDone={() => { onAdded?.(); }}
@@ -282,6 +375,37 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                                 setError(null);
                                 setStep(2);
                             }}
+                        />
+                    )
+                ) : provider.authFlow === 'app_password_2fa' ? (
+                    step === 1 ? (
+                        <IcloudDriveExplainerStep
+                            provider={provider}
+                            onBack={() => setProvider(null)}
+                            onNext={() => setStep(2)}
+                        />
+                    ) : step === 2 ? (
+                        <IcloudDriveCredentialsStep
+                            provider={provider}
+                            form={form}
+                            setForm={setForm}
+                            error={error}
+                            submitting={submitting}
+                            onBack={() => { setStep(1); setError(null); }}
+                            onCancel={onClose}
+                            onSubmit={handleIcloudPreauthStart}
+                        />
+                    ) : (
+                        <IcloudDriveTwoFactorStep
+                            provider={provider}
+                            form={form}
+                            twoFactor={twoFactor}
+                            setTwoFactor={setTwoFactor}
+                            error={error}
+                            submitting={submitting}
+                            onBack={() => { setStep(2); setError(null); }}
+                            onCancel={onClose}
+                            onSubmit={handleIcloudVerifyAndAdd}
                         />
                     )
                 ) : step === 1 ? (
