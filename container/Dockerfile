@@ -1,5 +1,9 @@
 FROM docker.io/ubuntu:22.04
 
+# ── BuildKit arch detection ──────────────────────────────────────────────────
+# TARGETARCH is injected by BuildKit: amd64, arm64, arm/v7, etc.
+ARG TARGETARCH
+
 # ── Environment ───────────────────────────────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -52,9 +56,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ── Google Chrome (browser automation) ───────────────────────────────────────
+# Google publishes Chrome for both amd64 and arm64.
 RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
       | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] \
+    echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/google-chrome.gpg] \
       https://dl.google.com/linux/chrome/deb/ stable main" \
       > /etc/apt/sources.list.d/google-chrome.list && \
     apt-get update && \
@@ -72,12 +77,19 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── Node.js LTS ───────────────────────────────────────────────────────────────
+# Node distributes: linux-x64 (amd64), linux-arm64 (arm64), linux-armv7l (arm/v7).
 RUN set -eux; \
     LTS_VERSION=$(curl -fsSL https://nodejs.org/dist/index.json | \
       jq -r '[.[] | select(.lts != false)][0].version' | sed 's/^v//'); \
-    curl -fsSLO "https://nodejs.org/dist/v${LTS_VERSION}/node-v${LTS_VERSION}-linux-x64.tar.xz"; \
-    tar -xJf "node-v${LTS_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner; \
-    rm "node-v${LTS_VERSION}-linux-x64.tar.xz"; \
+    case "${TARGETARCH}" in \
+      amd64)  NODE_ARCH="x64" ;; \
+      arm64)  NODE_ARCH="arm64" ;; \
+      arm)    NODE_ARCH="armv7l" ;; \
+      *)      echo "ERROR: unsupported arch: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    curl -fsSLO "https://nodejs.org/dist/v${LTS_VERSION}/node-v${LTS_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
+    tar -xJf "node-v${LTS_VERSION}-linux-${NODE_ARCH}.tar.xz" -C /usr/local --strip-components=1 --no-same-owner; \
+    rm "node-v${LTS_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
     ln -sf /usr/local/bin/node /usr/local/bin/nodejs; \
     node -v && npm -v
 
@@ -97,11 +109,23 @@ RUN python3.12 -m ensurepip --upgrade && \
     ln -sf /usr/local/bin/pip /usr/local/bin/pip3 && \
     python3.12 -m pip install --no-cache-dir --upgrade pip
 
-# ── PyTorch + CUDA ────────────────────────────────────────────────────────────
-# ~2.5 GB — separate layer, rarely changes. Placed before agent packages so
-# additions to the package list below don't bust this expensive cache layer.
-RUN python3.12 -m pip install --no-cache-dir \
-      torch torchaudio torchvision
+# ── PyTorch ────────────────────────────────────────────────────────────────────
+# amd64 → CUDA-enabled (NVIDIA GPU).  arm64 → CPU-only (Apple Silicon, Raspberry Pi).
+# ~2.5 GB on amd64, ~800 MB on arm64.  Separate layer, rarely changes.
+RUN case "${TARGETARCH}" in \
+      amd64) \
+        python3.12 -m pip install --no-cache-dir \
+          torch torchaudio torchvision \
+        ;; \
+      arm64) \
+        python3.12 -m pip install --no-cache-dir \
+          torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cpu \
+        ;; \
+      *) \
+        python3.12 -m pip install --no-cache-dir \
+          torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cpu \
+        ;; \
+    esac
 
 # ── Agent packages (general) ─────────────────────────────────────────────────
 # Pre-installed so the agent can import them immediately without pip install.
@@ -128,27 +152,48 @@ RUN python3.12 -m pip install --no-cache-dir \
       # Web servers (agent can build quick prototypes)
       flask flask-socketio blinker
 
-# ── Image generation (Flux via diffusers) ─────────────────────────────────────
-RUN python3.12 -m pip install --no-cache-dir \
-      git+https://github.com/huggingface/diffusers.git \
-      "transformers>=4.51.0,<4.58.0" accelerate safetensors sentencepiece protobuf \
-      "huggingface_hub[cli]" bitsandbytes ftfy
+# ── Image generation (Flux via diffusers) — amd64/CUDA only ───────────────────
+RUN case "${TARGETARCH}" in \
+      amd64) \
+        python3.12 -m pip install --no-cache-dir \
+          git+https://github.com/huggingface/diffusers.git \
+          "transformers>=4.51.0,<4.58.0" accelerate safetensors sentencepiece protobuf \
+          "huggingface_hub[cli]" bitsandbytes ftfy \
+        ;; \
+      arm64) \
+        echo "Skipping diffusers/Flux on arm64 (CPU-only)" \
+        ;; \
+    esac
 
-# ── Music generation (ACE-Step 1.5) ──────────────────────────────────────────
-RUN git clone --depth 1 https://github.com/ace-step/ACE-Step-1.5.git /tmp/ace-step-1.5 && \
-    python3.12 -m pip install --no-cache-dir /tmp/ace-step-1.5/acestep/third_parts/nano-vllm && \
-    python3.12 -m pip install --no-cache-dir --no-deps /tmp/ace-step-1.5 && \
-    python3.12 -m pip install --no-cache-dir \
-      einops "vector-quantize-pytorch>=1.27.15" "torchcodec>=0.9.1" \
-      "torchao>=0.16.0,<0.17.0" numba loguru diskcache modelscope \
-      "peft>=0.18.0" lycoris-lora && \
-    rm -rf /tmp/ace-step-1.5
+# ── Music generation (ACE-Step 1.5) — amd64/CUDA only ─────────────────────────
+RUN case "${TARGETARCH}" in \
+      amd64) \
+        git clone --depth 1 https://github.com/ace-step/ACE-Step-1.5.git /tmp/ace-step-1.5 && \
+        python3.12 -m pip install --no-cache-dir /tmp/ace-step-1.5/acestep/third_parts/nano-vllm && \
+        python3.12 -m pip install --no-cache-dir --no-deps /tmp/ace-step-1.5 && \
+        python3.12 -m pip install --no-cache-dir \
+          einops "vector-quantize-pytorch>=1.27.15" "torchcodec>=0.9.1" \
+          "torchao>=0.16.0,<0.17.0" numba loguru diskcache modelscope \
+          "peft>=0.18.0" lycoris-lora && \
+        rm -rf /tmp/ace-step-1.5 \
+        ;; \
+      arm64) \
+        echo "Skipping ACE-Step on arm64 (CPU-only)" \
+        ;; \
+    esac
 
 # ── Pre-downloaded models ────────────────────────────────────────────────────
 # Baked in so the agent never fetches at runtime.
 
-# TAESD — fast image preview decoding (~10 MB)
-RUN python3.12 -c "from diffusers import AutoencoderTiny; AutoencoderTiny.from_pretrained('madebyollin/taef1')"
+# TAESD — fast image preview decoding (~10 MB).  amd64/CUDA only.
+RUN case "${TARGETARCH}" in \
+      amd64) \
+        python3.12 -c "from diffusers import AutoencoderTiny; AutoencoderTiny.from_pretrained('madebyollin/taef1')" \
+        ;; \
+      arm64) \
+        echo "Skipping TAESD on arm64 (no diffusers)" \
+        ;; \
+    esac
 
 # Kokoro TTS — int8 ONNX voice model (~88 MB)
 RUN mkdir -p /opt/kokoro && \
