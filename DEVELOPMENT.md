@@ -168,10 +168,27 @@ just ui-test   # Vitest
 
 ## Container Build & Publish
 
+### Multi-Arch Setup (one-time)
+
+The image builds for both `linux/amd64` and `linux/arm64`. On **Linux**, install QEMU first so the kernel can emulate ARM:
+
 ```sh
-just build     # Build computron_9000:latest (only when Dockerfile changes)
-just publish   # Tag and push to ghcr.io/lefoulkrod/computron_9000
+docker run --privileged --rm tonistiigi/binfmt --install all
 ```
+
+Docker Desktop (macOS/Windows) bundles QEMU — no setup needed.
+
+### Build & Publish
+
+```sh
+just build     # Build computron_9000:latest locally (single-arch, for dev)
+just publish   # Build + push multi-arch to ghcr.io/lefoulkrod/computron_9000
+```
+
+`just publish` tags:
+- On `main`: `main`, `main-<sha>`, `latest`
+- On feature branch: `<branch>-<sha>`, `<branch>-latest`
+- CI also adds semver tags on version tags (`v1.2.3` → `v1.2.3`, `v1.2`, `v1`)
 
 ## Justfile Reference
 
@@ -187,7 +204,7 @@ Run `just` (no args) to see all available recipes. Key ones:
 | `just reset` | Stop and wipe state |
 | `just shell` | Bash shell inside the dev container |
 | `just logs` | Tail app + inference logs |
-| `just publish` | Tag and push image to registry |
+| `just publish` | Build + push multi-arch image (amd64 + arm64) to GHCR |
 | `just test` | Run all unit tests |
 | `just test-unit` | Run unit tests only |
 | `just test-file <path>` | Run tests for a specific file |
