@@ -98,12 +98,18 @@ publish registry="ghcr.io/lefoulkrod/computron_9000":
 
     [ -n "${GITHUB_PACKAGES_TOKEN:-}" ] && echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin
 
+    if [ "$branch" = "main" ]; then
+        branch_tag="main"
+    else
+        branch_tag="${branch}-latest"
+    fi
+
     docker buildx build \
         --builder multiarch \
         --platform linux/amd64,linux/arm64 \
         -f container/Dockerfile \
         -t "{{registry}}:${tag}" \
-        -t "{{registry}}:${branch}-latest" \
+        -t "{{registry}}:${branch_tag}" \
         --push .
 
     if [ "$branch" = "main" ]; then
