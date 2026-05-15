@@ -57,7 +57,7 @@ export default function FileContentRenderer({
                 <div className={styles.markdownContent}>
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeMermaid]}
+                        rehypePlugins={[[rehypeMermaid, { strategy: 'img-svg' }]]}
                         components={_markdownComponents}
                     >
                         {text}
