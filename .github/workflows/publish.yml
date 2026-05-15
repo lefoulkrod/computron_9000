@@ -56,7 +56,6 @@ jobs:
 
       - name: Smoke test arm64
         run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
           docker run --rm --platform linux/arm64 \
-            ghcr.io/${{ github.repository }}:main-${SHORT_SHA} \
+            ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }} \
             python3.12 -c 'import torch; print("arm64 torch:", torch.__version__)'
