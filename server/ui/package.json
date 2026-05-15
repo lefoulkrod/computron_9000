@@ -15,6 +15,7 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "rehype-katex": "^7.0.0",
+    "rehype-mermaid": "^3.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^3.0.0",
     "remark-gfm": "^4.0.0",
