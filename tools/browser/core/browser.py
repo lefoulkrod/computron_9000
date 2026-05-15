@@ -392,6 +392,15 @@ class Browser:
         if proxy:
             context_kwargs["proxy"] = proxy
 
+        # On arm64, Playwright's bundled Chromium sends "HeadlessChrome" in
+        # its User-Agent — a dead bot giveaway.  Override with a real Chrome
+        # UA matching the version of the underlying Chromium engine.
+        if platform.machine() != "x86_64":
+            context_kwargs["user_agent"] = (
+                f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                f"(KHTML, like Gecko) Chrome/{pw_browser.version} Safari/537.36"
+            )
+
         context = await pw_browser.new_context(**context_kwargs)
 
         headers = {

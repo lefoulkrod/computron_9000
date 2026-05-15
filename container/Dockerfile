@@ -70,7 +70,8 @@ RUN case "${TARGETARCH}" in \
         apt-get clean && rm -rf /var/lib/apt/lists/* \
         ;; \
       arm64) \
-        echo "Skipping Chrome on arm64 (Playwright uses bundled Chromium)" \
+        python3.12 -m pip install --no-cache-dir playwright && \
+        python3.12 -m playwright install --with-deps chromium \
         ;; \
       *) \
         echo "ERROR: unsupported arch for browser: ${TARGETARCH}"; exit 1 \
