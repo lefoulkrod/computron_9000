@@ -9,7 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
-    DISPLAY=:99
+    DISPLAY=:99 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
 RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     echo "Etc/UTC" > /etc/timezone
