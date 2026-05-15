@@ -56,4 +56,5 @@ class TestChromeArgs:
 
     def test_always_uses_system_chrome(self):
         source = inspect.getsource(Browser.start)
-        assert 'channel="chrome"' in source
+        assert '["channel"] = "chrome"' in source
+        assert 'platform.machine() == "x86_64"' in source

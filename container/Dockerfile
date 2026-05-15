@@ -55,16 +55,28 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Google Chrome (browser automation) ───────────────────────────────────────
-# Google publishes Chrome for both amd64 and arm64.
-RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-      | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
-    echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/google-chrome.gpg] \
-      https://dl.google.com/linux/chrome/deb/ stable main" \
-      > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends google-chrome-stable && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# ── Browser (browser automation) ─────────────────────────────────────────────
+# amd64: Google Chrome (used by Playwright channel="chrome").
+# arm64: skipped — Playwright uses its bundled Chromium instead.
+RUN case "${TARGETARCH}" in \
+      amd64) \
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+          | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] \
+          https://dl.google.com/linux/chrome/deb/ stable main" \
+          > /etc/apt/sources.list.d/google-chrome.list && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends google-chrome-stable && \
+        apt-get clean && rm -rf /var/lib/apt/lists/* \
+        ;; \
+      arm64) \
+        python3.12 -m pip install --no-cache-dir playwright==1.52.0 && \
+        python3.12 -m playwright install --with-deps chromium \
+        ;; \
+      *) \
+        echo "ERROR: unsupported arch for browser: ${TARGETARCH}"; exit 1 \
+        ;; \
+    esac
 
 # ── GitHub CLI ────────────────────────────────────────────────────────────────
 RUN mkdir -p /etc/apt/keyrings && \
