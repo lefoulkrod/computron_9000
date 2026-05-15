@@ -44,8 +44,8 @@ jobs:
           push: true
           # Push by digest only — tags applied in the merge job.
           outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
 
       - name: Store digest
         run: |
@@ -94,7 +94,12 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Create manifest and push
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          docker buildx imagetools create \
-            $(printf -- '-t %s ' ${{ steps.meta.outputs.tags }}) \
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && tag_args+=(-t "$tag")
+          done <<< "$TAGS"
+          docker buildx imagetools create "${tag_args[@]}" \
             $(printf 'ghcr.io/${{ github.repository }}@%s ' $(cat /tmp/digests/*.txt))
