@@ -113,12 +113,10 @@ publish registry="ghcr.io/lefoulkrod/computron_9000":
         --push .
 
     if [ "$branch" = "main" ]; then
-        docker buildx build \
-            --builder multiarch \
-            --platform linux/amd64,linux/arm64 \
-            -f container/Dockerfile \
+        # Retag the already-pushed manifest — no rebuild needed.
+        docker buildx imagetools create \
             -t "{{registry}}:latest" \
-            --push .
+            "{{registry}}:${tag}"
     fi
     echo "✅ Published multi-arch: {{registry}}:${tag}"
 

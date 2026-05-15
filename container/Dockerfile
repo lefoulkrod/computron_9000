@@ -163,6 +163,9 @@ RUN case "${TARGETARCH}" in \
       arm64) \
         echo "Skipping diffusers/Flux on arm64 (CPU-only)" \
         ;; \
+      *) \
+        echo "ERROR: unsupported arch for diffusers: ${TARGETARCH}"; exit 1 \
+        ;; \
     esac
 
 # ── Music generation (ACE-Step 1.5) — amd64/CUDA only ─────────────────────────
@@ -180,6 +183,9 @@ RUN case "${TARGETARCH}" in \
       arm64) \
         echo "Skipping ACE-Step on arm64 (CPU-only)" \
         ;; \
+      *) \
+        echo "ERROR: unsupported arch for ACE-Step: ${TARGETARCH}"; exit 1 \
+        ;; \
     esac
 
 # ── Pre-downloaded models ────────────────────────────────────────────────────
@@ -192,6 +198,9 @@ RUN case "${TARGETARCH}" in \
         ;; \
       arm64) \
         echo "Skipping TAESD on arm64 (no diffusers)" \
+        ;; \
+      *) \
+        echo "ERROR: unsupported arch for TAESD: ${TARGETARCH}"; exit 1 \
         ;; \
     esac
 

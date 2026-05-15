@@ -36,13 +36,13 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -53,3 +53,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test arm64
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          docker run --rm --platform linux/arm64 \
+            ghcr.io/${{ github.repository }}:main-${SHORT_SHA} \
+            python3.12 -c 'import torch; print("arm64 torch:", torch.__version__)'

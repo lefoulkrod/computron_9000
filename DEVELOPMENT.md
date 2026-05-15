@@ -190,6 +190,8 @@ just publish   # Build + push multi-arch to ghcr.io/lefoulkrod/computron_9000
 - On feature branch: `<branch>-<sha>`, `<branch>-latest`
 - CI also adds semver tags on version tags (`v1.2.3` → `v1.2.3`, `v1.2`, `v1`)
 
+> **CI vs `just publish`:** The GitHub Actions workflow auto-publishes on every push to `main` and version tags. `just publish` is now a manual escape hatch — useful for pushing test images from feature branches without waiting for a merge.
+
 ## Justfile Reference
 
 Run `just` (no args) to see all available recipes. Key ones:
