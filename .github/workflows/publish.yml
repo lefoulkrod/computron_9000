@@ -50,13 +50,14 @@ jobs:
       - name: Store digest
         run: |
           mkdir -p /tmp/digests
-          echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.platform }}.txt
+          platform=${{ matrix.platform }}
+          echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${platform//\//-}.txt"
 
       - name: Upload digest
         uses: actions/upload-artifact@v5
         with:
-          name: digests-${{ matrix.platform }}
-          path: /tmp/digests/${{ matrix.platform }}.txt
+          name: digests-${{ strategy.job-index }}
+          path: /tmp/digests/*.txt
           retention-days: 1
 
   # Merge per-platform images into a single multi-arch manifest and tag it.
