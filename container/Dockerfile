@@ -70,7 +70,7 @@ RUN case "${TARGETARCH}" in \
         apt-get clean && rm -rf /var/lib/apt/lists/* \
         ;; \
       arm64) \
-        python3.12 -m pip install --no-cache-dir playwright && \
+        python3.12 -m pip install --no-cache-dir playwright==1.52.0 && \
         python3.12 -m playwright install --with-deps chromium \
         ;; \
       *) \

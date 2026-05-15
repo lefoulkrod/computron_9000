@@ -154,6 +154,56 @@ class BrowserInteractionResult(BaseModel):
     action_ms: float = 0.0
 
 
+def _chrome_ua_metadata(version: str) -> tuple[str, dict]:
+    """Build a Chrome UA string + Client Hints metadata at the given
+    engine version, internally consistent across all three surfaces
+    (legacy header, Sec-CH-UA headers, navigator.userAgentData)."""
+    major = version.split(".")[0]
+    ua_string = (
+        f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        f"(KHTML, like Gecko) Chrome/{version} Safari/537.36"
+    )
+    metadata = {
+        "brands": [
+            {"brand": "Google Chrome", "version": major},
+            {"brand": "Chromium", "version": major},
+            {"brand": "Not_A Brand", "version": "24"},
+        ],
+        "fullVersionList": [
+            {"brand": "Google Chrome", "version": version},
+            {"brand": "Chromium", "version": version},
+            {"brand": "Not_A Brand", "version": "24.0.0.0"},
+        ],
+        "platform": "Linux",
+        "platformVersion": "6.5.0",
+        "architecture": "x86",
+        "model": "",
+        "mobile": False,
+        "bitness": "64",
+        "wow64": False,
+    }
+    return ua_string, metadata
+
+
+async def _apply_ua_override(
+    context: BrowserContext, ua_string: str, ua_metadata: dict
+) -> None:
+    """Patch every page's UA + Client Hints via CDP."""
+    async def _override(page: Page) -> None:
+        try:
+            client = await context.new_cdp_session(page)
+            await client.send(
+                "Network.setUserAgentOverride",
+                {"userAgent": ua_string, "userAgentMetadata": ua_metadata},
+            )
+        except Exception:
+            logger.warning("Failed to apply CDP UA override", exc_info=True)
+
+    for page in context.pages:
+        await _override(page)
+    context.on("page", lambda page: asyncio.create_task(_override(page)))
+
+
 class Browser:
     """Minimal persistent Playwright browser core for powering LLM tools.
 
@@ -204,6 +254,8 @@ class Browser:
         # process tree if the async close path never ran (e.g. SIGKILL, event
         # loop torn down before shutdown hooks complete).
         self._driver_pid: int | None = None
+        self._ua_string: str | None = None
+        self._ua_metadata: dict | None = None
         try:
             transport = pw._impl_obj._connection._transport  # type: ignore[union-attr]
             proc = getattr(transport, "_proc", None)
@@ -393,13 +445,14 @@ class Browser:
             context_kwargs["proxy"] = proxy
 
         # On arm64, Playwright's bundled Chromium sends "HeadlessChrome" in
-        # its User-Agent — a dead bot giveaway.  Override with a real Chrome
-        # UA matching the version of the underlying Chromium engine.
+        # its User-Agent and "Chromium" in Client Hints — both bot signals.
+        # Use CDP to patch both surfaces atomically with a real Chrome
+        # fingerprint matching the version of the underlying engine.
+        ua_string: str | None = None
+        ua_metadata: dict | None = None
         if platform.machine() != "x86_64":
-            context_kwargs["user_agent"] = (
-                f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                f"(KHTML, like Gecko) Chrome/{pw_browser.version} Safari/537.36"
-            )
+            ua_string, ua_metadata = _chrome_ua_metadata(pw_browser.version)
+            context_kwargs["user_agent"] = ua_string
 
         context = await pw_browser.new_context(**context_kwargs)
 
@@ -412,13 +465,19 @@ class Browser:
         await context.add_init_script(_ANTI_BOT_SCRIPT)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
 
-        return cls(
+        if ua_string is not None and ua_metadata is not None:
+            await _apply_ua_override(context, ua_string, ua_metadata)
+
+        instance = cls(
             context=context,
             extra_headers=headers,
             pw=pw,
             pw_browser=pw_browser,
             profile_dir=str(profile_path),
         )
+        instance._ua_string = ua_string
+        instance._ua_metadata = ua_metadata
+        return instance
 
     @classmethod
     async def start_ephemeral(
@@ -457,6 +516,12 @@ class Browser:
         await context.add_init_script(_ANTI_BOT_SCRIPT)
         await context.add_init_script(_OPEN_SHADOW_DOM_SCRIPT)
 
+        # Propagate arm64 UA override from the root browser.
+        if root_browser._ua_string is not None and root_browser._ua_metadata is not None:
+            await _apply_ua_override(
+                context, root_browser._ua_string, root_browser._ua_metadata
+            )
+
         instance = cls(
             context=context,
             extra_headers=headers,
@@ -464,6 +529,8 @@ class Browser:
             profile_dir="",
         )
         instance._downloads_dir = root_browser._downloads_dir
+        instance._ua_string = root_browser._ua_string
+        instance._ua_metadata = root_browser._ua_metadata
         return instance
 
     async def close_context(self) -> None:
