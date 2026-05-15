@@ -61,6 +61,9 @@ chown computron:broker /home/computron/downloads
 chmod 3770 /home/computron/downloads
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
+# Clean stale lock/socket from a previous run — docker restart preserves
+# tmpfs, so Xvfb's old files can block the new instance.
+rm -f "/tmp/.X${_DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${_DISPLAY_NUM}"
 Xvfb ":${_DISPLAY_NUM}" -screen 0 1280x720x24 -ac &
 XVFB_PID=$!
 sleep 1

@@ -6,9 +6,9 @@ differently:
 
 - ``IntegrationAuthFailed`` — the broker told us the upstream rejected our
   credentials. The user needs to reconnect the integration.
-- ``IntegrationWriteDenied`` — the broker refused a write-classified verb
-  because the integration's ``write_allowed`` flag is false. The user needs
-  to enable writes.
+- ``IntegrationPermissionDenied`` — the broker refused a verb because the
+  integration's per-capability permission is too low. The user needs to
+  adjust permissions in Settings.
 
 Other broker error codes (``NETWORK`` / ``UPSTREAM`` / ``BAD_REQUEST``) land
 on the base ``IntegrationError`` for now. Promote them to dedicated subclasses
@@ -39,10 +39,13 @@ class IntegrationAuthFailed(IntegrationError):
     """
 
 
-class IntegrationWriteDenied(IntegrationError):
-    """The broker refused a write-classified verb.
+class IntegrationPermissionDenied(IntegrationError):
+    """The broker refused a verb due to insufficient permissions.
 
-    Fires when the integration's ``write_allowed`` flag is false. Tool handlers
-    should surface this with a hint that the user can enable writes in
-    Settings → Integrations.
+    The integration's per-capability access level doesn't meet the
+    verb's requirement. Tool handlers should surface this with a hint
+    that the user can adjust permissions in Settings.
     """
+
+
+IntegrationWriteDenied = IntegrationPermissionDenied

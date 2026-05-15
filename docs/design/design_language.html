@@ -554,6 +554,7 @@ body {
   display: inline-block;
 }
 
+.dot-ready  { background: var(--success); box-shadow: 0 0 6px var(--success-muted); }
 .dot-running {
   background: var(--success);
   box-shadow: 0 0 6px var(--success-muted);
@@ -3254,6 +3255,13 @@ body {
         </thead>
         <tbody>
           <tr>
+            <td><span class="vocab-state">Ready</span></td>
+            <td><code>--success</code></td>
+            <td><span class="vocab-dot" style="background:var(--success);box-shadow:0 0 6px var(--success-muted)"></span><span style="color:var(--text-tertiary)">solid + glow</span></td>
+            <td><code>--success-muted</code></td>
+            <td>Connected integrations, enabled goals, healthy services</td>
+          </tr>
+          <tr>
             <td><span class="vocab-state">Running</span></td>
             <td><code>--success</code></td>
             <td><span class="vocab-dot" style="background:var(--success);box-shadow:0 0 6px var(--success-muted);animation:pulse 2s infinite"></span><span style="color:var(--text-tertiary)">pulsing</span></td>
@@ -3332,6 +3340,29 @@ body {
         <button class="btn-icon" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
         <button class="btn-icon" title="More"><i class="bi bi-three-dots"></i></button>
         <span style="font-size:11px;color:var(--text-tertiary);margin-left:8px;align-self:center">Icon buttons (28&times;28)</span>
+      </div>
+
+      <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-code);margin-top:12px;line-height:1.6;max-width:760px">
+        // <strong style="color:var(--text-secondary)">When to reach for which.</strong> The four variants form a loudness ladder:
+        <code>filled</code> &gt; <code>outline</code> &gt; <code>ghost</code>, with <code>danger</code> as a parallel destructive track.<br>
+        // <code>.btn-filled</code> &mdash; the single primary action on a surface (Save, Connect, Submit, Next). At most one per row.<br>
+        // <code>.btn-outline</code> &mdash; the default for everything that isn&apos;t the primary CTA. Cancel, Back, Retry, Configure. A real, peer choice the user might pick.<br>
+        // <code>.btn-ghost</code> &mdash; tertiary / quiet. Use when the button stands alone or genuinely shouldn&apos;t compete for attention (a solo Skip, a hover-revealed row action). Reads as "an escape hatch."<br>
+        // <code>.btn-danger</code> &mdash; destructive (Delete, Disconnect, Remove). Use anywhere the action can&apos;t be cheaply undone.<br>
+        // <strong style="color:var(--text-secondary)">Rule of thumb:</strong> if two buttons live in the same action row, neither should be <code>ghost</code>. Use <code>filled</code> for the one primary CTA, <code>outline</code> for the rest, <code>danger</code> for destructive. Reach for <code>ghost</code> only when the button is alone or you specifically want it to feel almost-not-there.<br>
+        // Counter-example: a wizard footer of <code>[Back] [Cancel] [Save]</code>. All three are peer choices &mdash; render Back &amp; Cancel as <code>outline</code> and Save as <code>filled</code>. A <code>ghost</code> Cancel sitting next to outline Back reads as disabled, especially in dark mode.
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-danger">Delete</button>
+        <span style="color:var(--text-tertiary);font-family:var(--font-code);font-size:11px">&rarr;</span>
+        <button class="btn" style="background:var(--danger);color:#fff;border-color:var(--danger)">Confirm?</button>
+        <span style="color:var(--text-tertiary);font-family:var(--font-code);font-size:11px;margin-left:8px">click 1 arms; click 2 fires</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-code);margin-top:8px;line-height:1.6;max-width:760px">
+        // <strong style="color:var(--text-secondary)">Click-twice-to-confirm pattern.</strong> Destructive actions that can&apos;t be cheaply undone use a two-stage confirm: resting renders as <code>btn-danger</code> (danger-muted background, danger text); click 1 escalates to a solid danger fill (<code>background: var(--danger); color: #fff</code>) and the label flips to "Confirm?"; click 2 within the timeout (default 3s) fires the action.<br>
+        // The armed-state escalation is the affordance &mdash; resting state alone is not loud enough to signal "your next click is destructive." Don&apos;t replace this with a modal for inline row/panel actions; reserve modals for multi-field destructive forms.<br>
+        // Implemented by the <code>ConfirmButton</code> primitive (see <code>server/ui/src/components/primitives/ConfirmButton.jsx</code>). All Delete actions in the app should route through it.
       </div>
     </div>
 
@@ -3418,6 +3449,7 @@ body {
     <div class="subsection">
       <div class="subsection-label">Status Dot</div>
       <div class="component-row" style="gap: 16px">
+        <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-ready"></span><span style="font-size:12px;color:var(--text-secondary)">Ready (steady green)</span></span>
         <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-running"></span><span style="font-size:12px;color:var(--text-secondary)">Running (pulses)</span></span>
         <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-complete"></span><span style="font-size:12px;color:var(--text-secondary)">Complete</span></span>
         <span style="display:flex;align-items:center;gap:6px"><span class="status-dot dot-error"></span><span style="font-size:12px;color:var(--text-secondary)">Error</span></span>
@@ -3575,7 +3607,7 @@ body {
             <div class="desc">Endpoint for the inference backend.</div>
           </div>
           <div class="control">
-            <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> CONNECTED</span>
+            <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-ready" style="width:5px;height:5px"></span> CONNECTED</span>
           </div>
         </div>
       </div>
@@ -4318,7 +4350,7 @@ body {
           <div class="fs-row-desc">Endpoint for the inference backend.</div>
         </div>
         <div class="fs-row-control">
-          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> CONNECTED</span>
+          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-ready" style="width:5px;height:5px"></span> CONNECTED</span>
         </div>
       </div>
       <div class="fs-row">
@@ -4416,13 +4448,13 @@ body {
     <div class="sd-page" style="max-width:720px">
       <div class="sd-header">
         <div class="sd-title-row">
-          <span class="status-dot dot-running"></span>
+          <span class="status-dot dot-ready"></span>
           <h2 class="sd-title">Scrape API docs daily</h2>
           <button class="btn btn-outline" style="font-size:11px;height:28px;margin-left:auto"><i class="bi bi-pause-fill" style="font-size:11px"></i> Pause</button>
           <button class="btn btn-outline" style="font-size:11px;height:28px"><i class="bi bi-play-fill" style="font-size:11px"></i> Run now</button>
         </div>
         <div class="sd-meta-row">
-          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-running" style="width:5px;height:5px"></span> ACTIVE</span>
+          <span class="badge badge-success" style="font-size:9px"><span class="status-dot dot-ready" style="width:5px;height:5px"></span> ACTIVE</span>
           <span class="sd-meta-item">cron: 0 6 * * *</span>
           <span class="sd-meta-item">tz: UTC</span>
           <span class="sd-meta-item">next: 06:00</span>

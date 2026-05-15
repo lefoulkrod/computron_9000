@@ -1,7 +1,8 @@
 """Pydantic models for the supervisor's on-disk and in-memory shapes.
 
-Imports only stdlib and pydantic — no internal dependencies — so this module
-can be imported from anywhere in the supervisor without introducing a cycle.
+Imports only stdlib, pydantic, and the permissions leaf module — so this
+module can be imported from anywhere in the supervisor without introducing
+a cycle.
 """
 
 from __future__ import annotations
@@ -9,9 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer, field_validator
+
+from integrations.permissions import (
+    Access,
+    Capability,
+    Permissions,
+    permissions_from_dict,
+    permissions_to_dict,
+)
 
 
 @dataclass(frozen=True)
@@ -63,20 +72,28 @@ class IntegrationMeta(BaseModel):
         slug: Catalog entry slug (e.g. ``"gmail"``, ``"icloud"``). Selects the
             broker binary and any provider-specific config the catalog ships.
         label: Human-readable label shown in the UI. User-editable.
-        write_allowed: Permission gate. When ``False`` the supervisor passes
-            ``WRITE_ALLOWED=false`` into every broker it spawns for this
-            integration, and the broker itself refuses write-classified verbs
-            at dispatch. The flag is the real enforcement point: an agent
-            bypassing the app server's tool registry and connecting directly
-            to a broker's UDS still gets refused by the broker itself.
+        permissions: Per-capability access level. The broker enforces these at
+            verb dispatch — an agent bypassing the app server's tool registry
+            and connecting directly to a broker's UDS still gets refused.
         added_at: When the integration was first added.
         updated_at: Last time the metadata or the encrypted blob was rewritten.
     """
 
-    version: int = 1
+    version: int = 2
     id: str
     slug: str
     label: str
-    write_allowed: bool = False
+    permissions: Permissions = {}
     added_at: datetime
     updated_at: datetime
+
+    @field_validator("permissions", mode="before")
+    @classmethod
+    def _parse_permissions(cls, v: Any) -> Permissions:
+        if isinstance(v, dict) and v and isinstance(next(iter(v.values())), str):
+            return permissions_from_dict(v)
+        return v
+
+    @field_serializer("permissions")
+    def _serialize_permissions(self, perms: Permissions) -> dict[str, str]:
+        return permissions_to_dict(perms)

@@ -10,6 +10,7 @@ from integrations.broker_client._errors import (
     IntegrationAuthFailed,
     IntegrationError,
     IntegrationNotConnected,
+    IntegrationPermissionDenied,
     IntegrationWriteDenied,
 )
 
@@ -17,6 +18,7 @@ __all__ = [
     "IntegrationAuthFailed",
     "IntegrationError",
     "IntegrationNotConnected",
+    "IntegrationPermissionDenied",
     "IntegrationWriteDenied",
     "call",
 ]

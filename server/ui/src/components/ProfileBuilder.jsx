@@ -1,29 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from './ProfileBuilder.module.css';
-import ChevronRightIcon from './icons/ChevronRightIcon';
-import ToggleSwitch from './ToggleSwitch.jsx';
+import ModelPicker from './ModelPicker.jsx';
+import Button from './primitives/Button.jsx';
 import Callout from './primitives/Callout.jsx';
-
-const PRESETS = {
-    balanced: { temperature: 0.7 },
-    creative: { temperature: 1.0, top_p: 0.95 },
-    precise:  { temperature: 0.2, top_k: 40 },
-    code:     { temperature: 0.3, think: true },
-};
-
-const PRESET_META = [
-    { id: 'balanced', label: 'Balanced', hint: '0.7 temp' },
-    { id: 'creative', label: 'Creative', hint: '1.0 temp, 0.95 top_p' },
-    { id: 'precise',  label: 'Precise',  hint: '0.2 temp, 40 top_k' },
-    { id: 'code',     label: 'Code',     hint: '0.3 temp, think' },
-];
-
-const INFERENCE_FIELDS = ['temperature', 'top_k', 'top_p', 'repeat_penalty', 'think'];
+import ConfirmButton from './primitives/ConfirmButton.jsx';
+import { InferenceSettings, resolvePreset, detectPreset, INFERENCE_FIELDS, isSupported } from './inference';
 
 const HELP_SECTIONS = [
     { title: 'Name', body: 'How this profile appears in the profile list and agent selector.' },
     { title: 'Description', body: 'A short summary of what this profile is tuned for. Shown below the name in the profile list.' },
-    { title: 'Model', body: 'The Ollama model to use when this profile is active. Leave blank to use the system default.' },
+    { title: 'Model', body: 'The model to use when this profile is active.' },
     { title: 'System Prompt', body: 'Instructions prepended to every conversation. Controls the agent\'s personality, constraints, and behavior. Supports markdown.' },
     { title: 'Skills', body: 'Toggle which tool groups the agent can access. Disabled skills are not available during inference.' },
     { title: 'Inference Preset', body: 'Quick presets that set temperature, sampling, and thinking for common workloads. Selecting a preset fills in the advanced values.' },
@@ -31,44 +17,15 @@ const HELP_SECTIONS = [
     { title: 'Top K', body: 'Limits sampling to the K most probable tokens. 10 = factual, 40 = general, 100+ = creative.' },
     { title: 'Top P', body: 'Nucleus sampling — considers tokens whose cumulative probability exceeds P. 0.5 = focused, 0.9 = general, 1.0 = everything.' },
     { title: 'Repeat Penalty', body: '1.0 = off, 1.1 = general use, 1.5+ = strongly discourages repetition in long outputs.' },
-    { title: 'Context (num_ctx)', body: 'Maximum context window in K tokens. Higher values allow longer conversations but use more memory.' },
+    { title: 'Context Window', body: 'Maximum context window in tokens. Higher values allow longer conversations but use more memory (Ollama only).' },
     { title: 'Max Output (num_predict)', body: 'Maximum tokens the model can generate per turn. -1 = unlimited.' },
     { title: 'Iterations (max_iterations)', body: 'How many tool-call rounds the agent can chain per user message before stopping.' },
     { title: 'Thinking', body: 'When enabled, the model reasons step-by-step before answering. Good for math, logic, and code generation.' },
 ];
 
-function _detectPreset(draft) {
-    for (const [id, fields] of Object.entries(PRESETS)) {
-        const presetKeys = Object.keys(fields);
-        const allMatch = presetKeys.every((k) => {
-            const draftVal = draft[k];
-            const presetVal = fields[k];
-            if (typeof presetVal === 'boolean') return draftVal === presetVal;
-            return Number(draftVal) === presetVal;
-        });
-        if (!allMatch) continue;
-
-        const otherKeys = INFERENCE_FIELDS.filter((k) => !presetKeys.includes(k));
-        const othersNull = otherKeys.every((k) => draft[k] == null || draft[k] === '');
-        if (othersNull) return id;
-    }
-    return null;
-}
-
 function _cloneProfile(profile) {
     return JSON.parse(JSON.stringify(profile));
 }
-
-const ADVANCED_HELP = {
-    temperature: '0.0 = deterministic, 0.7 = general, 1.0+ = creative',
-    top_k: '10 = factual, 40 = general, 100+ = creative',
-    top_p: '0.5 = focused, 0.9 = general, 1.0 = everything',
-    repeat_penalty: '1.0 = off, 1.1 = general, 1.5+ = strongly discourages repetition',
-    context: 'Context window in tokens. Higher = more memory, slower',
-    max_output: 'Max tokens per response. Leave empty for unlimited',
-    iterations: 'Tool-call rounds per turn. Leave empty for unlimited',
-    thinking: 'Step-by-step reasoning before answering. Good for math, logic, code',
-};
 
 export default function ProfileBuilder({
     profile,
@@ -76,17 +33,15 @@ export default function ProfileBuilder({
     onDelete,
     onDuplicate,
     models,
+    provider = 'ollama',
     availableSkills,
     deleteConflict,
     onDismissDeleteConflict,
 }) {
     const [draft, setDraft] = useState(null);
-    const [showAdvanced, setShowAdvanced] = useState(false);
     const [saveError, setSaveError] = useState(null);
 
-    // Clone profile into local draft whenever the prop changes
     useEffect(() => {
-        setShowAdvanced(false);
         setSaveError(null);
         if (profile) {
             setDraft(_cloneProfile(profile));
@@ -97,34 +52,30 @@ export default function ProfileBuilder({
 
     const activePreset = useMemo(() => {
         if (!draft) return null;
-        return _detectPreset(draft);
-    }, [draft]);
+        return detectPreset(draft, provider);
+    }, [draft, provider]);
 
     const update = useCallback((field, value) => {
         setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
     }, []);
 
-    const updateInference = useCallback((field, value) => {
-        setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
-    }, []);
-
     const applyPreset = useCallback((presetId) => {
-        const values = PRESETS[presetId];
+        const values = resolvePreset(presetId, provider);
         if (!values) return;
         setDraft((prev) => {
             if (!prev) return prev;
             const next = { ...prev };
-            // Clear all inference fields first
             for (const k of INFERENCE_FIELDS) {
                 next[k] = null;
             }
-            // Apply preset values
             for (const [k, v] of Object.entries(values)) {
-                next[k] = v;
+                if (isSupported(k, provider)) {
+                    next[k] = v;
+                }
             }
             return next;
         });
-    }, []);
+    }, [provider]);
 
     const toggleSkill = useCallback((skill) => {
         setDraft((prev) => {
@@ -148,17 +99,14 @@ export default function ProfileBuilder({
         if (!draft || !onSave) return;
         setSaveError(null);
         const result = await onSave(draft);
-        // onSave may return { ok, error } from useAgentProfiles
         if (result && result.ok === false && result.error) {
             setSaveError(result.error);
-            // Revert enabled toggle locally so the UI matches server state
             if (result.error.error === 'default_agent_cannot_be_disabled') {
                 setDraft((prev) => (prev ? { ...prev, enabled: true } : prev));
             }
         }
     }, [draft, onSave]);
 
-    // Empty state
     if (!profile) {
         return (
             <div className={styles.wrapper}>
@@ -171,37 +119,28 @@ export default function ProfileBuilder({
 
     if (!draft) return null;
 
-
     return (
         <div className={styles.wrapper}>
             <div className={styles.editor}>
                 {/* Actions bar */}
                 <div className={styles.actionsBar}>
-                        <button
-                            className={styles.deleteBtn}
-                            onClick={() => onDelete?.(profile.id)}
-                        >
-                            Delete
-                        </button>
+                        <ConfirmButton
+                            label="Delete"
+                            confirmLabel="Confirm?"
+                            busyLabel="Deleting…"
+                            title="Delete this profile"
+                            onConfirm={() => onDelete?.(profile.id)}
+                        />
                         <div className={styles.actionsRight}>
-                            <button
-                                className={styles.secondaryBtn}
-                                onClick={() => onDuplicate?.(profile.id)}
-                            >
+                            <Button onClick={() => onDuplicate?.(profile.id)}>
                                 Duplicate
-                            </button>
-                            <button
-                                className={styles.secondaryBtn}
-                                onClick={handleRevert}
-                            >
+                            </Button>
+                            <Button onClick={handleRevert}>
                                 Revert
-                            </button>
-                            <button
-                                className={styles.primaryBtn}
-                                onClick={handleSave}
-                            >
+                            </Button>
+                            <Button variant="filled" onClick={handleSave}>
                                 Save
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -256,17 +195,23 @@ export default function ProfileBuilder({
                     </section>
 
                     {/* 2. Model */}
-                    <section className={styles.section}>
+                    <section className={styles.section} data-testid="profile-model-picker">
                         <div className={styles.sectionLabel}>Model</div>
-                        <select
-                            className={styles.selectInput}
-                            value={draft.model || ''}
-                            onChange={(e) => update('model', e.target.value)}
-                        >
-                            {(models || []).map((m) => (
-                                <option key={m.name} value={m.name}>{m.name}</option>
-                            ))}
-                        </select>
+                        <ModelPicker
+                            models={models || []}
+                            selected={draft.model || null}
+                            onSelect={(name) => {
+                                const meta = (models || []).find((m) => m.name === name);
+                                setDraft((prev) => {
+                                    if (!prev) return prev;
+                                    const next = { ...prev, model: name || '' };
+                                    if (meta?.context_window != null) {
+                                        next.context_window = meta.context_window;
+                                    }
+                                    return next;
+                                });
+                            }}
+                        />
                     </section>
 
                     {/* 3. System Prompt */}
@@ -302,97 +247,15 @@ export default function ProfileBuilder({
                         </div>
                     </section>
 
-                    {/* 5. Inference Preset */}
-                    <section className={styles.section}>
-                        <div className={styles.sectionLabel}>Inference Preset</div>
-                        <div className={styles.presetGrid}>
-                            {PRESET_META.map((p) => (
-                                <button
-                                    key={p.id}
-                                    className={`${styles.presetBtn} ${activePreset === p.id ? styles.presetActive : ''}`}
-                                    onClick={() => applyPreset(p.id)}
-                                    >
-                                    <span className={styles.presetLabel}>{p.label}</span>
-                                    <span className={styles.presetHint}>{p.hint}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* 6. Advanced Settings */}
-                    <section className={styles.section}>
-                        <button
-                            className={styles.advancedToggle}
-                            onClick={() => setShowAdvanced((v) => !v)}
-                        >
-                            <ChevronRightIcon className={`${styles.chevron} ${showAdvanced ? styles.chevronOpen : ''}`} />
-                            Advanced Settings
-                        </button>
-
-                        {showAdvanced && (
-                            <div className={styles.advancedBody}>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Temperature</span>
-                                        <input className={styles.numInput} type="number" value={draft.temperature ?? ''} onChange={(e) => updateInference('temperature', e.target.value === '' ? null : Number(e.target.value))} min={0} max={2} step={0.1} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.temperature}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Top K</span>
-                                        <input className={styles.numInput} type="number" value={draft.top_k ?? ''} onChange={(e) => updateInference('top_k', e.target.value === '' ? null : Number(e.target.value))} min={0} step={1} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.top_k}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Top P</span>
-                                        <input className={styles.numInput} type="number" value={draft.top_p ?? ''} onChange={(e) => updateInference('top_p', e.target.value === '' ? null : Number(e.target.value))} min={0} max={1} step={0.05} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.top_p}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Repeat Penalty</span>
-                                        <input className={styles.numInput} type="number" value={draft.repeat_penalty ?? ''} onChange={(e) => updateInference('repeat_penalty', e.target.value === '' ? null : Number(e.target.value))} min={0} step={0.05} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.repeat_penalty}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Context</span>
-                                        <input className={styles.numInput} type="number" value={draft.num_ctx ?? ''} onChange={(e) => update('num_ctx', e.target.value === '' ? null : Number(e.target.value))} min={1} placeholder="auto" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.context}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Max Output</span>
-                                        <input className={styles.numInput} type="number" value={draft.num_predict ?? ''} onChange={(e) => update('num_predict', e.target.value === '' ? null : Number(e.target.value))} min={-1} step={1} placeholder="unlimited" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.max_output}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Iterations</span>
-                                        <input className={styles.numInput} type="number" value={draft.max_iterations ?? ''} onChange={(e) => update('max_iterations', e.target.value === '' ? null : Number(e.target.value))} min={1} step={1} placeholder="unlimited" />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.iterations}</span>
-                                </div>
-                                <div className={styles.advancedField}>
-                                    <label className={styles.fieldRow}>
-                                        <span className={styles.fieldLabel}>Thinking</span>
-                                        <ToggleSwitch
-                                            checked={draft.think || false}
-                                            onChange={(e) => updateInference('think', e.target.checked || null)}
-                                        />
-                                    </label>
-                                    <span className={styles.fieldHint}>{ADVANCED_HELP.thinking}</span>
-                                </div>
-                            </div>
-                        )}
-                    </section>
+                    {/* 5. Inference (presets + advanced) */}
+                    <InferenceSettings
+                        key={draft.id}
+                        draft={draft}
+                        provider={provider}
+                        activePreset={activePreset}
+                        onFieldChange={update}
+                        onApplyPreset={applyPreset}
+                    />
                 </div>
 
             </div>
@@ -402,8 +265,6 @@ export default function ProfileBuilder({
 }
 
 function DeleteConflictCallout({ conflict, onDismiss }) {
-    // Group usage rows by goal — multiple tasks in the same goal collapse
-    // into a single line. The user only needs to know which goals to clear.
     const goals = useMemo(() => {
         const seen = new Set();
         const rows = [];

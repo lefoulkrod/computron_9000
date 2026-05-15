@@ -10,8 +10,6 @@ import re
 from pathlib import Path
 from typing import Final
 
-from tools._truncation import truncate_args
-
 from ._fs_internal import is_binary_file, write_text_lines
 from .models import InsertTextResult, ReplaceInFileResult
 
@@ -22,7 +20,6 @@ _WHERE_VALUES: Final[set[str]] = {"after", "before", "replace"}
 _OCCURRENCE_VALUES: Final[set[str]] = {"first", "all"}
 
 
-@truncate_args(replacement=200)
 def replace_in_file(
     path: str,
     pattern: str,
@@ -77,7 +74,6 @@ def replace_in_file(
         )
 
 
-@truncate_args(text=200)
 def insert_text(
     path: str,
     anchor: str,

@@ -7,5 +7,5 @@
   "skills": ["browser", "coder"],
   "temperature": 0.5,
   "think": true,
-  "num_ctx": 60000
+  "context_window": 60000
 }

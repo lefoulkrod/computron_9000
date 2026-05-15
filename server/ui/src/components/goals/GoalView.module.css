@@ -76,29 +76,8 @@
     font-family: inherit;
 }
 
-.actionBtn {
-    font-size: 11px;
-    padding: 5px 12px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-family: inherit;
-}
-
-.actionBtn:hover {
-    background: var(--canvas);
-}
-
-.danger {
-    border-color: var(--danger-muted);
-    color: var(--danger);
-}
-
-.danger:hover {
-    background: var(--danger-muted);
-}
+/* Action-bar buttons (Run now / Pause/Resume / Delete) now render via the
+ * Button + ConfirmButton primitives — see ../primitives/. */
 
 .body {
     display: flex;

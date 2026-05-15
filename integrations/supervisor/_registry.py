@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from integrations.permissions import Access, Capability
 from integrations.supervisor._spawn import BrokerHandle
 from integrations.supervisor.types import IntegrationMeta
 
@@ -19,11 +20,12 @@ IntegrationState = Literal["running", "auth_failed", "broken"]
 class IntegrationRecord:
     """In-memory state for one active integration.
 
-    Pairs the integration's persisted metadata (slug, label, write_allowed,
+    Pairs the integration's persisted metadata (slug, label, permissions,
     timestamps — the same thing on disk at ``<id>.meta``) with the live
-    ``BrokerHandle`` and a snapshot of ``capabilities`` lifted from the
-    catalog at construction time. ``capabilities`` is denormalized here
-    so the ``list`` verb doesn't need to look the catalog back up.
+    ``BrokerHandle`` and ``max_access`` — the highest access level per
+    capability that the provider/scopes allow. Denormalized here (lifted
+    from the catalog at construction time) so the ``list`` verb doesn't
+    need to look the catalog back up.
 
     Runtime-only fields:
 
@@ -39,7 +41,7 @@ class IntegrationRecord:
 
     meta: IntegrationMeta
     broker: BrokerHandle
-    capabilities: frozenset[str]
+    max_access: dict[Capability, Access]
     state: IntegrationState = "running"
     expected_termination: bool = False
 

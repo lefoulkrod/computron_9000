@@ -53,12 +53,14 @@ class TaskExecutor:
             ],
             instance_id=conversation_id,
         )
-        num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
         ctx_manager = ContextManager(
             history=history,
-            context_limit=num_ctx,
+            context_limit=agent.context_window,
             agent_name=agent.name,
-            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
+            strategies=[
+                ToolClearingStrategy(),
+                LLMCompactionStrategy(threshold=agent.compaction_threshold),
+            ],
         )
         hooks = default_hooks(agent, max_iterations=agent.max_iterations, ctx_manager=ctx_manager)
         hooks.append(

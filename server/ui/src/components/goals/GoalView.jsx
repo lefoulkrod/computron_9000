@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import RunDetail from './RunDetail.jsx';
 import TaskDetail from './TaskDetail.jsx';
 import { StatusIcon, formatTime, formatDuration, formatCron } from './goalUtils.jsx';
+import Button from '../primitives/Button.jsx';
+import ConfirmButton from '../primitives/ConfirmButton.jsx';
 import styles from './GoalView.module.css';
 
 export default function GoalView({ goal, onBack, onDeleteGoal, onDeleteRun, onPauseGoal, onResumeGoal, onTriggerGoal, fetchDetail }) {
@@ -68,15 +70,19 @@ export default function GoalView({ goal, onBack, onDeleteGoal, onDeleteRun, onPa
                         </span>
                     )}
                     <div className={styles.actions}>
-                        <button className={styles.actionBtn} onClick={() => onTriggerGoal(goal.id)}>Run Now</button>
+                        <Button variant="filled" onClick={() => onTriggerGoal(goal.id)}>Run now</Button>
                         {isActive ? (
-                            <button className={styles.actionBtn} onClick={() => onPauseGoal(goal.id)}>Pause</button>
+                            <Button onClick={() => onPauseGoal(goal.id)}>Pause</Button>
                         ) : (
-                            <button className={styles.actionBtn} onClick={() => onResumeGoal(goal.id)}>Resume</button>
+                            <Button onClick={() => onResumeGoal(goal.id)}>Resume</Button>
                         )}
-                        <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => { onDeleteGoal(goal.id); onBack(); }}>
-                            Delete
-                        </button>
+                        <ConfirmButton
+                            label="Delete"
+                            confirmLabel="Confirm?"
+                            busyLabel="Deleting…"
+                            title="Delete this goal"
+                            onConfirm={() => { onDeleteGoal(goal.id); onBack(); }}
+                        />
                     </div>
                 </div>
             </div>

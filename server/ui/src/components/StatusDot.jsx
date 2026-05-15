@@ -1,9 +1,15 @@
 import styles from './StatusDot.module.css';
 
-/**
- * Colored status dot indicating agent state.
- * Pulses when running, static otherwise.
- */
+const STATUS_ALIAS = {
+    success: 'complete',
+    stopped: 'idle',
+    connected: 'ready',
+    disconnected: 'error',
+    completed: 'complete',
+    failed: 'error',
+};
+
 export default function StatusDot({ status }) {
-    return <span className={`${styles.dot} ${styles[status] || ''}`} />;
+    const resolved = STATUS_ALIAS[status] || status;
+    return <span className={`${styles.dot} ${styles[resolved] || ''}`} />;
 }

@@ -18,6 +18,8 @@ import itertools
 import logging
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+
+from ._cleanup import run_agent_span_exit_hooks
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # Avoid runtime import cycles; only needed for typing
@@ -121,6 +123,13 @@ async def agent_span(
     # lifetime; a borrowed instance also preserves skills across spans.
     ls_token = _active_agent_state.set(agent_state if agent_state is not None else AgentState([]))
 
+    # Lazy import: sdk.turn._nudge_queue is a leaf module with no internal
+    # deps, but importing it at module level triggers sdk.turn.__init__ which
+    # pulls in _execution.py → sdk.events (circular).
+    from sdk.turn._nudge_queue import register_nudge_queue, unregister_nudge_queue
+
+    register_nudge_queue(context_id)
+
     logger.info(
         "Agent started: %s (id=%s, parent=%s, depth=%d)",
         agent_name, context_id, parent_id, depth,
@@ -144,12 +153,7 @@ async def agent_span(
         status = "stopped" if isinstance(exc, StopRequestedError) else "error"
         raise
     finally:
-        # Release ephemeral browser context for this agent.
-        try:
-            from tools.browser.core import release_agent_browser
-            await release_agent_browser(context_id)
-        except Exception:  # noqa: BLE001
-            logger.debug("No browser context to release for '%s'", context_id)
+        await run_agent_span_exit_hooks(context_id)
 
         logger.info(
             "Agent completed: %s (id=%s, status=%s, depth=%d)",
@@ -161,6 +165,7 @@ async def agent_span(
             agent_name=agent_name or "",
             status=status,
         )))
+        unregister_nudge_queue(context_id)
         _active_agent_state.reset(ls_token)
         _context_stack.reset(token)
 

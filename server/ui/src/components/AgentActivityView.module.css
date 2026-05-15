@@ -142,35 +142,42 @@
     padding: 8px;
 }
 
-/* Nudge bar */
+/* Nudge bar — lightweight variant of the chat input */
 .nudgeBar {
     flex-shrink: 0;
-    padding: 8px 16px;
+    padding: var(--sp-2) var(--sp-3);
     border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-2);
     background: var(--canvas);
 }
 .nudgeLabel {
-    font-size: 9px;
+    font-size: 0.75rem;
+    font-weight: 500;
     color: var(--text-tertiary);
     flex-shrink: 0;
 }
 .nudgeInput {
     flex: 1;
-    background: var(--surface);
+    background: var(--canvas);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 6px 10px;
+    padding: var(--sp-1) var(--sp-2);
     color: var(--text-primary);
-    font-size: 10px;
+    font-size: 0.8125rem;
+    font-family: var(--font-body);
     outline: none;
+    transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+.nudgeInput::placeholder {
+    color: var(--text-tertiary);
 }
 .nudgeInput:focus {
-    border-color: var(--border-strong);
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
 }
 .nudgeHint {
-    font-size: 8px;
+    font-size: 0.6875rem;
     color: var(--text-tertiary);
 }

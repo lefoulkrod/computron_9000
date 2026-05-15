@@ -63,7 +63,8 @@ function _handleStreamEvent(data, callbacks) {
         callbacks.onToolCreated();
     }
 
-    // Tool call → show on agent card, log it, refresh memory if needed
+    // Tool call → update card badge, refresh memory if needed.
+    // Activity log entry is buffered by the caller for correct ordering.
     if (type === 'tool_call') {
         if (payload.name === 'remember' || payload.name === 'forget') {
             callbacks.onMemoryChanged();
@@ -171,21 +172,34 @@ export default function useStreamingChat(callbacks) {
     }, []);
     const abortControllerRef = useRef(null);
     const conversationIdRef = useRef(_uuid());
+    const rootAgentIdRef = useRef(null);
 
-    const sendMessage = useCallback(async (message, fileData, modelSettings) => {
-        if (!message && !fileData) return;
-
-        // If already streaming, send as a nudge (fire-and-forget)
-        if (isStreamingRef.current) {
-            const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
-            fetch('/api/chat', {
+    const sendNudge = useCallback(async (message, agentId) => {
+        if (!message) return;
+        const nudgeBody = {
+            message,
+            conversation_id: conversationIdRef.current,
+            agent_id: agentId || rootAgentIdRef.current,
+        };
+        try {
+            const res = await fetch('/api/nudge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            }).catch(() => {});
-            if (callbacks.onNudgeSent) callbacks.onNudgeSent(message || '');
-            return;
+                body: JSON.stringify(nudgeBody),
+            });
+            if (res.ok) {
+                if (callbacks.onNudgeSent) callbacks.onNudgeSent({ ok: true, message });
+            } else {
+                const data = await res.json().catch(() => ({}));
+                if (callbacks.onNudgeSent) callbacks.onNudgeSent({ ok: false, status: res.status, error: data.error });
+            }
+        } catch {
+            if (callbacks.onNudgeSent) callbacks.onNudgeSent({ ok: false, status: 0, error: 'Could not reach the server' });
         }
+    }, [callbacks]);
+
+    const sendMessage = useCallback(async (message, fileData, profileId) => {
+        if (!message && !fileData) return;
 
         // Build user message with optional attachment preview
         const userMsg = {
@@ -207,7 +221,7 @@ export default function useStreamingChat(callbacks) {
             { id: placeholderId, role: 'assistant', placeholder: true },
         ]);
 
-        const body = _buildRequestBody(message, fileData, modelSettings, conversationIdRef.current);
+        const body = _buildRequestBody(message, fileData, profileId, conversationIdRef.current);
 
         // IDs for pending animation frame flushes. Declared here so the
         // finally block can cancel them if the stream errors or aborts.
@@ -235,42 +249,24 @@ export default function useStreamingChat(callbacks) {
             // rendered identically to the agent activity view.
             const assistantId = placeholderId;
 
-            // ── Token buffering ───────────────────────────────────────
-            // Tokens arrive one word at a time. Updating React on every
-            // single one would be way too slow. Instead we collect them
-            // and flush once per screen paint (~60fps).
-            //
-            // ALL agent tokens (root and sub) go through the same path:
-            //   bufferAgentToken → flushAgentBuffers → onAgentContent
-            //   → agent reducer (APPEND_STREAM_CHUNK)
-            //
-            // The chat view reads the root agent's activityLog from the
-            // reducer — same source as the activity view. No separate
-            // buffer for root agent tokens.
-            const agentPending = {};  // { [agentId]: { content: '', thinking: '' } }
+            // ── Activity log buffering ────────────────────────────────
+            // Events arrive faster than React can render. We queue
+            // everything in arrival order and flush once per animation
+            // frame (~60fps). React 18 batches the dispatches into one
+            // render, and the reducer merges consecutive same-type entries.
+            const pending = [];
 
-            const flushAgentBuffers = () => {
+            const flush = () => {
                 agentRafId = null;
-                for (const [aid, buf] of Object.entries(agentPending)) {
-                    if (!buf.content && !buf.thinking) continue;
-                    if (callbacks.onAgentContent) {
-                        callbacks.onAgentContent({
-                            agentId: aid,
-                            content: buf.content || null,
-                            thinking: buf.thinking || null,
-                        });
-                    }
-                    buf.content = '';
-                    buf.thinking = '';
+                for (const op of pending) {
+                    op.callback(op.args);
                 }
+                pending.length = 0;
             };
 
-            const bufferAgentToken = (agentId, content, thinking) => {
-                if (!agentPending[agentId]) agentPending[agentId] = { content: '', thinking: '' };
-                if (content) agentPending[agentId].content += content;
-                if (thinking) agentPending[agentId].thinking += thinking;
+            const scheduleFlush = () => {
                 if (agentRafId === null) {
-                    agentRafId = requestAnimationFrame(flushAgentBuffers);
+                    agentRafId = requestAnimationFrame(flush);
                 }
             };
 
@@ -298,6 +294,7 @@ export default function useStreamingChat(callbacks) {
                         // Set agentId on the assistant message so the chat
                         // view can look up this agent's activityLog.
                         if (payload?.type === 'agent_started' && !payload.parent_agent_id) {
+                            rootAgentIdRef.current = payload.agent_id;
                             setMessages((prev) => {
                                 const i = prev.length - 1;
                                 if (i < 0 || prev[i].id !== assistantId) return prev;
@@ -307,25 +304,52 @@ export default function useStreamingChat(callbacks) {
                             });
                         }
 
-                        // ── Text tokens ──────────────────────────────────
-                        // All agents (root and sub) go through the same
-                        // buffer → onAgentContent → agent reducer path.
-                        if (payload?.type === 'content' && data.agent_id) {
+                        if (payload?.type === 'content' && data.agent_id && callbacks.onAgentContent) {
                             const contentField = payload.content || '';
                             const hasResponse = contentField.length > 0;
                             const hasThinking = typeof payload.thinking === 'string' && payload.thinking.length > 0;
                             if (hasResponse || hasThinking) {
-                                bufferAgentToken(
-                                    data.agent_id,
-                                    hasResponse ? contentField : null,
-                                    hasThinking ? payload.thinking : null,
-                                );
+                                pending.push({
+                                    callback: callbacks.onAgentContent,
+                                    args: {
+                                        agentId: data.agent_id,
+                                        content: hasResponse ? contentField : null,
+                                        thinking: hasThinking ? payload.thinking : null,
+                                    },
+                                });
+                                scheduleFlush();
                             }
+                        }
+
+                        if (payload?.type === 'tool_call' && data.agent_id && callbacks.onActivityEntry) {
+                            pending.push({
+                                callback: callbacks.onActivityEntry,
+                                args: {
+                                    agentId: data.agent_id,
+                                    entry: { type: 'tool_call', name: payload.name, timestamp: Date.now() },
+                                },
+                            });
+                            scheduleFlush();
+                        }
+
+                        if (payload?.type === 'file_output' && data.agent_id && callbacks.onActivityEntry) {
+                            pending.push({
+                                callback: callbacks.onActivityEntry,
+                                args: {
+                                    agentId: data.agent_id,
+                                    entry: { type: 'file_output', ...payload, timestamp: Date.now() },
+                                },
+                            });
+                            scheduleFlush();
                         }
 
                         // Turn end — flush and mark done
                         if (payload?.type === 'turn_end') {
-                            flushAgentBuffers();
+                            if (agentRafId !== null) {
+                                cancelAnimationFrame(agentRafId);
+                                agentRafId = null;
+                            }
+                            flush();
                             setMessages((prev) => {
                                 const i = prev.length - 1;
                                 if (i < 0 || prev[i].id !== assistantId) return prev;
@@ -339,8 +363,8 @@ export default function useStreamingChat(callbacks) {
                     }
                 }
             }
-            // Stream ended — flush any remaining buffered tokens
-            flushAgentBuffers();
+            // Stream ended — flush any remaining buffered entries
+            flush();
         } catch (err) {
             if (err.name === 'AbortError') return;
             // Replace the placeholder (or append) with an error message
@@ -417,6 +441,7 @@ export default function useStreamingChat(callbacks) {
         messages,
         isStreaming,
         sendMessage,
+        sendNudge,
         stopGeneration,
         loadConversation,
         newConversation,

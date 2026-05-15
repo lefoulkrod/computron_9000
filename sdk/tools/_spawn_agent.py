@@ -39,10 +39,22 @@ def _log_spawn(agent_name: str, profile: AgentProfile, instruction_preview: str)
         params.append(f"top_k={profile.top_k}")
     if profile.top_p is not None:
         params.append(f"top_p={profile.top_p}")
+    if profile.repeat_penalty is not None:
+        params.append(f"repeat_penalty={profile.repeat_penalty}")
+    if profile.num_predict is not None:
+        params.append(f"num_predict={profile.num_predict}")
+    if profile.context_window is not None:
+        params.append(f"ctx={profile.context_window}")
+    if profile.compaction_threshold is not None:
+        params.append(f"compact@{int(profile.compaction_threshold * 100)}%")
     if profile.think:
         params.append("think")
-    if profile.num_ctx is not None:
-        params.append(f"ctx={profile.num_ctx}")
+    if profile.reasoning_effort is not None:
+        params.append(f"reasoning_effort={profile.reasoning_effort}")
+    if profile.reasoning_summary is not None:
+        params.append(f"reasoning_summary={profile.reasoning_summary}")
+    if profile.thinking_budget is not None:
+        params.append(f"thinking_budget={profile.thinking_budget}")
     if profile.max_iterations is not None:
         params.append(f"max_iter={profile.max_iterations}")
     if params:
@@ -175,12 +187,14 @@ async def spawn_agent(
             instance_id=instance_id,
         )
 
-        num_ctx = agent.options.get("num_ctx", 0) if agent.options else 0
         ctx_manager = ContextManager(
             history=history,
-            context_limit=num_ctx,
+            context_limit=agent.context_window,
             agent_name=agent.name,
-            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
+            strategies=[
+                ToolClearingStrategy(),
+                LLMCompactionStrategy(threshold=agent.compaction_threshold),
+            ],
         )
         hooks = default_hooks(
             agent,

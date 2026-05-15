@@ -93,49 +93,9 @@
     outline-offset: 2px;
 }
 
-/* Status dot */
-.statusDot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
 
-.statusConnected {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-muted);
-}
-
-.statusDisconnected {
-    background: var(--danger);
-    box-shadow: 0 0 6px var(--danger-muted);
-}
-
-/* Action buttons (Refresh, Run Setup Wizard) */
-.actionBtn {
-    flex-shrink: 0;
-    height: 30px;
-    font-family: var(--font-brand);
-    font-size: 0.75rem;
-    padding: 0 0.75rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: var(--canvas);
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    box-shadow: none;
-}
-
-.actionBtn:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent-muted);
-}
-
-.actionBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+/* Action buttons (Refresh, Run Setup Wizard) now render via the
+ * Button primitive — see ./primitives/Button.jsx. */
 
 /* ── Group card: a row plus a nested disclosure + advanced body ── */
 .groupCard {
@@ -251,6 +211,11 @@
 .numberInput:focus {
     border-color: var(--accent);
     box-shadow: var(--shadow-glow);
+}
+
+/* Picker row below a setting row */
+.pickerRow {
+    padding: 0 var(--sp-3) var(--sp-2);
 }
 
 /* Info note */

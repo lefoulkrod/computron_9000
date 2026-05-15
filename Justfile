@@ -205,25 +205,25 @@ logs:
 # Testing
 # =============================================================================
 
-# Run all unit tests on host
-test:
-    PYTHONPATH=. uv run pytest
+# Run unit tests (tests/unit/)
+unit:
+    PYTHONPATH=. uv run pytest tests/unit/
 
 # Run tests matching a specific file or path
 test-file file:
     PYTHONPATH=. uv run pytest {{file}}
 
-# Run only tests marked @pytest.mark.unit
-test-unit:
-    PYTHONPATH=. uv run pytest -m unit
+# Run integration tests (needs a running container with Ollama)
+integration:
+    COMPUTRON_URL="${COMPUTRON_URL:-http://localhost:8080}" PYTHONPATH=. uv run pytest tests/integration/
 
 # Coverage report
 test-cov:
-    PYTHONPATH=. uv run pytest --cov-report=html --cov-report=term
+    PYTHONPATH=. uv run pytest tests/unit/ --cov-report=html --cov-report=term
 
 # Watch mode (pytest-watch)
 test-watch:
-    PYTHONPATH=. uv run ptw
+    PYTHONPATH=. uv run ptw tests/unit/
 
 # Run UI tests (Vitest)
 test-ui *args:
@@ -245,7 +245,7 @@ manual-test:
     echo "🏗️  Building ${image}"
     docker build -f container/Dockerfile -t "$image" .
     name="computron_manual_test"
-    port=9090
+    port=9091
     state=$(mktemp -d)
     mkdir -p "$state/home" "$state/state"
     cleanup() {
@@ -352,7 +352,7 @@ e2e *args:
     fi
 
     targets="{{args}}"
-    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest ${targets:-e2e/}
+    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest ${targets:-tests/e2e/}
 
 
 # =============================================================================
@@ -379,8 +379,8 @@ format-check:
 # All non-mutating checks
 check: lint typecheck format-check
 
-# CI-style: check + tests
-ci: check test
+# CI-style: check + unit tests
+ci: check unit
 
 
 # =============================================================================

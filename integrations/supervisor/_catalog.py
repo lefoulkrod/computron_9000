@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from integrations.permissions import Access, Capability, Permissions
 from integrations.supervisor.types import HostPath, HostPathBinding
 
 
@@ -29,13 +30,10 @@ class CatalogEntry:
     """The argv to exec for the broker subprocess
     (e.g. ``["python", "-m", "integrations.brokers.email_broker"]``)."""
 
-    capabilities: frozenset[str] = frozenset()
-    """Tags the app server uses to decide which agent tools to expose for this
-    integration. Each capability corresponds to a family of tools — e.g.
-    ``"email"`` unlocks the IMAP-backed email tools; ``"calendar"`` unlocks
-    CalDAV tools when those land. The supervisor surfaces these in ``list``
-    and ``add`` RPC responses so the app server doesn't need to know which
-    slug supports which tools."""
+    capabilities: dict[Capability, Access] = field(default_factory=dict)
+    """Per-capability maximum access level for static providers (app-password
+    integrations where the credential grants everything). Each capability
+    corresponds to a family of agent tools."""
 
     static_env: dict[str, str] = field(default_factory=dict)
     """Env vars the supervisor provides directly — protocol hosts, ports, etc.
@@ -54,6 +52,30 @@ class CatalogEntry:
     write). Empty for integrations that don't touch shared state — the MCP
     broker, for example."""
 
+    scope_capabilities: dict[str, tuple[Capability, Access]] = field(default_factory=dict)
+    """Maps OAuth scope URIs to ``(capability, max_access)`` pairs. When
+    non-empty, the per-integration max access is derived from the granted
+    scopes in the auth blob instead of from the static ``capabilities``
+    field. For each capability, the highest access level among all matching
+    granted scopes wins."""
+
+    def resolve_capabilities(self, auth_blob: dict | None = None) -> dict[Capability, Access]:
+        """Derive the max access level per capability for one integration.
+
+        For static providers (iCloud, Gmail) returns ``self.capabilities``
+        unchanged. For OAuth providers with ``scope_capabilities`` set,
+        inspects the auth blob's ``"scopes"`` field and returns the highest
+        granted access level per capability.
+        """
+        if not self.scope_capabilities or auth_blob is None:
+            return dict(self.capabilities)
+        granted = set((auth_blob.get("scopes") or "").split())
+        ceiling: dict[Capability, Access] = {}
+        for scope, (cap, access) in self.scope_capabilities.items():
+            if scope in granted:
+                ceiling[cap] = max(ceiling.get(cap, Access.OFF), access)
+        return ceiling
+
 
 _EMAIL_HOST_PATHS = (
     # Email attachments land in the shared "downloads" role alongside browser
@@ -65,7 +87,10 @@ _EMAIL_HOST_PATHS = (
 _ICLOUD = CatalogEntry(
     slug="icloud",
     command=["python", "-m", "integrations.brokers.email_broker"],
-    capabilities=frozenset({"email", "calendar"}),
+    capabilities={
+        Capability.EMAIL: Access.READ_WRITE,
+        Capability.CALENDAR: Access.READ_WRITE,
+    },
     static_env={
         "IMAP_HOST": "imap.mail.me.com",
         "IMAP_PORT": "993",
@@ -86,7 +111,7 @@ _ICLOUD = CatalogEntry(
 _GMAIL = CatalogEntry(
     slug="gmail",
     command=["python", "-m", "integrations.brokers.email_broker"],
-    capabilities=frozenset({"email"}),
+    capabilities={Capability.EMAIL: Access.READ_WRITE},
     static_env={
         "IMAP_HOST": "imap.gmail.com",
         "IMAP_PORT": "993",
@@ -101,9 +126,87 @@ _GMAIL = CatalogEntry(
 )
 
 
+_LLM_OPENAI = CatalogEntry(
+    slug="llm_openai",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
+    static_env={
+        "LLM_PROVIDER": "openai",
+        "LLM_BASE_URL": "https://api.openai.com",
+    },
+    env_injection={"api_key": "LLM_API_KEY"},
+    host_paths=(),
+)
+
+_LLM_ANTHROPIC = CatalogEntry(
+    slug="llm_anthropic",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
+    static_env={
+        "LLM_PROVIDER": "anthropic",
+        "LLM_BASE_URL": "https://api.anthropic.com",
+    },
+    env_injection={"api_key": "LLM_API_KEY"},
+    host_paths=(),
+)
+
+_LLM_OPENROUTER = CatalogEntry(
+    slug="llm_openrouter",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
+    static_env={
+        "LLM_PROVIDER": "openai",
+        "LLM_BASE_URL": "https://openrouter.ai/api",
+    },
+    env_injection={"api_key": "LLM_API_KEY"},
+    host_paths=(),
+)
+
+_LLM_OPENAI_COMPAT = CatalogEntry(
+    slug="llm_openai_compat",
+    command=["python", "-m", "integrations.brokers.llm_proxy"],
+    capabilities={Capability.LLM_PROXY: Access.READ_WRITE},
+    static_env={"LLM_PROVIDER": "openai"},
+    env_injection={"api_key": "LLM_API_KEY", "base_url": "LLM_BASE_URL"},
+    host_paths=(),
+)
+
+_GOOGLE_WORKSPACE = CatalogEntry(
+    slug="google_workspace",
+    command=["python", "-m", "integrations.brokers.google_workspace_broker"],
+    static_env={},
+    env_injection={
+        "client_id": "OAUTH_CLIENT_ID",
+        "client_secret": "OAUTH_CLIENT_SECRET",
+        "access_token": "OAUTH_ACCESS_TOKEN",
+        "refresh_token": "OAUTH_REFRESH_TOKEN",
+        "token_uri": "OAUTH_TOKEN_URI",
+        "scopes": "OAUTH_SCOPES",
+        "expires_at": "OAUTH_EXPIRES_AT",
+    },
+    scope_capabilities={
+        "https://www.googleapis.com/auth/gmail.readonly": (Capability.EMAIL, Access.READ),
+        "https://www.googleapis.com/auth/gmail.modify": (Capability.EMAIL, Access.READ_WRITE),
+        "https://www.googleapis.com/auth/calendar.readonly": (Capability.CALENDAR, Access.READ),
+        "https://www.googleapis.com/auth/calendar.events": (Capability.CALENDAR, Access.READ_WRITE),
+        "https://www.googleapis.com/auth/drive.readonly": (Capability.DRIVE, Access.READ),
+        "https://www.googleapis.com/auth/drive.file": (Capability.DRIVE, Access.READ_WRITE),
+        "https://www.googleapis.com/auth/contacts.readonly": (Capability.CONTACTS, Access.READ),
+    },
+    host_paths=(
+        HostPathBinding(role="downloads", env_var="DOWNLOADS_DIR", mode="write"),
+    ),
+)
+
+
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
     "gmail": _GMAIL,
+    "llm_openai": _LLM_OPENAI,
+    "llm_anthropic": _LLM_ANTHROPIC,
+    "llm_openrouter": _LLM_OPENROUTER,
+    "llm_openai_compat": _LLM_OPENAI_COMPAT,
+    "google_workspace": _GOOGLE_WORKSPACE,
 }
 
 

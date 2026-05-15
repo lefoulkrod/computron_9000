@@ -28,7 +28,7 @@ function _buildBreadcrumb(agents, agentId) {
  *   Left: activity stream (thinking, text, tool calls) — auto-scrolls
  *   Right: preview panels (browser, terminal, files) scoped to this agent
  *
- * The nudge bar at the bottom always sends to the root agent.
+ * The nudge bar at the bottom sends to the currently viewed agent.
  * "← Agents" goes back to the network graph.
  */
 export default function AgentActivityView({ onNudge, onPreview }) {
@@ -111,15 +111,15 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                 <input
                     className={styles.nudgeInput}
                     type="text"
-                    placeholder="Send a nudge to root agent..."
+                    placeholder={`Send a nudge to ${formatAgentName(agent.name)}...`}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' && e.target.value.trim()) {
-                            if (onNudge) onNudge(e.target.value.trim());
+                            if (onNudge) onNudge(e.target.value.trim(), selectedAgentId);
                             e.target.value = '';
                         }
                     }}
                 />
-                <span className={styles.nudgeHint}>queues for root agent</span>
+                <span className={styles.nudgeHint}>queues for {formatAgentName(agent.name)}</span>
             </div>
         </div>
     );

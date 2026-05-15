@@ -258,39 +258,23 @@ async def run_turn(
                 tool_names = [tc.function.name for tc in tool_calls]
                 logger.debug("Executing %d tool call(s) for '%s': %s", len(tool_calls), agent.name, tool_names)
 
-                if parallel_cfg.enabled and len(tool_calls) > 1:
+                parallel = parallel_cfg.enabled and len(tool_calls) > 1
+                if parallel:
                     logger.info(
                         "Running %d tool calls in parallel for '%s' (max_concurrent=%d)",
                         len(tool_calls),
                         agent.name,
                         parallel_cfg.max_concurrent,
                     )
-                    sem = asyncio.Semaphore(parallel_cfg.max_concurrent)
+                sem = asyncio.Semaphore(parallel_cfg.max_concurrent if parallel else 1)
 
-                    async def _run_parallel(tc_item):
-                        async with sem:
-                            return tc_item, await _run_tool_with_hooks(tc_item, agent_state.tools, hooks)
+                async def _run(tc_item):
+                    async with sem:
+                        return await _run_tool_with_hooks(tc_item, agent_state.tools, hooks)
 
-                    tasks = [asyncio.create_task(_run_parallel(tc)) for tc in tool_calls]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for tc, result in zip(tool_calls, results):
-                        if isinstance(result, Exception):
-                            logger.error("Parallel tool call failed: %s", result)
-                            history.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tc.id,
-                                    "tool_name": tc.function.name,
-                                    "content": "Error: %s" % result,
-                                }
-                            )
-                        else:
-                            _tc, tool_result = result
-                            history.append(tool_result)
-                else:
-                    for tc in tool_calls:
-                        result = await _run_tool_with_hooks(tc, agent_state.tools, hooks)
-                        history.append(result)
+                results = await asyncio.gather(*[_run(tc) for tc in tool_calls])
+                for tool_result in results:
+                    history.append(tool_result)
 
             except StopRequestedError:
                 logger.info("Agent '%s' tool loop stopped by user request", agent.name)
@@ -298,7 +282,7 @@ async def run_turn(
                 raise
             except Exception as exc:
                 logger.exception("Unhandled exception in tool loop")
-                error_msg = "An error occurred while processing your message."
+                error_msg = str(exc) if isinstance(exc, ProviderError) else "An error occurred while processing your message."
                 publish_event(AgentEvent(payload=ContentPayload(type="content", content=error_msg)))
                 _publish_turn_end()
                 raise ToolLoopError(error_msg) from exc

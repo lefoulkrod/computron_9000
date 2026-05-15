@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from integrations.permissions import Permissions, permissions_to_env
 from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor.types import HostPath
 
@@ -49,14 +50,14 @@ async def spawn_broker(
     entry: CatalogEntry,
     integration_id: str,
     secret_bundle: dict,
-    write_allowed: bool,
+    permissions: Permissions,
     sockets_dir: Path,
     host_paths: dict[str, HostPath],
 ) -> BrokerHandle:
     """Spawn the broker for ``integration_id`` from its catalog entry.
 
     Combines the entry's static env, the credential-to-env mapping, the
-    per-spawn ``INTEGRATION_ID`` / ``BROKER_SOCKET`` / ``WRITE_ALLOWED`` vars,
+    per-spawn ``INTEGRATION_ID`` / ``BROKER_SOCKET`` / ``PERMISSIONS`` vars,
     and any host-path bindings the entry declares (each role looked up in
     ``host_paths`` and injected as the binding's env_var). Awaits ``READY\\n``
     on the subprocess's stdout before returning.
@@ -85,7 +86,7 @@ async def spawn_broker(
         env[binding.env_var] = str(spec.path)
     env["INTEGRATION_ID"] = integration_id
     env["BROKER_SOCKET"] = str(socket_path)
-    env["WRITE_ALLOWED"] = "true" if write_allowed else "false"
+    env["PERMISSIONS"] = permissions_to_env(permissions)
 
     logger.info("spawning broker for %s at %s", integration_id, socket_path)
 

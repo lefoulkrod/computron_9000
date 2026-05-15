@@ -7,5 +7,5 @@
   "skills": [],
   "temperature": 0.7,
   "think": true,
-  "num_ctx": 32000
+  "context_window": 32000
 }

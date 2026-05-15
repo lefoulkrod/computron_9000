@@ -27,7 +27,15 @@ export default function MobileApp({ dark, onToggleTheme }) {
         onToolCreated: _noop,
         onMemoryChanged: _noop,
         onAudioPlayback: _noop,
-        onNudgeSent: _noop,
+        onNudgeSent: (result) => {
+            if (result.ok) {
+                addToast('Nudge sent', { type: 'info', duration: 3000 });
+            } else if (result.status === 409) {
+                addToast('Agent is no longer running', { type: 'warn', duration: 5000 });
+            } else {
+                addToast(result.error || 'Could not send nudge', { type: 'error' });
+            }
+        },
         onSkillApplied: (event) => addToast(`Using skill: ${event.skill_name}`, { type: 'info', duration: 4000 }),
         onDesktopActive: _noop,
         onGenerationPreview: _noop,

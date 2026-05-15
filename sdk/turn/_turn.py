@@ -7,7 +7,7 @@ async context manager that sets up and tears down everything a turn needs:
 - An event dispatcher bound to a ContextVar so ``publish_event`` works
 - A per-conversation stop event so ``check_stop`` / ``request_stop`` work
 - Conversation liveness tracking (``is_turn_active``)
-- Per-conversation nudge queues (``queue_nudge`` / ``drain_nudges``) currently only applied to the root agent.
+- Nudge queues live in ``_nudge_queue.py`` (leaf module, no cycles).
 """
 
 from __future__ import annotations
@@ -48,10 +48,6 @@ _stop_event: ContextVar[asyncio.Event | None] = ContextVar("turn_stop_event", de
 # and inherited by sub-agents automatically via ContextVar semantics.
 _conversation_id: ContextVar[str | None] = ContextVar("turn_conversation_id", default=None)
 
-# Per-conversation nudge queues keyed by conversation_id.
-_nudge_queues: dict[str, list[str]] = {}
-
-
 def get_conversation_id() -> str | None:
     """Return the conversation ID for the current coroutine context, or None."""
     return _conversation_id.get()
@@ -91,26 +87,6 @@ def any_turn_active() -> bool:
     return bool(_active_conversations)
 
 
-def queue_nudge(conversation_id: str, message: str) -> None:
-    """Append a nudge message to the conversation's queue."""
-    q = _nudge_queues.get(conversation_id)
-    if q is not None:
-        q.append(message)
-
-
-def drain_nudges() -> list[str]:
-    """Pop and return all queued nudge messages for the current conversation."""
-    sid = _conversation_id.get()
-    if sid is None:
-        return []
-    q = _nudge_queues.get(sid)
-    if not q:
-        return []
-    messages = list(q)
-    q.clear()
-    return messages
-
-
 @asynccontextmanager
 async def turn_scope(
     handler: EventHandler | None = None,
@@ -123,7 +99,6 @@ async def turn_scope(
     - A fresh stop event is created and bound so ``check_stop`` works from any
       depth without parameter passing
     - The conversation is registered as active so ``is_turn_active`` returns True
-    - A nudge queue is created for the conversation
     - If a handler is provided, it is subscribed for the duration of the turn
     - In-flight async handler tasks are drained before teardown
     - Teardown always occurs, even if the body raises
@@ -140,7 +115,6 @@ async def turn_scope(
     stop_event = asyncio.Event()
     _active_conversations.add(sid)
     _active_stop_events[sid] = stop_event
-    _nudge_queues[sid] = []
     dispatcher_token = _current_dispatcher.set(dispatcher)
     stop_token = _stop_event.set(stop_event)
     conversation_token = _conversation_id.set(sid)
@@ -161,4 +135,3 @@ async def turn_scope(
             _conversation_id.reset(conversation_token)
             _active_conversations.discard(sid)
             _active_stop_events.pop(sid, None)
-            _nudge_queues.pop(sid, None)

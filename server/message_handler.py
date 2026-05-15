@@ -43,6 +43,7 @@ from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
 from sdk.turn import is_turn_active, turn_scope
 from sdk.turn._turn import StopRequestedError
+from tools.browser.core import release_agent_browser
 from tools.memory import load_memory
 from tools.virtual_computer.receive_file import receive_attachment
 
@@ -68,10 +69,22 @@ def _log_turn_start(profile: AgentProfile) -> None:
         params.append(f"top_k={profile.top_k}")
     if profile.top_p is not None:
         params.append(f"top_p={profile.top_p}")
+    if profile.repeat_penalty is not None:
+        params.append(f"repeat_penalty={profile.repeat_penalty}")
+    if profile.num_predict is not None:
+        params.append(f"num_predict={profile.num_predict}")
+    if profile.context_window is not None:
+        params.append(f"ctx={profile.context_window}")
+    if profile.compaction_threshold is not None:
+        params.append(f"compact@{int(profile.compaction_threshold * 100)}%")
     if profile.think:
         params.append("think")
-    if profile.num_ctx is not None:
-        params.append(f"ctx={profile.num_ctx}")
+    if profile.reasoning_effort is not None:
+        params.append(f"reasoning_effort={profile.reasoning_effort}")
+    if profile.reasoning_summary is not None:
+        params.append(f"reasoning_summary={profile.reasoning_summary}")
+    if profile.thinking_budget is not None:
+        params.append(f"thinking_budget={profile.thinking_budget}")
     if profile.max_iterations is not None:
         params.append(f"max_iter={profile.max_iterations}")
     if params:
@@ -107,7 +120,7 @@ _conversations: OrderedDict[str, _Conversation] = OrderedDict()
 _background_tasks: set[asyncio.Task] = set()
 
 
-def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
+async def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
     """Return ``(conversation, is_new)`` for the given ID, creating it if needed.
 
     ``is_new`` is True only when the conversation has no in-memory entry
@@ -134,11 +147,11 @@ def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
     _conversations[conversation_id] = _Conversation(
         history=ConversationHistory(persisted, instance_id=conversation_id),
     )
-    _evict_lru(exclude=conversation_id)
+    await _evict_lru_conversation(exclude=conversation_id)
     return _conversations[conversation_id], is_new
 
 
-def _evict_lru(exclude: str | None = None) -> None:
+async def _evict_lru_conversation(exclude: str | None = None) -> None:
     """Drop the oldest non-active entries until we are at or below the cap.
 
     Conversations whose turn is currently in flight are skipped — popping
@@ -158,6 +171,7 @@ def _evict_lru(exclude: str | None = None) -> None:
                 continue
             if not is_turn_active(cid):
                 _conversations.pop(cid)
+                await release_agent_browser(f"conv:{cid}")
                 logger.info(
                     "Evicted LRU conversation %s from in-memory cache", cid,
                 )
@@ -169,7 +183,7 @@ def _evict_lru(exclude: str | None = None) -> None:
             return
 
 
-def resume_conversation(conversation_id: str) -> list[dict] | None:
+async def resume_conversation(conversation_id: str) -> list[dict] | None:
     """Load a conversation's full-fidelity history and install it.
 
     Returns the raw messages for the UI to display, or None if not found.
@@ -183,7 +197,7 @@ def resume_conversation(conversation_id: str) -> list[dict] | None:
     )
     _conversations[conversation_id] = conversation
     _conversations.move_to_end(conversation_id)
-    _evict_lru(exclude=conversation_id)
+    await _evict_lru_conversation(exclude=conversation_id)
     return messages
 
 
@@ -234,12 +248,14 @@ def _ensure_context_manager(
 ) -> ContextManager:
     """Return the conversation's context manager, creating it if needed."""
     if conversation.context_manager is None:
-        num_ctx = active_agent.options.get("num_ctx", 0) if active_agent.options else 0
         conversation.context_manager = ContextManager(
             history=conversation.history,
-            context_limit=num_ctx,
+            context_limit=active_agent.context_window,
             agent_name=active_agent.name,
-            strategies=[ToolClearingStrategy(), LLMCompactionStrategy()],
+            strategies=[
+                ToolClearingStrategy(),
+                LLMCompactionStrategy(threshold=active_agent.compaction_threshold),
+            ],
         )
     return conversation.context_manager
 
@@ -386,7 +402,7 @@ async def handle_user_message(
     if not conversation_id:
         msg = "conversation_id is required"
         raise ValueError(msg)
-    conversation, is_new_conversation = _get_conversation(conversation_id)
+    conversation, is_new_conversation = await _get_conversation(conversation_id)
 
     user_content = message
     if data:

@@ -77,3 +77,18 @@ class ChatResponse(BaseModel):
     raw: Any = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class ModelInfo(BaseModel):
+    """Metadata for an available model, returned by provider.list_models()."""
+
+    name: str
+    context_window: int | None = None
+    max_output_tokens: int | None = None
+    supports_images: bool = False
+    supports_thinking: bool = False
+    parameter_size: str | None = None
+    quantization_level: str | None = None
+    family: str | None = None
+    capabilities: list[str] = Field(default_factory=list)
+    is_cloud: bool = False

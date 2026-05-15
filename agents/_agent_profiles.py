@@ -38,7 +38,11 @@ class AgentProfile(BaseModel):
     repeat_penalty: float | None = None
     num_predict: int | None = None
     think: bool | None = None
-    num_ctx: int | None = None
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
+    thinking_budget: str | None = None
+    context_window: int | None = None
+    compaction_threshold: float | None = None
     max_iterations: int | None = None
 
 
@@ -111,13 +115,28 @@ def save_agent_profile(profile: AgentProfile) -> AgentProfile:
     return profile
 
 
-def set_model_on_profiles(model: str) -> None:
-    """Set the model on all profiles that have no model. Used by setup wizard."""
+def set_model_on_profiles(
+    model: str,
+    *,
+    force: bool = False,
+    context_window: int | None = None,
+) -> None:
+    """Set the model on agent profiles.
+
+    When *force* is False (default), only profiles with no model are updated.
+    When True, all profiles are updated unconditionally.
+
+    If *context_window* is provided, it's also written to each updated profile
+    so compaction uses the correct denominator for the new model.
+    """
     d = _profiles_dir()
     d.mkdir(parents=True, exist_ok=True)
     for profile in _load_all().values():
-        if not profile.model:
-            updated = profile.model_copy(update={"model": model})
+        if force or not profile.model:
+            updates: dict = {"model": model}
+            if context_window is not None:
+                updates["context_window"] = context_window
+            updated = profile.model_copy(update=updates)
             path = d / f"{updated.id}.json"
             path.write_text(json.dumps(updated.model_dump(), indent=2))
             logger.info("Set model '%s' on profile '%s'", model, profile.id)

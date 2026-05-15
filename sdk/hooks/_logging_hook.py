@@ -20,6 +20,9 @@ class LoggingHook:
     def __init__(self, agent: Any) -> None:
         """Initialize with the agent whose name is used in log lines."""
         self._agent_name: str = getattr(agent, "name", "unknown")
+        self._model: str = getattr(agent, "model", "?")
+        self._options: dict = getattr(agent, "options", {}) or {}
+        self._think: bool = getattr(agent, "think", False)
         self._console = Console(stderr=True)
 
     async def before_model(self, history: Any, iteration: int, agent_name: str) -> None:
@@ -33,8 +36,19 @@ class LoggingHook:
             roles[role] = roles.get(role, 0) + 1
         role_summary = "  ".join(f"{r}: {c}" for r, c in sorted(roles.items()))
 
+        body = Text()
+        body.append(f"{msg_count}", style="bold")
+        body.append(f" messages  ({role_summary})")
+        if iteration == 1 and (self._options or self._think):
+            parts = []
+            if self._think:
+                parts.append("think")
+            for k, v in self._options.items():
+                parts.append(f"{k}={v}")
+            body.append(f"\noptions: {', '.join(parts)}", style="dim")
+
         self._console.print(Panel(
-            f"[bold]{msg_count}[/bold] messages  ({role_summary})",
+            body,
             title=f"[bold cyan]{self._agent_name}[/bold cyan]  before_model  iteration {iteration}",
             border_style="cyan",
             expand=False,

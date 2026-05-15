@@ -1,0 +1,57 @@
+/* Button — canonical 32px text button primitive.
+ *
+ * The global button reset in global.css already provides cursor,
+ * transition, :focus-visible glow, :disabled opacity, and the
+ * :active translateY shift, so this file only declares geometry
+ * + variant palettes.
+ */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+
+.outline {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+.outline:hover:not(:disabled) {
+    background: var(--surface);
+    border-color: var(--border-strong);
+}
+
+.filled {
+    background: var(--accent);
+    color: #fff;
+}
+.filled:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.ghost {
+    background: transparent;
+    color: var(--text-tertiary);
+    border: none;
+}
+.ghost:hover:not(:disabled) {
+    background: var(--surface);
+    color: var(--text-primary);
+}
+
+.danger {
+    background: var(--danger-muted);
+    color: var(--danger);
+}
+.danger:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.15);
+}

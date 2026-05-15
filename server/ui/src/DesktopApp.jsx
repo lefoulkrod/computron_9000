@@ -23,7 +23,8 @@ import GoalsView from './components/goals/GoalsView.jsx';
 import PreviewPanel from './components/PreviewPanel.jsx';
 import SplitHandle from './components/SplitHandle.jsx';
 import FilePreviewInline from './components/FilePreviewInline.jsx';
-import FullscreenPreview from './components/FullscreenPreview.jsx';
+import FileFullscreen from './components/FileFullscreen.jsx';
+import BrowserFullscreen from './components/BrowserFullscreen.jsx';
 import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
 // useModelSettings removed — replaced by profile-based configuration
@@ -53,8 +54,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [muted, setMuted] = useState(false);
     const [userDesktopOpen, setUserDesktopOpen] = useState(false);
     const [networkViewOpen, setNetworkViewOpen] = useState(false);
-    const [nudgeToast, setNudgeToast] = useState(null);
-
     const features = useFeatures();
     const [selectedProfileId, setSelectedProfileId] = useState(() => {
         return localStorage.getItem('computron_profile_id') || 'computron';
@@ -66,11 +65,14 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     // Setup wizard state
     const [setupComplete, setSetupComplete] = useState(null); // null = loading
+    const wasSetupComplete = useRef(false);
     const [settingsTab, setSettingsTab] = useState('profiles');
 
     useEffect(() => {
         fetch('/api/settings').then(r => r.json()).then(data => {
-            setSetupComplete(data.setup_complete || false);
+            const done = data.setup_complete || false;
+            wasSetupComplete.current = done;
+            setSetupComplete(done);
         }).catch(() => setSetupComplete(false));
     }, []);
 
@@ -101,7 +103,15 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         onToolCreated: () => setToolsRefreshSignal((s) => s + 1),
         onMemoryChanged: () => setMemoryRefreshSignal((s) => s + 1),
         onAudioPlayback: (audio) => setPendingAudio(audio),
-        onNudgeSent: (text) => setNudgeToast(text || 'Nudge sent'),
+        onNudgeSent: (result) => {
+            if (result.ok) {
+                addToast('Nudge sent', { type: 'info', duration: 3000 });
+            } else if (result.status === 409) {
+                addToast('Agent is no longer running', { type: 'warn', duration: 5000 });
+            } else {
+                addToast(result.error || 'Could not send nudge', { type: 'error' });
+            }
+        },
         onDesktopActive: (agentId) => {
             agentDispatch({ type: 'UPDATE_DESKTOP_ACTIVE', agentId });
         },
@@ -127,14 +137,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 });
             }
         },
-        // When an agent uses a tool, show it on the card and log it.
+        // When an agent uses a tool, update the card badge. Activity log
+        // entries are buffered by useStreamingChat for correct ordering.
         onAgentToolCall: ({ name, agentId }) => {
             agentDispatch({ type: 'UPDATE_ACTIVE_TOOL', agentId, toolName: name });
-            agentDispatch({
-                type: 'APPEND_ACTIVITY',
-                agentId,
-                entry: { type: 'tool_call', name, timestamp: Date.now() },
-            });
         },
         // Sub-agent text tokens, batched ~60x/sec. We merge content and
         // thinking in one update so they don't get jumbled together.
@@ -150,13 +156,13 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         onAgentContextUsage: ({ agentId, iteration, maxIterations, contextUsage }) => {
             agentDispatch({ type: 'UPDATE_ITERATION', agentId, iteration, maxIterations, contextUsage });
         },
-        // Agent file output
-        onAgentFileOutput: ({ agentId, ...fileEvent }) => {
-            agentDispatch({
-                type: 'APPEND_ACTIVITY',
-                agentId,
-                entry: { type: 'file_output', ...fileEvent, timestamp: Date.now() },
-            });
+        // Agent file output — activity log entry is buffered by
+        // useStreamingChat, this callback handles any side effects.
+        onAgentFileOutput: () => {},
+        // Buffered activity log entry (tool call, file output) — dispatched
+        // by useStreamingChat in correct chronological order.
+        onActivityEntry: ({ agentId, entry }) => {
+            agentDispatch({ type: 'APPEND_ACTIVITY', agentId, entry });
         },
     }).current;
 
@@ -164,23 +170,20 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         messages,
         isStreaming,
         sendMessage,
+        sendNudge,
         stopGeneration,
         loadConversation,
         newConversation: chatNewConversation,
     } = useStreamingChat(_callbacks);
 
-    useEffect(() => {
-        if (!nudgeToast) return;
-        const timer = setTimeout(() => setNudgeToast(null), 3000);
-        return () => clearTimeout(timer);
-    }, [nudgeToast]);
-
-
-
     const handleSend = useCallback((message, fileData) => {
         setAttachment(null);
-        sendMessage(message, fileData, selectedProfileId);
-    }, [sendMessage, selectedProfileId]);
+        if (isStreaming) {
+            sendNudge(message);
+        } else {
+            sendMessage(message, fileData, selectedProfileId);
+        }
+    }, [sendMessage, sendNudge, isStreaming, selectedProfileId]);
 
     const openDesktop = useCallback(async () => {
         if (userDesktopOpen) return;
@@ -256,7 +259,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     // Show setup wizard if setup is not complete
     if (setupComplete === false) {
         return (
-            <SetupWizard onComplete={() => {
+            <SetupWizard isRerun={wasSetupComplete.current} onComplete={() => {
                 setSetupComplete(true);
                 profilesHook.refresh();
             }} />
@@ -368,7 +371,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     {!goalsActive && flyoutPanel !== 'settings' && networkViewOpen && agentState.selectedAgentId && (
                         <div className={styles.chatColumn}
                              style={{ width: hasPreview ? `${preview.splitPosition}%` : '100%' }}>
-                            <AgentActivityView onNudge={(text) => handleSend(text, null, null)} onPreview={preview.openFile} />
+                            <AgentActivityView onNudge={sendNudge} onPreview={preview.openFile} />
                         </div>
                     )}
 
@@ -407,7 +410,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     {preview.activeTab === 'browser' && preview.browserSnapshot && (
                                         <BrowserPreview
                                             snapshot={preview.browserSnapshot}
-                                            hideShell
+                                            onFullscreen={() => preview.setFullscreenItem({ kind: 'browser' })}
                                         />
                                     )}
                                     {preview.activeTab?.startsWith('file:') && (() => {
@@ -416,18 +419,18 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                         return file ? (
                                             <FilePreviewInline
                                                 item={file}
-                                                onFullscreen={() => preview.setFullscreenItem(file)}
+                                                onFullscreen={() => preview.setFullscreenItem({ kind: 'file', file })}
                                             />
                                         ) : null;
                                     })()}
                                     {preview.activeTab === 'terminal' && preview.terminalLines.length > 0 && (
-                                        <TerminalPanel lines={preview.terminalLines} hideShell />
+                                        <TerminalPanel lines={preview.terminalLines} />
                                     )}
                                     {preview.activeTab === 'desktop' && preview.desktopActive && (
-                                        <DesktopPreview visible hideShell />
+                                        <DesktopPreview visible />
                                     )}
                                     {preview.activeTab === 'generation' && preview.generationPreview && (
-                                        <GenerationPreview preview={preview.generationPreview} hideShell />
+                                        <GenerationPreview preview={preview.generationPreview} />
                                     )}
                                 </PreviewPanel>
                             </div>
@@ -442,17 +445,20 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 <DesktopPreview visible={true} onClose={() => setUserDesktopOpen(false)} overlay />
             )}
 
-            {/* Fullscreen file preview — fills entire viewport */}
-            {preview.fullscreenItem && (
-                <FullscreenPreview
-                    item={preview.fullscreenItem}
+            {/* Fullscreen preview — fills entire viewport */}
+            {preview.fullscreenItem?.kind === 'file' && (
+                <FileFullscreen
+                    item={preview.fullscreenItem.file}
+                    onClose={() => preview.setFullscreenItem(null)}
+                />
+            )}
+            {preview.fullscreenItem?.kind === 'browser' && preview.browserSnapshot && (
+                <BrowserFullscreen
+                    snapshot={preview.browserSnapshot}
                     onClose={() => preview.setFullscreenItem(null)}
                 />
             )}
 
-            {nudgeToast && (
-                <div className={styles.nudgeToast}>{nudgeToast}</div>
-            )}
         </div>
     );
 }

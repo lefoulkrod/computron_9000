@@ -14,7 +14,7 @@ from rich.text import Text
 
 from config import LLMConfig
 
-from ._models import ChatDelta, ChatMessage, ChatResponse, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -24,6 +24,7 @@ _console = Console(stderr=True)
 # manually in chat().
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=10, read=None, write=10, pool=10)
 _FIRST_TOKEN_TIMEOUT = 120.0
+_MODEL_CACHE_TTL = 300.0  # 5 minutes
 
 
 def _build_ollama_kwargs(
@@ -36,7 +37,7 @@ def _build_ollama_kwargs(
     """Build kwargs dict for the Ollama chat API."""
     kwargs: dict[str, Any] = {
         "model": model,
-        "messages": messages,
+        "messages": _convert_messages_for_ollama(messages),
         "stream": True,
         "think": think,
     }
@@ -47,16 +48,35 @@ def _build_ollama_kwargs(
     return kwargs
 
 
+def _convert_messages_for_ollama(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert internal message format to Ollama's expected format.
+
+    Ollama expects images as a list of base64 strings on the message dict.
+    """
+    converted = []
+    for msg in messages:
+        images = msg.get("images")
+        if images:
+            ollama_images = [img["data"] for img in images]
+            converted.append({**msg, "images": ollama_images})
+        else:
+            converted.append(msg)
+    return converted
+
+
 class OllamaProvider:
     """LLM provider backed by an Ollama server."""
 
     def __init__(self, host: str | None = None) -> None:
         self._client = AsyncClient(host=host, timeout=_DEFAULT_TIMEOUT)
+        self._model_cache: list[ModelInfo] | None = None
+        self._model_cache_at: float = 0.0
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
         """Construct from application config."""
-        return cls(host=llm_config.host)
+        # base_url comes from settings.json (wizard); host comes from config.yaml/env var
+        return cls(host=llm_config.base_url or llm_config.host)
 
     async def chat(
         self,
@@ -179,49 +199,63 @@ class OllamaProvider:
         _log_stream_complete(model, elapsed, chunk_count, response.usage)
         yield response
 
-    async def list_models(self) -> list[str]:
-        """Return available model names from the Ollama server."""
-        response = await self._client.list()
-        return [m.model for m in response.models if m.model is not None]
+    async def list_models(self) -> list[ModelInfo]:
+        """Return available models with metadata from the Ollama server.
 
-    async def list_models_detailed(self) -> list[dict[str, Any]]:
-        """Return models with metadata from the Ollama server.
-
-        For each model, calls ``show`` to retrieve capabilities. ``show`` is
-        dispatched concurrently for all models.
+        Calls ``show`` concurrently for each model to get capabilities and
+        context window size. Results are cached for 5 minutes since show()
+        per model is expensive.
         """
+        now = time.monotonic()
+        if self._model_cache is not None and now - self._model_cache_at < _MODEL_CACHE_TTL:
+            return self._model_cache
+
         response = await self._client.list()
         models = [m for m in response.models if m.model is not None]
 
-        async def _capabilities(name: str) -> list[str]:
+        async def _show_details(name: str) -> tuple[list[str], int | None]:
             try:
                 show_resp = await self._client.show(name)
-                return list(getattr(show_resp, "capabilities", None) or [])
+                caps = list(getattr(show_resp, "capabilities", None) or [])
+                model_info = getattr(show_resp, "model_info", None) or {}
+                ctx: int | None = None
+                for key, val in model_info.items():
+                    if key.endswith(".context_length") and isinstance(val, int):
+                        ctx = val
+                        break
+                return caps, ctx
             except Exception:
-                logger.debug("Failed to fetch capabilities for model '%s'", name)
-                return []
+                logger.debug("Failed to fetch details for model '%s'", name)
+                return [], None
 
-        capability_lists = await asyncio.gather(
-            *(_capabilities(m.model) for m in models)
+        detail_lists = await asyncio.gather(
+            *(_show_details(m.model) for m in models)
         )
 
-        results: list[dict[str, Any]] = []
-        for m, capabilities in zip(models, capability_lists, strict=True):
+        results: list[ModelInfo] = []
+        for m, (capabilities, context_window) in zip(models, detail_lists, strict=True):
             name = m.model
             details = getattr(m, "details", None)
-            results.append({
-                "name": name,
-                "parameter_size": getattr(details, "parameter_size", None) if details else None,
-                "quantization_level": getattr(details, "quantization_level", None) if details else None,
-                "family": getattr(details, "family", None) if details else None,
-                "capabilities": capabilities,
-                "is_cloud": name.endswith(":cloud"),
-            })
+            results.append(ModelInfo(
+                name=name,
+                context_window=context_window,
+                supports_images="vision" in capabilities,
+                supports_thinking="thinking" in capabilities,
+                parameter_size=getattr(details, "parameter_size", None) if details else None,
+                quantization_level=getattr(details, "quantization_level", None) if details else None,
+                family=getattr(details, "family", None) if details else None,
+                capabilities=capabilities,
+                is_cloud=name.endswith(":cloud"),
+            ))
 
+        self._model_cache = results
+        self._model_cache_at = now
         return results
 
     def invalidate_model_cache(self) -> None:
-        """No-op kept for protocol compatibility; model list is never cached."""
+        """Clear the cached model list so the next call re-queries Ollama."""
+        self._model_cache = None
+        self._model_cache_at = 0.0
 
 
 # ---------------------------------------------------------------------------

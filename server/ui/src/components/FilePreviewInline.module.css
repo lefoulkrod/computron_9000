@@ -97,28 +97,6 @@
     color: var(--text-primary);
 }
 
-/* Toolbar buttons (right side) */
-.toolbarBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-sm);
-    box-shadow: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-.toolbarBtn:hover {
-    background: var(--accent-muted);
-    color: var(--text-primary);
-}
-
 /* Content area */
 .content {
     flex: 1;
@@ -259,10 +237,6 @@
 
 :global([data-theme="light"]) .toggleBtnActive {
     background: var(--surface);
-}
-
-:global([data-theme="light"]) .toolbarBtn:hover {
-    background: var(--border-subtle);
 }
 
 :global([data-theme="light"]) .content {

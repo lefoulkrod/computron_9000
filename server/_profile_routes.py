@@ -148,8 +148,8 @@ async def handle_profile_usage(request: web.Request) -> web.Response:
     return web.json_response({"usage": usage})
 
 
-async def handle_set_model(request: web.Request) -> web.Response:
-    """Set the model on all profiles that have no model. Used by setup wizard."""
+async def handle_apply_model_to_profiles(request: web.Request) -> web.Response:
+    """Set the model on agent profiles. Used by setup wizard."""
     try:
         body = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -157,8 +157,11 @@ async def handle_set_model(request: web.Request) -> web.Response:
     model = body.get("model")
     if not model:
         return web.json_response({"error": "model is required"}, status=400)
+    context_window = body.get("context_window")
+    if context_window is not None:
+        context_window = int(context_window)
     try:
-        set_model_on_profiles(model)
+        set_model_on_profiles(model, force=bool(body.get("force")), context_window=context_window)
         return web.json_response({"ok": True})
     except Exception as exc:
         return web.json_response({"error": str(exc)}, status=500)
@@ -201,7 +204,7 @@ def register_profile_routes(app: web.Application) -> None:
     app.router.add_route("GET", "/api/agents", handle_list_agents)
     app.router.add_route("GET", "/api/profiles", handle_list_profiles)
     app.router.add_route("POST", "/api/profiles", handle_create_profile)
-    app.router.add_route("POST", "/api/profiles/set-model", handle_set_model)
+    app.router.add_route("POST", "/api/profiles/set-model", handle_apply_model_to_profiles)
     app.router.add_route("GET", "/api/profiles/{id}", handle_get_profile)
     app.router.add_route("PUT", "/api/profiles/{id}", handle_update_profile)
     app.router.add_route("DELETE", "/api/profiles/{id}", handle_delete_profile)

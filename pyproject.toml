@@ -15,9 +15,13 @@ dependencies = [
     "html2text>=2025.4.15",
     "rich>=14.3.3",
     "anthropic>=0.52.0",
+    "openai>=1.40.0,<2",
     "croniter>=1.3",
     "cryptography>=46.0.7",
     "caldav>=1.3",
+    "google-auth>=2.30",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.130",
 ]
 
 [project.optional-dependencies]
@@ -46,8 +50,6 @@ extend-exclude = [
     "tests/**",
     "repls",
     "repls/**",
-    "e2e",
-    "e2e/**",
 ]
 
 [tool.ruff.lint]
@@ -109,7 +111,7 @@ explicit_package_bases = true           # Force explicit top-level package roots
 show_error_codes = true                 # Show mypy error codes (useful with Ruff autofixes)
 allow_redefinition = false              # Prevent accidental variable reassign in same scope
 pretty = true                           # Nicer formatted errors
-exclude = "^(tests|repls|e2e)/"                 # Skip type-checking tests and REPL scripts
+exclude = "^(tests|repls)/"                      # Skip type-checking tests and REPL scripts
 
 # 🔌 Plugins
 plugins = ["pydantic.mypy"]             # Enable Pydantic plugin for proper model typing
@@ -120,24 +122,21 @@ init_typed = true                       # Enforce correct __init__ signatures
 init_forbid_extra = true                # Respect ConfigDict(extra="forbid")
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
 python_files = ["test_*.py"]
-python_classes = ["Test*"]  
+python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "-ra",
-    "--strict-markers",
     "--strict-config",
-]
-markers = [
-    "unit: marks tests as unit tests",
-    "integration: marks tests as integration tests",
-    "slow: marks tests as slow running",
+    "-q",
+    "--no-header",
+    "--disable-warnings",
 ]
 asyncio_mode = "auto"
-log_cli = true
-log_cli_level = "INFO"
-log_level = "INFO"
+log_cli = false
+log_cli_level = "ERROR"
+log_level = "WARNING"
 
 
 [build-system]

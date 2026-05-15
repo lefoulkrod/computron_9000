@@ -28,7 +28,7 @@ export default function GoalsListPanel({ goals, runnerStatus, selectedGoalId, on
                 <RunnerStatusBadge status={runnerStatus} />
             </div>
 
-            <div className={styles.goalsList}>
+            <div className={styles.goalsList} data-testid="goals-list">
                 {sortedGoals.length === 0 ? (
                     <div className={styles.empty}>No goals yet</div>
                 ) : (

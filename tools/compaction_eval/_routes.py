@@ -71,14 +71,14 @@ async def get_record(request: web.Request) -> web.Response:
 
 
 async def list_models(request: web.Request) -> web.Response:
-    """List available Ollama models."""
+    """List available models."""
     provider = _get_provider(request)
     try:
         models = await provider.list_models()
     except Exception:
         logger.exception("Failed to list models")
         return web.json_response({"error": "Failed to list models"}, status=502)
-    return web.json_response({"models": models})
+    return web.json_response({"models": [m.model_dump() for m in models]})
 
 
 # -- LLM operations ---------------------------------------------------------

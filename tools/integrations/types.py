@@ -8,7 +8,9 @@ crypto material) stays on its side.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from integrations.permissions import Access, Capability, Permissions
 
 
 @dataclass(frozen=True)
@@ -21,13 +23,11 @@ class RegisteredIntegration:
     consecutive failed respawns. Tool gating skips anything not in
     ``"running"`` so the agent doesn't call into a dead broker.
 
-    ``write_allowed`` is the per-integration policy bit. The agent is
-    only offered write tools (send, move) when this is true; read-only
-    integrations get the read tools and nothing else.
+    ``permissions`` is the per-capability access level. The agent is only
+    offered tools whose capability has sufficient access.
     """
 
     id: str
     slug: str
-    capabilities: frozenset[str]
+    permissions: Permissions = field(default_factory=dict)
     state: str = "running"
-    write_allowed: bool = False

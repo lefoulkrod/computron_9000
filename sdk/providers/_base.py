@@ -5,7 +5,7 @@ from typing import Any
 
 from config import LLMConfig
 
-from ._models import ChatDelta, ChatResponse
+from ._models import ChatDelta, ChatResponse, ModelInfo
 
 
 class BaseAPIProvider:
@@ -49,5 +49,8 @@ class BaseAPIProvider:
             model=model, messages=messages, tools=tools, options=options, think=think,
         )
 
-    async def list_models(self) -> list[str]:
+    async def list_models(self) -> list[ModelInfo]:
         raise NotImplementedError(f"{type(self).__name__} is not yet implemented")
+
+    def invalidate_model_cache(self) -> None:
+        """Clear the model cache. Subclasses that cache should override this."""

@@ -5,12 +5,16 @@ import ProfileBuilder from './ProfileBuilder.jsx';
 
 export default function ProfilesTab({ profilesHook, features }) {
     const [allModels, setAllModels] = useState([]);
+    const [provider, setProvider] = useState('ollama');
     const [draftProfile, setDraftProfile] = useState(null);
     const [deleteConflict, setDeleteConflict] = useState(null);
 
     useEffect(() => {
         fetch('/api/models').then(r => r.json()).then(data => {
             setAllModels(data.models || []);
+        }).catch(() => {});
+        fetch('/api/settings').then(r => r.json()).then(data => {
+            setProvider(data.llm_provider || 'ollama');
         }).catch(() => {});
     }, []);
 
@@ -83,6 +87,7 @@ export default function ProfilesTab({ profilesHook, features }) {
                     if (result) profilesHook.setSelectedProfileId(result.id);
                 }}
                 models={allModels}
+                provider={provider}
                 availableSkills={availableSkills}
             />
         </div>

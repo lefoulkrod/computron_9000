@@ -35,6 +35,7 @@ from conversations import (
 )
 from sdk.turn import is_turn_active, queue_nudge, request_stop
 from server._feature_routes import register_feature_routes
+from server._integrations_oauth_routes import register_oauth_routes
 from server._integrations_routes import register_integrations_routes
 from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
@@ -74,24 +75,43 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
 
 
+class NudgeRequest(BaseModel):
+    """Request model for nudging a running agent."""
+
+    message: str
+    conversation_id: str
+    agent_id: str
+
+
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
 
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS, GET, DELETE",
+    "Access-Control-Allow-Methods": "POST, PUT, OPTIONS, GET, DELETE",
+    # X-Requested-With is intentionally NOT listed here — cross-origin requests
+    # cannot set it (browser blocks them at preflight), so its presence signals
+    # that a request is same-origin. This is a lightweight CSRF guard.
     "Access-Control-Allow-Headers": "Content-Type",
 }
+
+_CSRF_METHODS = {"POST", "PUT", "DELETE"}
 
 
 @web.middleware
 async def cors_and_error_middleware(
     request: Request, handler: Callable[[Request], Awaitable[StreamResponse]]
 ) -> StreamResponse:
-    """Add CORS headers and convert validation errors to JSON responses."""
+    """Add CORS headers, enforce CSRF check, and convert validation errors to JSON."""
     if request.method == "OPTIONS":
         return web.Response(status=200, headers=_CORS_HEADERS)
+    # CSRF: mutating requests must carry X-Requested-With: XMLHttpRequest.
+    # Same-origin JS can always set this header; cross-origin JS cannot because
+    # the server does not list it in Access-Control-Allow-Headers.
+    if request.method in _CSRF_METHODS:
+        if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+            return web.json_response({"error": "CSRF check failed"}, status=403, headers=_CORS_HEADERS)
     try:
         resp: StreamResponse = await handler(request)
     except ValidationError as exc:  # pragma: no cover - handled uniformly
@@ -180,11 +200,6 @@ async def chat_handler(request: Request) -> StreamResponse:
             {"error": "conversation_id is required."}, status=400,
         )
 
-    # If this conversation already has an active agent, queue the message as a nudge
-    if is_turn_active(payload.conversation_id):
-        queue_nudge(payload.conversation_id, user_query)
-        return web.json_response({"ok": True})
-
     data_objs: list[Data] | None = None
     if payload.data:
         data_objs = [
@@ -199,6 +214,25 @@ async def chat_handler(request: Request) -> StreamResponse:
             conversation_id=payload.conversation_id,
         ),
     )
+
+
+async def nudge_handler(request: Request) -> Response:
+    """Send a nudge message to a running agent."""
+    raw_body = await request.text()
+    try:
+        payload = NudgeRequest.model_validate_json(raw_body)
+    except ValidationError as ve:
+        logger.warning("Invalid nudge request: %s", ve)
+        raise
+    text = payload.message.strip()
+    if not text:
+        return web.json_response({"error": "message is required."}, status=400)
+    if not is_turn_active(payload.conversation_id):
+        return web.json_response(
+            {"error": "No active turn for this conversation."}, status=409,
+        )
+    queue_nudge(payload.agent_id, text)
+    return web.json_response({"ok": True})
 
 
 async def container_file_handler(request: Request) -> StreamResponse:
@@ -302,7 +336,7 @@ async def delete_conversation_handler(request: Request) -> Response:
 async def resume_conversation_handler(request: Request) -> Response:
     """Resume a past conversation by loading its full-fidelity history."""
     conversation_id = request.match_info["conversation_id"]
-    messages = resume_conversation(conversation_id)
+    messages = await resume_conversation(conversation_id)
     if messages is None:
         return web.json_response({"error": "Conversation not found"}, status=404)
     return web.json_response({"conversation_id": conversation_id, "messages": messages})
@@ -352,6 +386,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # API routes
     app.router.add_route("POST", "/api/chat", chat_handler)
     app.router.add_route("POST", "/api/chat/stop", stop_handler)
+    app.router.add_route("POST", "/api/nudge", nudge_handler)
     app.router.add_route("GET", "/api/custom-tools", list_custom_tools_handler)
     app.router.add_route("DELETE", "/api/custom-tools/{name}", delete_custom_tool_handler)
     app.router.add_route("GET", "/api/memory", list_memory_handler)
@@ -383,6 +418,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
 
     # Integrations (supervisor / brokers)
     register_integrations_routes(app)
+    register_oauth_routes(app)
 
     # Container file serving — lets the frontend (and agent-authored HTML) reference
     # container files by their real path instead of base64-encoding them.

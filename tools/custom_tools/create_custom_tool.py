@@ -7,14 +7,11 @@ import logging
 
 from sdk.events import AgentEvent, ToolCreatedPayload, publish_event
 
-from tools._truncation import truncate_args
-
 from . import registry
 
 logger = logging.getLogger(__name__)
 
 
-@truncate_args(command_template=300, program_code=0)
 async def create_custom_tool(
     name: str,
     description: str,

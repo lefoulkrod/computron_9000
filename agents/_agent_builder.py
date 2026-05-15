@@ -28,12 +28,15 @@ def build_agent(
         raise RuntimeError(msg)
 
     raw_options: dict[str, Any] = {
-        "num_ctx": profile.num_ctx,
+        "num_ctx": profile.context_window,
         "num_predict": profile.num_predict,
         "temperature": profile.temperature,
         "top_k": profile.top_k,
         "top_p": profile.top_p,
         "repeat_penalty": profile.repeat_penalty,
+        "reasoning_effort": profile.reasoning_effort,
+        "reasoning_summary": profile.reasoning_summary,
+        "thinking_budget": profile.thinking_budget,
     }
     options = {k: v for k, v in raw_options.items() if v is not None}
 
@@ -45,6 +48,8 @@ def build_agent(
         model=profile.model,
         think=profile.think or False,
         options=options,
+        context_window=profile.context_window or 0,
+        compaction_threshold=profile.compaction_threshold or 0.75,
         max_iterations=profile.max_iterations or 0,
     )
 

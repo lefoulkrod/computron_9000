@@ -236,22 +236,6 @@
     border-color: var(--danger-muted);
 }
 
-.statusDot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-}
-
-.dotRunning {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-muted);
-}
-
-.dotError {
-    background: var(--danger);
-}
 
 /* ── Detail pane (mirrors ProfileBuilder layout) ──────────────────── */
 .detailPane {
@@ -276,74 +260,6 @@
     align-items: center;
     gap: var(--sp-2);
     margin-left: auto;
-}
-
-/* All three actions-bar buttons share the design-language .btn baseline:
- * 32px tall, body font 13px/500, radius-md, 14px horizontal pad, 1px
- * transparent border, 150ms transition. Variants only override
- * background, color, and border-color — see §8 Form Controls. */
-.deleteBtn,
-.secondaryBtn,
-.primaryBtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 14px;
-    border-radius: var(--radius-md);
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms var(--ease);
-    border: 1px solid transparent;
-    white-space: nowrap;
-}
-
-.deleteBtn:active,
-.secondaryBtn:active,
-.primaryBtn:active {
-    transform: translateY(1px);
-}
-
-.deleteBtn:disabled,
-.secondaryBtn:disabled,
-.primaryBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* .btn-danger */
-.deleteBtn {
-    background: var(--danger-muted);
-    color: var(--danger);
-}
-
-.deleteBtn:hover:not(:disabled) {
-    background: rgba(220, 38, 38, 0.15);
-}
-
-/* .btn-outline */
-.secondaryBtn {
-    background: transparent;
-    border-color: var(--border);
-    color: var(--text-primary);
-}
-
-.secondaryBtn:hover:not(:disabled) {
-    background: var(--surface);
-    border-color: var(--border-strong);
-}
-
-/* .btn-filled */
-.primaryBtn {
-    background: var(--accent);
-    color: #fff;
-}
-
-.primaryBtn:hover:not(:disabled) {
-    background: var(--accent-hover);
 }
 
 /* Body scrolls; sections stack with thin separators. */
@@ -462,48 +378,70 @@
     font-size: 12px;
 }
 
-/* ── Empty / unavailable state buttons (§8 .btn baseline) ─── */
-.btnFilledLg,
-.btnOutline {
-    display: inline-flex;
+/* ── Per-capability permission toggles (§ dl-fpreview-toggle) ─── */
+.permRow {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 0 14px;
-    height: 32px;
-    border-radius: var(--radius-md);
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0;
+}
+
+.permRow + .permRow {
+    border-top: 1px solid var(--border-subtle);
+}
+
+.permLabel {
+    flex: 1;
     font-size: 13px;
-    font-family: var(--font-body);
     font-weight: 500;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 150ms var(--ease);
-    white-space: nowrap;
-}
-
-.btnFilledLg {
-    background: var(--accent);
-    color: #fff;
-}
-
-.btnFilledLg:hover {
-    background: var(--accent-hover);
-}
-
-.btnOutline {
-    background: transparent;
-    border-color: var(--border);
     color: var(--text-primary);
 }
 
-.btnOutline:hover:not(:disabled) {
-    background: var(--surface);
-    border-color: var(--border-strong);
+.toggleGroup {
+    display: flex;
+    background: var(--canvas);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
 }
 
-.btnOutline:disabled {
-    opacity: 0.5;
+.toggleOpt {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    font-size: 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    white-space: nowrap;
+    transition: all 120ms var(--ease);
+}
+
+.toggleOpt:hover:not(:disabled) {
+    color: var(--text-primary);
+}
+
+.toggleOpt:disabled {
+    opacity: 0.3;
     cursor: not-allowed;
+}
+
+.toggleActiveOff {
+    background: var(--surface);
+    color: var(--text-primary);
+}
+
+.toggleActiveRead {
+    background: var(--accent-muted);
+    color: var(--accent);
+}
+
+.toggleActive {
+    background: var(--accent);
+    color: #fff;
 }
 
 /* ── Loading + load-error wrapper ─────────────────────────── */

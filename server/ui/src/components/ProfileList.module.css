@@ -30,23 +30,29 @@
     opacity: 0.7;
 }
 
+/* Section-header chip — paired with the eyebrow label in the panel
+ * header. Matches `IntegrationsTab.listAddBtn` exactly so "+ New"
+ * (Profiles) and "+ Add" (Integrations) read as the same control. */
 .newBtn {
-    font-family: var(--font-brand);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    padding: 0.25rem 0.6rem;
-    border: 1px solid var(--accent-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-sm);
     background: var(--accent-muted);
     color: var(--accent);
+    border: 1px solid transparent;
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.04em;
     cursor: pointer;
-    box-shadow: none;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background 120ms var(--ease);
 }
 
 .newBtn:hover {
-    background: var(--accent-muted);
-    border-color: var(--accent-muted);
+    background: var(--accent);
+    color: #fff;
 }
 
 .list {

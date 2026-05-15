@@ -13,7 +13,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from tools._truncation import truncate_args
 from tools.browser.core import get_active_view
 from tools.browser.core._formatting import format_javascript_result
 from tools.browser.core.exceptions import BrowserToolError
@@ -25,7 +24,6 @@ _console = Console(stderr=True)
 _CODE_PREVIEW_LEN = 120
 
 
-@truncate_args(code=500)
 async def execute_javascript(code: str, timeout_ms: int = 10000) -> str:
     """Execute JavaScript in the page context.  Advanced — prefer structured tools.
 

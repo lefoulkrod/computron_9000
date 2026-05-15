@@ -1,28 +1,32 @@
-"""``app.sock`` RPC handler: ``add`` / ``list`` / ``resolve`` / ``update`` / ``remove``.
+"""``app.sock`` RPC handler.
 
-The app server (UID ``computron``) is the only legitimate client. Per the
-broker RPC framing, requests are length-prefixed JSON frames with
-``{id, verb, args}`` and responses are ``{id, result | error}``. Verbs and
-their payloads:
+The app server (UID ``computron``) is the only legitimate client. Requests
+and responses use the shared length-prefixed JSON framing.
 
-- ``add``: ``{slug, user_suffix, label, auth_blob, write_allowed}`` →
-  ``{id, slug, label, write_allowed, capabilities, state, socket}``.
-- ``list``: ``{}`` → ``{integrations: [...]}``. Non-secret metadata of
-  every active integration.
-- ``resolve``: ``{id}`` → ``{id, socket, write_allowed}``. The app server's
-  broker_client calls this to locate a broker before any tool call.
-- ``update``: ``{id, write_allowed?, label?}`` → the same record shape as
-  ``add``. At least one of ``write_allowed`` / ``label`` must be present.
-  ``label`` is meta-only (broker never sees it), so a label-only update
-  rewrites meta in place. ``write_allowed`` flips the broker's env gate,
-  so changing it terminates the broker and re-spawns with new env.
-- ``remove``: ``{id}`` → ``{id}``. SIGTERMs broker, deletes vault files.
+Verbs
+-----
+
+**add** (slug, user_suffix, label, auth_blob, permissions)
+    Encrypt credentials, spawn a broker, return the new record.
+    Both the app-password and OAuth add flows end here.
+
+**list** ()
+    Non-secret metadata for every active integration.
+
+**resolve** (id)
+    Look up a broker's UDS path by integration ID. Called by the
+    broker_client before every tool invocation.
+
+**update** (id, permissions?, label?)
+    Change permissions and/or label on a live integration. At least one
+    field required. Label changes are meta-only; permission changes
+    respawn the broker so the new env takes effect.
+
+**remove** (id)
+    SIGTERM the broker and delete its vault files.
 
 The handler is a thin dispatcher: it parses args and delegates to a
 :class:`BrokerManager` (lifecycle) and :class:`Registry` (read access).
-
-Errors use the shared ``RpcError`` machinery: the RPC layer turns them into
-``{error: {code, message}}`` frames.
 """
 
 from __future__ import annotations
@@ -31,8 +35,13 @@ import logging
 from typing import Any
 
 from integrations._rpc import RpcError
+from integrations.permissions import (
+    access_to_str,
+    permissions_from_dict,
+    permissions_to_dict,
+)
 from integrations.supervisor._manager import BrokerManager
-from integrations.supervisor._registry import Registry
+from integrations.supervisor._registry import IntegrationRecord, Registry
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +76,15 @@ class AppSockHandler:
     # --- verbs --------------------------------------------------------------
 
     async def _add(self, args: dict[str, Any]) -> dict[str, Any]:
+        perms_raw = args.get("permissions")
+        if not isinstance(perms_raw, dict):
+            raise RpcError("BAD_REQUEST", "'permissions' required (dict)")
         record = await self._manager.add(
             slug=_require_str(args, "slug"),
-            user_suffix=_require_str(args, "user_suffix"),
+            user_suffix=args.get("user_suffix") or None,
             label=_require_str(args, "label"),
             auth_blob=args.get("auth_blob"),
-            write_allowed=bool(args.get("write_allowed", False)),
+            permissions=permissions_from_dict(perms_raw),
         )
         return _record_to_dict(record)
 
@@ -89,28 +101,29 @@ class AppSockHandler:
         return {
             "id": record.meta.id,
             "socket": str(record.broker.socket_path),
-            "write_allowed": record.meta.write_allowed,
+            "permissions": permissions_to_dict(record.meta.permissions),
         }
 
     async def _update(self, args: dict[str, Any]) -> dict[str, Any]:
         integration_id = _require_str(args, "id")
-        write_allowed: bool | None = None
-        if "write_allowed" in args:
-            if not isinstance(args["write_allowed"], bool):
-                raise RpcError("BAD_REQUEST", "'write_allowed' must be a bool")
-            write_allowed = args["write_allowed"]
+        permissions = None
+        if "permissions" in args:
+            perms_raw = args["permissions"]
+            if not isinstance(perms_raw, dict):
+                raise RpcError("BAD_REQUEST", "'permissions' must be a dict")
+            permissions = permissions_from_dict(perms_raw)
         label: str | None = None
         if "label" in args:
             if not isinstance(args["label"], str) or not args["label"]:
                 raise RpcError("BAD_REQUEST", "'label' must be a non-empty string")
             label = args["label"]
-        if write_allowed is None and label is None:
+        if permissions is None and label is None:
             raise RpcError(
                 "BAD_REQUEST",
-                "update requires 'write_allowed' and/or 'label'",
+                "update requires 'permissions' and/or 'label'",
             )
         record = await self._manager.update(
-            integration_id, write_allowed=write_allowed, label=label,
+            integration_id, permissions=permissions, label=label,
         )
         return _record_to_dict(record)
 
@@ -120,14 +133,15 @@ class AppSockHandler:
         return {"id": integration_id}
 
 
-def _record_to_dict(record) -> dict[str, Any]:
-    """Wire-shape for one integration — used by ``add`` and ``list``."""
+def _record_to_dict(record: IntegrationRecord) -> dict[str, Any]:
+    """Wire-shape for one integration — used by ``add``, ``list``, ``update``."""
     return {
         "id": record.meta.id,
         "slug": record.meta.slug,
         "label": record.meta.label,
-        "write_allowed": record.meta.write_allowed,
-        "capabilities": sorted(record.capabilities),
+        "permissions": permissions_to_dict(record.meta.permissions),
+        "max_access": {cap.value: access_to_str(a) for cap, a in record.max_access.items()},
+        "capabilities": sorted(cap.value for cap in record.max_access),
         "state": record.state,
         "socket": str(record.broker.socket_path),
     }
