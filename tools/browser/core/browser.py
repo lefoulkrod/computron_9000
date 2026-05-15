@@ -12,6 +12,7 @@ import asyncio
 import time
 import logging
 import os
+import platform
 import secrets
 import signal
 from collections.abc import Awaitable, Callable
@@ -343,10 +344,13 @@ class Browser:
         viewport = _viewport()
 
         launch_kwargs: dict[str, Any] = dict(
-            channel="chrome",
             headless=headless,
             args=chrome_args,
         )
+        # Google Chrome is amd64-only on Linux.  On arm64, omit the
+        # channel so Playwright uses its bundled Chromium instead.
+        if platform.machine() == "x86_64":
+            launch_kwargs["channel"] = "chrome"
         if resolved_downloads_path:
             launch_kwargs["downloads_path"] = resolved_downloads_path
 
