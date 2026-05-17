@@ -4,10 +4,12 @@ from typing import Any
 
 import pytest
 
-from sdk.providers._tool_schema import (
+from sdk.tools._callable_schema import (
+    _CHARS_PER_TOKEN,
     _parse_arg_descriptions,
     _python_type_to_json_schema,
     callable_to_json_schema,
+    estimate_tool_tokens,
 )
 
 
@@ -326,3 +328,56 @@ class TestCallableToJsonSchema:
         schema = callable_to_json_schema(simple)
         assert schema["function"]["parameters"]["properties"]["x"] == {"type": "integer"}
         assert "description" not in schema["function"]["parameters"]["properties"]["x"]
+
+
+# ── estimate_tool_tokens ────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_estimate_tool_tokens_is_deterministic():
+    def fn(name: str) -> str:
+        """Echo the name.
+
+        Args:
+            name: The name to echo.
+        """
+        return name
+
+    assert estimate_tool_tokens(fn) == estimate_tool_tokens(fn)
+
+
+@pytest.mark.unit
+def test_estimate_tool_tokens_grows_with_docstring():
+    def short(x: int) -> int:
+        """Brief."""
+        return x
+
+    def long(x: int) -> int:
+        """A much longer docstring with significantly more characters that
+        should make the schema bigger and therefore push the estimated
+        token count above the short variant's.
+
+        Args:
+            x: The parameter, explained verbosely for testing purposes.
+        """
+        return x
+
+    assert estimate_tool_tokens(long) > estimate_tool_tokens(short)
+
+
+@pytest.mark.unit
+def test_estimate_tool_tokens_matches_json_dumps_length():
+    import json
+
+    def fn(name: str, count: int = 1) -> str:
+        """Repeat name.
+
+        Args:
+            name: The name.
+            count: How many times.
+        """
+        return name * count
+
+    schema = callable_to_json_schema(fn)
+    expected = len(json.dumps(schema, default=str)) // _CHARS_PER_TOKEN
+    assert estimate_tool_tokens(fn) == expected

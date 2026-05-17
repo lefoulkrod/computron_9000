@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from agents import build_agent, get_agent_profile
 from agents.types import Agent
 from sdk import PersistenceHook, default_hooks, run_turn
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
 from sdk.events._context import agent_span, get_current_dispatcher
 from sdk.events._models import FileOutputPayload
 from sdk.skills import AgentState, get_skill
@@ -53,19 +53,6 @@ class TaskExecutor:
             ],
             instance_id=conversation_id,
         )
-        ctx_manager = ContextManager(
-            history=history,
-            context_limit=agent.context_window,
-            agent_name=agent.name,
-            strategies=[
-                ToolClearingStrategy(),
-                LLMCompactionStrategy(threshold=agent.compaction_threshold),
-            ],
-        )
-        hooks = default_hooks(agent, max_iterations=agent.max_iterations, ctx_manager=ctx_manager)
-        hooks.append(
-            PersistenceHook(conversation_id=conversation_id, history=history)
-        )
 
         file_paths: list[str] = []
 
@@ -78,6 +65,19 @@ class TaskExecutor:
             if dispatcher:
                 dispatcher.subscribe(_capture_file_output)
             state = AgentState(await get_core_tools() + (agent.tools or []))
+            ctx_manager = ContextManager(
+                history=history,
+                agent_state=state,
+                context_limit=agent.context_window,
+                agent_name=agent.name,
+                strategies=[
+                    LLMCompactionStrategy(threshold=agent.compaction_threshold),
+                ],
+            )
+            hooks = default_hooks(agent, max_iterations=agent.max_iterations, ctx_manager=ctx_manager)
+            hooks.append(
+                PersistenceHook(conversation_id=conversation_id, history=history)
+            )
             async with agent_span(agent.name, instruction=instruction, agent_state=state):
                 result = await run_turn(history, agent, hooks=hooks)
 

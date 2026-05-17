@@ -19,33 +19,28 @@ class _FakeHistory:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_after_model_records_and_returns():
-    """after_model calls record_response and returns the response unchanged."""
-
+async def test_after_model_calls_manager_and_returns_response():
     class FakeCtxManager:
-        recorded = None
+        called_with: dict[str, Any] | None = None
 
-        async def record_response(self, response: Any, **kwargs: Any) -> None:
-            self.recorded = response
-            self.kwargs = kwargs
+        async def after_model(self, **kwargs: Any) -> None:
+            self.called_with = kwargs
 
     mgr = FakeCtxManager()
-    hook = ContextHook(mgr)
+    hook = ContextHook(mgr, max_iterations=7)
     sentinel = object()
-    result = await hook.after_model(sentinel, _FakeHistory(), 1, "TEST")
+    result = await hook.after_model(sentinel, _FakeHistory(), 3, "TEST")
     assert result is sentinel
-    assert mgr.recorded is sentinel
+    assert mgr.called_with == {"iteration": 3, "max_iterations": 7}
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_before_model_calls_apply_strategies():
-    """before_model calls apply_strategies on the context manager."""
-
+async def test_before_model_delegates_to_manager():
     class FakeCtxManager:
         applied = False
 
-        async def apply_strategies(self) -> None:
+        async def before_model(self) -> None:
             self.applied = True
 
     mgr = FakeCtxManager()

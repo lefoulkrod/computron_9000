@@ -5,7 +5,6 @@ import logging
 from collections import OrderedDict
 from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, field
 
 from rich.console import Console
 from rich.panel import Panel
@@ -30,7 +29,7 @@ from sdk import (
     default_hooks,
     run_turn,
 )
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
 from sdk.events import (
     AgentEvent,
     ContentPayload,
@@ -101,27 +100,19 @@ def _log_turn_start(profile: AgentProfile) -> None:
     )
 
 
-@dataclass
-class _Conversation:
-    """Per-conversation state: conversation history and context manager."""
-
-    history: ConversationHistory = field(default_factory=ConversationHistory)
-    context_manager: ContextManager | None = None
-
-
 # In-memory conversation cache. LRU-bounded so a long-lived process
 # doesn't hold every conversation a user has ever opened. The on-disk
 # state is authoritative; an evicted entry is rehydrated from disk on
 # next access.
 _MAX_CACHED_CONVERSATIONS = 25
-_conversations: OrderedDict[str, _Conversation] = OrderedDict()
+_conversations: OrderedDict[str, ConversationHistory] = OrderedDict()
 
 # Track background tasks to avoid garbage collection (RUF006)
 _background_tasks: set[asyncio.Task] = set()
 
 
-async def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
-    """Return ``(conversation, is_new)`` for the given ID, creating it if needed.
+async def _get_conversation(conversation_id: str) -> tuple[ConversationHistory, bool]:
+    """Return ``(history, is_new)`` for the given ID, creating it if needed.
 
     ``is_new`` is True only when the conversation has no in-memory entry
     AND no on-disk history — a genuine first-time use. On any cache miss
@@ -144,9 +135,7 @@ async def _get_conversation(conversation_id: str) -> tuple[_Conversation, bool]:
     is_new = persisted is None
     if is_new:
         logger.info("Creating new conversation %s", conversation_id)
-    _conversations[conversation_id] = _Conversation(
-        history=ConversationHistory(persisted, instance_id=conversation_id),
-    )
+    _conversations[conversation_id] = ConversationHistory(persisted, instance_id=conversation_id)
     await _evict_lru_conversation(exclude=conversation_id)
     return _conversations[conversation_id], is_new
 
@@ -192,10 +181,7 @@ async def resume_conversation(conversation_id: str) -> list[dict] | None:
     if messages is None:
         return None
 
-    conversation = _Conversation(
-        history=ConversationHistory(messages, instance_id=conversation_id),
-    )
-    _conversations[conversation_id] = conversation
+    _conversations[conversation_id] = ConversationHistory(messages, instance_id=conversation_id)
     _conversations.move_to_end(conversation_id)
     await _evict_lru_conversation(exclude=conversation_id)
     return messages
@@ -242,27 +228,9 @@ def _build_agent_from_profile(profile: AgentProfile) -> Agent:
     return build_agent(profile, tools=[run_bash_cmd, remember, forget])
 
 
-def _ensure_context_manager(
-    conversation: _Conversation,
-    active_agent: Agent,
-) -> ContextManager:
-    """Return the conversation's context manager, creating it if needed."""
-    if conversation.context_manager is None:
-        conversation.context_manager = ContextManager(
-            history=conversation.history,
-            context_limit=active_agent.context_window,
-            agent_name=active_agent.name,
-            strategies=[
-                ToolClearingStrategy(),
-                LLMCompactionStrategy(threshold=active_agent.compaction_threshold),
-            ],
-        )
-    return conversation.context_manager
-
-
 async def _run_turn(
     *,
-    conversation: _Conversation,
+    history: ConversationHistory,
     active_agent: Agent,
     profile: AgentProfile,
     user_content: str,
@@ -279,7 +247,6 @@ async def _run_turn(
     )
     _log_turn_start(profile)
 
-    ctx_manager = _ensure_context_manager(conversation, active_agent)
     conv_id = conversation_id
 
     # Fresh AgentState each turn, restored from persisted skill names.
@@ -306,6 +273,16 @@ async def _run_turn(
         agent_state.add(skill)
         logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
 
+    ctx_manager = ContextManager(
+        history=history,
+        agent_state=agent_state,
+        context_limit=active_agent.context_window,
+        agent_name=active_agent.name,
+        strategies=[
+            LLMCompactionStrategy(threshold=active_agent.compaction_threshold),
+        ],
+    )
+
     async with turn_scope(handler=handler, conversation_id=conversation_id):
         # Subscribe event buffer to capture agent lifecycle/preview events
         event_buffer = AgentEventBufferHook()
@@ -316,13 +293,13 @@ async def _run_turn(
         async with agent_span(
             active_agent.name, instruction=user_content, agent_state=agent_state, profile_name=profile.name
         ):
-            conversation.history.append({"role": "user", "content": user_content})
+            history.append({"role": "user", "content": user_content})
             # Build full system prompt: profile prompt + loaded skill prompts
             full_prompt = active_agent.instruction
             skill_prompt = agent_state.build_skill_prompt()
             if skill_prompt:
                 full_prompt = full_prompt + "\n" + skill_prompt
-            _refresh_system_message(conversation.history, full_prompt)
+            _refresh_system_message(history, full_prompt)
 
             hooks = default_hooks(
                 active_agent,
@@ -333,13 +310,13 @@ async def _run_turn(
             hooks.append(
                 PersistenceHook(
                     conversation_id=conv_id,
-                    history=conversation.history,
+                    history=history,
                 )
             )
 
             with suppress(StopRequestedError):
                 await run_turn(
-                    history=conversation.history,
+                    history=history,
                     agent=active_agent,
                     hooks=hooks,
                 )
@@ -402,7 +379,7 @@ async def handle_user_message(
     if not conversation_id:
         msg = "conversation_id is required"
         raise ValueError(msg)
-    conversation, is_new_conversation = await _get_conversation(conversation_id)
+    history, is_new_conversation = await _get_conversation(conversation_id)
 
     user_content = message
     if data:
@@ -435,7 +412,7 @@ async def handle_user_message(
         async def _producer() -> None:
             try:
                 await _run_turn(
-                    conversation=conversation,
+                    history=history,
                     active_agent=active_agent,
                     profile=profile,
                     user_content=user_content,

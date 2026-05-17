@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from agents import AgentProfile, build_agent, get_agent_profile
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy, ToolClearingStrategy
+from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
 from sdk.events import agent_span
 from sdk.hooks import PersistenceHook, default_hooks
 from sdk.skills import AgentState, get_skill, list_skills
@@ -189,10 +189,10 @@ async def spawn_agent(
 
         ctx_manager = ContextManager(
             history=history,
+            agent_state=agent_state,
             context_limit=agent.context_window,
             agent_name=agent.name,
             strategies=[
-                ToolClearingStrategy(),
                 LLMCompactionStrategy(threshold=agent.compaction_threshold),
             ],
         )

@@ -9,8 +9,6 @@ All conversation data is stored under per-conversation subdirectories::
             {NAME}_{hex}.json # sub-agent message histories
         summaries/
             {id}.json         # compaction records
-        clearings/
-            {id}.json         # tool clearing records
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ from typing import Any
 
 from config import load_config
 
-from ._models import ClearingRecord, ConversationSummary, SummaryRecord
+from ._models import ConversationSummary, SummaryRecord
 
 logger = logging.getLogger(__name__)
 
@@ -304,66 +302,6 @@ def list_summary_records(conversation_id: str | None = None) -> list[SummaryReco
                 records.append(SummaryRecord.model_validate(data))
             except Exception:
                 logger.exception("Failed to load summary record from %s", path)
-
-    records.sort(key=lambda r: r.created_at, reverse=True)
-    return records
-
-
-# -- Clearing record persistence -----------------------------------------------
-
-
-def save_clearing_record(record: ClearingRecord) -> None:
-    """Persist a clearing record to {conv_id}/clearings/{id}.json."""
-    conv_id = record.conversation_id or "default"
-    clearings_dir = _get_conv_dir(conv_id) / "clearings"
-    clearings_dir.mkdir(parents=True, exist_ok=True)
-
-    path = clearings_dir / f"{record.id}.json"
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps(record.model_dump(), indent=2),
-        encoding="utf-8",
-    )
-    tmp.replace(path)
-
-
-def load_clearing_record(conversation_id: str, record_id: str) -> ClearingRecord | None:
-    """Load a clearing record by conversation and record ID."""
-    path = _get_conv_dir(conversation_id) / "clearings" / f"{record_id}.json"
-    if not path.exists():
-        return None
-    try:
-        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-        return ClearingRecord.model_validate(data)
-    except Exception:
-        logger.exception("Failed to load clearing record %s", record_id)
-        return None
-
-
-def list_clearing_records(conversation_id: str | None = None) -> list[ClearingRecord]:
-    """Load clearing records, optionally filtered by conversation."""
-    dirs_to_scan: list[Path] = []
-    if conversation_id:
-        clearings_dir = _get_conv_dir(conversation_id) / "clearings"
-        if clearings_dir.exists():
-            dirs_to_scan.append(clearings_dir)
-    else:
-        conv_root = _get_conversations_dir()
-        if conv_root.exists():
-            for entry in conv_root.iterdir():
-                if entry.is_dir():
-                    cd = entry / "clearings"
-                    if cd.exists():
-                        dirs_to_scan.append(cd)
-
-    records: list[ClearingRecord] = []
-    for d in dirs_to_scan:
-        for path in d.glob("*.json"):
-            try:
-                data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-                records.append(ClearingRecord.model_validate(data))
-            except Exception:
-                logger.exception("Failed to load clearing record from %s", path)
 
     records.sort(key=lambda r: r.created_at, reverse=True)
     return records

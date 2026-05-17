@@ -31,8 +31,8 @@ def _stub_browser_release():
 async def test_get_conversation_cold_cache_no_disk_creates_empty_and_marks_new() -> None:
     """No in-memory entry, no on-disk history -> empty + is_new=True."""
     conv, is_new = await mh._get_conversation("brand-new-id")
-    assert len(conv.history) == 0
-    assert conv.history.instance_id == "brand-new-id"
+    assert len(conv) == 0
+    assert conv.instance_id == "brand-new-id"
     assert is_new is True
 
 
@@ -45,8 +45,8 @@ async def test_get_conversation_cold_cache_with_disk_hydrates_and_marks_not_new(
 
     conv, is_new = await mh._get_conversation("existing")
 
-    assert len(conv.history) == 2
-    loaded = conv.history.messages
+    assert len(conv) == 2
+    loaded = conv.messages
     assert loaded[0]["content"] == "hello"
     assert loaded[1]["content"] == "hi"
     assert is_new is False
@@ -54,11 +54,9 @@ async def test_get_conversation_cold_cache_with_disk_hydrates_and_marks_not_new(
 
 async def test_get_conversation_warm_cache_does_not_reread_disk() -> None:
     """An in-memory entry wins over whatever is on disk and is_new=False."""
-    cached = mh._Conversation(
-        history=ConversationHistory(
-            [{"role": "user", "content": "from-memory"}],
-            instance_id="cid",
-        ),
+    cached = ConversationHistory(
+        [{"role": "user", "content": "from-memory"}],
+        instance_id="cid",
     )
     mh._conversations["cid"] = cached
     save_conversation_history("cid", [{"role": "user", "content": "from-disk"}])
@@ -66,12 +64,12 @@ async def test_get_conversation_warm_cache_does_not_reread_disk() -> None:
     conv, is_new = await mh._get_conversation("cid")
 
     assert conv is cached
-    assert conv.history.messages[0]["content"] == "from-memory"
+    assert conv.messages[0]["content"] == "from-memory"
     assert is_new is False
 
 
 async def test_get_conversation_subsequent_call_returns_same_instance() -> None:
-    """Two calls for the same id return the same _Conversation object."""
+    """Two calls for the same id return the same ConversationHistory object."""
     first, first_new = await mh._get_conversation("same-id")
     second, second_new = await mh._get_conversation("same-id")
     assert first is second
@@ -96,7 +94,7 @@ async def test_get_conversation_corrupted_history_falls_back_to_empty(tmp_path: 
 
     conv, is_new = await mh._get_conversation(cid)
 
-    assert len(conv.history) == 0
+    assert len(conv) == 0
     assert is_new is True
 
 
