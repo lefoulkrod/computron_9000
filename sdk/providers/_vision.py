@@ -16,7 +16,8 @@ async def vision_generate(
 ) -> str:
     """Send an image + prompt to the configured vision model via the active provider.
 
-    Reads vision_model, vision_options, and vision_think from settings.json.
+    Reads vision_provider, vision_model, vision_options, and vision_think
+    from settings.json.
 
     Args:
         prompt: Question or instruction about the image.
@@ -27,21 +28,22 @@ async def vision_generate(
         The model's text response.
 
     Raises:
-        ValueError: If no vision model is configured.
+        ValueError: If no vision provider/model is configured.
         ProviderError: If the provider call fails.
     """
     settings = load_settings()
 
     vision_model = settings.get("vision_model")
-    if not vision_model:
+    vision_provider = settings.get("vision_provider")
+    if not vision_model or not vision_provider:
         msg = "No vision model configured. Set one in Settings > System."
         raise ValueError(msg)
 
     vision_options: dict[str, Any] = dict(settings.get("vision_options") or {})
     vision_think: bool = bool(settings.get("vision_think") or False)
 
-    from . import get_default_provider
-    provider = get_default_provider()
+    from . import get_provider
+    provider = get_provider(vision_provider)
     messages: list[dict[str, Any]] = [{
         "role": "user",
         "content": prompt,

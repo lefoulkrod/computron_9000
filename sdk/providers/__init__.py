@@ -3,12 +3,11 @@
 import importlib
 import logging
 from pathlib import Path
-from typing import Any
 
-from config import LLMConfig, load_config
+from config import load_config
 from settings import load_settings
 
-from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, LLMConfig, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._protocol import Provider
 from ._runtime_stats import LLMRuntimeStats, llm_runtime_stats
 from ._vision import vision_generate
@@ -36,53 +35,41 @@ def _proxy_socket_path(provider: str) -> Path:
     return sockets_dir / f"llm_{provider}.sock"
 
 
-def _resolve_ollama_base_url() -> str:
-    """Determine the Ollama base URL from settings or config fallbacks."""
-    settings = load_settings()
-    if settings.get("llm_provider") == "ollama" and settings.get("llm_base_url"):
-        return settings["llm_base_url"]
-    cfg = load_config()
-    return cfg.llm.host or "http://host.docker.internal:11434"
-
-
-def _create_provider(provider_name: str) -> Provider:
-    """Instantiate a provider by name."""
+def _provider_class(provider_name: str) -> type:
+    """Resolve the provider class for a name, raising on unknown names."""
     path = _PROVIDER_PATHS.get(provider_name)
     if path is None:
         msg = f"Unknown LLM provider: {provider_name!r}. Available: {sorted(_PROVIDER_PATHS)}"
         raise ValueError(msg)
-
     module_path, cls_name = path.rsplit(":", 1)
     module = importlib.import_module(module_path)
-    cls = getattr(module, cls_name)
+    return getattr(module, cls_name)
 
-    if provider_name == "ollama":
-        base_url = _resolve_ollama_base_url()
-        llm_cfg = LLMConfig(provider="ollama", base_url=base_url)
-        instance = cls.from_config(llm_cfg)
-        logger.info("Initialized LLM provider: ollama (direct, %s)", base_url)
-    else:
-        # Cloud providers with a base_url in settings connect directly;
-        # otherwise route through the broker proxy socket.
-        settings = load_settings()
-        if settings.get("llm_provider") == provider_name and settings.get("llm_base_url"):
-            llm_cfg = LLMConfig(provider=provider_name, base_url=settings["llm_base_url"])
-            instance = cls.from_config(llm_cfg)
-            logger.info("Initialized LLM provider: %s (direct)", provider_name)
-        else:
-            proxy_socket = _proxy_socket_path(provider_name)
-            if not proxy_socket.exists():
-                msg = (
-                    f"Provider {provider_name!r} is not configured — "
-                    f"add it via Settings > Integrations"
-                )
-                raise ValueError(msg)
-            instance = cls(proxy_socket=proxy_socket)
-            logger.info(
-                "Initialized LLM provider: %s (via broker at %s)",
-                provider_name, proxy_socket,
-            )
-    return instance
+
+def _create_provider(provider_name: str) -> Provider:
+    """Instantiate a provider by name.
+
+    Direct providers (Ollama, no-auth OpenAI-compatible) are configured in
+    ``settings.direct_providers`` and connect straight to their base URL.
+    Everything else is a brokered integration reached through a Unix socket.
+    A name with neither is not configured.
+    """
+    cls = _provider_class(provider_name)
+
+    direct = load_settings().get("direct_providers", {}).get(provider_name)
+    if direct and direct.get("base_url"):
+        instance = cls.from_config(LLMConfig(provider=provider_name, base_url=direct["base_url"]))
+        logger.info("Initialized LLM provider: %s (direct, %s)", provider_name, direct["base_url"])
+        return instance
+
+    proxy_socket = _proxy_socket_path(provider_name)
+    if proxy_socket.exists():
+        instance = cls(proxy_socket=proxy_socket)
+        logger.info("Initialized LLM provider: %s (via broker at %s)", provider_name, proxy_socket)
+        return instance
+
+    msg = f"Provider {provider_name!r} is not configured — add it on the Providers page"
+    raise ValueError(msg)
 
 
 def get_provider(provider_name: str) -> Provider:
@@ -97,12 +84,6 @@ def get_provider(provider_name: str) -> Provider:
     instance = _create_provider(provider_name)
     _provider_cache[provider_name] = instance
     return instance
-
-
-def get_default_provider() -> Provider:
-    """Return the provider configured as the system-wide default."""
-    settings = load_settings()
-    return get_provider(settings.get("llm_provider", "ollama"))
 
 
 def reset_provider(provider_name: str | None = None) -> None:
@@ -128,7 +109,6 @@ __all__ = [
     "TokenUsage",
     "ToolCall",
     "ToolCallFunction",
-    "get_default_provider",
     "get_provider",
     "llm_runtime_stats",
     "reset_provider",

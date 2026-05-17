@@ -7,10 +7,8 @@ from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any
 
-from config import LLMConfig
-
 from ._base import BaseAPIProvider
-from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, LLMConfig, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from ._tool_schema import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
@@ -68,8 +66,8 @@ class OpenAIProvider(BaseAPIProvider):
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OpenAIProvider":
-        """Construct from application config."""
-        return cls(api_key=llm_config.api_key, base_url=llm_config.base_url)
+        """Construct from a direct-provider config (no API key — that path is brokered)."""
+        return cls(base_url=llm_config.base_url)
 
     def _build_kwargs(
         self,

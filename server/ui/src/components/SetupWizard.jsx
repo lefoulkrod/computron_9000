@@ -160,9 +160,9 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
     const [providerError, setProviderError] = useState(null);
     const [providerSaving, setProviderSaving] = useState(false);
 
-    // Model step state
+    // Model step state. The main-model step (2) and vision-model step (3)
+    // pick from the same list — fetched once into allModels.
     const [allModels, setAllModels] = useState([]);
-    const [visionModels, setVisionModels] = useState(null);
     const [selectedMain, setSelectedMain] = useState(null);
     // undefined = not chosen yet; null = explicit skip; string = model name
     const [selectedVision, setSelectedVision] = useState(undefined);
@@ -182,6 +182,9 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                 ? 'openai_compat'
                 : 'ollama'
     ), [selectedProvider, cloudProvider]);
+
+    // Model-list endpoint scoped to the chosen provider (the API requires it).
+    const modelsUrl = `/api/models?provider=${encodeURIComponent(resolvedProviderName)}`;
 
     // Refs for a11y
     const cardRef = useRef(null);
@@ -231,7 +234,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
             if (!res.ok) {
                 setModelsError({
                     message: data.message || `Request failed (${res.status})`,
-                    llmHost: data.llm_host || null,
+                    llmHost: data.provider || null,
                 });
                 return;
             }
@@ -243,22 +246,14 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         }
     }, []);
 
-    // Fetch all models when entering step 2 (if not already populated by the probe)
+    // Load the model list when entering the model steps, unless the
+    // provider-step probe already populated it.
     useEffect(() => {
-        if (step !== 2 || allModels.length > 0) return;
-        fetchModels('/api/models', setAllModels);
-    }, [step, allModels.length, fetchModels]);
+        if ((step !== 2 && step !== 3) || allModels.length > 0) return;
+        fetchModels(modelsUrl, setAllModels);
+    }, [step, allModels.length, fetchModels, modelsUrl]);
 
-    // Fetch vision models when entering step 3 (same list as main models)
-    useEffect(() => {
-        if (step !== 3 || visionModels !== null) return;
-        fetchModels('/api/models', setVisionModels);
-    }, [step, visionModels, fetchModels]);
-
-    const retryFetch = () => {
-        if (step === 2) fetchModels('/api/models', setAllModels);
-        else if (step === 3) fetchModels('/api/models', setVisionModels);
-    };
+    const retryFetch = () => fetchModels(modelsUrl, setAllModels);
 
     // ── Provider step: save settings and probe connection ───────────
     const handleSaveProvider = useCallback(async () => {
@@ -279,18 +274,17 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                 ));
             } catch (_) { /* supervisor offline — handled below */ }
 
-            const settingsBody = { llm_provider: providerName, llm_base_url: null };
+            // Direct providers (Ollama, no-auth compat) get a settings entry;
+            // brokered providers get a vault integration. We only write what
+            // the user picked — we don't clear the other kind.
+            let directEntry = null;
 
             if (selectedProvider === PROVIDER_OLLAMA) {
-                // Direct connection — no API key, just a base URL.
-                settingsBody.llm_base_url = providerUrl || 'http://host.docker.internal:11434';
+                directEntry = { ollama: { base_url: providerUrl || 'http://host.docker.internal:11434' } };
             } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && !providerApiKey) {
-                // Direct connection — compat endpoint that doesn't require auth.
-                if (providerUrl) settingsBody.llm_base_url = providerUrl;
+                directEntry = { openai_compat: { base_url: providerUrl || 'http://localhost:1234/v1' } };
             } else {
-                // Proxied connection — API key stored in vault, broker handles auth.
-                // No llm_base_url in settings; its absence tells the provider
-                // factory to connect through the broker socket.
+                // Brokered connection — API key stored in vault, broker handles auth.
                 const slug = `llm_${providerName}`;
                 const label = PROVIDER_LABELS[providerName];
                 const authBlob = { api_key: providerApiKey };
@@ -313,35 +307,36 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                 }
             }
 
-            const settingsRes = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(settingsBody),
-            });
-            if (!settingsRes.ok) {
-                const data = await settingsRes.json().catch(() => ({}));
-                setProviderError(data.error || 'Failed to save provider settings');
-                return;
+            if (directEntry) {
+                const settingsRes = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ direct_providers: directEntry }),
+                });
+                if (!settingsRes.ok) {
+                    const data = await settingsRes.json().catch(() => ({}));
+                    setProviderError(data.error || 'Failed to save provider settings');
+                    return;
+                }
             }
 
             // Probe the connection by listing models
-            const modelsRes = await fetch('/api/models');
+            const modelsRes = await fetch(modelsUrl);
             const modelsData = await modelsRes.json().catch(() => ({}));
             if (!modelsRes.ok) {
                 setProviderError(modelsData.message || 'Could not connect to provider');
                 return;
             }
 
-            // Cache probe results so step 2 doesn't re-fetch
+            // Cache probe results so the model steps don't re-fetch
             setAllModels(modelsData.models || []);
-            setVisionModels(null);
             setStep((s) => s + 1);
         } catch (err) {
             setProviderError(err.message);
         } finally {
             setProviderSaving(false);
         }
-    }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey]);
+    }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey, modelsUrl]);
 
     // ── Final save: mark setup complete ─────────────────────────────
     const handleFinish = useCallback(async () => {
@@ -371,8 +366,12 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                 body: JSON.stringify({
                     setup_complete: true,
                     default_agent: 'computron',
+                    vision_provider: resolvedProviderName,
                     vision_model: selectedVision,
+                    compaction_provider: resolvedProviderName,
                     compaction_model: selectedMain,
+                    title_provider: resolvedProviderName,
+                    title_model: selectedMain,
                 }),
             });
             if (!res.ok) {
@@ -405,12 +404,10 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         if (step === 2) {
             // Reset so re-probe in step 1 repopulates models
             setAllModels([]);
-            setVisionModels([]);
             setSelectedMain(null);
             setModelsError(null);
         }
         if (step === 3) {
-            setVisionModels([]);
             setSelectedVision(undefined);
             setModelsError(null);
         }
@@ -679,7 +676,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                             <p className={styles.hint}>Loading models…</p>
                         ) : (
                             <ModelPicker
-                                models={visionModels || []}
+                                models={allModels}
                                 selected={selectedVision}
                                 onSelect={setSelectedVision}
                             />

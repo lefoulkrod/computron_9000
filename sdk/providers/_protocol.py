@@ -3,9 +3,7 @@
 from collections.abc import AsyncGenerator, Callable
 from typing import Any, Protocol
 
-from config import LLMConfig
-
-from ._models import ChatDelta, ChatResponse, ModelInfo
+from ._models import ChatDelta, ChatResponse, LLMConfig, ModelInfo
 
 
 class Provider(Protocol):

@@ -3,9 +3,7 @@
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-from config import LLMConfig
-
-from ._models import ChatDelta, ChatResponse, ModelInfo
+from ._models import ChatDelta, ChatResponse, LLMConfig, ModelInfo
 
 
 class BaseAPIProvider:
@@ -21,8 +19,8 @@ class BaseAPIProvider:
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "BaseAPIProvider":
-        """Construct from application config."""
-        return cls(api_key=llm_config.api_key, base_url=llm_config.base_url)
+        """Construct from a direct-provider config (no API key — that path is brokered)."""
+        return cls(base_url=llm_config.base_url)
 
     async def chat(
         self,

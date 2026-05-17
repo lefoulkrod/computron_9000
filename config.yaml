@@ -37,20 +37,6 @@ desktop:
   resolution: "1280x720"
   websocket_port: 6080
 
-summary:
-  model: kimi-k2.5:cloud
-  think: false
-  options:
-    num_ctx: 32768
-    num_predict: 8192
-    temperature: 0.3
-    top_k: 20
-
-llm:
-  provider: ollama
-  host: ${LLM_HOST}
-  api_key: ${LLM_API_KEY}
-
 parallel:
   enabled: true
   max_concurrent: 4

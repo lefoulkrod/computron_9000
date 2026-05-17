@@ -7,8 +7,8 @@ to generate concise titles (3-5 words) that capture the essence of the conversat
 
 import logging
 
-from config import load_config
-from sdk.providers import get_default_provider
+from settings import load_settings
+from sdk.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +32,25 @@ async def generate_conversation_title(first_message: str) -> str:
         A generated title string (3-5 words recommended).
     """
     try:
-        cfg = load_config()
-        
-        # Check if summary model is configured
-        if cfg.summary is None or not cfg.summary.model:
-            logger.debug("No summary model configured, skipping title generation")
+        settings = load_settings()
+        title_model = settings.get("title_model")
+        title_provider = settings.get("title_provider")
+        if not title_model or not title_provider:
+            logger.debug("No title model/provider configured, skipping title generation")
             return _truncate_for_title(first_message)
-        
-        provider = get_default_provider()
-        
-        # Prepare messages for title generation
+
+        provider = get_provider(title_provider)
+
         messages = [
             {"role": "system", "content": _TITLE_GENERATION_PROMPT},
             {"role": "user", "content": f"Generate a title for this conversation: {first_message}"}
         ]
-        
-        # Get model options from config, limit output to ~50 tokens
-        options = cfg.summary.options.copy() if cfg.summary.options else {}
-        options["num_predict"] = 50
-        options["temperature"] = min(options.get("temperature", 0.3), 0.5)  # Keep it focused
-        
-        # Generate title using the summary model
+
+        # Titles are tiny — cap output and keep sampling focused.
+        options = {"num_predict": 50, "temperature": 0.3}
+
         response = await provider.chat(
-            model=cfg.summary.model,
+            model=title_model,
             messages=messages,
             options=options,
             think=False,

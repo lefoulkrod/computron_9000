@@ -9,6 +9,17 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class LLMConfig(BaseModel):
+    """Connection parameters for constructing a direct-connect LLM provider.
+
+    Direct providers carry no credentials (Ollama and no-auth OpenAI-compat
+    endpoints) — just the base URL to connect to.
+    """
+
+    provider: str = "ollama"
+    base_url: str | None = None
+
+
 class ProviderError(Exception):
     """Error raised by an LLM provider with retryability information.
 
