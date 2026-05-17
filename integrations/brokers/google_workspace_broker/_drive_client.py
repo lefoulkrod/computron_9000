@@ -61,35 +61,8 @@ class DriveClient:
                 break
         return results[:limit]
 
-    def search_files(
-        self,
-        query: str,
-        limit: int = 30,
-    ) -> list[dict[str, Any]]:
-        """Search Drive files. ``query`` is a raw Drive API q-string."""
-        q = f"{query} and trashed = false"
-        results: list[dict[str, Any]] = []
-        page_token: str | None = None
-        while len(results) < limit:
-            page_size = min(limit - len(results), 100)
-            resp = (
-                self._service().files()
-                .list(
-                    q=q,
-                    fields=_LIST_FIELDS,
-                    pageSize=page_size,
-                    pageToken=page_token,
-                )
-                .execute()
-            )
-            results.extend(resp.get("files", []))
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
-        return results[:limit]
-
-    def get_file_metadata(self, file_id: str) -> dict[str, Any]:
-        """Get metadata for a single file."""
+    def _get_file_metadata(self, file_id: str) -> dict[str, Any]:
+        """Get metadata for a single file. Used internally by export_file."""
         return (
             self._service().files()
             .get(fileId=file_id, fields=_FILE_FIELDS)
@@ -105,7 +78,7 @@ class DriveClient:
         Returns:
             (content_bytes, filename, mime_type)
         """
-        meta = self.get_file_metadata(file_id)
+        meta = self._get_file_metadata(file_id)
         mime = meta.get("mimeType", "")
         name = meta.get("name", file_id)
 
@@ -166,27 +139,6 @@ class DriveClient:
             .create(body=file_metadata, fields=_FILE_FIELDS)
             .execute()
         )
-
-    def update_file(
-        self,
-        file_id: str,
-        content: bytes | None = None,
-        mime_type: str | None = None,
-        name: str | None = None,
-    ) -> dict[str, Any]:
-        """Update an existing file's content and/or name."""
-        body: dict[str, Any] = {}
-        if name is not None:
-            body["name"] = name
-        kwargs: dict[str, Any] = {"fileId": file_id, "fields": _FILE_FIELDS}
-        if body:
-            kwargs["body"] = body
-        if content is not None:
-            mt = mime_type or "application/octet-stream"
-            kwargs["media_body"] = MediaInMemoryUpload(
-                content, mimetype=mt, resumable=True,
-            )
-        return self._service().files().update(**kwargs).execute()
 
     def trash_file(self, file_id: str) -> dict[str, Any]:
         """Move a file to the trash. Returns the updated file resource."""
