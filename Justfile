@@ -81,25 +81,44 @@ build:
     @echo "🏗️  Building {{_image}}..."
     docker build -f container/Dockerfile -t {{_image}} .
 
-# Publish image to GitHub Container Registry
+# Publish multi-arch image to GitHub Container Registry.
+# Requires: docker buildx (comes with Docker Desktop; on Linux, install QEMU first:
+#   docker run --privileged --rm tonistiigi/binfmt --install all)
 publish registry="ghcr.io/lefoulkrod/computron_9000":
     #!/usr/bin/env bash
     set -euo pipefail
-    just _require-image
     sha=$(git rev-parse --short HEAD)
     branch=$(git branch --show-current | tr '/' '-')
     tag="${branch}-${sha}"
-    echo "🏷️  Tagging as {{registry}}:${tag} and {{registry}}:${branch}-latest"
-    docker tag {{_image}} "{{registry}}:${tag}"
-    docker tag {{_image}} "{{registry}}:${branch}-latest"
+    echo "🏗️  Building multi-arch (linux/amd64, linux/arm64)..."
+
+    # Ensure buildx builder exists (idempotent)
+    docker buildx inspect multiarch >/dev/null 2>&1 || \
+        docker buildx create --use --name multiarch --driver docker-container
+
     [ -n "${GITHUB_PACKAGES_TOKEN:-}" ] && echo "$GITHUB_PACKAGES_TOKEN" | docker login ghcr.io -u lefoulkrod --password-stdin
-    docker push "{{registry}}:${tag}"
-    docker push "{{registry}}:${branch}-latest"
+
     if [ "$branch" = "main" ]; then
-        docker tag {{_image}} "{{registry}}:latest"
-        docker push "{{registry}}:latest"
+        branch_tag="main"
+    else
+        branch_tag="${branch}-latest"
     fi
-    echo "✅ Published: {{registry}}:${tag}"
+
+    docker buildx build \
+        --builder multiarch \
+        --platform linux/amd64,linux/arm64 \
+        -f container/Dockerfile \
+        -t "{{registry}}:${tag}" \
+        -t "{{registry}}:${branch_tag}" \
+        --push .
+
+    if [ "$branch" = "main" ]; then
+        # Retag the already-pushed manifest — no rebuild needed.
+        docker buildx imagetools create \
+            -t "{{registry}}:latest" \
+            "{{registry}}:${tag}"
+    fi
+    echo "✅ Published multi-arch: {{registry}}:${tag}"
 
 
 # =============================================================================

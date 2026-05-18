@@ -8,18 +8,14 @@ from unittest.mock import patch
 import pytest
 
 from conversations._models import (
-    ClearingRecord,
     SummaryRecord,
 )
 from conversations._store import (
     delete_conversation,
-    list_clearing_records,
     list_conversations,
     list_summary_records,
-    load_clearing_record,
     load_conversation_history,
     load_summary_record,
-    save_clearing_record,
     save_conversation_history,
     save_sub_agent_history,
     save_summary_record,
@@ -185,43 +181,3 @@ class TestSummaryRecordStore:
         assert list_summary_records() == []
 
 
-@pytest.mark.unit
-class TestClearingRecordStore:
-    """Tests for clearing record persistence."""
-
-    def test_save_and_load(self, _conv_dir: Path) -> None:
-        """Save a clearing record and load it back."""
-        record = ClearingRecord(
-            id="clr-001",
-            conversation_id="conv-1",
-            results_cleared=5,
-            total_chars_freed=10000,
-        )
-        save_clearing_record(record)
-        loaded = load_clearing_record("conv-1", "clr-001")
-        assert loaded is not None
-        assert loaded.results_cleared == 5
-
-        # Verify directory structure
-        assert (_conv_dir / "conv-1" / "clearings" / "clr-001.json").exists()
-
-    def test_list_all(self, _conv_dir: Path) -> None:
-        """List clearing records across all conversations."""
-        save_clearing_record(ClearingRecord(
-            id="c1", conversation_id="conv-1", created_at="2026-03-14T10:00:00",
-        ))
-        save_clearing_record(ClearingRecord(
-            id="c2", conversation_id="conv-2", created_at="2026-03-14T12:00:00",
-        ))
-
-        records = list_clearing_records()
-        assert len(records) == 2
-
-    def test_list_by_conversation(self, _conv_dir: Path) -> None:
-        """List clearing records for a specific conversation."""
-        save_clearing_record(ClearingRecord(id="c1", conversation_id="conv-1"))
-        save_clearing_record(ClearingRecord(id="c2", conversation_id="conv-2"))
-
-        records = list_clearing_records(conversation_id="conv-1")
-        assert len(records) == 1
-        assert records[0].id == "c1"

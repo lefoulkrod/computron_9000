@@ -9,7 +9,7 @@ from typing import Any
 
 from ._base import BaseAPIProvider
 from ._models import ChatDelta, ChatMessage, ChatResponse, LLMConfig, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
-from ._tool_schema import callable_to_json_schema
+from sdk.tools import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
 

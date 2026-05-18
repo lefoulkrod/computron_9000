@@ -5,11 +5,15 @@ for tool definitions (unlike Ollama which accepts raw callables).
 """
 
 import inspect
+import json
 import logging
 import re
 import types
 from collections.abc import Callable
 from typing import Any, Union, get_args, get_origin
+
+# Match the context estimator.
+_CHARS_PER_TOKEN = 4
 
 logger = logging.getLogger(__name__)
 
@@ -169,3 +173,10 @@ def callable_to_json_schema(func: Callable[..., Any]) -> dict[str, Any]:
             },
         },
     }
+
+
+def estimate_tool_tokens(func: Callable[..., Any]) -> int:
+    """Estimate the token cost of including *func*'s schema in a chat request."""
+    schema = callable_to_json_schema(func)
+    chars = len(json.dumps(schema, default=str))
+    return chars // _CHARS_PER_TOKEN

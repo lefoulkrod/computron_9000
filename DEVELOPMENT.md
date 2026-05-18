@@ -103,3 +103,53 @@ See `CLAUDE.md` for the full coding conventions. Key points:
 - `__init__.py` is a facade — pure re-exports, no code
 - Eager imports by default; lazy only for heavy optional deps (playwright, torch)
 - Circular imports are a design bug — fix the graph, don't patch around it
+
+## Container Build & Publish
+
+### Multi-Arch Setup (one-time)
+
+The image builds for both `linux/amd64` and `linux/arm64`. On **Linux**, install QEMU first so the kernel can emulate ARM:
+
+```sh
+docker run --privileged --rm tonistiigi/binfmt --install all
+```
+
+Docker Desktop (macOS/Windows) bundles QEMU — no setup needed.
+
+### Build & Publish
+
+```sh
+just build     # Build computron_9000:latest locally (single-arch, for dev)
+just publish   # Build + push multi-arch to ghcr.io/lefoulkrod/computron_9000
+```
+
+`just publish` tags:
+- On `main`: `main`, `main-<sha>`, `latest`
+- On feature branch: `<branch>-<sha>`, `<branch>-latest`
+- CI also adds semver tags on version tags (`v1.2.3` → `v1.2.3`, `v1.2`, `v1`)
+
+> **CI vs `just publish`:** The GitHub Actions workflow auto-publishes on every push to `main` and version tags. `just publish` is now a manual escape hatch — useful for pushing test images from feature branches without waiting for a merge.
+
+## Justfile Reference
+
+Run `just` (no args) to see all available recipes. Key ones:
+
+| Command | Purpose |
+|---------|---------|
+| `just build` | Build the container image (only when container/Dockerfile changes) |
+| `just dev` | Start dev container, sync source, build UI, launch app on :8080 |
+| `just restart-app` | Sync latest Python source and bounce the app |
+| `just rebuild-ui` | Sync latest UI source and rebuild dist/ |
+| `just stop` | Stop the dev container (state at `~/.computron_9000/` persists) |
+| `just reset` | Stop and wipe state |
+| `just shell` | Bash shell inside the dev container |
+| `just logs` | Tail app + inference logs |
+| `just publish` | Build + push multi-arch image (amd64 + arm64) to GHCR |
+| `just test` | Run all unit tests |
+| `just test-unit` | Run unit tests only |
+| `just test-file <path>` | Run tests for a specific file |
+| `just e2e` | Run e2e tests in a throwaway container on :9090 |
+| `just lint` | Lint with ruff |
+| `just typecheck` | Type check with mypy |
+| `just format` | Auto-format with ruff |
+| `just check` | All non-mutating checks (lint + typecheck + format-check) |

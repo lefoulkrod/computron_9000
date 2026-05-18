@@ -81,35 +81,6 @@ class SummaryRecord(BaseModel):
     conversations)."""
 
 
-class ClearedItem(BaseModel):
-    """A single item that was cleared from conversation history."""
-
-    message_index: int
-    role: str  # "tool" or "assistant"
-    tool_name: str = ""
-    cleared_type: str = ""  # "tool_result" or "tool_arg"
-    arg_key: str = ""
-    original_content: str = ""
-    original_chars: int = 0
-
-
-class ClearingRecord(BaseModel):
-    """Record of a single tool clearing event for quality evaluation."""
-
-    id: str
-    created_at: str = ""
-    conversation_id: str = ""
-    agent_name: str = ""
-    fill_ratio: float = 0.0
-    total_chars_freed: int = 0
-    results_cleared: int = 0
-    args_cleared: int = 0
-    threshold: float = 0.0
-    keep_recent_groups: int = 0
-    cleared_items: list[ClearedItem] = Field(default_factory=list)
-    source_history: str = ""
-
-
 class ConversationSummary(BaseModel):
     """Summary of a conversation for listing in the UI."""
 
