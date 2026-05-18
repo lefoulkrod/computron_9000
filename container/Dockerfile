@@ -70,7 +70,6 @@ RUN mkdir -p /etc/apt/keyrings && \
 # Pinned so the image is reproducible; bump the ARG to upgrade. Per-arch deb
 # names are stable in rclone's release layout.
 ARG RCLONE_VERSION=v1.74.1
-ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
       amd64) RCLONE_ARCH="amd64" ;; \
       arm64) RCLONE_ARCH="arm64" ;; \
