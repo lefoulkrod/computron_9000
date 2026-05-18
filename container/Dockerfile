@@ -67,7 +67,16 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── rclone — backend for the rclone_broker (iCloud Drive, etc.) ───────────────
-RUN curl -fsSL https://downloads.rclone.org/rclone-current-linux-amd64.deb \
+# Pinned so the image is reproducible; bump the ARG to upgrade. Per-arch deb
+# names are stable in rclone's release layout.
+ARG RCLONE_VERSION=v1.74.1
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      amd64) RCLONE_ARCH="amd64" ;; \
+      arm64) RCLONE_ARCH="arm64" ;; \
+      *)     echo "ERROR: unsupported arch for rclone: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://downloads.rclone.org/${RCLONE_VERSION}/rclone-${RCLONE_VERSION}-linux-${RCLONE_ARCH}.deb" \
       -o /tmp/rclone.deb && \
     apt-get install -y /tmp/rclone.deb && \
     rm /tmp/rclone.deb && \
