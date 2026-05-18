@@ -92,7 +92,7 @@ function ModelCard({ name, value, description, model, selected, onSelect }) {
     );
 }
 
-export default function SetupWizard({ isRerun = false, onComplete }) {
+export default function SetupWizard({ onComplete }) {
     const [step, setStep] = useState(0);
 
     // Provider step state
@@ -111,8 +111,6 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
     const [selectedVision, setSelectedVision] = useState(undefined);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
-
-    const [updateAllProfiles, setUpdateAllProfiles] = useState(true);
 
     // The provider name as stored in settings / on profiles ('ollama',
     // 'openai_compat', 'anthropic', 'openai', ...).
@@ -174,17 +172,6 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         const providerName = resolvedProviderName;
 
         try {
-            // Remove any existing LLM integration — only one provider active at a time.
-            try {
-                const existing = await fetch('/api/integrations').then(r => r.json());
-                const llmIntegrations = (existing.integrations || []).filter(i =>
-                    i.capabilities?.includes('llm_proxy')
-                );
-                await Promise.all(llmIntegrations.map(i =>
-                    fetch(`/api/integrations/${encodeURIComponent(i.id)}`, { method: 'DELETE' }).catch(() => { })
-                ));
-            } catch (_) { /* supervisor offline — handled below */ }
-
             // Direct providers (Ollama, no-auth compat) get a settings entry;
             // brokered providers get a vault integration. We only write what
             // the user picked — we don't clear the other kind.
@@ -248,39 +235,19 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         }
     }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey, modelsUrl]);
 
-    // ── Final save: mark setup complete ─────────────────────────────
+    // ── Final save: server-side orchestration ───────────────────────
     const handleFinish = useCallback(async () => {
         setSaving(true);
         setError(null);
         try {
-            const force = isRerun && updateAllProfiles;
-            const setModelRes = await fetch('/api/profiles/set-model', {
+            const res = await fetch('/api/setup/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: selectedMain,
                     provider: resolvedProviderName,
-                    force,
-                    context_window: mainModelMeta?.context_window ?? null,
-                }),
-            });
-            if (!setModelRes.ok) {
-                const data = await setModelRes.json().catch(() => ({}));
-                throw new Error(data.error || 'Failed to set model on profiles');
-            }
-
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    setup_complete: true,
-                    default_agent: 'computron',
-                    vision_provider: resolvedProviderName,
+                    main_model: selectedMain,
                     vision_model: selectedVision,
-                    compaction_provider: resolvedProviderName,
-                    compaction_model: selectedMain,
-                    title_provider: resolvedProviderName,
-                    title_model: selectedMain,
+                    context_window: mainModelMeta?.context_window ?? null,
                 }),
             });
             if (!res.ok) {
@@ -294,7 +261,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
             setError(`Connection error: ${err.message}`);
             setSaving(false);
         }
-    }, [selectedMain, selectedVision, mainModelMeta, resolvedProviderName, isRerun, updateAllProfiles, onComplete]);
+    }, [selectedMain, selectedVision, mainModelMeta, resolvedProviderName, onComplete]);
 
     const canContinue =
         step === 0 ||
@@ -533,18 +500,6 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                             placeholder="Choose a main model…"
                             defaultOpen
                         />
-                        {isRerun && (
-                            <label className={styles.checkRow} data-testid="update-profiles-check">
-                                <input
-                                    type="checkbox"
-                                    checked={updateAllProfiles}
-                                    onChange={(e) => setUpdateAllProfiles(e.target.checked)}
-                                />
-                                <span className={styles.checkLabel}>
-                                    Update all agent profiles to use this model
-                                </span>
-                            </label>
-                        )}
                     </div>
                 )}
 

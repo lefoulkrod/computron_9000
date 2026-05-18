@@ -41,6 +41,7 @@ from server._model_routes import register_model_routes
 from server._profile_routes import register_profile_routes
 from server._provider_routes import register_provider_routes
 from server._settings_routes import register_settings_routes
+from server._setup_routes import register_setup_routes
 from server._task_routes import register_task_routes
 from server.message_handler import handle_user_message, resume_conversation
 from tools.custom_tools.registry import delete_tool, list_tools
@@ -406,6 +407,9 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
 
     # Application settings
     register_settings_routes(app)
+
+    # Setup wizard completion
+    register_setup_routes(app)
 
     # Desktop API
     app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)

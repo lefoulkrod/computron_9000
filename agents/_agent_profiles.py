@@ -120,23 +120,20 @@ def apply_llm_config_to_profiles(
     model: str,
     *,
     provider: str | None = None,
-    force: bool = False,
     context_window: int | None = None,
 ) -> None:
-    """Stamp the chosen LLM config (provider, model, context window) onto profiles.
+    """Stamp the chosen LLM config (provider, model, context window) onto
+    profiles that don't already have a model.
 
-    When *force* is False (default), only profiles that are missing a model
-    are updated. When True, all profiles are updated unconditionally.
-
-    *provider* and *context_window* are written alongside the model on each
-    updated profile when supplied — the provider so the profile resolves to a
-    provider on its own, the context window so compaction uses the right
-    denominator for the new model.
+    Used by the setup wizard's finish step to fill in the shipped default
+    profiles, which ship with empty ``provider`` / ``model``. Profiles that
+    already have a model are left alone — per-profile edits happen in
+    ProfileBuilder afterwards.
     """
     d = _profiles_dir()
     d.mkdir(parents=True, exist_ok=True)
     for profile in _load_all().values():
-        if force or not profile.model:
+        if not profile.model:
             updates: dict = {"model": model}
             if provider is not None:
                 updates["provider"] = provider
