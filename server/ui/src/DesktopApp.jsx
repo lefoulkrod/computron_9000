@@ -341,7 +341,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                 <IntegrationsTab />
                             )}
                             {settingsTab === 'system' && (
-                                <SystemSettings onRunWizard={() => setSetupComplete(false)} />
+                                <SystemSettings />
                             )}
                         </SettingsPage>
                     )}

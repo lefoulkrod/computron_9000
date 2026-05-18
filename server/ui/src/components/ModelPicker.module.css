@@ -1,35 +1,188 @@
-.picker {
+/* ── Wrapper / closed trigger ───────────────────────────────── */
+.wrapper {
+    position: relative;
+    display: inline-block;
     width: 100%;
-    margin-top: 0.75rem;
+}
+
+.trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    width: 100%;
+    min-width: 240px;
+    height: 32px;
+    padding: 0 28px 0 10px;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-body);
+    text-align: left;
+    cursor: pointer;
+    position: relative;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+[data-theme="dark"] .trigger { background: var(--surface); }
+
+.trigger:hover:not(:disabled) {
+    border-color: var(--border-strong);
+}
+
+.trigger:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.triggerOpen {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
+}
+
+.triggerProv {
+    color: var(--text-tertiary);
+    font-size: 0.78rem;
+    flex-shrink: 0;
+}
+
+.triggerSep {
+    color: var(--text-tertiary);
+    margin: 0 0.1rem;
+    flex-shrink: 0;
+}
+
+.triggerModel {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-code);
+    font-size: 12px;
+}
+
+.triggerPlaceholder {
+    color: var(--text-tertiary);
+    font-style: italic;
+    flex: 1;
+}
+
+.triggerEmpty .triggerPlaceholder {
+    color: var(--text-tertiary);
+}
+
+.triggerCaret {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    font-size: 10px;
+    transition: transform 120ms ease;
+    pointer-events: none;
+}
+
+.triggerOpen .triggerCaret {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+/* ── Popover ────────────────────────────────────────────────── */
+.popover {
+    position: absolute;
+    z-index: 50;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    min-width: 360px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────── */
+.tabs {
+    display: flex;
+    gap: 2px;
+    padding: 4px 4px 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.tab {
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    cursor: pointer;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tabActive {
+    color: var(--text-primary);
+    background: var(--elevated);
+    border-color: var(--border);
+    position: relative;
+}
+
+.tabActive::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    background: var(--elevated);
+}
+
+/* ── Search ─────────────────────────────────────────────────── */
+.search {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
 }
 
 .searchInput {
     width: 100%;
-    padding: 0.6rem 0.85rem;
-    font-size: 0.85rem;
-    font-family: var(--font-mono);
-    background: var(--surface);
+    height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-family: var(--font-body);
+    background: var(--canvas);
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-md);
     color: var(--text-primary);
     outline: none;
-    transition: border-color 120ms ease;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+
+[data-theme="dark"] .searchInput { background: var(--surface); }
 
 .searchInput:focus {
     border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
 }
 
 .searchInput::placeholder {
     color: var(--text-tertiary);
 }
 
+/* ── List ──────────────────────────────────────────────────── */
 .list {
-    max-height: 260px;
+    max-height: 280px;
     overflow-y: auto;
-    border: 1px solid var(--border);
-    border-top: none;
-    background: var(--surface);
+    background: var(--elevated);
 }
 
 .list::-webkit-scrollbar { width: 6px; }
@@ -40,15 +193,15 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 0.5rem 0.85rem;
+    padding: 7px 10px;
     background: none;
     border: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
     text-align: left;
     color: var(--text-primary);
-    font-size: 0.8rem;
-    font-family: var(--font-mono);
+    font-size: 12px;
+    font-family: var(--font-code);
     transition: background 80ms ease;
 }
 
@@ -57,7 +210,11 @@
 }
 
 .item:hover {
-    background: var(--surface-hover);
+    background: var(--surface);
+}
+
+.itemSelected {
+    background: var(--accent-muted);
 }
 
 .itemName {
@@ -75,6 +232,7 @@
 }
 
 .badge {
+    font-family: var(--font-brand);
     font-size: 10px;
     padding: 1px var(--sp-1);
     background: var(--border);
@@ -84,6 +242,7 @@
 }
 
 .capBadge {
+    font-family: var(--font-brand);
     font-size: 10px;
     padding: 1px var(--sp-1);
     background: var(--accent-muted);
@@ -93,7 +252,7 @@
 }
 
 .empty {
-    padding: 0.75rem 0.85rem;
+    padding: 0.7rem 0.85rem;
     font-size: 0.8rem;
     color: var(--text-tertiary);
     font-style: italic;

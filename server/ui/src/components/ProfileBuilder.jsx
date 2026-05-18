@@ -32,8 +32,7 @@ export default function ProfileBuilder({
     onSave,
     onDelete,
     onDuplicate,
-    models,
-    provider = 'ollama',
+    providers,
     availableSkills,
     deleteConflict,
     onDismissDeleteConflict,
@@ -50,17 +49,21 @@ export default function ProfileBuilder({
         }
     }, [profile]);
 
+    // Inference-option support (think, top_k, num_ctx, etc.) depends on which
+    // provider this profile points at, not on any global default.
+    const draftProvider = draft?.provider || providers?.[0]?.name || 'ollama';
+
     const activePreset = useMemo(() => {
         if (!draft) return null;
-        return detectPreset(draft, provider);
-    }, [draft, provider]);
+        return detectPreset(draft, draftProvider);
+    }, [draft, draftProvider]);
 
     const update = useCallback((field, value) => {
         setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
     }, []);
 
     const applyPreset = useCallback((presetId) => {
-        const values = resolvePreset(presetId, provider);
+        const values = resolvePreset(presetId, draftProvider);
         if (!values) return;
         setDraft((prev) => {
             if (!prev) return prev;
@@ -69,13 +72,13 @@ export default function ProfileBuilder({
                 next[k] = null;
             }
             for (const [k, v] of Object.entries(values)) {
-                if (isSupported(k, provider)) {
+                if (isSupported(k, draftProvider)) {
                     next[k] = v;
                 }
             }
             return next;
         });
-    }, [provider]);
+    }, [draftProvider]);
 
     const toggleSkill = useCallback((skill) => {
         setDraft((prev) => {
@@ -194,17 +197,17 @@ export default function ProfileBuilder({
                         )}
                     </section>
 
-                    {/* 2. Model */}
+                    {/* 2. Provider & Model */}
                     <section className={styles.section} data-testid="profile-model-picker">
-                        <div className={styles.sectionLabel}>Model</div>
+                        <div className={styles.sectionLabel}>Provider &amp; Model</div>
                         <ModelPicker
-                            models={models || []}
-                            selected={draft.model || null}
-                            onSelect={(name) => {
-                                const meta = (models || []).find((m) => m.name === name);
+                            providers={providers || []}
+                            selectedProvider={draft.provider || null}
+                            selectedModel={draft.model || null}
+                            onSelect={(p, name, meta) => {
                                 setDraft((prev) => {
                                     if (!prev) return prev;
-                                    const next = { ...prev, model: name || '' };
+                                    const next = { ...prev, provider: p || '', model: name || '' };
                                     if (meta?.context_window != null) {
                                         next.context_window = meta.context_window;
                                     }
@@ -251,7 +254,7 @@ export default function ProfileBuilder({
                     <InferenceSettings
                         key={draft.id}
                         draft={draft}
-                        provider={provider}
+                        provider={draftProvider}
                         activePreset={activePreset}
                         onFieldChange={update}
                         onApplyPreset={applyPreset}

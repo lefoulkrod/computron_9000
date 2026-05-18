@@ -92,63 +92,6 @@ function ModelCard({ name, value, description, model, selected, onSelect }) {
     );
 }
 
-// Receives a key prop from the parent that changes on each new error, so the
-// component remounts and moves focus to the panel automatically.
-function ModelsErrorPanel({ error, onRetry, loading, selectedProvider }) {
-    const ref = useRef(null);
-    useEffect(() => { ref.current?.focus(); }, []);
-
-    const isOllama = !selectedProvider || selectedProvider === PROVIDER_OLLAMA;
-    const isCloud = selectedProvider === PROVIDER_CLOUD;
-
-    return (
-        <div ref={ref} className={styles.errorPanel} role="alert" tabIndex={-1}>
-            <div className={styles.errorTitle}>
-                {isOllama ? "Can't reach Ollama" : "Can't reach provider"}
-            </div>
-            <div className={styles.errorMessage}>{error.message}</div>
-            {error.llmHost && (
-                <div className={styles.errorDetail}>
-                    Trying: <code>{error.llmHost}</code>
-                </div>
-            )}
-            {isOllama && (
-                <ul className={styles.errorHints}>
-                    <li>Make sure Ollama is running on the host (<code>ollama serve</code>).</li>
-                    <li>
-                        On macOS / Windows / WSL2, use{' '}
-                        <code>http://host.docker.internal:11434</code> as the URL.
-                    </li>
-                    <li>
-                        On Linux, start the container with <code>--network=host</code> and
-                        use <code>http://localhost:11434</code>.
-                    </li>
-                </ul>
-            )}
-            {selectedProvider === PROVIDER_OPENAI_COMPAT && (
-                <ul className={styles.errorHints}>
-                    <li>Check that your server is running and the URL is correct.</li>
-                    <li>Make sure the server is reachable from this container.</li>
-                </ul>
-            )}
-            {isCloud && (
-                <ul className={styles.errorHints}>
-                    <li>Check that your API key is correct.</li>
-                    <li>Ensure you have a working internet connection.</li>
-                </ul>
-            )}
-            <button
-                className={styles.retryBtn}
-                type="button"
-                onClick={onRetry}
-                disabled={loading}
-            >
-                {loading ? 'Retrying…' : 'Retry'}
-            </button>
-        </div>
-    );
-}
-
 export default function SetupWizard({ isRerun = false, onComplete }) {
     const [step, setStep] = useState(0);
 
@@ -160,15 +103,13 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
     const [providerError, setProviderError] = useState(null);
     const [providerSaving, setProviderSaving] = useState(false);
 
-    // Model step state. The main-model step (2) and vision-model step (3)
-    // pick from the same list — fetched once into allModels.
-    const [allModels, setAllModels] = useState([]);
+    // Model step state. The ModelPicker handles its own list fetching;
+    // we just track which model is picked and its metadata (for context_window).
     const [selectedMain, setSelectedMain] = useState(null);
+    const [mainModelMeta, setMainModelMeta] = useState(null);
     // undefined = not chosen yet; null = explicit skip; string = model name
     const [selectedVision, setSelectedVision] = useState(undefined);
     const [saving, setSaving] = useState(false);
-    const [modelsError, setModelsError] = useState(null);
-    const [modelsLoading, setModelsLoading] = useState(false);
     const [error, setError] = useState(null);
 
     const [updateAllProfiles, setUpdateAllProfiles] = useState(true);
@@ -224,36 +165,6 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
     }, []);
 
 
-
-    const fetchModels = useCallback(async (url, setter) => {
-        setModelsLoading(true);
-        setModelsError(null);
-        try {
-            const res = await fetch(url);
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                setModelsError({
-                    message: data.message || `Request failed (${res.status})`,
-                    llmHost: data.provider || null,
-                });
-                return;
-            }
-            setter(data.models || []);
-        } catch (err) {
-            setModelsError({ message: err.message, llmHost: null });
-        } finally {
-            setModelsLoading(false);
-        }
-    }, []);
-
-    // Load the model list when entering the model steps, unless the
-    // provider-step probe already populated it.
-    useEffect(() => {
-        if ((step !== 2 && step !== 3) || allModels.length > 0) return;
-        fetchModels(modelsUrl, setAllModels);
-    }, [step, allModels.length, fetchModels, modelsUrl]);
-
-    const retryFetch = () => fetchModels(modelsUrl, setAllModels);
 
     // ── Provider step: save settings and probe connection ───────────
     const handleSaveProvider = useCallback(async () => {
@@ -328,8 +239,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                 return;
             }
 
-            // Cache probe results so the model steps don't re-fetch
-            setAllModels(modelsData.models || []);
+            // Probe succeeded — the ModelPicker fetches its own list when opened.
             setStep((s) => s + 1);
         } catch (err) {
             setProviderError(err.message);
@@ -344,7 +254,6 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
         setError(null);
         try {
             const force = isRerun && updateAllProfiles;
-            const meta = allModels.find((m) => m.name === selectedMain);
             const setModelRes = await fetch('/api/profiles/set-model', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -352,7 +261,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                     model: selectedMain,
                     provider: resolvedProviderName,
                     force,
-                    context_window: meta?.context_window ?? null,
+                    context_window: mainModelMeta?.context_window ?? null,
                 }),
             });
             if (!setModelRes.ok) {
@@ -385,7 +294,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
             setError(`Connection error: ${err.message}`);
             setSaving(false);
         }
-    }, [selectedMain, selectedVision, resolvedProviderName, isRerun, updateAllProfiles, allModels, onComplete]);
+    }, [selectedMain, selectedVision, mainModelMeta, resolvedProviderName, isRerun, updateAllProfiles, onComplete]);
 
     const canContinue =
         step === 0 ||
@@ -402,14 +311,11 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
 
     const handleBack = () => {
         if (step === 2) {
-            // Reset so re-probe in step 1 repopulates models
-            setAllModels([]);
             setSelectedMain(null);
-            setModelsError(null);
+            setMainModelMeta(null);
         }
         if (step === 3) {
             setSelectedVision(undefined);
-            setModelsError(null);
         }
         setStep((s) => s - 1);
     };
@@ -616,23 +522,17 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                             This will be set as the default model for all built-in agent
                             profiles. You can change individual profiles later in Settings.
                         </p>
-                        {modelsError ? (
-                            <ModelsErrorPanel
-                                key={modelsError.message}
-                                error={modelsError}
-                                onRetry={retryFetch}
-                                loading={modelsLoading}
-                                selectedProvider={selectedProvider}
-                            />
-                        ) : modelsLoading ? (
-                            <p className={styles.hint}>Loading models…</p>
-                        ) : (
-                            <ModelPicker
-                                models={allModels}
-                                selected={selectedMain}
-                                onSelect={setSelectedMain}
-                            />
-                        )}
+                        <ModelPicker
+                            providers={[{ name: resolvedProviderName, label: PROVIDER_LABELS[resolvedProviderName] || resolvedProviderName }]}
+                            selectedProvider={resolvedProviderName}
+                            selectedModel={selectedMain}
+                            onSelect={(_p, m, meta) => {
+                                setSelectedMain(m);
+                                setMainModelMeta(meta);
+                            }}
+                            placeholder="Choose a main model…"
+                            defaultOpen
+                        />
                         {isRerun && (
                             <label className={styles.checkRow} data-testid="update-profiles-check">
                                 <input
@@ -664,23 +564,15 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                             that supports vision (image input).
                         </p>
 
-                        {modelsError ? (
-                            <ModelsErrorPanel
-                                key={modelsError.message}
-                                error={modelsError}
-                                onRetry={retryFetch}
-                                loading={modelsLoading}
-                                selectedProvider={selectedProvider}
-                            />
-                        ) : modelsLoading ? (
-                            <p className={styles.hint}>Loading models…</p>
-                        ) : (
-                            <ModelPicker
-                                models={allModels}
-                                selected={selectedVision}
-                                onSelect={setSelectedVision}
-                            />
-                        )}
+                        <ModelPicker
+                            providers={[{ name: resolvedProviderName, label: PROVIDER_LABELS[resolvedProviderName] || resolvedProviderName }]}
+                            selectedProvider={resolvedProviderName}
+                            selectedModel={selectedVision || null}
+                            onSelect={(_p, m) => setSelectedVision(m)}
+                            placeholder="Choose a vision model…"
+                            capability="vision"
+                            defaultOpen
+                        />
 
                         <button
                             type="button"
