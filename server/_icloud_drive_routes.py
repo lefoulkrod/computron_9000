@@ -40,7 +40,7 @@ async def _json_body(request: web.Request) -> dict | web.Response:
 
 
 async def handle_icloud_drive_preauth_start(request: web.Request) -> web.Response:
-    """``POST /api/integrations/preauth/icloud-drive`` — sign in, trigger 2FA.
+    """``POST /api/integrations/icloud-drive/preauth`` — sign in, trigger 2FA.
 
     Body: ``{"email": "...", "password": "..."}`` (the Apple ID account
     password, not an app-specific one).
@@ -67,7 +67,7 @@ async def handle_icloud_drive_preauth_start(request: web.Request) -> web.Respons
 
 
 async def handle_icloud_drive_preauth_verify(request: web.Request) -> web.Response:
-    """``POST /api/integrations/preauth/icloud-drive/verify`` — submit the 2FA code.
+    """``POST /api/integrations/icloud-drive/preauth/verify`` — submit the 2FA code.
 
     Body: ``{"session_id": "...", "code": "123456"}``.
 
@@ -91,10 +91,10 @@ async def handle_icloud_drive_preauth_verify(request: web.Request) -> web.Respon
 
 
 def register_icloud_drive_routes(app: web.Application) -> None:
-    """Register ``/api/integrations/preauth/icloud-drive*`` routes."""
+    """Register ``/api/integrations/icloud-drive/*`` routes."""
     app.router.add_route(
-        "POST", "/api/integrations/preauth/icloud-drive", handle_icloud_drive_preauth_start,
+        "POST", "/api/integrations/icloud-drive/preauth", handle_icloud_drive_preauth_start,
     )
     app.router.add_route(
-        "POST", "/api/integrations/preauth/icloud-drive/verify", handle_icloud_drive_preauth_verify,
+        "POST", "/api/integrations/icloud-drive/preauth/verify", handle_icloud_drive_preauth_verify,
     )

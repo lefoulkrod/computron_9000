@@ -100,7 +100,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         setError(null);
         const email = form.email.trim();
         try {
-            const resp = await fetch('/api/integrations/preauth/icloud-drive', {
+            const resp = await fetch('/api/integrations/icloud-drive/preauth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password: form.password }),
@@ -131,7 +131,7 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
         const email = form.email.trim();
         const label = form.label.trim() || `${provider.title} · ${email}`;
         try {
-            const verifyResp = await fetch('/api/integrations/preauth/icloud-drive/verify', {
+            const verifyResp = await fetch('/api/integrations/icloud-drive/preauth/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session_id: twoFactor.sessionId, code: twoFactor.code.trim() }),
