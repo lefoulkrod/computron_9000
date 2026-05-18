@@ -1,40 +1,29 @@
-"""Shared formatting helpers for Drive agent tools."""
+"""Shared formatting helpers for the unified Drive tools."""
 
 from __future__ import annotations
 
 from typing import Any
 
-_MIME_SHORTCUTS = {
-    "application/vnd.google-apps.document": "Google Doc",
-    "application/vnd.google-apps.spreadsheet": "Google Sheet",
-    "application/vnd.google-apps.presentation": "Google Slides",
-    "application/vnd.google-apps.form": "Google Form",
-    "application/vnd.google-apps.drawing": "Google Drawing",
-    "application/vnd.google-apps.shortcut": "Shortcut",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint",
-    "application/pdf": "PDF",
-}
+
+def human_bytes(n: int) -> str:
+    """Render a byte count as a short human-readable string (e.g. ``1.5 GB``)."""
+    if n <= 0:
+        return "0 B"
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024.0:
+            return f"{size:.1f} {unit}".replace(".0 ", " ")
+        size /= 1024.0
+    return f"{size:.1f} PB"
 
 
-def format_file(f: dict[str, Any]) -> str:
-    fid = f.get("id", "?")
-    name = f.get("name", "(unnamed)")
-    mime = f.get("mimeType", "")
-    size = f.get("size")
-    kind = "folder" if mime == "application/vnd.google-apps.folder" else short_mime(mime)
-    size_str = f" ({format_size(int(size))})" if size else ""
-    return f"- [{fid}] {name}  —  {kind}{size_str}"
-
-
-def short_mime(mime: str) -> str:
-    return _MIME_SHORTCUTS.get(mime, mime.split("/")[-1] if "/" in mime else mime)
-
-
-def format_size(size: int) -> str:
-    if size < 1024:
-        return f"{size}B"
-    if size < 1024 * 1024:
-        return f"{size / 1024:.1f}KB"
-    return f"{size / (1024 * 1024):.1f}MB"
+def format_entry(entry: dict[str, Any]) -> str:
+    """One-line render of a directory entry returned by ``drive_list``."""
+    name = entry.get("name", "?")
+    handle = entry.get("handle", "")
+    if entry.get("is_dir"):
+        return f"- [dir]  {name}/  [{handle}]"
+    size_str = human_bytes(int(entry.get("size", 0) or 0))
+    mime = entry.get("mime_type") or ""
+    suffix = f"  ({mime})" if mime else ""
+    return f"- [file] {name}  {size_str}{suffix}  [{handle}]"

@@ -61,35 +61,8 @@ class DriveClient:
                 break
         return results[:limit]
 
-    def search_files(
-        self,
-        query: str,
-        limit: int = 30,
-    ) -> list[dict[str, Any]]:
-        """Search Drive files. ``query`` is a raw Drive API q-string."""
-        q = f"{query} and trashed = false"
-        results: list[dict[str, Any]] = []
-        page_token: str | None = None
-        while len(results) < limit:
-            page_size = min(limit - len(results), 100)
-            resp = (
-                self._service().files()
-                .list(
-                    q=q,
-                    fields=_LIST_FIELDS,
-                    pageSize=page_size,
-                    pageToken=page_token,
-                )
-                .execute()
-            )
-            results.extend(resp.get("files", []))
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
-        return results[:limit]
-
-    def get_file_metadata(self, file_id: str) -> dict[str, Any]:
-        """Get metadata for a single file."""
+    def _get_file_metadata(self, file_id: str) -> dict[str, Any]:
+        """Get metadata for a single file. Used internally by export_file."""
         return (
             self._service().files()
             .get(fileId=file_id, fields=_FILE_FIELDS)
@@ -105,7 +78,7 @@ class DriveClient:
         Returns:
             (content_bytes, filename, mime_type)
         """
-        meta = self.get_file_metadata(file_id)
+        meta = self._get_file_metadata(file_id)
         mime = meta.get("mimeType", "")
         name = meta.get("name", file_id)
 
@@ -167,27 +140,6 @@ class DriveClient:
             .execute()
         )
 
-    def update_file(
-        self,
-        file_id: str,
-        content: bytes | None = None,
-        mime_type: str | None = None,
-        name: str | None = None,
-    ) -> dict[str, Any]:
-        """Update an existing file's content and/or name."""
-        body: dict[str, Any] = {}
-        if name is not None:
-            body["name"] = name
-        kwargs: dict[str, Any] = {"fileId": file_id, "fields": _FILE_FIELDS}
-        if body:
-            kwargs["body"] = body
-        if content is not None:
-            mt = mime_type or "application/octet-stream"
-            kwargs["media_body"] = MediaInMemoryUpload(
-                content, mimetype=mt, resumable=True,
-            )
-        return self._service().files().update(**kwargs).execute()
-
     def trash_file(self, file_id: str) -> dict[str, Any]:
         """Move a file to the trash. Returns the updated file resource."""
         return (
@@ -195,6 +147,95 @@ class DriveClient:
             .update(fileId=file_id, body={"trashed": True}, fields=_FILE_FIELDS)
             .execute()
         )
+
+    def resolve_path(self, path: str) -> str | None:
+        """Walk a slash-separated path from the Drive root and return the leaf's ID.
+
+        Returns ``None`` if any segment is missing. The empty string and ``"/"``
+        both resolve to ``"root"``. When two children share a name, the first
+        returned by ``files.list`` wins — Drive permits duplicates but they're
+        rare; the alternative is an error and the agent has no way to tell which
+        one it meant anyway.
+        """
+        cleaned = path.strip("/")
+        if not cleaned:
+            return "root"
+        parent_id = "root"
+        for segment in cleaned.split("/"):
+            safe = segment.replace("'", "\\'")
+            q = (
+                f"'{parent_id}' in parents and trashed = false "
+                f"and name = '{safe}'"
+            )
+            resp = (
+                self._service().files()
+                .list(q=q, fields="files(id, mimeType)", pageSize=2)
+                .execute()
+            )
+            files = resp.get("files", [])
+            if not files:
+                return None
+            parent_id = files[0]["id"]
+        return parent_id
+
+    def list_in_parent_matching(
+        self,
+        parent_id: str,
+        name_substring: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Direct children of ``parent_id`` whose name contains ``name_substring``."""
+        safe = name_substring.replace("'", "\\'")
+        q = (
+            f"'{parent_id}' in parents and trashed = false "
+            f"and name contains '{safe}'"
+        )
+        results: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while len(results) < limit:
+            page_size = min(limit - len(results), 100)
+            resp = (
+                self._service().files()
+                .list(
+                    q=q,
+                    fields=_LIST_FIELDS,
+                    pageSize=page_size,
+                    pageToken=page_token,
+                    orderBy="folder,modifiedTime desc",
+                )
+                .execute()
+            )
+            results.extend(resp.get("files", []))
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+        return results[:limit]
+
+    def move_file(
+        self,
+        file_id: str,
+        new_parent_id: str,
+        new_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Move ``file_id`` into ``new_parent_id`` and optionally rename it."""
+        current = (
+            self._service().files()
+            .get(fileId=file_id, fields="parents")
+            .execute()
+        )
+        old_parents = ",".join(current.get("parents", []))
+        body: dict[str, Any] = {}
+        if new_name is not None:
+            body["name"] = new_name
+        kwargs: dict[str, Any] = {
+            "fileId": file_id,
+            "addParents": new_parent_id,
+            "removeParents": old_parents,
+            "fields": _FILE_FIELDS,
+        }
+        if body:
+            kwargs["body"] = body
+        return self._service().files().update(**kwargs).execute()
 
     def share_file(
         self,

@@ -24,17 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 _VERB_REQUIREMENT: dict[str, tuple[Capability, Access]] = {
-    # Drive (read)
-    "list_drive_files": (Capability.DRIVE, Access.READ),
-    "search_drive_files": (Capability.DRIVE, Access.READ),
-    "get_drive_file_metadata": (Capability.DRIVE, Access.READ),
-    "export_drive_file": (Capability.DRIVE, Access.READ),
-    # Drive (write)
-    "upload_drive_file": (Capability.DRIVE, Access.READ_WRITE),
-    "create_drive_folder": (Capability.DRIVE, Access.READ_WRITE),
-    "update_drive_file": (Capability.DRIVE, Access.READ_WRITE),
-    "trash_drive_file": (Capability.DRIVE, Access.READ_WRITE),
-    "share_drive_file": (Capability.DRIVE, Access.READ_WRITE),
+    # Drive verbs — shared shape with the rclone broker so the agent's Drive
+    # tools work uniformly against either backend.
+    "drive_list": (Capability.DRIVE, Access.READ),
+    "drive_download": (Capability.DRIVE, Access.READ),
+    "drive_upload": (Capability.DRIVE, Access.READ_WRITE),
+    "drive_mkdir": (Capability.DRIVE, Access.READ_WRITE),
+    "drive_move": (Capability.DRIVE, Access.READ_WRITE),
+    "drive_delete": (Capability.DRIVE, Access.READ_WRITE),
+    "drive_share": (Capability.DRIVE, Access.READ_WRITE),
     # Calendar (read)
     "list_calendars": (Capability.CALENDAR, Access.READ),
     "list_events": (Capability.CALENDAR, Access.READ),
@@ -100,15 +98,13 @@ class VerbDispatcher:
 
         self._handlers: dict[str, _Handler] = {}
         if self._drive is not None:
-            self._handlers["list_drive_files"] = self._handle_list_drive_files
-            self._handlers["search_drive_files"] = self._handle_search_drive_files
-            self._handlers["get_drive_file_metadata"] = self._handle_get_drive_file_metadata
-            self._handlers["export_drive_file"] = self._handle_export_drive_file
-            self._handlers["upload_drive_file"] = self._handle_upload_drive_file
-            self._handlers["create_drive_folder"] = self._handle_create_drive_folder
-            self._handlers["update_drive_file"] = self._handle_update_drive_file
-            self._handlers["trash_drive_file"] = self._handle_trash_drive_file
-            self._handlers["share_drive_file"] = self._handle_share_drive_file
+            self._handlers["drive_list"] = self._handle_drive_list
+            self._handlers["drive_download"] = self._handle_drive_download
+            self._handlers["drive_upload"] = self._handle_drive_upload
+            self._handlers["drive_mkdir"] = self._handle_drive_mkdir
+            self._handlers["drive_move"] = self._handle_drive_move
+            self._handlers["drive_delete"] = self._handle_drive_delete
+            self._handlers["drive_share"] = self._handle_drive_share
         if self._calendar is not None:
             self._handlers["list_calendars"] = self._handle_list_calendars
             self._handlers["list_events"] = self._handle_list_events
@@ -149,56 +145,66 @@ class VerbDispatcher:
             raise RpcError("BAD_REQUEST", msg)
         return await handler(args)
 
-    # --- Drive handlers ------------------------------------------------------
+    # --- Drive handlers (canonical / shared with the rclone broker) ---------
 
-    async def _handle_list_drive_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        folder_id = args.get("folder_id") or "root"
+    async def _resolve_handle(self, handle: str) -> str | None:
+        """Parse an opaque Drive handle into a file ID.
+
+        Empty / ``"id:"`` / ``"id:root"`` → ``"root"``. Any string with the
+        ``id:`` prefix is taken as a literal ID. Anything else is treated as a
+        slash-separated path resolved from the Drive root.
+        """
+        if not handle or handle in ("id:", "id:root"):
+            return "root"
+        if handle.startswith("id:"):
+            return handle[len("id:"):]
+        return await _run_sync(self._drive.resolve_path, handle)
+
+    async def _handle_drive_list(self, args: dict[str, Any]) -> dict[str, Any]:
+        handle = args.get("handle") or ""
+        pattern = args.get("pattern") or ""
         limit = _require_int(args, "limit", default=50)
+        parent_id = await self._resolve_handle(handle)
+        if parent_id is None:
+            raise RpcError("NOT_FOUND", f"path not found: {handle!r}")
         try:
-            files = await _run_sync(self._drive.list_files, folder_id, limit)
+            if pattern:
+                files = await _run_sync(
+                    self._drive.list_in_parent_matching, parent_id, pattern, limit,
+                )
+            else:
+                files = await _run_sync(self._drive.list_files, parent_id, limit)
         except HttpError as exc:
             raise _wrap_http_error(exc) from exc
-        return {"files": files}
+        return {"entries": [_drive_entry(f) for f in files]}
 
-    async def _handle_search_drive_files(self, args: dict[str, Any]) -> dict[str, Any]:
-        query = _require_str(args, "query")
-        limit = _require_int(args, "limit", default=30)
-        try:
-            files = await _run_sync(self._drive.search_files, query, limit)
-        except HttpError as exc:
-            raise _wrap_http_error(exc) from exc
-        return {"files": files}
-
-    async def _handle_get_drive_file_metadata(self, args: dict[str, Any]) -> dict[str, Any]:
-        file_id = _require_str(args, "file_id")
-        try:
-            meta = await _run_sync(self._drive.get_file_metadata, file_id)
-        except HttpError as exc:
-            raise _wrap_http_error(exc) from exc
-        return {"file": meta}
-
-    async def _handle_export_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
-        file_id = _require_str(args, "file_id")
+    async def _handle_drive_download(self, args: dict[str, Any]) -> dict[str, Any]:
+        handle = _require_str(args, "handle")
+        file_id = await self._resolve_handle(handle)
+        if file_id is None:
+            raise RpcError("NOT_FOUND", f"path not found: {handle!r}")
         try:
             content, filename, mime_type = await _run_sync(
                 self._drive.export_file, file_id,
             )
         except HttpError as exc:
             raise _wrap_http_error(exc) from exc
-
         path = _write_download(self._downloads_dir, content, filename)
         return {
-            "path": str(path),
+            "local_path": str(path),
             "filename": filename,
             "mime_type": mime_type,
             "size": len(content),
         }
 
-    async def _handle_upload_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_drive_upload(self, args: dict[str, Any]) -> dict[str, Any]:
+        parent_handle = args.get("parent_handle") or ""
         name = _require_str(args, "name")
         data_b64 = _require_str(args, "data_b64")
-        mime_type = _require_str(args, "mime_type")
-        parent_id = args.get("parent_id") or None
+        mime_type = args.get("mime_type") or "application/octet-stream"
+        parent_id = await self._resolve_handle(parent_handle)
+        if parent_id is None:
+            raise RpcError("NOT_FOUND", f"parent not found: {parent_handle!r}")
         try:
             content = base64.b64decode(data_b64)
         except Exception as exc:
@@ -209,59 +215,57 @@ class VerbDispatcher:
             )
         except HttpError as exc:
             raise _wrap_http_error(exc) from exc
-        return {"file": result}
+        return {"entry": _drive_entry(result)}
 
-    async def _handle_create_drive_folder(self, args: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_drive_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
+        parent_handle = args.get("parent_handle") or ""
         name = _require_str(args, "name")
-        parent_id = args.get("parent_id") or None
+        parent_id = await self._resolve_handle(parent_handle)
+        if parent_id is None:
+            raise RpcError("NOT_FOUND", f"parent not found: {parent_handle!r}")
+        try:
+            result = await _run_sync(self._drive.create_folder, name, parent_id)
+        except HttpError as exc:
+            raise _wrap_http_error(exc) from exc
+        return {"entry": _drive_entry(result)}
+
+    async def _handle_drive_move(self, args: dict[str, Any]) -> dict[str, Any]:
+        handle = _require_str(args, "handle")
+        dest_parent_handle = args.get("dest_parent_handle") or ""
+        new_name = args.get("name") or None
+        file_id = await self._resolve_handle(handle)
+        if file_id is None:
+            raise RpcError("NOT_FOUND", f"path not found: {handle!r}")
+        new_parent_id = await self._resolve_handle(dest_parent_handle)
+        if new_parent_id is None:
+            raise RpcError("NOT_FOUND", f"destination not found: {dest_parent_handle!r}")
         try:
             result = await _run_sync(
-                self._drive.create_folder, name, parent_id,
+                self._drive.move_file, file_id, new_parent_id, new_name,
             )
         except HttpError as exc:
             raise _wrap_http_error(exc) from exc
-        return {"file": result}
+        return {"entry": _drive_entry(result)}
 
-    async def _handle_update_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
-        file_id = _require_str(args, "file_id")
-        name = args.get("name") or None
-        data_b64 = args.get("data_b64") or None
-        mime_type = args.get("mime_type") or None
-        if name is None and data_b64 is None:
-            raise RpcError("BAD_REQUEST", "update requires 'name' and/or 'data_b64'")
-        content: bytes | None = None
-        if data_b64 is not None:
-            try:
-                content = base64.b64decode(data_b64)
-            except Exception as exc:
-                raise RpcError("BAD_REQUEST", f"invalid base64 in data_b64: {exc}") from exc
+    async def _handle_drive_delete(self, args: dict[str, Any]) -> dict[str, Any]:
+        handle = _require_str(args, "handle")
+        file_id = await self._resolve_handle(handle)
+        if file_id is None:
+            raise RpcError("NOT_FOUND", f"path not found: {handle!r}")
         try:
-            result = await _run_sync(
-                self._drive.update_file, file_id, content, mime_type, name,
-            )
+            await _run_sync(self._drive.trash_file, file_id)
         except HttpError as exc:
             raise _wrap_http_error(exc) from exc
-        return {"file": result}
+        return {"deleted": True}
 
-    async def _handle_trash_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
-        file_id = _require_str(args, "file_id")
-        try:
-            result = await _run_sync(self._drive.trash_file, file_id)
-        except HttpError as exc:
-            raise _wrap_http_error(exc) from exc
-        return {"file": result}
-
-    async def _handle_share_drive_file(self, args: dict[str, Any]) -> dict[str, Any]:
-        file_id = _require_str(args, "file_id")
+    async def _handle_drive_share(self, args: dict[str, Any]) -> dict[str, Any]:
+        handle = _require_str(args, "handle")
         role = _require_str(args, "role")
-        share_type = _require_str(args, "type")
-        if role not in ("reader", "commenter", "writer"):
-            raise RpcError("BAD_REQUEST", f"role must be reader, commenter, or writer (got {role!r})")
-        if share_type not in ("user", "group", "domain", "anyone"):
-            raise RpcError("BAD_REQUEST", f"type must be user, group, domain, or anyone (got {share_type!r})")
+        share_type = args.get("type") or "user"
         email = args.get("email") or None
-        if share_type in ("user", "group") and not email:
-            raise RpcError("BAD_REQUEST", f"'email' required when type is {share_type!r}")
+        file_id = await self._resolve_handle(handle)
+        if file_id is None:
+            raise RpcError("NOT_FOUND", f"path not found: {handle!r}")
         try:
             result = await _run_sync(
                 self._drive.share_file, file_id, role, share_type, email,
@@ -546,6 +550,24 @@ def _write_download(dir_path: Path, payload: bytes, filename: str) -> Path:
     dest.write_bytes(payload)
     dest.chmod(0o640)
     return dest
+
+
+def _drive_entry(f: dict[str, Any]) -> dict[str, Any]:
+    """Project a Drive file resource onto the unified Drive-entry shape.
+
+    Same shape the rclone broker produces, so the agent's tool layer is
+    backend-agnostic. ``handle`` is an opaque ``id:<file_id>`` token that
+    every other verb accepts as a file reference.
+    """
+    mime = f.get("mimeType", "")
+    return {
+        "name": f.get("name", ""),
+        "handle": f"id:{f.get('id', '')}",
+        "is_dir": mime == "application/vnd.google-apps.folder",
+        "size": int(f.get("size") or 0),
+        "mime_type": mime,
+        "modified": f.get("modifiedTime", ""),
+    }
 
 
 def _flatten_event(e: dict[str, Any]) -> dict[str, Any]:

@@ -1,7 +1,8 @@
-"""Unit tests for the Drive write tools (upload_file, create_folder).
+"""Unit tests for the unified Drive agent tools.
 
-Same pattern as ``test_email_tools.py``: stub ``broker_client.call``
-to return canned shapes (or raise) and assert on the resulting string.
+Each tool wraps exactly one ``broker_client.call`` and shapes the result into
+a plain-text string. The broker is stubbed; behavior is identical regardless
+of which backend serves the verb.
 """
 
 from __future__ import annotations
@@ -13,11 +14,14 @@ from typing import Any
 import pytest
 
 from integrations import broker_client
-from tools.integrations.drive.create_folder import create_drive_folder
-from tools.integrations.drive.share_file import share_drive_file
-from tools.integrations.drive.trash_file import trash_drive_file
-from tools.integrations.drive.update_file import update_drive_file
-from tools.integrations.drive.upload_file import upload_drive_file
+from tools.integrations.drive._format import format_entry, human_bytes
+from tools.integrations.drive.delete import drive_delete
+from tools.integrations.drive.download import drive_download
+from tools.integrations.drive.list import drive_list
+from tools.integrations.drive.mkdir import drive_mkdir
+from tools.integrations.drive.move import drive_move
+from tools.integrations.drive.share import drive_share
+from tools.integrations.drive.upload import drive_upload
 
 
 def _patch_call(
@@ -25,560 +29,211 @@ def _patch_call(
     *,
     result: Any = None,
     exc: Exception | None = None,
-) -> None:
-    async def _fake(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
+) -> list[tuple[str, str, dict]]:
+    """Replace ``broker_client.call``; return a list that records each call."""
+    log: list[tuple[str, str, dict]] = []
+
+    async def _fake(integration_id: str, verb: str, args: dict, *, app_sock_path: Any) -> Any:
+        log.append((integration_id, verb, args))
         if exc is not None:
             raise exc
         return result
 
     monkeypatch.setattr(broker_client, "call", _fake)
+    return log
 
 
-# ── upload_drive_file ────────────────────────────────────────────────────────
+# --- format helpers --------------------------------------------------------
+
+@pytest.mark.parametrize(("n", "expected"), [
+    (0, "0 B"),
+    (-5, "0 B"),
+    (512, "512 B"),
+    (2048, "2 KB"),
+    (1536, "1.5 KB"),
+    (5 * 1024 * 1024, "5 MB"),
+])
+def test_human_bytes(n: int, expected: str) -> None:
+    assert human_bytes(n) == expected
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_confirms_with_file_id_and_size(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    _patch_call(
-        monkeypatch,
-        result={"file": {"id": "abc123", "name": "report.txt"}},
-    )
-    f = tmp_path / "report.txt"
-    f.write_text("hello world")
-
-    out = await upload_drive_file("gw_work", str(f))
-    assert "abc123" in out
-    assert "report.txt" in out
-    assert "11B" in out
+def test_format_entry_file_includes_handle_and_size() -> None:
+    line = format_entry({
+        "name": "report.pdf", "handle": "id:1AB", "is_dir": False,
+        "size": 2048, "mime_type": "application/pdf",
+    })
+    assert "report.pdf" in line and "[id:1AB]" in line and "2 KB" in line
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_uses_custom_name_when_provided(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"file": {"id": "x"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-
-    f = tmp_path / "local.txt"
-    f.write_text("data")
-    out = await upload_drive_file("gw_work", str(f), name="renamed.txt")
-
-    assert captured["name"] == "renamed.txt"
-    assert "renamed.txt" in out
+def test_format_entry_folder_marks_dir() -> None:
+    line = format_entry({"name": "Docs", "handle": "Docs", "is_dir": True})
+    assert "[dir]" in line and "Docs/" in line and "[Docs]" in line
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_sends_base64_content_and_mime_type(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    captured: dict[str, Any] = {}
+# --- drive_list ------------------------------------------------------------
 
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"file": {"id": "x"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-
-    payload = b"\x89PNG fake"
-    f = tmp_path / "image.png"
-    f.write_bytes(payload)
-    await upload_drive_file("gw_work", str(f))
-
-    assert base64.b64decode(captured["data_b64"]) == payload
-    assert captured["mime_type"] == "image/png"
+async def test_list_renders_entries_with_handles(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={"entries": [
+        {"name": "report.pdf", "handle": "id:1", "is_dir": False, "size": 2048, "mime_type": "application/pdf"},
+        {"name": "Folder", "handle": "id:2", "is_dir": True, "size": 0},
+    ]})
+    out = await drive_list("gw_personal")
+    assert "report.pdf" in out and "[id:1]" in out
+    assert "Folder/" in out and "[id:2]" in out
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_passes_parent_id(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"file": {"id": "x"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-
-    f = tmp_path / "doc.txt"
-    f.write_text("x")
-    await upload_drive_file("gw_work", str(f), parent_id="folder_abc")
-
-    assert captured["parent_id"] == "folder_abc"
+async def test_list_empty_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={"entries": []})
+    assert "empty" in await drive_list("gw_personal")
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_reports_missing_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    called = False
-
-    async def _track(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal called
-        called = True
-        return {}
-
-    monkeypatch.setattr(broker_client, "call", _track)
-
-    missing = tmp_path / "nope.txt"
-    out = await upload_drive_file("gw_work", str(missing))
-    assert "Cannot read file" in out
-    assert str(missing) in out
-    assert called is False
+async def test_list_with_pattern_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"entries": []})
+    out = await drive_list("gw_personal", pattern="report")
+    assert "No matching" in out
+    assert log[0][2]["pattern"] == "report"
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_reports_not_connected(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
-    f = tmp_path / "f.txt"
-    f.write_text("x")
-    out = await upload_drive_file("gw_unknown", str(f))
-    assert out == "Integration 'gw_unknown' is not connected."
+async def test_list_passes_handle_to_broker(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"entries": []})
+    await drive_list("icloud_drive_me", handle="Documents")
+    assert log[0][2]["handle"] == "Documents"
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_reports_write_denied(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
-    f = tmp_path / "f.txt"
-    f.write_text("x")
-    out = await upload_drive_file("gw_work", str(f))
-    assert out == "Writes are disabled for 'gw_work'."
+async def test_list_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("x"))
+    assert "not connected" in await drive_list("gw_personal")
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_upload_reports_generic_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationError("quota exceeded"))
-    f = tmp_path / "f.txt"
-    f.write_text("x")
-    out = await upload_drive_file("gw_work", str(f))
-    assert "quota exceeded" in out
+# --- drive_download --------------------------------------------------------
+
+async def test_download_confirms_with_local_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={
+        "local_path": "/downloads/report.pdf", "filename": "report.pdf",
+        "mime_type": "application/pdf", "size": 2048,
+    })
+    out = await drive_download("gw_personal", "id:1AB")
+    assert "report.pdf" in out and "/downloads/report.pdf" in out and "2 KB" in out
 
 
-# ── create_drive_folder ──────────────────────────────────────────────────────
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_create_folder_confirms_with_folder_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(
-        monkeypatch,
-        result={"file": {"id": "folder_xyz"}},
-    )
-    out = await create_drive_folder("gw_work", "Project Files")
-    assert "folder_xyz" in out
-    assert "Project Files" in out
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_create_folder_passes_parent_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"file": {"id": "x"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-    await create_drive_folder("gw_work", "Sub", parent_id="parent_abc")
-
-    assert captured["name"] == "Sub"
-    assert captured["parent_id"] == "parent_abc"
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_create_folder_reports_not_connected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
-    out = await create_drive_folder("gw_unknown", "Folder")
-    assert out == "Integration 'gw_unknown' is not connected."
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_create_folder_reports_write_denied(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
-    out = await create_drive_folder("gw_work", "Folder")
-    assert out == "Writes are disabled for 'gw_work'."
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_create_folder_reports_generic_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_download_error_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_call(monkeypatch, exc=broker_client.IntegrationError("boom"))
-    out = await create_drive_folder("gw_work", "Folder")
-    assert "boom" in out
+    assert "boom" in await drive_download("gw_personal", "id:1AB")
 
 
-# ── update_drive_file ────────────────────────────────────────────────────────
+# --- drive_upload ----------------------------------------------------------
 
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_with_new_content(
+async def test_upload_sends_base64_and_guesses_mime(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    captured: dict[str, Any] = {}
-
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"file": {"id": "abc", "name": "report.txt"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-
-    f = tmp_path / "report.txt"
-    f.write_text("updated content")
-    out = await update_drive_file("gw_work", "abc", file_path=str(f))
-
-    assert base64.b64decode(captured["data_b64"]) == b"updated content"
-    assert captured["mime_type"] == "text/plain"
-    assert "abc" in out
-    assert "report.txt" in out
+    source = tmp_path / "notes.txt"
+    source.write_bytes(b"hello world")
+    log = _patch_call(monkeypatch, result={"entry": {"handle": "id:NEW", "name": "notes.txt"}})
+    out = await drive_upload("gw_personal", str(source))
+    assert "notes.txt" in out and "id:NEW" in out
+    sent = log[0][2]
+    assert sent["name"] == "notes.txt"
+    assert sent["mime_type"] == "text/plain"
+    assert base64.b64decode(sent["data_b64"]) == b"hello world"
+    assert sent["parent_handle"] == ""
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_rename_only(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"file": {"id": "abc", "name": "new_name.txt"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-    out = await update_drive_file("gw_work", "abc", name="new_name.txt")
-
-    assert captured["name"] == "new_name.txt"
-    assert "data_b64" not in captured
-    assert "new_name.txt" in out
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_nothing_to_update(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    async def _track(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal called
-        called = True
-        return {}
-
-    monkeypatch.setattr(broker_client, "call", _track)
-    out = await update_drive_file("gw_work", "abc")
-    assert "Nothing to update" in out
-    assert called is False
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_missing_local_file(
+async def test_upload_custom_name_and_parent(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    called = False
-
-    async def _track(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal called
-        called = True
-        return {}
-
-    monkeypatch.setattr(broker_client, "call", _track)
-    missing = tmp_path / "nope.txt"
-    out = await update_drive_file("gw_work", "abc", file_path=str(missing))
-    assert "Cannot read file" in out
-    assert called is False
+    source = tmp_path / "x.bin"
+    source.write_bytes(b"\x00\x01")
+    log = _patch_call(monkeypatch, result={"entry": {"handle": "id:NEW", "name": "renamed.bin"}})
+    await drive_upload("gw_personal", str(source), parent_handle="id:FOLD", name="renamed.bin")
+    sent = log[0][2]
+    assert sent["name"] == "renamed.bin"
+    assert sent["parent_handle"] == "id:FOLD"
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_reports_not_connected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
-    out = await update_drive_file("gw_unknown", "abc", name="x")
-    assert out == "Integration 'gw_unknown' is not connected."
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_reports_write_denied(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
-    out = await update_drive_file("gw_work", "abc", name="x")
-    assert out == "Writes are disabled for 'gw_work'."
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_update_file_reports_generic_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationError("not found"))
-    out = await update_drive_file("gw_work", "abc", name="x")
+async def test_upload_missing_local_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    log = _patch_call(monkeypatch, result={})
+    out = await drive_upload("gw_personal", str(tmp_path / "nope.txt"))
     assert "not found" in out
+    assert log == []
 
 
-# ── trash_drive_file ─────────────────────────────────────────────────────────
+async def test_upload_permission_denied(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source = tmp_path / "x.txt"
+    source.write_bytes(b"x")
+    _patch_call(monkeypatch, exc=broker_client.IntegrationPermissionDenied("denied"))
+    assert "disabled" in await drive_upload("gw_personal", str(source))
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_trash_file_confirms_with_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(
-        monkeypatch,
-        result={"file": {"id": "abc", "name": "old_report.pdf"}},
-    )
-    out = await trash_drive_file("gw_work", "abc")
-    assert "old_report.pdf" in out
-    assert "trash" in out.lower()
+# --- drive_mkdir -----------------------------------------------------------
+
+async def test_mkdir_confirms_with_handle(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"entry": {"handle": "id:NEW", "name": "New"}})
+    out = await drive_mkdir("gw_personal", "New")
+    assert "New" in out and "id:NEW" in out
+    assert log[0][2] == {"parent_handle": "", "name": "New"}
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_trash_file_passes_file_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured["verb"] = verb
-        captured["args"] = args
-        return {"file": {"id": "abc"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-    await trash_drive_file("gw_work", "abc")
-    assert captured["verb"] == "trash_drive_file"
-    assert captured["args"]["file_id"] == "abc"
+async def test_mkdir_under_parent(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"entry": {"handle": "id:NEW"}})
+    await drive_mkdir("gw_personal", "Sub", parent_handle="id:PARENT")
+    assert log[0][2]["parent_handle"] == "id:PARENT"
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_trash_file_reports_not_connected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
-    out = await trash_drive_file("gw_unknown", "abc")
-    assert out == "Integration 'gw_unknown' is not connected."
+async def test_mkdir_permission_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationPermissionDenied("x"))
+    assert "disabled" in await drive_mkdir("gw_personal", "Sub")
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_trash_file_reports_write_denied(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
-    out = await trash_drive_file("gw_work", "abc")
-    assert out == "Writes are disabled for 'gw_work'."
+# --- drive_move ------------------------------------------------------------
+
+async def test_move_reparents(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"entry": {"handle": "id:M", "name": "a.txt"}})
+    out = await drive_move("gw_personal", "id:F", dest_parent_handle="id:DEST")
+    assert "id:M" in out
+    sent = log[0][2]
+    assert sent["handle"] == "id:F"
+    assert sent["dest_parent_handle"] == "id:DEST"
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_trash_file_reports_generic_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationError("forbidden"))
-    out = await trash_drive_file("gw_work", "abc")
-    assert "forbidden" in out
+async def test_move_renames_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"entry": {"handle": "id:M", "name": "b.txt"}})
+    await drive_move("gw_personal", "id:F", name="b.txt")
+    sent = log[0][2]
+    assert sent["name"] == "b.txt"
 
 
-# ── share_drive_file ─────────────────────────────────────────────────────────
+async def test_move_rejects_no_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={})
+    out = await drive_move("gw_personal", "id:F")
+    assert "needs either" in out.lower()
+    assert log == []
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_with_user(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(
-        monkeypatch,
-        result={"permission": {
-            "id": "perm1", "role": "reader", "type": "user",
-            "emailAddress": "alice@example.com",
-        }},
-    )
-    out = await share_drive_file(
-        "gw_work", "abc", role="reader", share_type="user",
-        email="alice@example.com",
-    )
-    assert "alice@example.com" in out
-    assert "reader" in out
+# --- drive_delete ----------------------------------------------------------
+
+async def test_delete_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, result={"deleted": True})
+    out = await drive_delete("gw_personal", "id:F")
+    assert "Deleted" in out
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_anyone_link(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(
-        monkeypatch,
-        result={"permission": {"id": "perm2", "role": "reader", "type": "anyone"}},
-    )
-    out = await share_drive_file("gw_work", "abc", role="reader", share_type="anyone")
-    assert "anyone" in out
-    assert "reader" in out
+async def test_delete_permission_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_call(monkeypatch, exc=broker_client.IntegrationPermissionDenied("x"))
+    assert "disabled" in await drive_delete("gw_personal", "id:F")
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_passes_args_to_broker(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, Any] = {}
+# --- drive_share -----------------------------------------------------------
 
-    async def _capture(
-        integration_id: str, verb: str, args: dict, *, app_sock_path: str,
-    ) -> Any:
-        captured.update(args)
-        return {"permission": {"id": "x"}}
-
-    monkeypatch.setattr(broker_client, "call", _capture)
-    await share_drive_file(
-        "gw_work", "abc", role="writer", share_type="user",
-        email="bob@example.com",
-    )
-    assert captured["file_id"] == "abc"
-    assert captured["role"] == "writer"
-    assert captured["type"] == "user"
-    assert captured["email"] == "bob@example.com"
+async def test_share_grants_role(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={"permission": {"id": "p1"}})
+    out = await drive_share("gw_personal", "id:F", "a@b.com", role="writer")
+    assert "writer" in out and "a@b.com" in out
+    sent = log[0][2]
+    assert sent["email"] == "a@b.com" and sent["role"] == "writer" and sent["type"] == "user"
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_rejects_invalid_role(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    async def _track(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal called
-        called = True
-        return {}
-
-    monkeypatch.setattr(broker_client, "call", _track)
-    out = await share_drive_file("gw_work", "abc", role="admin", share_type="user", email="a@b.com")
-    assert "Invalid role" in out
-    assert called is False
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_rejects_invalid_type(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    async def _track(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal called
-        called = True
-        return {}
-
-    monkeypatch.setattr(broker_client, "call", _track)
-    out = await share_drive_file("gw_work", "abc", role="reader", share_type="public")
-    assert "Invalid type" in out
-    assert called is False
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_requires_email_for_user_type(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called = False
-
-    async def _track(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal called
-        called = True
-        return {}
-
-    monkeypatch.setattr(broker_client, "call", _track)
-    out = await share_drive_file("gw_work", "abc", role="reader", share_type="user")
-    assert "email" in out.lower()
-    assert called is False
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_reports_not_connected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationNotConnected("nope"))
-    out = await share_drive_file(
-        "gw_unknown", "abc", role="reader", share_type="anyone",
-    )
-    assert out == "Integration 'gw_unknown' is not connected."
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_reports_write_denied(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationWriteDenied("denied"))
-    out = await share_drive_file(
-        "gw_work", "abc", role="reader", share_type="anyone",
-    )
-    assert out == "Writes are disabled for 'gw_work'."
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_share_file_reports_generic_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_call(monkeypatch, exc=broker_client.IntegrationError("forbidden"))
-    out = await share_drive_file(
-        "gw_work", "abc", role="reader", share_type="anyone",
-    )
-    assert "forbidden" in out
+async def test_share_rejects_invalid_role(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _patch_call(monkeypatch, result={})
+    out = await drive_share("gw_personal", "id:F", "a@b.com", role="owner")
+    assert "role must be" in out
+    assert log == []

@@ -83,6 +83,12 @@ _EMAIL_HOST_PATHS = (
     HostPathBinding(role="downloads", env_var="ATTACHMENTS_DIR", mode="write"),
 )
 
+_RCLONE_HOST_PATHS = (
+    # Files retrieved from cloud storage drop into the shared "downloads" role,
+    # same as email attachments and browser saves.
+    HostPathBinding(role="downloads", env_var="DOWNLOADS_DIR", mode="write"),
+)
+
 
 _ICLOUD = CatalogEntry(
     slug="icloud",
@@ -123,6 +129,27 @@ _GMAIL = CatalogEntry(
         "password": "EMAIL_PASS",
     },
     host_paths=_EMAIL_HOST_PATHS,
+)
+
+
+_ICLOUD_DRIVE = CatalogEntry(
+    slug="icloud_drive",
+    command=["python", "-m", "integrations.brokers.rclone_broker"],
+    capabilities={Capability.DRIVE: Access.READ_WRITE},
+    static_env={
+        # rclone reads its remote definition from RCLONE_CONFIG_<NAME>_* env
+        # vars; the broker always works against a remote called "default".
+        "RCLONE_CONFIG_DEFAULT_TYPE": "iclouddrive",
+    },
+    env_injection={
+        # Apple ID + password + the 2FA-issued trust token. The trust token is
+        # what lets rclone skip the interactive 2FA prompt on each run; the
+        # password is still needed for token refresh.
+        "email": "RCLONE_CONFIG_DEFAULT_APPLE_ID",
+        "password": "RCLONE_CONFIG_DEFAULT_PASSWORD",
+        "trust_token": "RCLONE_CONFIG_DEFAULT_TRUST_TOKEN",
+    },
+    host_paths=_RCLONE_HOST_PATHS,
 )
 
 
@@ -201,6 +228,7 @@ _GOOGLE_WORKSPACE = CatalogEntry(
 
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
+    "icloud_drive": _ICLOUD_DRIVE,
     "gmail": _GMAIL,
     "llm_openai": _LLM_OPENAI,
     "llm_anthropic": _LLM_ANTHROPIC,

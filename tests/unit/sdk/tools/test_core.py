@@ -69,19 +69,18 @@ _CALENDAR_WRITE_TOOLS = {
 }
 
 _DRIVE_READ_TOOLS = {
-    "list_drive_files",
-    "search_drive_files",
-    "get_drive_file_metadata",
-    "export_drive_file",
+    "drive_list",
+    "drive_download",
 }
 
 _DRIVE_WRITE_TOOLS = {
-    "upload_drive_file",
-    "create_drive_folder",
-    "update_drive_file",
-    "trash_drive_file",
-    "share_drive_file",
+    "drive_upload",
+    "drive_mkdir",
+    "drive_move",
+    "drive_delete",
 }
+
+_DRIVE_GOOGLE_ONLY_TOOLS = {"drive_share"}
 
 _CONTACTS_READ_TOOLS = {
     "list_contacts",
@@ -226,6 +225,7 @@ async def test_drive_read_includes_drive_tools(
     assert _DRIVE_READ_TOOLS <= names
     assert not names & (_EMAIL_READ_TOOLS | _CALENDAR_READ_TOOLS | _CONTACTS_READ_TOOLS)
     assert not names & _DRIVE_WRITE_TOOLS
+    assert not names & _DRIVE_GOOGLE_ONLY_TOOLS  # share needs read+write
 
 
 @pytest.mark.asyncio
@@ -233,7 +233,7 @@ async def test_drive_read_includes_drive_tools(
 async def test_drive_read_write_includes_all_drive_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An integration with drive:rw gets both read and write tools."""
+    """A google_workspace integration with drive:rw gets read+write tools and share."""
     _stub_integrations(monkeypatch, {
         "gw_work": _FakeRecord(
             id="gw_work",
@@ -244,7 +244,7 @@ async def test_drive_read_write_includes_all_drive_tools(
     from sdk.tools._core import get_core_tools
 
     names = _tool_names(await get_core_tools())
-    assert (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS) <= names
+    assert (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS | _DRIVE_GOOGLE_ONLY_TOOLS) <= names
 
 
 @pytest.mark.asyncio
@@ -330,7 +330,8 @@ async def test_full_workspace_integration_includes_all_capabilities(
     all_integration_tools = (
         _EMAIL_READ_TOOLS | _EMAIL_WRITE_TOOLS
         | _CALENDAR_READ_TOOLS | _CALENDAR_WRITE_TOOLS
-        | _DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS | _CONTACTS_READ_TOOLS
+        | _DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS | _DRIVE_GOOGLE_ONLY_TOOLS
+        | _CONTACTS_READ_TOOLS
     )
     assert all_integration_tools <= names
 
@@ -356,3 +357,74 @@ async def test_off_capability_excluded(
     names = _tool_names(await get_core_tools())
     assert _EMAIL_READ_TOOLS <= names
     assert not names & _CALENDAR_READ_TOOLS
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_icloud_drive_gets_same_unified_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An iCloud Drive integration gets the same drive_* tools as Google,
+    minus the Google-only drive_share."""
+    _stub_integrations(monkeypatch, {
+        "icloud_drive_me": _FakeRecord(
+            id="icloud_drive_me",
+            slug="icloud_drive",
+            permissions={Capability.DRIVE: Access.READ_WRITE},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS) <= names
+    assert not names & _DRIVE_GOOGLE_ONLY_TOOLS
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_icloud_drive_read_only_excludes_writes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_integrations(monkeypatch, {
+        "icloud_drive_me": _FakeRecord(
+            id="icloud_drive_me",
+            slug="icloud_drive",
+            permissions={Capability.DRIVE: Access.READ},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    names = _tool_names(await get_core_tools())
+    assert _DRIVE_READ_TOOLS <= names
+    assert not names & _DRIVE_WRITE_TOOLS
+    assert not names & _DRIVE_GOOGLE_ONLY_TOOLS
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_drive_share_is_google_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With both providers connected at drive:rw, drive_share is registered for
+    Google but not for iCloud Drive."""
+    _stub_integrations(monkeypatch, {
+        "gw_work": _FakeRecord(
+            id="gw_work",
+            slug="google_workspace",
+            permissions={Capability.DRIVE: Access.READ_WRITE},
+        ),
+        "icloud_drive_me": _FakeRecord(
+            id="icloud_drive_me",
+            slug="icloud_drive",
+            permissions={Capability.DRIVE: Access.READ_WRITE},
+        ),
+    })
+    from sdk.tools._core import get_core_tools
+
+    tools = await get_core_tools()
+    names = _tool_names(tools)
+    assert (_DRIVE_READ_TOOLS | _DRIVE_WRITE_TOOLS | _DRIVE_GOOGLE_ONLY_TOOLS) <= names
+    # Confirm drive_share's docstring only lists the google_workspace id.
+    share = next(t for t in tools if t.__name__ == "drive_share")
+    assert "'gw_work'" in share.__doc__
+    assert "'icloud_drive_me'" not in share.__doc__

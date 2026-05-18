@@ -92,27 +92,33 @@ async def get_core_tools() -> list[Callable[..., Any]]:
 
     drive_ids = _ids_with_access(records, Capability.DRIVE, Access.READ)
     if drive_ids:
-        from tools.integrations.drive.export_file import build_export_drive_file_tool
-        from tools.integrations.drive.get_file_metadata import build_get_drive_file_metadata_tool
-        from tools.integrations.drive.list_files import build_list_drive_files_tool
-        from tools.integrations.drive.search_files import build_search_drive_files_tool
-        tools.append(build_list_drive_files_tool(drive_ids))
-        tools.append(build_search_drive_files_tool(drive_ids))
-        tools.append(build_get_drive_file_metadata_tool(drive_ids))
-        tools.append(build_export_drive_file_tool(drive_ids))
+        from tools.integrations.drive import (
+            build_drive_download_tool,
+            build_drive_list_tool,
+        )
+        tools.append(build_drive_list_tool(drive_ids))
+        tools.append(build_drive_download_tool(drive_ids))
 
     drive_write_ids = _ids_with_access(records, Capability.DRIVE, Access.READ_WRITE)
     if drive_write_ids:
-        from tools.integrations.drive.create_folder import build_create_drive_folder_tool
-        from tools.integrations.drive.share_file import build_share_drive_file_tool
-        from tools.integrations.drive.trash_file import build_trash_drive_file_tool
-        from tools.integrations.drive.update_file import build_update_drive_file_tool
-        from tools.integrations.drive.upload_file import build_upload_drive_file_tool
-        tools.append(build_upload_drive_file_tool(drive_write_ids))
-        tools.append(build_create_drive_folder_tool(drive_write_ids))
-        tools.append(build_update_drive_file_tool(drive_write_ids))
-        tools.append(build_trash_drive_file_tool(drive_write_ids))
-        tools.append(build_share_drive_file_tool(drive_write_ids))
+        from tools.integrations.drive import (
+            build_drive_delete_tool,
+            build_drive_mkdir_tool,
+            build_drive_move_tool,
+            build_drive_upload_tool,
+        )
+        tools.append(build_drive_upload_tool(drive_write_ids))
+        tools.append(build_drive_mkdir_tool(drive_write_ids))
+        tools.append(build_drive_move_tool(drive_write_ids))
+        tools.append(build_drive_delete_tool(drive_write_ids))
+
+    # drive_share is Google-only — rclone-backed remotes have no sharing API.
+    drive_share_ids = frozenset(
+        i for i in drive_write_ids if records[i].slug == "google_workspace"
+    )
+    if drive_share_ids:
+        from tools.integrations.drive import build_drive_share_tool
+        tools.append(build_drive_share_tool(drive_share_ids))
 
     contacts_ids = _ids_with_access(records, Capability.CONTACTS, Access.READ)
     if contacts_ids:
