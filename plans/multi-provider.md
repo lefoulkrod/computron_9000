@@ -111,14 +111,17 @@ No default provider; provider storage; `config.yaml` cleanup. Includes what earl
 - Unit tests updated; `settings.py` gained comments explaining the first-write/source-of-truth model.
 - **Known degradation, fixed in Step 3:** SystemSettings and ProfilesTab still `fetch('/api/models')` without a provider, so they show empty model lists until the ModelPicker is provider-aware. e2e wizard/provider tests and `DesktopApp.test.jsx` are not yet updated for the new settings shape.
 
-### Step 3: ModelPicker provider+model selector; fix the degraded UI
+### Step 3: ModelPicker provider+model selector; fix the degraded UI — DONE
 
-- Provider tab bar in ModelPicker; per-provider model fetch (`GET /api/models?provider=`) with per-provider caching; tab bar hidden when one provider is configured.
-- ProfileBuilder passes the configured providers to ModelPicker, stores provider+model on the profile.
-- SystemSettings model pickers (default / vision / compaction / title) use the enhanced picker; compaction gets the "Advanced" `compaction_options` panel mirroring vision's; title gets a model+provider picker, no options panel; `num_ctx` fields are Ollama-only and prefill from the picked model's `context_window`.
-- ProfilesTab stops reading `llm_provider`; ProfileBuilder shows/edits the per-profile provider.
-- Fix the ModelPicker results list: floating popover instead of inline-flow.
-- Update `DesktopApp.test.jsx` and the e2e wizard/provider tests for the new settings shape.
+- Provider tab bar in ModelPicker; per-provider model fetch (`GET /api/models?provider=`) with per-provider caching; tab bar hidden when one provider is configured. **DONE.**
+- ProfileBuilder passes the configured providers to ModelPicker, stores provider+model on the profile. **DONE.**
+- SystemSettings model pickers (default / vision / compaction / title) use the enhanced picker; title gets a model+provider picker, no options panel. **DONE.**
+- ProfilesTab stops reading `llm_provider`; ProfileBuilder shows/edits the per-profile provider. **DONE.**
+- Fix the ModelPicker results list: floating popover instead of inline-flow. **DONE** (the new picker is a chip trigger with a popover anchored to it).
+- Update `DesktopApp.test.jsx` mock + e2e tests for the new settings/picker shape. **DONE.** `tests/e2e/setup/test_wizard_rerun.py` and `tests/e2e/setup/test_wizard_provider_step.py` were deleted — both depended on the removed "Run Setup Wizard" re-entry button. Provider-step conditional-field-visibility coverage is a candidate for future Vitest unit tests on the wizard.
+- **Deferred** (not blocking multi-provider; can be picked up later as quality-of-life work):
+  - Compaction "Advanced" panel mirroring vision's (editable `compaction_options` with provider-tagged fields). `compaction_options` is still settable by the migration / defaults / hand-editing settings.json; no UI surface.
+  - `num_ctx` Ollama-only prefill from the picked model's `context_window` in the advanced panels. Current behavior: hardcoded defaults (60000 for vision, 32768 for compaction).
 
 ### Step 4: Providers settings page; revert Integrations tab; wizard first-run-only
 

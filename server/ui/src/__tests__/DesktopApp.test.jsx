@@ -235,15 +235,22 @@ function startSubAgent(dispatch, id, parentId, { name = 'browser_agent' } = {}) 
 describe('DesktopApp view transitions', () => {
     beforeEach(() => {
         capturedDispatch = null;
-        // Mock fetch for /api/settings and /api/models so the setup wizard resolves
+        // Mock the fetches DesktopApp's children make on mount so the setup
+        // wizard resolves and nothing else trips on a missing endpoint.
         globalThis.fetch = vi.fn((url) => {
             if (url === '/api/settings') {
-                return Promise.resolve({ json: () => Promise.resolve({ setup_complete: true }) });
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ setup_complete: true }) });
             }
-            if (url === '/api/models') {
-                return Promise.resolve({ json: () => Promise.resolve({ models: [] }) });
+            if (url === '/api/providers') {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ providers: [] }) });
             }
-            return Promise.resolve({ json: () => Promise.resolve({}) });
+            if (url === '/api/profiles') {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+            }
+            if (url.startsWith('/api/models')) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ models: [] }) });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
         });
     });
 

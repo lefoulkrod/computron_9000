@@ -176,6 +176,8 @@ export default function ModelPicker({
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 data-testid="model-picker-trigger"
+                data-selected-provider={selectedProvider || ''}
+                data-selected-model={selectedModel || ''}
             >
                 {selectedModel ? (
                     <>

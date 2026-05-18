@@ -27,10 +27,20 @@ def test_settings_default_agent(page: Page):
     assert settings["default_agent"] == "computron"
 
 
-def test_settings_provider(page: Page):
-    """The LLM provider should be set to ollama."""
+def test_settings_direct_provider(page: Page):
+    """Ollama should be configured as a direct provider with a base URL."""
     settings = page.request.get("/api/settings").json()
-    assert settings["llm_provider"] == "ollama"
+    direct = settings.get("direct_providers", {})
+    assert "ollama" in direct
+    assert direct["ollama"].get("base_url")
+
+
+def test_settings_per_use_providers(page: Page):
+    """Vision, compaction, and title each get a provider stamped by the wizard."""
+    settings = page.request.get("/api/settings").json()
+    assert settings["vision_provider"] == "ollama"
+    assert settings["compaction_provider"] == "ollama"
+    assert settings["title_provider"] == "ollama"
 
 
 def test_settings_vision_model(page: Page, wizard_choices):
@@ -45,8 +55,14 @@ def test_settings_compaction_model(page: Page, wizard_choices):
     assert settings["compaction_model"] == wizard_choices["main_model"]
 
 
+def test_settings_title_model(page: Page, wizard_choices):
+    """The title model should be set to the main model (matches compaction)."""
+    settings = page.request.get("/api/settings").json()
+    assert settings["title_model"] == wizard_choices["main_model"]
+
+
 def test_ootb_profiles_all_have_same_model(page: Page, wizard_choices):
-    """All OOTB profiles should have the picked model set."""
+    """All OOTB profiles should have the picked model + provider."""
     profiles = page.request.get("/api/profiles").json()
     ootb_ids = {"computron", "code_expert", "research_agent", "creative_writer"}
     for profile in profiles:
@@ -54,6 +70,10 @@ def test_ootb_profiles_all_have_same_model(page: Page, wizard_choices):
             assert profile["model"] == wizard_choices["main_model"], (
                 f"Profile '{profile['id']}' has model '{profile['model']}', "
                 f"expected '{wizard_choices['main_model']}'"
+            )
+            assert profile.get("provider") == "ollama", (
+                f"Profile '{profile['id']}' has provider '{profile.get('provider')}', "
+                f"expected 'ollama'"
             )
 
 
