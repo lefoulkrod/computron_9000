@@ -226,3 +226,48 @@ async def test_summary_record_includes_metadata():
     assert record.conversation_id == "conv-123"
     assert record.agent_name == "BROWSER"
     assert record.options == {"temperature": 0.3}
+
+
+# ── Empty intent history must not replace pinned message ─────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_empty_intent_history_does_not_replace_pinned_message():
+    """When _extract_intent returns an empty string, the pinned first user
+    message must be preserved — not replaced with just the intent prefix."""
+    messages = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "original request"},
+        {"role": "user", "content": "revised request"},
+        *[{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(8)],
+        {"role": "user", "content": "recent"},
+        {"role": "assistant", "content": "recent reply"},
+    ]
+    history = _build_history(messages)
+    strategy = SummarizeStrategy(threshold=0.5, keep_recent_groups=1)
+
+    with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
+         patch.object(strategy, "_extract_intent", new_callable=AsyncMock) as mock_extract, \
+         patch("sdk.context._strategy.save_summary_record"), \
+         patch("sdk.context._strategy.load_config") as mock_cfg, \
+         patch("sdk.context._strategy.load_settings", return_value={"compaction_model": "test-model"}), \
+         patch("sdk.context._strategy.get_conversation_id", return_value="conv-1"), \
+         patch("sdk.context._strategy.get_current_agent_name", return_value="TEST"):
+        mock_summarize.return_value = ("Summary.", "test-model")
+        # _extract_intent returns empty string — simulates model returning no content
+        mock_extract.return_value = ""
+        mock_cfg.return_value = MagicMock(
+            summary=MagicMock(options={}),
+        )
+
+        await strategy.apply(history, _make_stats(0.8))
+
+    # The pinned first user message must still contain the original content,
+    # NOT be replaced with just the intent prefix.
+    non_system = history.non_system_messages
+    pinned = non_system[0]
+    assert pinned["role"] == "user"
+    assert pinned["content"] == "original request", (
+        f"Expected original request to be preserved, got: {pinned['content']!r}"
+    )
