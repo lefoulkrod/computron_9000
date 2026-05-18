@@ -564,6 +564,10 @@ def _count_kept_by_assistant_groups(
     non-assistant messages (user messages, tool results) that fall between
     or after the kept assistant messages are included automatically.
 
+    The user message that immediately precedes the earliest kept assistant
+    group is also preserved so the agent retains the triggering context
+    (e.g. the question or instruction that prompted the assistant's work).
+
     Returns the number of raw messages to keep from the end.
     """
     if keep_groups <= 0 or not messages:
@@ -582,6 +586,12 @@ def _count_kept_by_assistant_groups(
 
     if assistant_count == 0:
         return 0
+
+    # Extend the boundary backward to include the user message that
+    # immediately precedes the earliest kept assistant group, so the
+    # agent retains the triggering context.
+    if boundary > 0 and messages[boundary - 1].get("role") == "user":
+        boundary -= 1
 
     return len(messages) - boundary
 

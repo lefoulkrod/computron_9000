@@ -88,11 +88,47 @@ async def test_tool_pairs_kept_together():
 
     non_system = history.non_system_messages
     roles = [m["role"] for m in non_system]
-    assert roles == ["user", "assistant", "assistant", "tool", "assistant"]
+    # The user message "now fix it" that triggers the kept assistant group
+    # should be preserved alongside the assistant + tool result.
+    assert roles == ["user", "assistant", "user", "assistant", "tool", "assistant"]
     for i, m in enumerate(non_system):
         if m.get("role") == "tool":
             assert i > 0
             assert non_system[i - 1].get("role") == "assistant"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_user_message_before_kept_group_is_preserved():
+    """The user message that triggers the kept assistant group must be preserved."""
+    messages = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "original request"},
+        {"role": "assistant", "content": "old work"},
+        {"role": "user", "content": "do task A"},
+        {"role": "assistant", "content": "result A"},
+        {"role": "user", "content": "now do task B"},
+        {"role": "assistant", "content": "result B"},
+    ]
+    history = _build_history(messages)
+    strategy = SummarizeStrategy(threshold=0.5, keep_recent_groups=1, summary_model="test-model")
+
+    with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
+         patch("sdk.context._strategy.save_summary_record"), \
+         patch("sdk.context._strategy.load_config") as mock_cfg:
+        mock_summarize.return_value = ("Summary.", "test-model")
+        mock_cfg.return_value = MagicMock(summary=MagicMock(model="test-model", options={}))
+
+        await strategy.apply(history, _make_stats(0.8))
+
+    non_system = history.non_system_messages
+    roles = [m["role"] for m in non_system]
+    # The pinned first user message, the summary, then the user message
+    # "now do task B" and its assistant response should all be preserved.
+    assert roles == ["user", "assistant", "user", "assistant"]
+    contents = [m["content"] for m in non_system]
+    assert "now do task B" in contents
+    assert "result B" in contents
 
 
 # ── _serialize_messages: summary skip is role-agnostic ─────────────────
