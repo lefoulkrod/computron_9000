@@ -362,7 +362,7 @@ class LLMCompactionStrategy:
         # Update the pinned first user message with the extracted intent
         # history so the agent sees the current objective, not the stale
         # original request.
-        if intent_history is not None and has_pinned:
+        if intent_history and has_pinned:
             pinned_idx = 1 if history.system_message is not None else 0
             pinned_msg = history.get_mutable(pinned_idx)
             pinned_msg["content"] = _INTENT_PREFIX + intent_history
