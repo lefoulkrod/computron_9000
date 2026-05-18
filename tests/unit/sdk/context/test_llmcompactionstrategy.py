@@ -13,6 +13,7 @@ from sdk.context._strategy import (
     _extract_prior_summary,
     _find_first_user,
     _serialize_messages,
+    _unload_model,
 )
 
 
@@ -226,3 +227,61 @@ async def test_summary_record_includes_metadata():
     assert record.conversation_id == "conv-123"
     assert record.agent_name == "BROWSER"
     assert record.options == {"temperature": 0.3}
+
+
+# ── _unload_model ────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unload_model_spawns_subprocess_and_awaits():
+    """_unload_model should use asyncio subprocess, not blocking subprocess.run."""
+    import asyncio as _asyncio
+
+    mock_proc = MagicMock()
+    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+    mock_proc.wait = AsyncMock()
+
+    with patch("sdk.context._strategy.asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = mock_proc
+
+        await _unload_model("test-model")
+
+        mock_exec.assert_awaited_once_with(
+            "ollama", "stop", "test-model",
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.PIPE,
+        )
+        mock_proc.communicate.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unload_model_handles_timeout():
+    """_unload_model should kill the process and log on timeout."""
+    import asyncio as _asyncio
+
+    mock_proc = MagicMock()
+    mock_proc.communicate = AsyncMock(side_effect=TimeoutError)
+    mock_proc.kill = MagicMock()
+    mock_proc.wait = AsyncMock()
+
+    with patch("sdk.context._strategy.asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = mock_proc
+
+        # Should not raise
+        await _unload_model("test-model")
+
+        mock_proc.kill.assert_called_once()
+        mock_proc.wait.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unload_model_handles_subprocess_error():
+    """_unload_model should not raise when subprocess creation fails."""
+    with patch("sdk.context._strategy.asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        mock_exec.side_effect = OSError("No such executable")
+
+        # Should not raise
+        await _unload_model("test-model")

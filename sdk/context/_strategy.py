@@ -288,11 +288,11 @@ class LLMCompactionStrategy:
                 "LLMCompactionStrategy: compaction timed out after %ds, skipping",
                 _CALL_TIMEOUT,
             )
-            _unload_model(resolved_model)
+            await _unload_model(resolved_model)
             return
         except Exception:
             logger.exception("LLMCompactionStrategy: LLM call failed, skipping compaction")
-            _unload_model(resolved_model)
+            await _unload_model(resolved_model)
             return
         elapsed = _time.monotonic() - t0
 
@@ -368,7 +368,7 @@ class LLMCompactionStrategy:
             pinned_msg["content"] = _INTENT_PREFIX + intent_history
 
         # Unload the summarizer model to free VRAM for the main agent.
-        _unload_model(model_name)
+        await _unload_model(model_name)
 
     async def _summarize(
         self,
@@ -520,14 +520,22 @@ class LLMCompactionStrategy:
         return None
 
 
-def _unload_model(model: str) -> None:
+async def _unload_model(model: str) -> None:
     """Unload a model from Ollama to free VRAM."""
-    import subprocess
+    import asyncio
+
     try:
-        subprocess.run(
-            ["ollama", "stop", model],
-            capture_output=True, timeout=30,
+        proc = await asyncio.create_subprocess_exec(
+            "ollama", "stop", model,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        try:
+            await asyncio.wait_for(proc.communicate(), timeout=30)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            logger.debug("Timed out unloading model %s", model)
     except Exception:
         logger.debug("Failed to unload model %s", model)
 
