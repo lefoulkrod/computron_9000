@@ -189,12 +189,13 @@ class OpenAIResponsesProvider(BaseAPIProvider):
                     item = event.item
                     if getattr(item, "type", None) == "function_call":
                         idx = event.output_index
-                        tc_accum[idx] = {
-                            "id": getattr(item, "id", "") or "",
-                            "call_id": getattr(item, "call_id", "") or "",
-                            "name": getattr(item, "name", "") or "",
-                            "arguments": "",
-                        }
+                        if idx not in tc_accum:
+                            tc_accum[idx] = {"id": "", "call_id": "", "name": "", "arguments": ""}
+                        tc_accum[idx]["id"] = getattr(item, "id", "") or ""
+                        tc_accum[idx]["call_id"] = getattr(item, "call_id", "") or ""
+                        tc_accum[idx]["name"] = getattr(item, "name", "") or ""
+                        # Preserve any arguments already accumulated from
+                        # function_call_arguments.delta events that arrived first.
 
                 elif event.type == "response.completed":
                     final_response = event.response
