@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeSanitize from 'rehype-sanitize';
 import { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
+import rehypeMermaid from 'rehype-mermaid';
 import remend from 'remend';
 import 'katex/dist/katex.min.css';
 import styles from './MarkdownContent.module.css';
@@ -87,7 +88,7 @@ export default function MarkdownContent({ children, streaming }) {
             <ReactMarkdown
                 urlTransform={_urlTransform}
                 remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                rehypePlugins={[[rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, _sanitizeSchema]]}
+                rehypePlugins={[[rehypeMermaid, { strategy: 'img-svg' }], [rehypeKatex, { strict: 'ignore' }], [rehypeSanitize, _sanitizeSchema]]}
                 components={_markdownComponents}
             >
                 {content}

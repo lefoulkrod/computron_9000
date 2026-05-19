@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeMermaid from 'rehype-mermaid';
 import { highlightCode } from '../utils/highlight.js';
 import { PreCodeBlock, InlineCode } from './CodeBlock.jsx';
 
@@ -56,6 +57,7 @@ export default function FileContentRenderer({
                 <div className={styles.markdownContent}>
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[[rehypeMermaid, { strategy: 'img-svg' }]]}
                         components={_markdownComponents}
                     >
                         {text}
