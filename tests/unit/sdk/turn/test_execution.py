@@ -40,6 +40,7 @@ def _make_agent(**overrides: Any) -> Agent:
         "name": "test-agent",
         "description": "test",
         "instruction": "You are a test agent.",
+        "provider": "ollama",
         "model": "test-model",
         "options": {},
         "tools": [],

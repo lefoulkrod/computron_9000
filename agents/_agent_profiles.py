@@ -30,6 +30,7 @@ class AgentProfile(BaseModel):
     description: str = ""
     enabled: bool = True
     system_prompt: str = ""
+    provider: str = ""
     model: str = ""
     skills: list[str] = Field(default_factory=list)
     temperature: float | None = None
@@ -115,31 +116,33 @@ def save_agent_profile(profile: AgentProfile) -> AgentProfile:
     return profile
 
 
-def set_model_on_profiles(
+def apply_llm_config_to_profiles(
     model: str,
     *,
-    force: bool = False,
+    provider: str | None = None,
     context_window: int | None = None,
 ) -> None:
-    """Set the model on agent profiles.
+    """Stamp the chosen LLM config (provider, model, context window) onto
+    profiles that don't already have a model.
 
-    When *force* is False (default), only profiles with no model are updated.
-    When True, all profiles are updated unconditionally.
-
-    If *context_window* is provided, it's also written to each updated profile
-    so compaction uses the correct denominator for the new model.
+    Used by the setup wizard's finish step to fill in the shipped default
+    profiles, which ship with empty ``provider`` / ``model``. Profiles that
+    already have a model are left alone — per-profile edits happen in
+    ProfileBuilder afterwards.
     """
     d = _profiles_dir()
     d.mkdir(parents=True, exist_ok=True)
     for profile in _load_all().values():
-        if force or not profile.model:
+        if not profile.model:
             updates: dict = {"model": model}
+            if provider is not None:
+                updates["provider"] = provider
             if context_window is not None:
                 updates["context_window"] = context_window
             updated = profile.model_copy(update=updates)
             path = d / f"{updated.id}.json"
             path.write_text(json.dumps(updated.model_dump(), indent=2))
-            logger.info("Set model '%s' on profile '%s'", model, profile.id)
+            logger.info("Applied model '%s' to profile '%s'", model, profile.id)
 
 
 def delete_agent_profile(profile_id: str) -> bool:
@@ -170,11 +173,11 @@ __all__ = [
     "COMPUTRON_ID",
     "PROFILES_SUBDIR",
     "AgentProfile",
+    "apply_llm_config_to_profiles",
     "delete_agent_profile",
     "duplicate_agent_profile",
     "get_agent_profile",
     "get_default_profile",
     "list_agent_profiles",
     "save_agent_profile",
-    "set_model_on_profiles",
 ]

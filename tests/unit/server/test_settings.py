@@ -26,8 +26,13 @@ class TestLoadSettings:
         s = load_settings()
         assert s["setup_complete"] is False
         assert s["default_agent"] == "computron"
+        assert s["direct_providers"] == {}
+        assert s["vision_provider"] == ""
         assert s["vision_model"] == ""
+        assert s["compaction_provider"] == ""
         assert s["compaction_model"] == ""
+        assert s["title_provider"] == ""
+        assert s["title_model"] == ""
 
     def test_loads_from_disk(self, tmp_path):
         """Reads saved settings."""
@@ -92,41 +97,46 @@ class TestSettingsUpdate:
         with pytest.raises(ValidationError, match="Extra inputs"):
             SettingsUpdate(unknown_setting="value")
 
-    def test_llm_fields_accepted(self):
-        u = SettingsUpdate(
-            llm_provider="openai",
-            llm_base_url="http://localhost:1234/v1",
-        )
-        assert u.llm_provider == "openai"
-        assert u.llm_base_url == "http://localhost:1234/v1"
+    def test_direct_providers_accepted(self):
+        u = SettingsUpdate(direct_providers={"ollama": {"base_url": "http://localhost:11434"}})
+        assert u.direct_providers == {"ollama": {"base_url": "http://localhost:11434"}}
+
+    def test_llm_provider_field_rejected(self):
+        """The old flat llm_provider field is gone — providers live elsewhere now."""
+        with pytest.raises(ValidationError, match="Extra inputs"):
+            SettingsUpdate(llm_provider="openai")
 
     def test_llm_api_key_rejected(self):
-        """llm_api_key is no longer a settings field — keys live in the vault."""
+        """llm_api_key is not a settings field — keys live in the vault."""
         with pytest.raises(ValidationError, match="Extra inputs"):
             SettingsUpdate(llm_api_key="sk-test")
 
-    def test_llm_base_url_rejects_non_http_scheme(self):
+    def test_direct_provider_rejects_missing_base_url(self):
+        with pytest.raises(ValidationError, match="no base_url"):
+            SettingsUpdate(direct_providers={"ollama": {}})
+
+    def test_direct_provider_rejects_non_http_scheme(self):
         """file:// and other dangerous schemes must be rejected."""
         with pytest.raises(ValidationError, match="http or https"):
-            SettingsUpdate(llm_base_url="file:///etc/passwd")
+            SettingsUpdate(direct_providers={"x": {"base_url": "file:///etc/passwd"}})
 
-    def test_llm_base_url_rejects_gopher(self):
+    def test_direct_provider_rejects_gopher(self):
         with pytest.raises(ValidationError, match="http or https"):
-            SettingsUpdate(llm_base_url="gopher://evil.example.com")
+            SettingsUpdate(direct_providers={"x": {"base_url": "gopher://evil.example.com"}})
 
-    def test_llm_base_url_rejects_metadata_ip(self):
+    def test_direct_provider_rejects_metadata_ip(self):
         """AWS instance metadata IP must be blocked."""
         with pytest.raises(ValidationError, match="blocked"):
-            SettingsUpdate(llm_base_url="http://169.254.169.254/latest/meta-data")
+            SettingsUpdate(direct_providers={"x": {"base_url": "http://169.254.169.254/latest/meta-data"}})
 
-    def test_llm_base_url_allows_localhost(self):
+    def test_direct_provider_allows_localhost(self):
         """localhost (used by Ollama) must be allowed."""
-        u = SettingsUpdate(llm_base_url="http://localhost:11434")
-        assert u.llm_base_url == "http://localhost:11434"
+        u = SettingsUpdate(direct_providers={"ollama": {"base_url": "http://localhost:11434"}})
+        assert u.direct_providers["ollama"]["base_url"] == "http://localhost:11434"
 
-    def test_llm_base_url_allows_https(self):
-        u = SettingsUpdate(llm_base_url="https://api.openai.com/v1")
-        assert u.llm_base_url == "https://api.openai.com/v1"
+    def test_direct_provider_allows_https(self):
+        u = SettingsUpdate(direct_providers={"openai_compat": {"base_url": "https://vllm.example.com/v1"}})
+        assert u.direct_providers["openai_compat"]["base_url"] == "https://vllm.example.com/v1"
 
     def test_null_vision_model_accepted(self):
         """vision_model: null is the explicit skip value."""
@@ -145,4 +155,4 @@ class TestSettingsUpdate:
         dumped = u.model_dump(exclude_unset=True)
         assert "vision_model" in dumped
         assert "setup_complete" not in dumped
-        assert "llm_provider" not in dumped
+        assert "direct_providers" not in dumped

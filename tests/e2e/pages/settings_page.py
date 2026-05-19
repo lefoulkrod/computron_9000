@@ -8,24 +8,37 @@ from tests.e2e.pages.integrations_tab import IntegrationsTab
 
 
 class ModelPickerLocator:
-    """Interaction helper for the ModelPicker component."""
+    """Interaction helper for the ModelPicker component.
+
+    The picker is a chip trigger that opens a popover on click. The
+    closed-state value is exposed via ``data-selected-model`` on the
+    trigger button so it can be read without opening.
+
+    Inline pickers portal the popover to ``document.body``, so popover
+    and item lookups go through the page, not the wrapper root.
+    """
 
     def __init__(self, root: Locator):
         self._root = root
-        self.input = root.locator("input[type='text']")
+        self._page = root.page
+        self.trigger = root.get_by_test_id("model-picker-trigger")
 
     def selected_value(self) -> str:
-        return self.input.input_value()
+        return self.trigger.get_attribute("data-selected-model") or ""
 
     def open(self) -> None:
-        self.input.focus()
+        """Open the popover if it isn't already open."""
+        if self.trigger.get_attribute("aria-expanded") != "true":
+            self.trigger.click()
+        # Wait for the popover to be visible.
+        self._page.get_by_test_id("model-picker-popover").wait_for(state="visible", timeout=5_000)
 
     def items(self) -> Locator:
-        return self._root.get_by_test_id("model-item")
+        return self._page.get_by_test_id("model-item")
 
     def select(self, model_name: str) -> None:
         self.open()
-        self._root.locator(f"[data-model-name='{model_name}']").click()
+        self._page.locator(f"[data-model-name='{model_name}']").click()
 
     def select_different(self, current: str) -> str:
         """Open and pick the first model whose name differs from *current*."""
@@ -210,6 +223,13 @@ class SettingsPage:
         """Open Settings and switch to the Integrations tab."""
         self.goto()
         self.page.get_by_role("button", name="Integrations").click()
+        return self
+
+    def goto_providers(self) -> "SettingsPage":
+        """Open Settings and switch to the Providers tab."""
+        self.goto()
+        self.page.get_by_role("button", name="Providers").click()
+        self.page.get_by_test_id("providers-tab").wait_for(state="visible")
         return self
 
     def close(self) -> "SettingsPage":

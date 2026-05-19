@@ -1,6 +1,7 @@
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStateProvider, useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
+import { AppDataProvider } from '../contexts/AppData.jsx';
 
 // Minimal 1x1 transparent PNG
 const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAADElEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
@@ -198,7 +199,11 @@ async function renderApp() {
     capturedDispatch = null;
     let result;
     await act(async () => {
-        result = render(<DesktopApp dark={false} onToggleTheme={vi.fn()} />);
+        result = render(
+            <AppDataProvider>
+                <DesktopApp dark={false} onToggleTheme={vi.fn()} />
+            </AppDataProvider>,
+        );
     });
 
     const dispatch = (action) => {
@@ -235,15 +240,22 @@ function startSubAgent(dispatch, id, parentId, { name = 'browser_agent' } = {}) 
 describe('DesktopApp view transitions', () => {
     beforeEach(() => {
         capturedDispatch = null;
-        // Mock fetch for /api/settings and /api/models so the setup wizard resolves
+        // Mock the fetches DesktopApp's children make on mount so the setup
+        // wizard resolves and nothing else trips on a missing endpoint.
         globalThis.fetch = vi.fn((url) => {
             if (url === '/api/settings') {
-                return Promise.resolve({ json: () => Promise.resolve({ setup_complete: true }) });
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ setup_complete: true }) });
             }
-            if (url === '/api/models') {
-                return Promise.resolve({ json: () => Promise.resolve({ models: [] }) });
+            if (url === '/api/providers') {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ providers: [] }) });
             }
-            return Promise.resolve({ json: () => Promise.resolve({}) });
+            if (url === '/api/profiles') {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+            }
+            if (url.startsWith('/api/models')) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ models: [] }) });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
         });
     });
 

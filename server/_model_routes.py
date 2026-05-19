@@ -7,9 +7,7 @@ import re
 
 from aiohttp import web
 
-from config import load_config
-from sdk.providers import get_provider
-from sdk.providers._models import ProviderError
+from sdk.providers import Provider, get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -20,54 +18,54 @@ _KEY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
-def _sanitize(msg: str, api_key: str | None = None) -> str:
+def _sanitize(msg: str) -> str:
     for pattern, replacement in _KEY_PATTERNS:
         msg = pattern.sub(replacement, msg)
-    if api_key:
-        msg = msg.replace(api_key, "***")
     return msg
 
 
-async def handle_list_models(_request: web.Request) -> web.Response:
-    """Return available models with metadata from the provider.
+def _resolve_provider(request: web.Request) -> tuple[Provider | None, web.Response | None]:
+    """Resolve the ``?provider=`` query to a provider, or build an error response.
 
-    Returns 503 with a structured error if the provider is unreachable,
-    so the setup wizard can display a clear message instead of a silent
-    empty list.
+    Exactly one of the two return values is non-None.
     """
-    provider = get_provider()
+    name = request.query.get("provider")
+    if not name:
+        return None, web.json_response({"error": "provider query parameter is required"}, status=400)
+    try:
+        return get_provider(name), None
+    except ValueError as exc:
+        return None, web.json_response({"error": _sanitize(str(exc))}, status=400)
+
+
+async def handle_list_models(request: web.Request) -> web.Response:
+    """Return available models with metadata for ``?provider=X``.
+
+    400 if the provider is missing or unknown; 503 with a structured error
+    if it's configured but unreachable, so the setup wizard / Providers page
+    can show a clear message instead of a silent empty list.
+    """
+    provider, err = _resolve_provider(request)
+    if err is not None:
+        return err
+    provider_name = request.query["provider"]
     try:
         models = await provider.list_models()
-    except ProviderError as exc:
-        cfg = load_config()
-        safe_msg = _sanitize(str(exc), cfg.llm.api_key)
-        logger.warning("Provider error listing models: %s", safe_msg)
+    except Exception as exc:  # noqa: BLE001 - any failure means "couldn't reach the provider"
+        safe_msg = _sanitize(str(exc))
+        logger.warning("Provider %s error listing models: %s", provider_name, safe_msg)
         return web.json_response(
-            {
-                "error": "provider_unreachable",
-                "message": safe_msg,
-                "llm_host": cfg.llm.host or "http://localhost:11434",
-            },
-            status=503,
-        )
-    except Exception as exc:
-        cfg = load_config()
-        safe_msg = _sanitize(str(exc), cfg.llm.api_key)
-        logger.warning("Unexpected error listing models: %s", safe_msg)
-        return web.json_response(
-            {
-                "error": "provider_unreachable",
-                "message": safe_msg,
-                "llm_host": cfg.llm.host or "http://localhost:11434",
-            },
+            {"error": "provider_unreachable", "message": safe_msg, "provider": provider_name},
             status=503,
         )
     return web.json_response({"models": [m.model_dump() for m in models]})
 
 
-async def handle_refresh_models(_request: web.Request) -> web.Response:
-    """Invalidate the cached model list so the next fetch re-queries the provider."""
-    provider = get_provider()
+async def handle_refresh_models(request: web.Request) -> web.Response:
+    """Invalidate the cached model list for ``?provider=X`` so the next fetch re-queries it."""
+    provider, err = _resolve_provider(request)
+    if err is not None:
+        return err
     provider.invalidate_model_cache()
     return web.json_response({"ok": True})
 

@@ -75,7 +75,7 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
 
     import sdk.turn._execution as mod
 
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "get_provider", lambda *_a, **_k: _ProviderScript([resp1, resp2]))
 
     def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
         return ApplyPatchResult(
@@ -84,7 +84,7 @@ async def test_tool_serialization_apply_text_patch_success(monkeypatch):
         )
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
-    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
+    agent = Agent(name="Test", description="d", instruction="x", provider="ollama", model="dummy", options={}, tools=[apply_text_patch])
     async with agent_span("Test", agent_state=AgentState(agent.tools)):
         await run_turn(history, agent=agent)
 
@@ -114,13 +114,13 @@ async def test_tool_serialization_apply_text_patch_invalid_range(monkeypatch):
 
     import sdk.turn._execution as mod
 
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "get_provider", lambda *_a, **_k: _ProviderScript([resp1, resp2]))
 
     def apply_text_patch(path: str, old_text: str, new_text: str) -> ApplyPatchResult:
         return ApplyPatchResult(success=False, file_path=path, error="No match found")
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
-    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[apply_text_patch])
+    agent = Agent(name="Test", description="d", instruction="x", provider="ollama", model="dummy", options={}, tools=[apply_text_patch])
     async with agent_span("Test", agent_state=AgentState(agent.tools)):
         await run_turn(history, agent=agent)
 
@@ -140,13 +140,13 @@ async def test_tool_serialization_tool_exception_as_error(monkeypatch):
 
     import sdk.turn._execution as mod
 
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "get_provider", lambda *_a, **_k: _ProviderScript([resp1, resp2]))
 
     def explode(x: int) -> str:
         raise RuntimeError("boom")
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
-    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[explode])
+    agent = Agent(name="Test", description="d", instruction="x", provider="ollama", model="dummy", options={}, tools=[explode])
     async with agent_span("Test", agent_state=AgentState(agent.tools)):
         await run_turn(history, agent=agent)
 
@@ -165,13 +165,13 @@ async def test_tool_serialization_async_tool_returns_dict(monkeypatch):
 
     import sdk.turn._execution as mod
 
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "get_provider", lambda *_a, **_k: _ProviderScript([resp1, resp2]))
 
     async def run_bash_cmd(cmd: str) -> dict[str, Any]:
         return {"stdout": "hi\n", "stderr": None, "exit_code": 0}
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
-    agent = Agent(name="Test", description="d", instruction="x", model="dummy", options={}, tools=[run_bash_cmd])
+    agent = Agent(name="Test", description="d", instruction="x", provider="ollama", model="dummy", options={}, tools=[run_bash_cmd])
     async with agent_span("Test", agent_state=AgentState(agent.tools)):
         await run_turn(history, agent=agent)
 
@@ -194,12 +194,12 @@ async def test_thinking_always_persisted_in_history(monkeypatch):
 
     import sdk.turn._execution as mod
 
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp]))
+    monkeypatch.setattr(mod, "get_provider", lambda *_a, **_k: _ProviderScript([resp]))
 
     history = ConversationHistory([{"role": "system", "content": "x"}])
     agent = Agent(
         name="Test", description="d", instruction="x",
-        model="dummy", options={}, tools=[],
+        provider="ollama", model="dummy", options={}, tools=[],
     )
     async with agent_span("Test", agent_state=AgentState(agent.tools)):
         await run_turn(history, agent=agent)
