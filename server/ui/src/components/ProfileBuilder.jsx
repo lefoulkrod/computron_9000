@@ -214,6 +214,7 @@ export default function ProfileBuilder({
                                     return next;
                                 });
                             }}
+                            inline
                         />
                     </section>
 

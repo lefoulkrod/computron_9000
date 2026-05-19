@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 
+import { useAppData } from '../contexts/AppData.jsx';
 import ProfileList from './ProfileList.jsx';
 import ProfileBuilder from './ProfileBuilder.jsx';
 
-export default function ProfilesTab({ profilesHook, features }) {
+export default function ProfilesTab() {
+    const { profilesHook, features } = useAppData();
     const [providers, setProviders] = useState([]);
     const [draftProfile, setDraftProfile] = useState(null);
     const [deleteConflict, setDeleteConflict] = useState(null);

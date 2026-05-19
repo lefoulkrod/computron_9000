@@ -123,6 +123,7 @@ export default function SystemSettings() {
                         onSelect={(p, m) => updateProviderModel('vision_provider', 'vision_model', p, m)}
                         placeholder="Choose a vision model…"
                         capability="vision"
+                        inline
                     />
                 </div>
 
@@ -207,6 +208,7 @@ export default function SystemSettings() {
                         selectedModel={settings.compaction_model || null}
                         onSelect={(p, m) => updateProviderModel('compaction_provider', 'compaction_model', p, m)}
                         placeholder="Choose a compaction model…"
+                        inline
                     />
                 </div>
             </div>
@@ -235,6 +237,7 @@ export default function SystemSettings() {
                         selectedModel={settings.title_model || null}
                         onSelect={(p, m) => updateProviderModel('title_provider', 'title_model', p, m)}
                         placeholder="Choose a title model…"
+                        inline
                     />
                 </div>
             </div>

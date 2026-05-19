@@ -16,7 +16,10 @@ const PROVIDER_LABELS = {
     openai_compat: 'OpenAI-compatible',
 };
 
-const stripTrailingV1 = (url) => url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+// Defaults pre-filled in the connect step; the server still requires the
+// URL be present in the request body.
+const OLLAMA_DEFAULT_URL = 'http://host.docker.internal:11434';
+const OPENAI_COMPAT_DEFAULT_URL = 'http://localhost:1234/v1';
 
 function ProgressBar({ currentStep }) {
     return (
@@ -122,9 +125,6 @@ export default function SetupWizard({ onComplete }) {
                 : 'ollama'
     ), [selectedProvider, cloudProvider]);
 
-    // Model-list endpoint scoped to the chosen provider (the API requires it).
-    const modelsUrl = `/api/models?provider=${encodeURIComponent(resolvedProviderName)}`;
-
     // Refs for a11y
     const cardRef = useRef(null);
     const stepTitleRef = useRef(null);
@@ -164,76 +164,43 @@ export default function SetupWizard({ onComplete }) {
 
 
 
-    // ── Provider step: save settings and probe connection ───────────
+    // ── Provider step: create+probe via POST /api/providers ─────────
+    // One server-side call. The server picks the storage (direct settings
+    // entry vs. brokered vault integration) from the body shape, then
+    // probes the new provider — 201 on success, 503 with a message if it
+    // can't connect.
     const handleSaveProvider = useCallback(async () => {
         setProviderSaving(true);
         setProviderError(null);
 
-        const providerName = resolvedProviderName;
+        const body = { name: resolvedProviderName };
+        if (selectedProvider === PROVIDER_OLLAMA) {
+            body.base_url = providerUrl.trim() || OLLAMA_DEFAULT_URL;
+        } else if (selectedProvider === PROVIDER_OPENAI_COMPAT) {
+            body.base_url = providerUrl.trim() || OPENAI_COMPAT_DEFAULT_URL;
+            if (providerApiKey.trim()) body.api_key = providerApiKey.trim();
+        } else {
+            body.api_key = providerApiKey.trim();
+        }
 
         try {
-            // Direct providers (Ollama, no-auth compat) get a settings entry;
-            // brokered providers get a vault integration. We only write what
-            // the user picked — we don't clear the other kind.
-            let directEntry = null;
-
-            if (selectedProvider === PROVIDER_OLLAMA) {
-                directEntry = { ollama: { base_url: providerUrl || 'http://host.docker.internal:11434' } };
-            } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && !providerApiKey) {
-                directEntry = { openai_compat: { base_url: providerUrl || 'http://localhost:1234/v1' } };
-            } else {
-                // Brokered connection — API key stored in vault, broker handles auth.
-                const slug = `llm_${providerName}`;
-                const label = PROVIDER_LABELS[providerName];
-                const authBlob = { api_key: providerApiKey };
-                if (selectedProvider === PROVIDER_OPENAI_COMPAT) {
-                    // Compat endpoints have a user-supplied upstream URL that
-                    // the broker needs — stored alongside the key in the vault.
-                    authBlob.base_url = stripTrailingV1(providerUrl || 'http://localhost:1234');
-                }
-
-                const integRes = await fetch('/api/integrations', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ slug, label, auth_blob: authBlob, write_allowed: false }),
-                });
-                if (!integRes.ok) {
-                    const data = await integRes.json().catch(() => ({}));
-                    const msg = data.error?.message || data.error || `Failed to store API key (${integRes.status})`;
-                    setProviderError(msg);
-                    return;
-                }
-            }
-
-            if (directEntry) {
-                const settingsRes = await fetch('/api/settings', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ direct_providers: directEntry }),
-                });
-                if (!settingsRes.ok) {
-                    const data = await settingsRes.json().catch(() => ({}));
-                    setProviderError(data.error || 'Failed to save provider settings');
-                    return;
-                }
-            }
-
-            // Probe the connection by listing models
-            const modelsRes = await fetch(modelsUrl);
-            const modelsData = await modelsRes.json().catch(() => ({}));
-            if (!modelsRes.ok) {
-                setProviderError(modelsData.message || 'Could not connect to provider');
+            const res = await fetch('/api/providers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setProviderError(data.message || data.error || `Failed to connect (${res.status})`);
                 return;
             }
-
-            // Probe succeeded — the ModelPicker fetches its own list when opened.
             setStep((s) => s + 1);
         } catch (err) {
             setProviderError(err.message);
         } finally {
             setProviderSaving(false);
         }
-    }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey, modelsUrl]);
+    }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey]);
 
     // ── Final save: server-side orchestration ───────────────────────
     const handleFinish = useCallback(async () => {
@@ -499,6 +466,7 @@ export default function SetupWizard({ onComplete }) {
                             }}
                             placeholder="Choose a main model…"
                             defaultOpen
+                            inline
                         />
                     </div>
                 )}
@@ -527,6 +495,7 @@ export default function SetupWizard({ onComplete }) {
                             placeholder="Choose a vision model…"
                             capability="vision"
                             defaultOpen
+                            inline
                         />
 
                         <button

@@ -102,6 +102,37 @@
     overflow: hidden;
 }
 
+/* Inline mode: portaled to <body> with fixed positioning set inline by JS.
+   Visually joined to the trigger above — shared accent border, top
+   corners flat, no extra shadow since the trigger frames it. Z-index
+   stacks above the wizard so a defaultOpen picker isn't hidden behind it.
+   Flex column + min-height:0 on the list lets the popover's max-height
+   constrain the inner list (so it scrolls instead of overflowing). */
+.popoverInline {
+    z-index: var(--z-tooltip);
+    min-width: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-color: var(--accent);
+    display: flex;
+    flex-direction: column;
+}
+.popoverInline .list {
+    max-height: none;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Matching half of the join on the trigger when inline+open. The
+   trigger's own glow is dropped so the combined trigger+popover reads as
+   a single control framed by the shared accent border. */
+.triggerInline.triggerOpen {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-color: var(--accent);
+    box-shadow: none;
+}
+
 /* ── Tabs ───────────────────────────────────────────────────── */
 .tabs {
     display: flex;

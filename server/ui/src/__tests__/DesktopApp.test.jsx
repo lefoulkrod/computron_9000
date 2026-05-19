@@ -1,6 +1,7 @@
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStateProvider, useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
+import { AppDataProvider } from '../contexts/AppData.jsx';
 
 // Minimal 1x1 transparent PNG
 const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAADElEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
@@ -198,7 +199,11 @@ async function renderApp() {
     capturedDispatch = null;
     let result;
     await act(async () => {
-        result = render(<DesktopApp dark={false} onToggleTheme={vi.fn()} />);
+        result = render(
+            <AppDataProvider>
+                <DesktopApp dark={false} onToggleTheme={vi.fn()} />
+            </AppDataProvider>,
+        );
     });
 
     const dispatch = (action) => {
