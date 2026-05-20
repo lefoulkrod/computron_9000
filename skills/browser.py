@@ -20,6 +20,7 @@ from tools.browser import (
     scroll_page,
     select_option,
 )
+from tools.misc import search_web
 from tools.virtual_computer import run_bash_cmd
 
 _SKILL = Skill(
@@ -50,6 +51,7 @@ _SKILL = Skill(
         - Stop when you have enough data — do NOT scroll for completeness.
         - Prefer site search/filters over scrolling through results.
         - Dismiss overlays early (click close/dismiss buttons).
+        - Use search_web(query) for fast text-only lookups — no browser needed.
 
         LOCAL FILES: ALL files under /home/computron/ are already served at
         http://localhost:8080/home/computron/... by the app server. To view any
@@ -91,6 +93,7 @@ _SKILL = Skill(
         inspect_page,
         execute_javascript,
         save_page_content,
+        search_web,
         run_bash_cmd,
     ],
 )
