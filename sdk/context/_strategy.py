@@ -681,7 +681,9 @@ def _split_into_chunks(
     """Split messages into chunks of approximately *target_size* characters.
 
     Keeps assistant + tool-call pairs together so a tool call and its
-    result are never separated across chunks.
+    result are never separated across chunks. A chunk may therefore
+    exceed *target_size* when a long run of tool calls/results would
+    otherwise straddle a boundary.
     """
     chunks: list[list[dict]] = []
     current_chunk: list[dict] = []
@@ -719,30 +721,19 @@ def _would_split_tool_pair(
     """Return True if appending *next_msg* to *chunk* would separate a
     tool-call / tool-result pair across chunks.
 
-    Covers two cases:
-
-    1. *next_msg* is a tool result and the last message in *chunk* is an
-       assistant with ``tool_calls`` — the tool call and its result would
-       land in different chunks.
-    2. *next_msg* is an assistant with ``tool_calls`` — the tool call
-       would be in the new chunk while its (future) tool results would
-       follow in yet another chunk.
+    Fires when *next_msg* is a tool result and the last message in
+    *chunk* is an assistant with ``tool_calls`` — flushing here would
+    put the call and its result in different chunks.
     """
     if not chunk:
         return False
 
     last = chunk[-1]
-
-    # Case 1: next_msg is a tool result; last is assistant with tool_calls.
-    if next_msg.get("role") == "tool" and last.get("role") == "assistant" and last.get("tool_calls"):
-        return True
-
-    # Case 2: next_msg is an assistant with tool_calls; keep it with the
-    # preceding context so its tool results (which follow) stay together.
-    if next_msg.get("role") == "assistant" and next_msg.get("tool_calls"):
-        return True
-
-    return False
+    return (
+        next_msg.get("role") == "tool"
+        and last.get("role") == "assistant"
+        and bool(last.get("tool_calls"))
+    )
 
 
 def _serialize_messages(messages: list[dict]) -> str:
