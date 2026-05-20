@@ -1,40 +1,129 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import styles from './Sidebar.module.css';
 
-const PANELS = [
+const COLLAPSE_KEY = 'computron_sidebar_collapsed';
+
+// Panels reachable from the nav. Settings + theme live in the footer.
+const NAV = [
     { id: 'agents', icon: 'bi-diagram-3', label: 'Agents' },
     { id: 'goals', icon: 'bi-bullseye', label: 'Goals' },
     { id: 'memory', icon: 'bi-database', label: 'Memory' },
-    { id: 'sep' },
     { id: 'conversations', icon: 'bi-clock-history', label: 'Conversations' },
     { id: 'tools', icon: 'bi-wrench', label: 'Tools' },
-    { id: 'sep2' },
-    { id: 'settings', icon: 'bi-gear', label: 'Settings' },
 ];
 
-export default function Sidebar({ activePanel, onPanelToggle, hiddenPanels = [] }) {
+function _readCollapsed() {
+    try {
+        return localStorage.getItem(COLLAPSE_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Left navigation rail. Collapses to an icon-only strip or expands to
+ * show labels, the COMPUTRON wordmark, and a primary "New chat" button.
+ * The collapsed/expanded choice is persisted to localStorage.
+ */
+export default function Sidebar({
+    activePanel,
+    onPanelToggle,
+    hiddenPanels = [],
+    dark,
+    onToggleTheme,
+    onNewConversation,
+}) {
+    const [collapsed, setCollapsed] = useState(_readCollapsed);
+
+    const toggleCollapsed = useCallback(() => {
+        setCollapsed((c) => {
+            const next = !c;
+            try {
+                localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+            } catch {
+                // localStorage unavailable — collapse still works for the session.
+            }
+            return next;
+        });
+    }, []);
+
+    const nav = NAV.filter((n) => !hiddenPanels.includes(n.id));
+    const settingsActive = activePanel === 'settings';
+
     return (
-        <div className={styles.sidebar}>
-            {PANELS.filter((p) => !hiddenPanels.includes(p.id)).map((panel) => {
-                if (panel.id === 'sep') {
-                    return <div key={panel.id} className={styles.sep} />;
-                }
-                if (panel.id === 'sep2') {
-                    return <div key={panel.id} className={styles.spacer} />;
-                }
-                const isActive = activePanel === panel.id;
-                return (
-                    <button
-                        key={panel.id}
-                        className={`${styles.btn} ${isActive ? styles.active : ''}`}
-                        title={panel.label}
-                        aria-label={panel.label}
-                        onClick={() => onPanelToggle(isActive ? null : panel.id)}
-                    >
-                        <i className={panel.icon} />
-                    </button>
-                );
-            })}
-        </div>
+        <aside
+            className={`${styles.sidebar} ${collapsed ? styles.collapsed : styles.expanded}`}
+            data-testid="sidebar"
+            data-collapsed={collapsed}
+        >
+            <div className={styles.brand}>
+                {!collapsed && <span className={styles.wordmark}>COMPUTRON</span>}
+                <button
+                    className={styles.iconBtn}
+                    onClick={toggleCollapsed}
+                    title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    data-testid="sidebar-toggle"
+                >
+                    <i className={`bi ${collapsed ? 'bi-layout-sidebar' : 'bi-layout-sidebar-inset'}`} />
+                </button>
+            </div>
+
+            <div className={styles.primary}>
+                <button
+                    className={styles.newChat}
+                    onClick={onNewConversation}
+                    title="New chat"
+                    aria-label="New chat"
+                    data-testid="sidebar-new-chat"
+                >
+                    <i className="bi bi-plus-lg" />
+                    {!collapsed && <span>New chat</span>}
+                </button>
+            </div>
+
+            <nav className={styles.nav}>
+                {nav.map((panel) => {
+                    const active = activePanel === panel.id;
+                    return (
+                        <button
+                            key={panel.id}
+                            className={`${styles.navItem} ${active ? styles.active : ''}`}
+                            onClick={() => onPanelToggle(active ? null : panel.id)}
+                            title={panel.label}
+                            aria-label={panel.label}
+                            data-testid={`sidebar-nav-${panel.id}`}
+                        >
+                            <i className={`bi ${panel.icon}`} />
+                            {!collapsed && <span className={styles.navLabel}>{panel.label}</span>}
+                        </button>
+                    );
+                })}
+            </nav>
+
+            <div className={styles.grow} />
+
+            <div className={styles.footer}>
+                <button
+                    className={`${styles.iconBtn} ${!dark ? styles.themeOn : ''}`}
+                    onClick={onToggleTheme}
+                    title={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+                    aria-label="Toggle theme"
+                    data-testid="sidebar-theme-toggle"
+                >
+                    <i className="bi bi-sun" />
+                </button>
+                <div className={styles.footerSpacer} />
+                <button
+                    className={`${styles.iconBtn} ${settingsActive ? styles.active : ''}`}
+                    onClick={() => onPanelToggle(settingsActive ? null : 'settings')}
+                    title="Settings"
+                    aria-label="Settings"
+                    data-testid="sidebar-settings"
+                >
+                    <i className="bi bi-gear" />
+                </button>
+            </div>
+        </aside>
     );
 }

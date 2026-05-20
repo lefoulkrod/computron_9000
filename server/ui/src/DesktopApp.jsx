@@ -264,9 +264,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         <div className={styles.appShell}>
             {/* Slim header */}
             <Header
-                dark={dark}
-                onToggleTheme={onToggleTheme}
-                onNewConversation={newConversation}
                 audio={pendingAudio}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
@@ -280,6 +277,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 <Sidebar
                     hiddenPanels={features.custom_tools ? [] : ['tools']}
                     activePanel={networkViewOpen ? 'agents' : flyoutPanel}
+                    dark={dark}
+                    onToggleTheme={onToggleTheme}
+                    onNewConversation={newConversation}
                     onPanelToggle={(panel) => {
                         if (panel === 'agents') {
                             // Toggle the network view open/closed
