@@ -162,3 +162,68 @@ def test_empty_tool_calls_list_splits_normally():
     assert len(chunks) >= 2
     total = sum(len(c) for c in chunks)
     assert total == 3
+
+
+@pytest.mark.unit
+def test_second_tool_result_not_split_from_assistant():
+    """When an assistant issues multiple tool calls, the second and later
+    tool results must stay in the same chunk as the assistant message.
+
+    Without the fix for _would_split_tool_pair, the first tool result
+    would be protected (last=assistant with tool_calls) but the second
+    tool result could be pushed to a new chunk because the last message
+    in the chunk is now another tool result, not the assistant.
+    """
+    messages = [
+        _make_msg("user", "x" * 80),
+        _make_msg(
+            "assistant",
+            content="",
+            tool_calls=[
+                {"function": {"name": "read_file", "arguments": "{}"}},
+                {"function": {"name": "grep", "arguments": "{}"}},
+            ],
+        ),
+        _make_msg("tool", content="r1" * 80, tool_name="read_file"),
+        _make_msg("tool", content="r2" * 80, tool_name="grep"),
+    ]
+    chunks = _split_into_chunks(messages, target_size=100)
+
+    # All four messages must stay in one chunk — the two tool results
+    # belong to the same assistant message and must not be separated.
+    assert len(chunks) == 1
+    assert len(chunks[0]) == 4
+    assert chunks[0][0]["role"] == "user"
+    assert chunks[0][1]["role"] == "assistant"
+    assert chunks[0][2]["role"] == "tool"
+    assert chunks[0][3]["role"] == "tool"
+
+
+@pytest.mark.unit
+def test_tool_result_chain_not_split():
+    """A long chain of tool results (e.g. 5+ tool calls from one assistant)
+    all stay together with their assistant message."""
+    messages = [_make_msg("user", "x" * 80)]
+    messages.append(
+        _make_msg(
+            "assistant",
+            content="",
+            tool_calls=[
+                {"function": {"name": f"tool_{i}", "arguments": "{}"}}
+                for i in range(5)
+            ],
+        ),
+    )
+    for i in range(5):
+        messages.append(
+            _make_msg("tool", content=f"result_{i}" * 20, tool_name=f"tool_{i}")
+        )
+
+    chunks = _split_into_chunks(messages, target_size=100)
+
+    # All messages must stay in one chunk.
+    assert len(chunks) == 1
+    assert len(chunks[0]) == 7
+    # Verify no tool result appears without its assistant.
+    tool_results = [m for m in chunks[0] if m.get("role") == "tool"]
+    assert len(tool_results) == 5

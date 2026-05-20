@@ -722,18 +722,26 @@ def _would_split_tool_pair(
     tool-call / tool-result pair across chunks.
 
     Fires when *next_msg* is a tool result and the last message in
-    *chunk* is an assistant with ``tool_calls`` — flushing here would
-    put the call and its result in different chunks.
+    *chunk* is either:
+
+    - an assistant with ``tool_calls`` (the call that produced this result), or
+    - another tool result (a prior result from the same assistant call).
+
+    Without the second condition, when an assistant issues multiple tool
+    calls the second and subsequent results could be split into a new
+    chunk, separating them from the assistant message that requested them.
     """
     if not chunk:
         return False
 
     last = chunk[-1]
-    return (
-        next_msg.get("role") == "tool"
-        and last.get("role") == "assistant"
-        and bool(last.get("tool_calls"))
-    )
+    if next_msg.get("role") != "tool":
+        return False
+    if last.get("role") == "assistant" and bool(last.get("tool_calls")):
+        return True
+    if last.get("role") == "tool":
+        return True
+    return False
 
 
 def _serialize_messages(messages: list[dict]) -> str:
