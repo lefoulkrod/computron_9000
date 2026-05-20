@@ -1,0 +1,51 @@
+/* Sleek inline meter — no pill container. Just the bar + numerics,
+   sitting on whatever surface hosts it. */
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.bar {
+  position: relative;
+  width: 72px;
+  height: 4px;
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+
+.fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--success);
+  border-radius: var(--radius-full);
+  transition: width 200ms var(--ease), background 200ms var(--ease);
+}
+
+/* Compaction-threshold marker — a hairline drawn over the bar. */
+.tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--text-tertiary);
+}
+
+.med .fill { background: var(--warning); }
+.high .fill { background: var(--danger); }
+
+.num {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.pct {
+  color: var(--text-tertiary);
+}

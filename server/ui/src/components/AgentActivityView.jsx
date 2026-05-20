@@ -4,7 +4,7 @@ import useAutoScroll from '../hooks/useAutoScroll.js';
 import { formatAgentName } from './AgentCard.jsx';
 import BackButton from './BackButton.jsx';
 import { formatElapsed } from '../utils/agentUtils.js';
-import ContextUsageBadge from './ContextUsageBadge.jsx';
+import ContextMeter from './ContextMeter.jsx';
 import AgentOutput from './AgentOutput.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
 import StatusDot from './StatusDot.jsx';
@@ -77,7 +77,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                                 iter {agent.iteration}{agent.maxIterations ? `/${agent.maxIterations}` : ''}
                             </span>
                         )}
-                        <ContextUsageBadge contextUsage={agent.contextUsage} />
+                        <ContextMeter contextUsage={agent.contextUsage} />
                         {agent.childIds.length > 0 && (
                             <span>{agent.childIds.length} sub-agent{agent.childIds.length !== 1 ? 's' : ''}</span>
                         )}

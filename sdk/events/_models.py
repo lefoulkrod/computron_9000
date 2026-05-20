@@ -166,12 +166,16 @@ class ContextUsagePayload(BaseModel):
         context_used: Prompt + completion tokens consumed on the last call.
         context_limit: The model's context window size.
         fill_ratio: Fraction of the context window consumed (0.0-1.0+).
+        compaction_threshold: Fill ratio at which compaction fires for the
+            agent active on this call. Per-profile and configurable, so it
+            is emitted with every event rather than assumed constant.
     """
 
     type: Literal["context_usage"]
     context_used: int
     context_limit: int
     fill_ratio: float
+    compaction_threshold: float = 0.75
     iteration: int | None = None
     max_iterations: int | None = None
 

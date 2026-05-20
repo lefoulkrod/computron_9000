@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import ChatMessages from './ChatMessages.jsx';
 import ChatInput from './ChatInput.jsx';
-import ContextUsageBadge from './ContextUsageBadge.jsx';
+import ContextMeter from './ContextMeter.jsx';
 import { formatAgentName } from './AgentCard.jsx';
 import StatusDot from './StatusDot.jsx';
 import styles from './ChatPanel.module.css';
@@ -26,7 +26,7 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                 ) : (
                     <span>Chat</span>
                 )}
-                <ContextUsageBadge contextUsage={rootAgent?.contextUsage} />
+                <ContextMeter contextUsage={rootAgent?.contextUsage} />
                 {networkActivated && (
                     <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view" data-testid="network-indicator">
                         <StatusDot status={networkRunningCount > 0 ? 'running' : 'complete'} />

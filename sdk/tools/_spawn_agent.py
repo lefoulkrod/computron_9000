@@ -192,6 +192,7 @@ async def spawn_agent(
             agent_state=agent_state,
             context_limit=agent.context_window,
             agent_name=agent.name,
+            compaction_threshold=agent.compaction_threshold,
             strategies=[
                 LLMCompactionStrategy(threshold=agent.compaction_threshold),
             ],

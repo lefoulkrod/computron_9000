@@ -106,6 +106,7 @@ function _handleStreamEvent(data, callbacks) {
                     context_used: payload.context_used,
                     context_limit: payload.context_limit,
                     fill_ratio: payload.fill_ratio,
+                    compaction_threshold: payload.compaction_threshold,
                 },
             });
         }
