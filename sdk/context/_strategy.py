@@ -681,7 +681,9 @@ def _split_into_chunks(
     """Split messages into chunks of approximately *target_size* characters.
 
     Keeps assistant + tool-call pairs together so a tool call and its
-    result are never separated across chunks.
+    result are never separated across chunks. A chunk may therefore
+    exceed *target_size* when a long run of tool calls/results would
+    otherwise straddle a boundary.
     """
     chunks: list[list[dict]] = []
     current_chunk: list[dict] = []
@@ -692,11 +694,16 @@ def _split_into_chunks(
         msg_size = len(content)
 
         # If adding this message would exceed the target and the chunk
-        # already has content, start a new chunk.
+        # already has content, start a new chunk — but never split a
+        # tool-call / tool-result pair across chunks.
         if current_size + msg_size > target_size and current_chunk:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_size = 0
+            # If the current message is a tool result and the last
+            # message in the chunk is an assistant with tool_calls,
+            # keep them together by deferring the split.
+            if not _would_split_tool_pair(current_chunk, msg):
+                chunks.append(current_chunk)
+                current_chunk = []
+                current_size = 0
 
         current_chunk.append(msg)
         current_size += msg_size
@@ -705,6 +712,28 @@ def _split_into_chunks(
         chunks.append(current_chunk)
 
     return chunks
+
+
+def _would_split_tool_pair(
+    chunk: list[dict],
+    next_msg: dict,
+) -> bool:
+    """Return True if appending *next_msg* to *chunk* would separate a
+    tool-call / tool-result pair across chunks.
+
+    Fires when *next_msg* is a tool result and the last message in
+    *chunk* is an assistant with ``tool_calls`` — flushing here would
+    put the call and its result in different chunks.
+    """
+    if not chunk:
+        return False
+
+    last = chunk[-1]
+    return (
+        next_msg.get("role") == "tool"
+        and last.get("role") == "assistant"
+        and bool(last.get("tool_calls"))
+    )
 
 
 def _serialize_messages(messages: list[dict]) -> str:
