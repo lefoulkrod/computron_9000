@@ -106,7 +106,7 @@ export default function ModelPicker({
         // popover off-screen — and a fixed-position popover can't be
         // scrolled into view by callers (including Playwright tests).
         const margin = 8;
-        const maxHeight = Math.max(120, window.innerHeight - rect.bottom - margin);
+        const maxHeight = Math.min(400, Math.max(120, window.innerHeight - rect.bottom - margin));
         setPopoverPos({
             left: rect.left,
             // -1 so the popover's top border overlaps the trigger's bottom

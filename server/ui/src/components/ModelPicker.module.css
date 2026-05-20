@@ -136,11 +136,11 @@
 /* ── Tabs ───────────────────────────────────────────────────── */
 .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     padding: 4px 4px 0;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    overflow-x: auto;
 }
 
 .tab {
