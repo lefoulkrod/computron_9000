@@ -722,17 +722,21 @@ def _would_split_tool_pair(
     tool-call / tool-result pair across chunks.
 
     Fires when *next_msg* is a tool result and the last message in
-    *chunk* is an assistant with ``tool_calls`` — flushing here would
-    put the call and its result in different chunks.
+    *chunk* is either an assistant with ``tool_calls`` or another tool
+    result — flushing here would put the call and its result(s) in
+    different chunks.
     """
     if not chunk:
         return False
 
     last = chunk[-1]
-    return (
-        next_msg.get("role") == "tool"
-        and last.get("role") == "assistant"
-        and bool(last.get("tool_calls"))
+    return next_msg.get("role") == "tool" and (
+        # Next message is a tool result and the last message in the chunk
+        # is the assistant that issued the tool call.
+        (last.get("role") == "assistant" and bool(last.get("tool_calls")))
+        # Or the last message is also a tool result — keep consecutive
+        # tool results together with their originating assistant.
+        or last.get("role") == "tool"
     )
 
 
