@@ -74,6 +74,10 @@ function _agentReducer(state, action) {
                 agent.desktopActive = prev.desktopActive;
                 agent.generationPreview = prev.generationPreview;
                 agent.openFiles = prev.openFiles;
+                // Keep the last turn's context usage visible until this
+                // turn's first context_usage event replaces it — the window
+                // doesn't empty between turns, so the meter shouldn't blink out.
+                agent.contextUsage = prev.contextUsage;
             }
 
             const agents = { ...state.agents, [agentId]: agent };
