@@ -92,12 +92,14 @@ def _ensure_builtins() -> None:
     from config import load_config
     from skills.browser import _SKILL as browser_skill
     from skills.coder import _SKILL as coder_skill
+    from skills.deep_research import _SKILL as deep_research_skill
     from skills.goal_planner import _SKILL as goal_planner_skill
 
     features = load_config().features
 
     register_skill(coder_skill)
     register_skill(goal_planner_skill)
+    register_skill(deep_research_skill)
     register_skill(
         browser_skill if features.visual_grounding else _strip_grounding_tools(browser_skill)
     )
