@@ -32,7 +32,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from integrations._perms import ATTACHMENT_FILE_MODE
+from integrations._perms import AGENT_OWNED_FILE_MODE
 from integrations._rpc import RpcError
 from integrations.brokers.email_broker._caldav_client import CalDavClient
 from integrations.brokers.email_broker._imap_client import ImapClient
@@ -364,5 +364,5 @@ def _write_attachment(
         suffix = dest.suffix
         dest = dir_path / f"{stem}_{secrets.token_hex(4)}{suffix}"
     dest.write_bytes(payload)
-    dest.chmod(ATTACHMENT_FILE_MODE)
+    dest.chmod(AGENT_OWNED_FILE_MODE)
     return dest

@@ -40,25 +40,21 @@ chown -R computron:computron /home/computron /var/lib/computron
 chmod 755 /home/computron /var/lib/computron
 
 # ── Shared downloads dir (computron + broker) ────────────────────────────────
-# /home/computron/downloads is the landing place for files the agent
-# retrieves from external sources: browser saves (written by computron via
-# the browser tool) and email attachments (written by broker). Both UIDs
-# need to drop files here, but only computron should have full control of
-# the directory.
+# /home/computron/downloads is the landing place for files brokers drop for
+# the agent (rclone iCloud Drive downloads, Google Drive exports, email
+# attachments) as well as files the agent itself writes (browser saves).
 #
-# Mode 3770 = setgid (2) + sticky (1) + 770:
-#  - 770: owner rwx, group rwx, others none
-#  - setgid (2): new files inherit group=broker so a file computron writes
-#    is still readable by broker via group membership and vice-versa
-#  - sticky (1): a process can only delete/rename files it owns. Broker
-#    creates email attachments and can clean those up; broker CANNOT delete
-#    or rename a file computron wrote. computron, as the directory owner,
-#    can still do anything to anything (sticky exempts the dir owner).
-#
-# Net: broker gets enough access to drop attachments and tidy its own GC;
-# computron retains full authority over the folder.
+# Mode 2770 = setgid (2) + 770. Mirrors AGENT_OWNED_DIR_MODE in
+# integrations/_perms.py; keep the two in sync.
+#  - 770: owner rwx, group rwx, others none.
+#  - setgid (2): files created here inherit group=broker, so a file the
+#    agent (computron) writes is still readable+writable by the broker via
+#    group membership, and vice-versa.
+#  - no sticky bit: any process with dir-write can unlink any file. Brokers
+#    drop a file then step back; the agent owns the file's lifecycle from
+#    then on, including delete.
 chown computron:broker /home/computron/downloads
-chmod 3770 /home/computron/downloads
+chmod 2770 /home/computron/downloads
 
 # ── Virtual framebuffer ──────────────────────────────────────────────────────
 # Clean stale lock/socket from a previous run — docker restart preserves

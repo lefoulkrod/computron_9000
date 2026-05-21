@@ -246,6 +246,29 @@ class BrokerManager:
         delete_integration(self._vault_dir, integration_id)
         logger.info("removed integration %s", integration_id)
 
+    async def update_secrets(
+        self, integration_id: str, patch: dict[str, str],
+    ) -> None:
+        """Merge ``patch`` into the integration's encrypted secret bundle.
+
+        Caller (the app-sock handler) is responsible for authorizing the
+        request — verifying the peer is a broker and that every key in
+        ``patch`` is on the catalog's allow-list. This method just does the
+        decrypt-merge-re-encrypt under the master key.
+        """
+        if self._registry.get(integration_id) is None:
+            raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
+        try:
+            existing = read_secrets(self._vault_dir, integration_id, self._master_key)
+        except DecryptError as exc:
+            msg = f"decrypt failed for {integration_id}: {exc}"
+            raise RpcError("INTERNAL", msg) from exc
+        existing.update(patch)
+        write_secrets(self._vault_dir, integration_id, self._master_key, existing)
+        logger.info(
+            "updated %d secret key(s) for %s", len(patch), integration_id,
+        )
+
     async def update(
         self,
         integration_id: str,

@@ -75,6 +75,12 @@ async def spawn_broker(
             msg = f"env_injection references missing auth field: {blob_key!r}"
             raise BrokerSpawnError(msg)
         env[env_name] = secret_bundle[blob_key]
+    # Same idea but for bundle keys that may not exist yet on first spawn —
+    # used for state the broker writes back over time (e.g. rclone cookies).
+    for blob_key, env_name in entry.optional_env_injection.items():
+        value = secret_bundle.get(blob_key)
+        if isinstance(value, str) and value:
+            env[env_name] = value
     for binding in entry.host_paths:
         spec = host_paths.get(binding.role)
         if spec is None:

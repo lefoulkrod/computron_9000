@@ -30,6 +30,7 @@ import json
 import logging
 import secrets
 import time
+import uuid
 from base64 import b64decode, b64encode
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -41,8 +42,16 @@ logger = logging.getLogger(__name__)
 _AUTH_ENDPOINT = "https://idmsa.apple.com/appleauth/auth"
 _SETUP_ENDPOINT = "https://setup.icloud.com/setup/ws/1"
 
-# Public widget key Apple's own iCloud web sign-in uses. Not a secret.
-_APPLE_WIDGET_KEY = "83545bf919730e51dbfba24e7e8a78d2"
+# The iCloud web client's public widget key — same value Apple's own
+# www.icloud.com first-party UI presents. Identifies the OAuth client to
+# Apple's auth surface; not a secret.
+_ICLOUD_WIDGET_KEY = "d39ba9916b7251055b22c7f910e2ea796ee65e98b2ddecea8f5dde8d9d1a815d"
+_ICLOUD_REDIRECT_URI = "https://www.icloud.com"
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/17.0 Safari/605.1.15"
+)
 
 _SESSION_TTL_SECONDS = 600.0
 
@@ -96,17 +105,21 @@ _K = _srp_k()
 def _srp_x(salt: bytes, password: str, iteration: int, protocol: str) -> int:
     """Apple's password-derived ``x``.
 
-    Both variants run PBKDF2-HMAC-SHA256 over the password and the server-
-    supplied salt, then hash ``salt || PBKDF2_output``. ``s2k_fo`` pre-hashes
-    the password with SHA-256 (hex-encoded) before PBKDF2 — that variant is
-    used for accounts that have been through Apple's password-upgrade path.
+    Apple always pre-hashes the password with SHA-256 before PBKDF2: for
+    ``s2k`` the raw 32-byte digest, for ``s2k_fo`` the hex-encoded form. The
+    resulting bytes stand in for the password in the standard RFC 5054
+    derivation, which Apple uses with the identity omitted:
+
+        x = H(salt || H(":" || pbkdf2_output))
+
+    The leading colon stays even when the identity is empty — RFC 5054
+    keeps the ``I:p`` separator, and Apple's server expects it.
     """
-    if protocol == "s2k_fo":
-        pw_input = _h(password.encode("utf-8")).hex().encode("ascii")
-    else:
-        pw_input = password.encode("utf-8")
+    pw_hash = _h(password.encode("utf-8"))
+    pw_input = pw_hash.hex().encode("ascii") if protocol == "s2k_fo" else pw_hash
     pbkdf = hashlib.pbkdf2_hmac("sha256", pw_input, salt, iteration, dklen=32)
-    return _b2i(_h(salt, pbkdf))
+    inner = _h(b":", pbkdf)
+    return _b2i(_h(salt, inner))
 
 
 def _srp_proofs(
@@ -121,19 +134,19 @@ def _srp_proofs(
       M1 = H(H(N) XOR H(g) || H(I) || s || PAD(A) || PAD(B) || K)
       M2 = H(PAD(A) || M1 || K)
     """
+    # u uses A and B PADDED to N's byte length (RFC 5054 §2.6).
     u = _b2i(_h(_i2b(big_a, _N_BYTES), _i2b(big_b, _N_BYTES)))
     s = pow((big_b - _K * pow(_G, x, _N)) % _N, a + u * x, _N)
-    session_key = _h(_i2b(s, _N_BYTES))
+    # K and the M-proofs hash A, B, S WITHOUT padding — pysrp's rfc5054
+    # mode pads only inside H()'s width=… form, and the proof formulas
+    # don't go through that path.
+    session_key = _h(_i2b(s))
     h_n = _h(_i2b(_N))
     h_g = _h(_i2b(_G, _N_BYTES))
     h_xor = bytes(a_ ^ b_ for a_, b_ in zip(h_n, h_g, strict=True))
     h_user = _h(username.encode("utf-8"))
-    m1 = _h(
-        h_xor, h_user, salt,
-        _i2b(big_a, _N_BYTES), _i2b(big_b, _N_BYTES),
-        session_key,
-    )
-    m2 = _h(_i2b(big_a, _N_BYTES), m1, session_key)
+    m1 = _h(h_xor, h_user, salt, _i2b(big_a), _i2b(big_b), session_key)
+    m2 = _h(_i2b(big_a), m1, session_key)
     return m1, m2, session_key
 
 
@@ -145,6 +158,7 @@ class _PendingAuth:
     email: str
     password: str
     session: aiohttp.ClientSession
+    client_id: str
     scnt: str | None = None
     apple_session_id: str | None = None
     session_key: bytes | None = None
@@ -174,14 +188,29 @@ class IcloudAuthPasswordError(IcloudAuthError):
     """Apple rejected the Apple ID / password pair."""
 
 
-def _auth_headers(pending: _PendingAuth | None = None) -> dict[str, str]:
+def _auth_headers(client_id: str, pending: _PendingAuth | None = None) -> dict[str, str]:
+    """Headers Apple's first-party iCloud web client sends on auth requests.
+
+    Apple's auth surface scopes OAuth state by the client id / widget key
+    combo plus the redirect URI. ``client_id`` is a per-session UUID that
+    Apple echoes back; it ties the init exchange to the complete call.
+    """
     headers = {
         "Accept": "application/json, text/javascript",
         "Content-Type": "application/json",
-        "X-Apple-Widget-Key": _APPLE_WIDGET_KEY,
-        "X-Apple-OAuth-Client-Id": _APPLE_WIDGET_KEY,
+        "User-Agent": _USER_AGENT,
+        "Origin": _ICLOUD_REDIRECT_URI,
+        "Referer": f"{_ICLOUD_REDIRECT_URI}/",
+        "X-Apple-Widget-Key": _ICLOUD_WIDGET_KEY,
+        "X-Apple-OAuth-Client-Id": _ICLOUD_WIDGET_KEY,
+        "X-Apple-OAuth-Client-Type": "firstPartyAuth",
+        "X-Apple-OAuth-Redirect-URI": _ICLOUD_REDIRECT_URI,
+        "X-Apple-OAuth-Require-Grant-Code": "true",
+        "X-Apple-OAuth-Response-Mode": "web_message",
+        "X-Apple-OAuth-Response-Type": "code",
+        "X-Apple-OAuth-State": client_id,
         "X-Apple-I-FD-Client-Info": json.dumps(
-            {"U": "Mozilla/5.0", "L": "en-US", "Z": "GMT+00:00", "V": "1.1", "F": ""},
+            {"U": _USER_AGENT, "L": "en-US", "Z": "GMT+00:00", "V": "1.1", "F": ""},
         ),
     }
     if pending is not None:
@@ -192,8 +221,15 @@ def _auth_headers(pending: _PendingAuth | None = None) -> dict[str, str]:
     return headers
 
 
+def _new_client_id() -> str:
+    return f"auth-{uuid.uuid4()}".lower()
+
+
 async def _srp_signin(
-    session: aiohttp.ClientSession, email: str, password: str,
+    session: aiohttp.ClientSession,
+    email: str,
+    password: str,
+    client_id: str,
 ) -> tuple[str | None, str | None, bytes, Literal[200, 409]]:
     """Run the two-step SRP-6a exchange against Apple's signin endpoint.
 
@@ -207,14 +243,17 @@ async def _srp_signin(
     a = _b2i(secrets.token_bytes(32)) % _N
     big_a = pow(_G, a, _N)
     init_body = {
-        "a": b64encode(_i2b(big_a, _N_BYTES)).decode("ascii"),
+        # pysrp sends A as long_to_bytes(A) — minimum bytes, no zero-padding.
+        # Apple's server reads it back as an int either way, but matching the
+        # canonical encoding keeps things consistent across the flow.
+        "a": b64encode(_i2b(big_a)).decode("ascii"),
         "accountName": email,
         "protocols": ["s2k", "s2k_fo"],
     }
     async with session.post(
         f"{_AUTH_ENDPOINT}/signin/init",
         json=init_body,
-        headers=_auth_headers(),
+        headers=_auth_headers(client_id),
     ) as resp:
         text = await resp.text()
         if resp.status != 200:
@@ -233,6 +272,10 @@ async def _srp_signin(
     protocol = str(init["protocol"])
     big_b = _b2i(b64decode(init["b"]))
     challenge_id = init["c"]
+    logger.info(
+        "Apple /signin/init OK: protocol=%s iteration=%d salt_len=%d b_len=%d",
+        protocol, iteration, len(salt), (big_b.bit_length() + 7) // 8,
+    )
     if protocol not in ("s2k", "s2k_fo"):
         logger.warning("Apple proposed unknown SRP protocol %r", protocol)
         raise IcloudAuthError(f"Apple wants an SRP variant we don't speak: {protocol}.")
@@ -254,14 +297,20 @@ async def _srp_signin(
         f"{_AUTH_ENDPOINT}/signin/complete",
         params={"isRememberMeEnabled": "true"},
         json=complete_body,
-        headers=_auth_headers(),
+        headers=_auth_headers(client_id),
     ) as resp:
         body = await resp.text()
         if resp.status in (401, 403):
-            logger.info("Apple rejected the SRP proof (HTTP %d)", resp.status)
+            logger.warning(
+                "Apple /signin/complete rejected (HTTP %d): %s",
+                resp.status, body[:500],
+            )
             raise IcloudAuthPasswordError("Apple rejected that Apple ID and password.")
         if resp.status not in (200, 409):
-            logger.warning("Apple /signin/complete returned HTTP %d: %s", resp.status, body[:300])
+            logger.warning(
+                "Apple /signin/complete returned HTTP %d: %s",
+                resp.status, body[:500],
+            )
             raise IcloudAuthError(f"Apple sign-in complete failed (HTTP {resp.status}).")
         scnt = resp.headers.get("scnt")
         apple_session_id = resp.headers.get("X-Apple-ID-Session-Id")
@@ -290,9 +339,14 @@ async def initiate_auth(email: str, password: str) -> dict[str, Any]:
     """
     _gc()
     session = aiohttp.ClientSession()
-    pending = _PendingAuth(email=email, password=password, session=session)
+    client_id = _new_client_id()
+    pending = _PendingAuth(
+        email=email, password=password, session=session, client_id=client_id,
+    )
     try:
-        scnt, apple_sid, session_key, status = await _srp_signin(session, email, password)
+        scnt, apple_sid, session_key, status = await _srp_signin(
+            session, email, password, client_id,
+        )
         pending.scnt = scnt
         pending.apple_session_id = apple_sid
         pending.session_key = session_key
@@ -306,21 +360,9 @@ async def initiate_auth(email: str, password: str) -> dict[str, Any]:
                 "This Apple ID doesn't have two-factor authentication enabled. "
                 "Enable 2FA in your Apple ID settings and try again.",
             )
-
-        # Ask Apple to push a 2FA code to the trusted devices.
-        async with session.put(
-            f"{_AUTH_ENDPOINT}/verify/trusteddevice",
-            headers=_auth_headers(pending),
-        ) as resp:
-            if resp.status >= 400:
-                body = await resp.text()
-                logger.warning(
-                    "Apple /verify/trusteddevice returned HTTP %d: %s",
-                    resp.status, body[:300],
-                )
-                raise IcloudAuthError(
-                    f"Couldn't send the 2FA code (HTTP {resp.status}).",
-                )
+        # status == 409 means 2FA is required AND Apple has already pushed
+        # the code to the trusted devices as part of the response — no
+        # separate "trigger" call is needed.
     except IcloudAuthError:
         await session.close()
         raise
@@ -359,7 +401,7 @@ async def complete_auth(session_id: str, code: str) -> dict[str, Any]:
         async with session.post(
             f"{_AUTH_ENDPOINT}/verify/trusteddevice/securitycode",
             json={"securityCode": {"code": code}},
-            headers=_auth_headers(pending),
+            headers=_auth_headers(pending.client_id, pending),
         ) as resp:
             if resp.status >= 400:
                 body = await resp.text()
@@ -373,7 +415,7 @@ async def complete_auth(session_id: str, code: str) -> dict[str, Any]:
 
         async with session.get(
             f"{_AUTH_ENDPOINT}/2sv/trust",
-            headers=_auth_headers(pending),
+            headers=_auth_headers(pending.client_id, pending),
         ) as resp:
             if resp.status >= 400:
                 body = await resp.text()

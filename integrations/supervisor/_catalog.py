@@ -43,7 +43,20 @@ class CatalogEntry:
     """Maps secret-bundle keys to env-var names. For example
     ``{"email": "EMAIL_USER", "password": "EMAIL_PASS"}`` means the supervisor
     reads ``email`` and ``password`` from the decrypted bundle and sets the
-    corresponding env vars when it spawns the broker for this slug."""
+    corresponding env vars when it spawns the broker for this slug. Required
+    keys — spawn fails if any are missing from the bundle."""
+
+    optional_env_injection: dict[str, str] = field(default_factory=dict)
+    """Same shape as ``env_injection`` but for bundle keys that may be absent
+    on first spawn. Missing keys are silently skipped — the corresponding env
+    var simply isn't set. Use for state the broker writes back over time
+    (e.g. cached cookies that don't exist until the first successful run)."""
+
+    patchable_secret_keys: frozenset[str] = frozenset()
+    """Secret-bundle keys the broker is allowed to mutate via the supervisor's
+    ``update_secrets`` verb. Anything outside this set is refused, so a
+    compromised or buggy broker can't overwrite the user's primary credentials
+    (password, trust_token) — only the state it legitimately manages."""
 
     host_paths: tuple[HostPathBinding, ...] = ()
     """Shared directories on the container filesystem this integration's broker
@@ -136,19 +149,23 @@ _ICLOUD_DRIVE = CatalogEntry(
     slug="icloud_drive",
     command=["python", "-m", "integrations.brokers.rclone_broker"],
     capabilities={Capability.DRIVE: Access.READ_WRITE},
-    static_env={
-        # rclone reads its remote definition from RCLONE_CONFIG_<NAME>_* env
-        # vars; the broker always works against a remote called "default".
-        "RCLONE_CONFIG_DEFAULT_TYPE": "iclouddrive",
-    },
+    static_env={},
     env_injection={
-        # Apple ID + password + the 2FA-issued trust token. The trust token is
-        # what lets rclone skip the interactive 2FA prompt on each run; the
-        # password is still needed for token refresh.
-        "email": "RCLONE_CONFIG_DEFAULT_APPLE_ID",
-        "password": "RCLONE_CONFIG_DEFAULT_PASSWORD",
-        "trust_token": "RCLONE_CONFIG_DEFAULT_TRUST_TOKEN",
+        # The broker reads these, then wipes them and injects rclone's config
+        # into a long-lived `rclone rcd` over its RC API — no plaintext
+        # credentials ever land in rcd's environ.
+        "email": "ICLOUD_APPLE_ID",
+        "password": "ICLOUD_APPLE_PASSWORD",
+        "trust_token": "ICLOUD_TRUST_TOKEN",
     },
+    optional_env_injection={
+        # rclone-managed session state (PCS cookies, refreshed tokens). Absent
+        # on first spawn; the broker writes it back to the vault via
+        # ``update_secrets`` on clean shutdown.
+        "rclone_cookies": "ICLOUD_RCLONE_COOKIES",
+        "client_id": "ICLOUD_RCLONE_CLIENT_ID",
+    },
+    patchable_secret_keys=frozenset({"rclone_cookies", "client_id"}),
     host_paths=_RCLONE_HOST_PATHS,
 )
 

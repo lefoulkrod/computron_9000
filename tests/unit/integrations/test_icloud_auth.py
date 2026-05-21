@@ -94,7 +94,8 @@ def _server_proof_round(
     u = _b2i(_h(_i2b(big_a, _N_BYTES), _i2b(big_b, _N_BYTES)))
     # Server-side: S = (A * v^u) ^ b mod N
     s = pow((big_a * pow(v, u, _N)) % _N, b_secret, _N)
-    session_key = _h(_i2b(s, _N_BYTES))
+    # pysrp hashes S unpadded — match the production code's K derivation.
+    session_key = _h(_i2b(s))
     return b_secret, big_b, session_key
 
 
@@ -126,7 +127,9 @@ def test_srp_full_exchange_matches_server(protocol: str) -> None:
         # M2 is what the server returns to prove it also derived the right K.
         # Compute server's M2 with M1 and assert it matches what the client
         # would expect to verify.
-        expected_m2 = _h(_i2b(big_a, _N_BYTES), m1, server_key)
+        # M2 hashes A unpadded — pysrp's calculate_H_AMK uses long_to_bytes
+        # directly. Match the production formula.
+        expected_m2 = _h(_i2b(big_a), m1, server_key)
         assert m2 == expected_m2
 
 

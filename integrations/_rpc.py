@@ -15,8 +15,11 @@ group is set to ``computron`` so the app server — which runs under that group
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
+import socket
+import struct
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -24,6 +27,41 @@ from typing import Any
 from integrations._perms import SOCKET_MODE
 
 logger = logging.getLogger(__name__)
+
+
+# Per-call peer-credential context. Set at the top of each connection's serving
+# loop by reading SO_PEERCRED on the underlying UDS, and read by handlers that
+# need to authorize verbs by uid (e.g. supervisor's update_secrets, which only
+# brokers may call). Default ``None`` for non-Unix transports / pre-handler.
+_peer_uid_var: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "rpc_peer_uid", default=None,
+)
+
+
+def get_peer_uid() -> int | None:
+    """The kernel-verified uid of the currently-handled RPC peer, or ``None``.
+
+    ``None`` means the peer's uid couldn't be determined (non-Linux UDS,
+    getsockopt failed, called outside a connection handler). Callers that
+    use this for security decisions should reject on ``None`` rather than
+    interpret it as a default.
+    """
+    return _peer_uid_var.get()
+
+
+def _peer_uid_from_writer(writer: asyncio.StreamWriter) -> int | None:
+    """Best-effort SO_PEERCRED lookup on the underlying socket."""
+    sock = writer.get_extra_info("socket")
+    if sock is None:
+        return None
+    try:
+        # struct ucred is {pid, uid, gid} — three native ints.
+        size = struct.calcsize("3i")
+        cred = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, size)
+    except OSError:
+        return None
+    _pid, uid, _gid = struct.unpack("3i", cred)
+    return uid
 
 # Every frame starts with a 4-byte big-endian length header so the receiver can
 # read exactly the right number of body bytes without hunting for delimiters.
@@ -108,6 +146,7 @@ async def _serve_connection(
     handler: VerbHandler,
 ) -> None:
     """Serve RPC frames on one accepted connection until the peer disconnects."""
+    _peer_uid_var.set(_peer_uid_from_writer(writer))
     try:
         while True:
             # --- read + parse the next request frame ---

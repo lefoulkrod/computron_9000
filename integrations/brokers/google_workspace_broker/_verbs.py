@@ -15,6 +15,7 @@ from googleapiclient.errors import HttpError
 
 from integrations._rpc import RpcError
 from integrations.brokers.google_workspace_broker._calendar_client import CalendarClient
+from integrations._perms import AGENT_OWNED_FILE_MODE
 from integrations.brokers.google_workspace_broker._contacts_client import ContactsClient
 from integrations.brokers.google_workspace_broker._drive_client import DriveClient, _run_sync
 from integrations.brokers.google_workspace_broker._gmail_client import GmailClient
@@ -548,7 +549,7 @@ def _write_download(dir_path: Path, payload: bytes, filename: str) -> Path:
         suffix = dest.suffix
         dest = dir_path / f"{stem}_{secrets.token_hex(4)}{suffix}"
     dest.write_bytes(payload)
-    dest.chmod(0o640)
+    dest.chmod(AGENT_OWNED_FILE_MODE)
     return dest
 
 

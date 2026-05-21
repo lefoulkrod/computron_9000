@@ -24,6 +24,11 @@ export function IcloudDriveExplainerStep({ provider, onBack, onNext }) {
                         tone="info"
                         description="Use your Apple ID account password — not an app-specific password. Two-factor authentication must be enabled."
                     />
+                    <Callout
+                        tone="info"
+                        title="Advanced Data Protection?"
+                        description="If your Apple ID has Advanced Data Protection turned on, you'll see one extra Approve prompt on your trusted device after entering the 2FA code. Tap Approve so Computron can read your end-to-end encrypted files."
+                    />
                     <div className={styles.chipStack}>
                         <span className={styles.chip}><i className="bi bi-check2" /> Encrypted at rest</span>
                         <span className={styles.chip}><i className="bi bi-check2" /> Agent never reads the credentials</span>
@@ -166,6 +171,10 @@ export function IcloudDriveTwoFactorStep({
                             Connecting as {form.email || 'your Apple ID'}.
                         </span>
                     </div>
+                    <Callout
+                        tone="info"
+                        description="Heads-up: if you have Advanced Data Protection enabled, you'll get one more Approve prompt on your trusted device right after this. Keep your phone handy."
+                    />
                     {submitting && (
                         <div className={styles.checkList}>
                             <div className={styles.checkRow}>
