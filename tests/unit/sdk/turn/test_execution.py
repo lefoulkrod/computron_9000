@@ -500,6 +500,42 @@ async def test_no_agent_state_raises() -> None:
             await run_turn(history, _make_agent())
 
 
+async def test_tool_loop_error_message_preserved_no_response() -> None:
+    """ToolLoopError("No ChatResponse received from provider") message is preserved.
+
+    When the provider yields only deltas (no ChatResponse), the inner handler
+    should preserve the original ToolLoopError message instead of replacing it
+    with the generic fallback.
+    """
+    # Provider yields only deltas — never a ChatResponse
+    streamed_turn: list[ChatDelta | ChatResponse] = [
+        ChatDelta(content="Hel"),
+        ChatDelta(content="lo"),
+    ]
+    provider = FakeProvider([streamed_turn])
+    history = ConversationHistory([{"role": "user", "content": "Hi"}])
+
+    with patch(f"{_MOD}.get_provider", return_value=provider):
+        with pytest.raises(ToolLoopError, match="No ChatResponse received from provider"):
+            await run_turn(history, _make_agent())
+
+
+async def test_tool_loop_error_message_preserved_retry_exhaustion() -> None:
+    """ToolLoopError("Failed to get chat response after retries.") message is preserved.
+
+    When _stream_chat_with_retries exhausts all retries and raises a ToolLoopError,
+    the inner handler should preserve the original message.
+    """
+    history = ConversationHistory([{"role": "user", "content": "Hi"}])
+
+    with patch(
+        f"{_MOD}._stream_chat_with_retries",
+        side_effect=ToolLoopError("Failed to get chat response after retries."),
+    ):
+        with pytest.raises(ToolLoopError, match="Failed to get chat response after retries."):
+            await run_turn(history, _make_agent())
+
+
 # ---------------------------------------------------------------------------
 # Tests: history mutation
 # ---------------------------------------------------------------------------

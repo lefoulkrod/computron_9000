@@ -282,7 +282,7 @@ async def run_turn(
                 raise
             except Exception as exc:
                 logger.exception("Unhandled exception in tool loop")
-                error_msg = str(exc) if isinstance(exc, ProviderError) else "An error occurred while processing your message."
+                error_msg = str(exc) if isinstance(exc, (ProviderError, ToolLoopError)) else "An error occurred while processing your message."
                 publish_event(AgentEvent(payload=ContentPayload(type="content", content=error_msg)))
                 _publish_turn_end()
                 raise ToolLoopError(error_msg) from exc
