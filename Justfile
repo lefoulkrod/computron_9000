@@ -352,7 +352,7 @@ e2e *args:
     fi
 
     targets="{{args}}"
-    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run --extra test python -m pytest ${targets:-tests/e2e/}
+    COMPUTRON_URL="http://localhost:$port" PYTHONPATH=. uv run pytest ${targets:-tests/e2e/}
 
 
 # =============================================================================
