@@ -4,7 +4,6 @@ import ChatPanel from './components/ChatPanel.jsx';
 import BrowserPreview from './components/BrowserPreview.jsx';
 import DesktopPreview from './components/DesktopPreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
-import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
@@ -45,6 +44,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [toolsPanelKey, setToolsPanelKey] = useState(0);
     const [memoryRefreshSignal, setMemoryRefreshSignal] = useState(0);
     const [toolsRefreshSignal, setToolsRefreshSignal] = useState(0);
+    const [conversationsRefresh, setConversationsRefresh] = useState(0);
     const [pendingAudio, setPendingAudio] = useState(null);
     const [muted, setMuted] = useState(false);
     const [userDesktopOpen, setUserDesktopOpen] = useState(false);
@@ -196,6 +196,13 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         agentDispatch({ type: 'RESET' });
     }, [chatNewConversation, preview.reset, agentDispatch]);
 
+    // Refresh the recent-conversations list when a turn finishes — a new
+    // conversation only lands in the sessions list once its first turn is
+    // saved, and titles are generated shortly after.
+    useEffect(() => {
+        if (!isStreaming) setConversationsRefresh((n) => n + 1);
+    }, [isStreaming]);
+
     // ── Which layout to show ───────────────────────────────────────────
     // Two top-level views:
     //
@@ -275,6 +282,8 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     onAudioEnded={() => setPendingAudio(null)}
                     desktopEnabled={features.desktop}
                     onOpenDesktop={openDesktop}
+                    onLoadConversation={loadConversation}
+                    conversationsRefresh={conversationsRefresh}
                     onPanelToggle={(panel) => {
                         if (panel === 'agents') {
                             // Toggle the network view open/closed
@@ -292,20 +301,16 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     }}
                 />
 
-                {/* Flyout panel (settings, memory, goals, etc.) — not for 'agents' which controls the main view */}
+                {/* Flyout panel (memory, tools) — not for 'agents'/'goals'/'settings' which control the main view */}
                 {flyoutPanel && flyoutPanel !== 'agents' && flyoutPanel !== 'goals' && flyoutPanel !== 'settings' && (
                     <FlyoutPanel
                         title={flyoutPanel === 'memory' ? 'Memory'
-                            : flyoutPanel === 'conversations' ? 'Conversations'
                             : flyoutPanel === 'tools' ? 'Custom Tools'
                             : 'Panel'}
                         onClose={() => setFlyoutPanel(null)}
                     >
                         {flyoutPanel === 'memory' && (
                             <MemoryPanel refreshSignal={memoryRefreshSignal} />
-                        )}
-                        {flyoutPanel === 'conversations' && (
-                            <ConversationsPanel onLoadConversation={loadConversation} />
                         )}
                         {flyoutPanel === 'tools' && (
                             <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />

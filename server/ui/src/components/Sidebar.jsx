@@ -1,15 +1,16 @@
 import React, { useCallback, useState } from 'react';
 import AudioIndicator from './AudioIndicator.jsx';
+import RecentConversations from './RecentConversations.jsx';
 import styles from './Sidebar.module.css';
 
 const COLLAPSE_KEY = 'computron_sidebar_collapsed';
 
-// Panels reachable from the nav. Settings + theme live in the footer.
+// Panels reachable from the nav. Settings + theme live in the footer;
+// conversations live inline in the recent list below the nav.
 const NAV = [
     { id: 'agents', icon: 'bi-diagram-3', label: 'Agents' },
     { id: 'goals', icon: 'bi-bullseye', label: 'Goals' },
     { id: 'memory', icon: 'bi-database', label: 'Memory' },
-    { id: 'conversations', icon: 'bi-clock-history', label: 'Conversations' },
     { id: 'tools', icon: 'bi-wrench', label: 'Tools' },
 ];
 
@@ -39,6 +40,9 @@ export default function Sidebar({
     onAudioEnded,
     desktopEnabled,
     onOpenDesktop,
+    onLoadConversation,
+    activeConversationId,
+    conversationsRefresh = 0,
 }) {
     const [collapsed, setCollapsed] = useState(_readCollapsed);
 
@@ -108,7 +112,15 @@ export default function Sidebar({
                 })}
             </nav>
 
-            <div className={styles.grow} />
+            {collapsed ? (
+                <div className={styles.grow} />
+            ) : (
+                <RecentConversations
+                    onLoadConversation={onLoadConversation}
+                    activeConversationId={activeConversationId}
+                    refreshSignal={conversationsRefresh}
+                />
+            )}
 
             <div className={styles.footer}>
                 <button

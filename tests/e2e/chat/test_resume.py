@@ -1,9 +1,9 @@
 """E2E tests for resuming a prior conversation.
 
 Verifies that conversations persist across "New conversation" and reload
-from the Conversations flyout with the full message history reconstructed
-from history.json — user messages, assistant content, and tool-call
-markers, in chronological order.
+from the recent-conversations list with the full message history
+reconstructed from history.json — user messages, assistant content, and
+tool-call markers, in chronological order.
 """
 
 import time
@@ -11,7 +11,7 @@ import time
 import pytest
 from playwright.sync_api import expect
 
-from tests.e2e.pages import ChatView, ConversationsFlyout
+from tests.e2e.pages import ChatView, RecentConversations
 
 LLM_TIMEOUT = 180_000
 
@@ -51,9 +51,7 @@ def resumed(browser, browser_context_args):
 
     # Resume the prior conversation. Topmost row = most recent
     # (sorted by started_at in conversations/_store.py).
-    flyout = ConversationsFlyout(page).open()
-    flyout.resume_top()
-    flyout.close()  # so per-test assertions can't false-match list rows
+    RecentConversations(page).open_top()
 
     # Wait until the first restored user message bubble is visible
     # before yielding. Scoped to message-user so we don't false-match
