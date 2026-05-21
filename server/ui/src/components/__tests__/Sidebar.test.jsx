@@ -99,4 +99,17 @@ describe('Sidebar', () => {
         expect(screen.queryByTestId('sidebar-nav-tools')).not.toBeInTheDocument();
         expect(screen.getByTestId('sidebar-nav-memory')).toBeInTheDocument();
     });
+
+    it('hides the desktop button unless desktop is enabled', () => {
+        setup();
+        expect(screen.queryByTestId('sidebar-desktop')).not.toBeInTheDocument();
+    });
+
+    it('shows the desktop button and fires onOpenDesktop when enabled', async () => {
+        const user = userEvent.setup();
+        const onOpenDesktop = vi.fn();
+        setup({ desktopEnabled: true, onOpenDesktop });
+        await user.click(screen.getByTestId('sidebar-desktop'));
+        expect(onOpenDesktop).toHaveBeenCalledOnce();
+    });
 });

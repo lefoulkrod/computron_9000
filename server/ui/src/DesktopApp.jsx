@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
-import Header from './components/Header.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
 import BrowserPreview from './components/BrowserPreview.jsx';
 import DesktopPreview from './components/DesktopPreview.jsx';
@@ -262,24 +261,20 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     return (
         <div className={styles.appShell}>
-            {/* Slim header */}
-            <Header
-                audio={pendingAudio}
-                muted={muted}
-                onToggleMute={() => setMuted((m) => !m)}
-                onAudioEnded={() => setPendingAudio(null)}
-                desktopEnabled={features.desktop}
-                onOpenDesktop={openDesktop}
-            />
-
             <div className={styles.bodyRow}>
-                {/* Icon sidebar */}
+                {/* Navigation sidebar */}
                 <Sidebar
                     hiddenPanels={features.custom_tools ? [] : ['tools']}
                     activePanel={networkViewOpen ? 'agents' : flyoutPanel}
                     dark={dark}
                     onToggleTheme={onToggleTheme}
                     onNewConversation={newConversation}
+                    audio={pendingAudio}
+                    muted={muted}
+                    onToggleMute={() => setMuted((m) => !m)}
+                    onAudioEnded={() => setPendingAudio(null)}
+                    desktopEnabled={features.desktop}
+                    onOpenDesktop={openDesktop}
                     onPanelToggle={(panel) => {
                         if (panel === 'agents') {
                             // Toggle the network view open/closed

@@ -7,25 +7,32 @@ import StatusDot from './StatusDot.jsx';
 import styles from './ChatPanel.module.css';
 
 /**
- * Chat panel for talking to the root agent. Shows the agent name and
- * context usage in the header (from the agent reducer), the scrollable
- * message list, and the input bar.
+ * Chat panel for talking to the root agent. A title bar across the top
+ * carries the conversation title, turn count, and context meter; below
+ * it the scrollable message list and the input bar.
  *
  * When sub-agents have been spawned, a network indicator appears in the
- * header so the user can navigate to the full agent network view.
+ * title bar so the user can navigate to the full agent network view.
  */
 export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork, selectedProfileId, onProfileChange, profileRefreshSignal }) {
     const [draft, setDraft] = useState('');
     const clearDraft = useCallback(() => setDraft(''), []);
 
+    // A turn is one user message and its response. Title falls back to the
+    // agent name until the live conversation title is wired up.
+    const turnCount = messages.filter((m) => m.role === 'user').length;
+    const title = rootAgent?.name ? formatAgentName(rootAgent.name) : 'Chat';
+
     return (
         <div className={styles.panel}>
-            <div className={styles.header}>
-                {rootAgent?.name ? (
-                    <span className={styles.agentName}>{formatAgentName(rootAgent.name)}</span>
-                ) : (
-                    <span>Chat</span>
+            <div className={styles.titleBar} data-testid="chat-title-bar">
+                <span className={styles.title} data-testid="chat-title">{title}</span>
+                {turnCount > 0 && (
+                    <span className={styles.turns} data-testid="chat-turns">
+                        {turnCount} turn{turnCount !== 1 ? 's' : ''}
+                    </span>
                 )}
+                <span className={styles.spacer} />
                 <ContextMeter contextUsage={rootAgent?.contextUsage} />
                 {networkActivated && (
                     <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view" data-testid="network-indicator">

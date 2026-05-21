@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import AudioIndicator from './AudioIndicator.jsx';
 import styles from './Sidebar.module.css';
 
 const COLLAPSE_KEY = 'computron_sidebar_collapsed';
@@ -32,6 +33,12 @@ export default function Sidebar({
     dark,
     onToggleTheme,
     onNewConversation,
+    audio,
+    muted,
+    onToggleMute,
+    onAudioEnded,
+    desktopEnabled,
+    onOpenDesktop,
 }) {
     const [collapsed, setCollapsed] = useState(_readCollapsed);
 
@@ -114,6 +121,23 @@ export default function Sidebar({
                     <i className="bi bi-sun" />
                 </button>
                 <div className={styles.footerSpacer} />
+                <AudioIndicator
+                    audio={audio}
+                    muted={muted}
+                    onToggleMute={onToggleMute}
+                    onEnded={onAudioEnded}
+                />
+                {desktopEnabled && (
+                    <button
+                        className={styles.iconBtn}
+                        onClick={onOpenDesktop}
+                        title="Open desktop"
+                        aria-label="Open desktop"
+                        data-testid="sidebar-desktop"
+                    >
+                        <i className="bi bi-display" />
+                    </button>
+                )}
                 <button
                     className={`${styles.iconBtn} ${settingsActive ? styles.active : ''}`}
                     onClick={() => onPanelToggle(settingsActive ? null : 'settings')}
