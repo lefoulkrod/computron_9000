@@ -55,6 +55,19 @@ def test_tool_call_event_embedding():
     as_dict = resp.model_dump()
     assert as_dict["payload"]["type"] == "tool_call"
     assert as_dict["payload"]["name"] == "web_search"
+    # Arguments default to None when not supplied.
+    assert as_dict["payload"]["arguments"] is None
+
+
+@pytest.mark.unit
+def test_tool_call_event_carries_arguments():
+    """ToolCallPayload retains a stringified arguments map when given one."""
+    payload = ToolCallPayload(
+        type="tool_call", name="read_file", arguments={"filename": "src/app.py"},
+    )
+    resp = AgentEvent(payload=payload)
+    assert resp.payload.arguments == {"filename": "src/app.py"}
+    assert resp.model_dump()["payload"]["arguments"] == {"filename": "src/app.py"}
 
 
 @pytest.mark.unit

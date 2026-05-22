@@ -53,10 +53,13 @@ class ToolCallPayload(BaseModel):
     Attributes:
         type: Discriminator; always "tool_call".
         name: The name of the tool being invoked.
+        arguments: Tool arguments, stringified and length-capped for
+            display. None when the call carried no arguments.
     """
 
     type: Literal["tool_call"]
     name: str
+    arguments: dict[str, str] | None = None
 
 
 class BrowserScreenshotPayload(BaseModel):

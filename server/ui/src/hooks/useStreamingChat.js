@@ -327,7 +327,7 @@ export default function useStreamingChat(callbacks) {
                                 callback: callbacks.onActivityEntry,
                                 args: {
                                     agentId: data.agent_id,
-                                    entry: { type: 'tool_call', name: payload.name, timestamp: Date.now() },
+                                    entry: { type: 'tool_call', name: payload.name, arguments: payload.arguments || null, timestamp: Date.now() },
                                 },
                             });
                             scheduleFlush();

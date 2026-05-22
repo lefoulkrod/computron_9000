@@ -23,7 +23,7 @@ export default function AgentOutput({ entries, streaming, showFileOutputs = true
             return <div key={i} data-testid="entry-content"><MarkdownContent streaming={streaming && i === entries.length - 1}>{entry.content}</MarkdownContent></div>;
         }
         if (entry.type === 'tool_call') {
-            return <ToolCallBlock key={i} name={entry.name} />;
+            return <ToolCallBlock key={i} name={entry.name} arguments={entry.arguments} />;
         }
         if (entry.type === 'file_output' && showFileOutputs) {
             return <FileOutput key={i} item={entry} onPreview={onPreview} />;
