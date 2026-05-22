@@ -162,3 +162,70 @@ def test_empty_tool_calls_list_splits_normally():
     assert len(chunks) >= 2
     total = sum(len(c) for c in chunks)
     assert total == 3
+
+
+@pytest.mark.unit
+def test_second_tool_result_not_split_from_assistant():
+    """When an assistant issues two tool calls, both results stay in the
+    same chunk as the assistant — the second tool result must not be
+    pushed to a new chunk."""
+    messages = [
+        _make_msg("user", "x" * 80),
+        _make_msg(
+            "assistant",
+            content="",
+            tool_calls=[
+                {"function": {"name": "read_file", "arguments": "{}"}},
+                {"function": {"name": "grep", "arguments": "{}"}},
+            ],
+        ),
+        _make_msg("tool", content="r1" * 80, tool_name="read_file"),
+        _make_msg("tool", content="r2" * 80, tool_name="grep"),
+    ]
+    chunks = _split_into_chunks(messages, target_size=100)
+
+    # All four messages (user, assistant, tool1, tool2) must be in one chunk.
+    assert len(chunks) == 1, (
+        f"Expected 1 chunk, got {len(chunks)} — "
+        f"second tool result was split from its assistant"
+    )
+    assert len(chunks[0]) == 4
+    assert chunks[0][0]["role"] == "user"
+    assert chunks[0][1]["role"] == "assistant"
+    assert chunks[0][2]["role"] == "tool"
+    assert chunks[0][3]["role"] == "tool"
+
+
+@pytest.mark.unit
+def test_tool_result_chain_not_split():
+    """A chain of 5 tool results from one assistant all stay together."""
+    tool_names = ["t1", "t2", "t3", "t4", "t5"]
+    messages = [
+        _make_msg("user", "x" * 80),
+        _make_msg(
+            "assistant",
+            content="",
+            tool_calls=[
+                {"function": {"name": name, "arguments": "{}"}}
+                for name in tool_names
+            ],
+        ),
+    ]
+    for name in tool_names:
+        messages.append(
+            _make_msg("tool", content=f"result_{name}" * 20, tool_name=name)
+        )
+
+    chunks = _split_into_chunks(messages, target_size=100)
+
+    # All 7 messages (user + assistant + 5 tool results) must be in one chunk.
+    assert len(chunks) == 1, (
+        f"Expected 1 chunk, got {len(chunks)} — "
+        f"tool result chain was split"
+    )
+    assert len(chunks[0]) == 7
+    assert chunks[0][0]["role"] == "user"
+    assert chunks[0][1]["role"] == "assistant"
+    # Verify all 5 tool results are present and in order
+    tool_roles = [m["role"] for m in chunks[0][2:]]
+    assert tool_roles == ["tool"] * 5
