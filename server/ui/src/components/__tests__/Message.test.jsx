@@ -50,3 +50,22 @@ describe('Message markdown image handling', () => {
         expect(img.getAttribute('src')).toBe(null);
     });
 });
+
+describe('Message user attachments', () => {
+    it('renders an image attachment as a thumbnail chip', () => {
+        render(<Message role="user" content="look at this" images={[DATA_URL_PNG]} />);
+        expect(screen.getByTestId('attachment-image')).toHaveAttribute('src', DATA_URL_PNG);
+    });
+
+    it('renders a file attachment as a file card', () => {
+        render(<Message role="user" content="" files={[{ filename: 'report.pdf' }]} />);
+        expect(screen.getByTestId('attachment-file')).toBeInTheDocument();
+        expect(screen.getByText('report.pdf')).toBeInTheDocument();
+    });
+
+    it('renders no attachment row when there are none', () => {
+        render(<Message role="user" content="just text" />);
+        expect(screen.queryByTestId('attachment-image')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('attachment-file')).not.toBeInTheDocument();
+    });
+});

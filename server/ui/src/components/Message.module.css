@@ -65,43 +65,13 @@
   100% { opacity: 0; }
 }
 
-/* ── User message images ── */
-
-.messageImages {
-  margin-top: var(--sp-2);
+/* ── User message attachments ── */
+/* A row of shared AttachmentChip items, above the message text. */
+.attachments {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-
-.messageImages img {
-  max-width: 300px;
-  max-height: 220px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-}
-
-/* ── User file attachment chips ── */
-
-.userFiles {
-  margin-top: var(--sp-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-}
-
-.userFileChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--accent-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  padding: 2px 8px;
-  font-size: 11px;
-  font-family: var(--font-code);
-  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
 }
 
 /* ── Inline markdown images ── */

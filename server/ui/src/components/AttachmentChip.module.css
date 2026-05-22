@@ -1,0 +1,111 @@
+/* Image attachment — rounded square thumbnail */
+.image {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+.image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+/* File attachment — horizontal card: icon tile + name + meta */
+.file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 52px;
+  padding: 0 30px 0 8px;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.tintPdf { background: var(--danger-muted); color: var(--danger); }
+.tintCode { background: var(--success-muted); color: var(--success); }
+.tintDoc { background: var(--accent-muted); color: var(--accent); }
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* Remove control — floating circle on the image's corner */
+.removeImage {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  padding: 0;
+  cursor: pointer;
+}
+.removeImage:hover {
+  background: var(--danger-muted);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Remove control — inline on the file card's right edge.
+   Centred via a fixed top (card 52px, button 20px) rather than a
+   transform, so the global button:active translate doesn't clobber it. */
+.removeFile {
+  position: absolute;
+  top: 16px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  padding: 0;
+  cursor: pointer;
+}
+.removeFile:hover {
+  background: var(--danger-muted);
+  color: var(--danger);
+}
