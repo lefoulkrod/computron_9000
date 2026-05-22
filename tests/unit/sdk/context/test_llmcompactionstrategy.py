@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,9 +44,9 @@ async def test_summary_inserted_as_assistant_role():
 
     with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
          patch("sdk.context._strategy.save_summary_record"), \
-         patch("sdk.context._strategy.load_config") as mock_cfg:
+         patch("sdk.context._strategy.load_settings",
+               return_value={"compaction_provider": "test-provider", "compaction_model": "test-model", "compaction_options": {}}):
         mock_summarize.return_value = ("This is the summary.", "test-model")
-        mock_cfg.return_value = MagicMock(summary=MagicMock(model="test-model", options={}))
 
         await strategy.apply(history, _make_stats(0.8))
 
@@ -80,9 +81,9 @@ async def test_tool_pairs_kept_together():
 
     with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
          patch("sdk.context._strategy.save_summary_record"), \
-         patch("sdk.context._strategy.load_config") as mock_cfg:
+         patch("sdk.context._strategy.load_settings",
+               return_value={"compaction_provider": "test-provider", "compaction_model": "test-model", "compaction_options": {}}):
         mock_summarize.return_value = ("Summary text.", "test-model")
-        mock_cfg.return_value = MagicMock(summary=MagicMock(model="test-model", options={}))
 
         await strategy.apply(history, _make_stats(0.8))
 
@@ -210,14 +211,11 @@ async def test_summary_record_includes_metadata():
 
     with patch.object(strategy, "_summarize", new_callable=AsyncMock) as mock_summarize, \
          patch("sdk.context._strategy.save_summary_record", side_effect=saved_records.append), \
-         patch("sdk.context._strategy.load_config") as mock_cfg, \
-         patch("sdk.context._strategy.load_settings", return_value={"compaction_model": "test-model"}), \
+         patch("sdk.context._strategy.load_settings",
+               return_value={"compaction_provider": "test-provider", "compaction_model": "test-model", "compaction_options": {"temperature": 0.3}}), \
          patch("sdk.context._strategy.get_conversation_id", return_value="conv-123"), \
          patch("sdk.context._strategy.get_current_agent_name", return_value="BROWSER"):
         mock_summarize.return_value = ("Summary.", "test-model")
-        mock_cfg.return_value = MagicMock(
-            summary=MagicMock(options={"temperature": 0.3}),
-        )
 
         await strategy.apply(history, _make_stats(0.8))
 
@@ -226,3 +224,58 @@ async def test_summary_record_includes_metadata():
     assert record.conversation_id == "conv-123"
     assert record.agent_name == "BROWSER"
     assert record.options == {"temperature": 0.3}
+
+
+# ── _unload_model (async subprocess) ────────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unload_model_spawns_subprocess_and_awaits():
+    """_unload_model should use create_subprocess_exec and await communicate()."""
+    from sdk.context._strategy import _unload_model
+
+    with patch("sdk.context._strategy.asyncio.create_subprocess_exec") as mock_csp:
+        mock_proc = MagicMock()
+        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+        mock_csp.return_value = mock_proc
+
+        await _unload_model("test-model")
+
+        mock_csp.assert_called_once_with(
+            "ollama", "stop", "test-model",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        mock_proc.communicate.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unload_model_handles_timeout():
+    """_unload_model should kill the process on timeout."""
+    from sdk.context._strategy import _unload_model
+
+    with patch("sdk.context._strategy.asyncio.create_subprocess_exec") as mock_csp:
+        mock_proc = MagicMock()
+        mock_proc.communicate = AsyncMock(side_effect=TimeoutError)
+        mock_proc.kill = MagicMock()
+        mock_proc.wait = AsyncMock()
+        mock_csp.return_value = mock_proc
+
+        await _unload_model("test-model")
+
+        mock_proc.kill.assert_called_once()
+        mock_proc.wait.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unload_model_handles_subprocess_error():
+    """_unload_model should catch OSError during subprocess creation."""
+    from sdk.context._strategy import _unload_model
+
+    with patch("sdk.context._strategy.asyncio.create_subprocess_exec",
+               side_effect=OSError("ollama not found")):
+        # Should not raise — the exception is caught and logged.
+        await _unload_model("test-model")

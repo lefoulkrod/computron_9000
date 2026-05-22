@@ -27,29 +27,6 @@ class Settings(BaseModel):
         return str(Path(v).expanduser())
 
 
-class _ModelOptions(BaseModel):
-    """Shared base for config sections that specify a model with options."""
-
-    model: str
-    options: dict[str, Any] = Field(default_factory=dict)
-    think: bool = False
-
-    @field_validator("options", mode="before")
-    @classmethod
-    def _normalize_options(cls, v: object) -> dict[str, Any]:
-        """Normalize ``options`` allowing missing or null values."""
-        if v is None:
-            return {}
-        if isinstance(v, dict):
-            return v
-        msg = "options must be a mapping if provided"
-        raise TypeError(msg)
-
-
-class SummaryConfig(_ModelOptions):
-    """Configuration for the summarization model used for context compaction."""
-
-
 class HumanTypingConfig(BaseModel):
     """Typing simulation configuration."""
 
@@ -131,15 +108,6 @@ class VirtualComputerConfig(BaseModel):
     home_dir: str
 
 
-class LLMConfig(BaseModel):
-    """Configuration for Large Language Model connection."""
-
-    provider: str = "ollama"
-    host: str | None = None
-    api_key: str | None = None
-    base_url: str | None = None
-
-
 class ParallelConfig(BaseModel):
     """Configuration for parallel agent execution."""
 
@@ -190,9 +158,7 @@ class AppConfig(BaseModel):
     virtual_computer: VirtualComputerConfig
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
-    llm: LLMConfig = Field(default_factory=LLMConfig)
     desktop: DesktopConfig = Field(default_factory=DesktopConfig)
-    summary: SummaryConfig | None = None
     parallel: ParallelConfig = Field(default_factory=ParallelConfig)
     goals: GoalsConfig = Field(default_factory=GoalsConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)

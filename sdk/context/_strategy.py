@@ -1,7 +1,6 @@
 """Pluggable context management strategies."""
 
 import asyncio
-import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -14,7 +13,6 @@ from sdk.providers import get_provider
 from rich.panel import Panel
 from rich.text import Text
 
-from config import load_config
 from conversations import SummaryRecord, save_summary_record
 from sdk.events import get_current_agent_name
 from sdk.turn import get_conversation_id
@@ -270,12 +268,11 @@ class LLMCompactionStrategy:
         # Extract any prior summary so we can merge facts forward.
         prior_summary = _extract_prior_summary(compactable)
 
-        # Resolve model name up front so we can unload on any exit path.
-        cfg = load_config()
-        resolved = self._resolve_model(cfg)
+        # Resolve model up front so we can unload on any exit path.
+        resolved = self._resolve_model()
         if resolved is None:
             return
-        resolved_model, resolved_options = resolved
+        _resolved_provider, resolved_model, resolved_options = resolved
 
         import time as _time
         t0 = _time.monotonic()
@@ -288,11 +285,11 @@ class LLMCompactionStrategy:
                 "LLMCompactionStrategy: compaction timed out after %ds, skipping",
                 _CALL_TIMEOUT,
             )
-            _unload_model(resolved_model)
+            await _unload_model(resolved_model)
             return
         except Exception:
             logger.exception("LLMCompactionStrategy: LLM call failed, skipping compaction")
-            _unload_model(resolved_model)
+            await _unload_model(resolved_model)
             return
         elapsed = _time.monotonic() - t0
 
@@ -368,7 +365,7 @@ class LLMCompactionStrategy:
             pinned_msg["content"] = _INTENT_PREFIX + intent_history
 
         # Unload the summarizer model to free VRAM for the main agent.
-        _unload_model(model_name)
+        await _unload_model(model_name)
 
     async def _summarize(
         self,
@@ -385,8 +382,7 @@ class LLMCompactionStrategy:
         """
         import copy
 
-        cfg = load_config()
-        _, options = self._resolve_model(cfg)
+        _, _, options = self._resolve_model() or (None, None, {})
         num_ctx = options.get("num_ctx", 8192) if isinstance(options, dict) else 8192
         chunk_threshold = int(num_ctx * _CHARS_PER_TOKEN * _CTX_INPUT_FRACTION)
         chunk_target = chunk_threshold // 2
@@ -433,10 +429,8 @@ class LLMCompactionStrategy:
         objective: str = "",
     ) -> tuple[str, str]:
         """Call the summarization LLM and return (summary_text, model_name)."""
-        cfg = load_config()
-        provider = get_provider()
-
-        model, options = self._resolve_model(cfg)
+        provider_name, model, options = self._resolve_model()
+        provider = get_provider(provider_name)
 
         user_content = ""
         if prior_summary:
@@ -470,9 +464,8 @@ class LLMCompactionStrategy:
         user message, indicating the user may have changed topics.  Uses
         the same model as the summarizer.
         """
-        cfg = load_config()
-        provider = get_provider()
-        model, options = self._resolve_model(cfg)
+        provider_name, model, options = self._resolve_model()
+        provider = get_provider(provider_name)
 
         # Build the user content with numbered messages.
         # Truncate individual messages to keep the input focused.
@@ -498,36 +491,40 @@ class LLMCompactionStrategy:
         )
         return response.message.content or ""
 
-    def _resolve_model(self, cfg: object) -> tuple[str, dict] | None:
-        """Determine which model and options to use for summarization.
+    def _resolve_model(self) -> tuple[str, str, dict] | None:
+        """Determine the (provider, model, options) to use for summarization.
 
-        The model name comes from an explicit constructor arg or the
-        ``compaction_model`` setting. Inference options come from
-        config.yaml's summary section. Returns None if no model is
-        configured.
+        The model comes from an explicit constructor arg or the
+        ``compaction_model`` setting; the provider from ``compaction_provider``;
+        inference options from ``compaction_options``. Returns None if no
+        model/provider is configured.
         """
-        summary_cfg = getattr(cfg, "summary", None)
-        options = summary_cfg.options if summary_cfg else {}
+        settings = load_settings()
+        options = dict(settings.get("compaction_options") or {})
+        provider = settings.get("compaction_provider") or ""
+        model = self._summary_model or settings.get("compaction_model") or ""
 
-        if self._summary_model:
-            return self._summary_model, options
+        if model and provider:
+            return provider, model, options
 
-        compaction_model = load_settings().get("compaction_model")
-        if compaction_model:
-            return compaction_model, options
-
-        logger.warning("No compaction model configured — compaction disabled")
+        logger.warning("No compaction model/provider configured — compaction disabled")
         return None
 
 
-def _unload_model(model: str) -> None:
+async def _unload_model(model: str) -> None:
     """Unload a model from Ollama to free VRAM."""
-    import subprocess
     try:
-        subprocess.run(
-            ["ollama", "stop", model],
-            capture_output=True, timeout=30,
+        proc = await asyncio.create_subprocess_exec(
+            "ollama", "stop", model,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        try:
+            await asyncio.wait_for(proc.communicate(), timeout=30)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            logger.debug("Unload model %s timed out after 30s", model)
     except Exception:
         logger.debug("Failed to unload model %s", model)
 
@@ -684,7 +681,9 @@ def _split_into_chunks(
     """Split messages into chunks of approximately *target_size* characters.
 
     Keeps assistant + tool-call pairs together so a tool call and its
-    result are never separated across chunks.
+    result are never separated across chunks. A chunk may therefore
+    exceed *target_size* when a long run of tool calls/results would
+    otherwise straddle a boundary.
     """
     chunks: list[list[dict]] = []
     current_chunk: list[dict] = []
@@ -695,11 +694,16 @@ def _split_into_chunks(
         msg_size = len(content)
 
         # If adding this message would exceed the target and the chunk
-        # already has content, start a new chunk.
+        # already has content, start a new chunk — but never split a
+        # tool-call / tool-result pair across chunks.
         if current_size + msg_size > target_size and current_chunk:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_size = 0
+            # If the current message is a tool result and the last
+            # message in the chunk is an assistant with tool_calls,
+            # keep them together by deferring the split.
+            if not _would_split_tool_pair(current_chunk, msg):
+                chunks.append(current_chunk)
+                current_chunk = []
+                current_size = 0
 
         current_chunk.append(msg)
         current_size += msg_size
@@ -708,6 +712,28 @@ def _split_into_chunks(
         chunks.append(current_chunk)
 
     return chunks
+
+
+def _would_split_tool_pair(
+    chunk: list[dict],
+    next_msg: dict,
+) -> bool:
+    """Return True if appending *next_msg* to *chunk* would separate a
+    tool-call / tool-result pair across chunks.
+
+    Fires when *next_msg* is a tool result and the last message in
+    *chunk* is an assistant with ``tool_calls`` — flushing here would
+    put the call and its result in different chunks.
+    """
+    if not chunk:
+        return False
+
+    last = chunk[-1]
+    return (
+        next_msg.get("role") == "tool"
+        and last.get("role") == "assistant"
+        and bool(last.get("tool_calls"))
+    )
 
 
 def _serialize_messages(messages: list[dict]) -> str:

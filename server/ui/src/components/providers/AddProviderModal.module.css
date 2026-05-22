@@ -1,0 +1,173 @@
+.scrim {
+    position: fixed;
+    inset: 0;
+    background: var(--scrim);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 80px;
+    z-index: 60;
+}
+
+.modal {
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 560px;
+    max-width: 90%;
+    max-height: calc(100vh - 120px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    padding: var(--sp-4) var(--sp-5);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.headerLeft {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.iconBtn {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    background: transparent;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+.iconBtn:hover {
+    background: var(--surface);
+    color: var(--text-primary);
+}
+
+.body {
+    padding: var(--sp-4) var(--sp-5);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.footer {
+    padding: var(--sp-3) var(--sp-5);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-2);
+}
+
+/* ── Catalog grid ───────────────────────────────────────────────── */
+.catalogGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+}
+
+.catalogCard {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-body);
+    color: var(--text-primary);
+    transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+.catalogCard:hover {
+    border-color: var(--border-strong);
+    background: var(--elevated);
+}
+.catalogCardSelected {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow);
+}
+
+.catalogIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    background: var(--canvas);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.catalogText {
+    min-width: 0;
+}
+.catalogName {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.catalogSub {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 1px;
+}
+
+/* ── Form rows ──────────────────────────────────────────────────── */
+.formRow {
+    display: flex;
+    flex-direction: column;
+}
+
+.formLabel {
+    font-family: var(--font-brand);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: var(--sp-2);
+}
+
+.formHint {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: var(--sp-1);
+}
+
+/* ── Input (matches design-language .input) ─────────────────────── */
+.input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--canvas);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-body);
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+[data-theme="dark"] .input { background: var(--surface); }
+.input::placeholder { color: var(--text-tertiary); }
+.input:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
+.inputMono { font-family: var(--font-code); font-size: 12px; }

@@ -165,7 +165,7 @@ async def run_turn(
     Raises:
         ToolLoopError: If an unexpected error occurs in the tool loop.
     """
-    provider = get_provider()
+    provider = get_provider(agent.provider)
     agent_state = _active_agent_state.get()
     if agent_state is None:
         raise ToolLoopError("run_turn called outside an agent_span (no active AgentState)")

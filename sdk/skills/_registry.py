@@ -56,6 +56,27 @@ def register_skill(skill: Skill) -> None:
 _builtins_registered = False
 
 
+def _strip_grounding_tools(skill: Skill) -> Skill:
+    """Return a copy of *skill* without any local-UI-TARS grounding tools.
+
+    These tools shell out to the local inference server; turning the
+    feature off should make them invisible to the agent.
+    """
+    from tools.browser.vision import browser_visual_action
+    from tools.desktop._tools import perform_visual_action
+
+    blocked = {browser_visual_action, perform_visual_action}
+    filtered = [t for t in skill.tools if t not in blocked]
+    if len(filtered) == len(skill.tools):
+        return skill
+    return Skill(
+        name=skill.name,
+        description=skill.description,
+        prompt=skill.prompt,
+        tools=filtered,
+    )
+
+
 def _ensure_builtins() -> None:
     """Register all built-in skills on first call.
 
@@ -73,13 +94,19 @@ def _ensure_builtins() -> None:
     from skills.coder import _SKILL as coder_skill
     from skills.goal_planner import _SKILL as goal_planner_skill
 
-    for skill in (browser_skill, coder_skill, goal_planner_skill):
-        register_skill(skill)
-
     features = load_config().features
+
+    register_skill(coder_skill)
+    register_skill(goal_planner_skill)
+    register_skill(
+        browser_skill if features.visual_grounding else _strip_grounding_tools(browser_skill)
+    )
+
     if features.desktop:
         from skills.desktop import _SKILL as desktop_skill
-        register_skill(desktop_skill)
+        register_skill(
+            desktop_skill if features.visual_grounding else _strip_grounding_tools(desktop_skill)
+        )
     if features.image_generation:
         from skills.image_generation import _SKILL as image_skill
         register_skill(image_skill)

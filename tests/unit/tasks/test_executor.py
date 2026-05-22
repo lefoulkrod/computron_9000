@@ -28,6 +28,7 @@ def _stub_agent() -> Agent:
         name="TASK_AGENT",
         description="",
         instruction="",
+        provider="ollama",
         model="",
         options={},
         tools=[],

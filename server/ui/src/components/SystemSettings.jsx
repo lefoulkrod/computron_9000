@@ -4,48 +4,28 @@ import ModelPicker from './ModelPicker.jsx';
 import PackageIcon from './icons/PackageIcon';
 import EyeIcon from './icons/EyeIcon';
 import CompactionIcon from './icons/CompactionIcon';
-import WrenchIcon from './icons/WrenchIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
-import Button from './primitives/Button.jsx';
-import StatusDot from './StatusDot.jsx';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 
-export default function SystemSettings({ onRunWizard }) {
-    const [allModels, setAllModels] = useState([]);
+export default function SystemSettings() {
+    const [providers, setProviders] = useState([]);
     const [profiles, setProfiles] = useState([]);
-    const [settings, setSettings] = useState({ default_agent: 'computron', vision_model: '' });
+    const [settings, setSettings] = useState({ default_agent: 'computron' });
     const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
     const [visionAdvancedOpen, setVisionAdvancedOpen] = useState(false);
-
-    const visionModels = allModels;
-    const provider = settings.llm_provider || 'ollama';
-    const providerLabel = provider === 'openai' && settings.llm_base_url
-        ? 'OpenAI Compatible'
-        : provider.charAt(0).toUpperCase() + provider.slice(1);
-
-    const fetchModels = useCallback(async () => {
-        try {
-            const res = await fetch('/api/models');
-            const data = await res.json();
-            setAllModels(data.models || []);
-        } catch {
-            // keep existing state on error
-        }
-    }, []);
 
     useEffect(() => {
         async function init() {
             try {
-                const [modelsRes, settingsRes, profilesRes] = await Promise.all([
-                    fetch('/api/models'),
+                const [providersRes, settingsRes, profilesRes] = await Promise.all([
+                    fetch('/api/providers'),
                     fetch('/api/settings'),
                     fetch('/api/profiles'),
                 ]);
-                const modelsData = await modelsRes.json();
+                const providersData = await providersRes.json();
                 const settingsData = await settingsRes.json();
                 const profilesData = await profilesRes.json();
-                setAllModels(modelsData.models || []);
+                setProviders(providersData.providers || []);
                 setSettings(settingsData);
                 setProfiles(profilesData);
             } catch {
@@ -74,19 +54,26 @@ export default function SystemSettings({ onRunWizard }) {
         }
     }, []);
 
-    const handleRefresh = useCallback(async () => {
-        setRefreshing(true);
+    // Update a (provider, model) pair atomically so they always stay in sync.
+    const updateProviderModel = useCallback(async (providerKey, modelKey, provider, model) => {
+        setSettings((prev) => ({ ...prev, [providerKey]: provider || '', [modelKey]: model || '' }));
         try {
-            await fetch('/api/models/refresh', { method: 'POST' });
-            await fetchModels();
+            const res = await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [providerKey]: provider || '', [modelKey]: model || '' }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setSettings(updated);
+            }
         } catch {
             // silent
-        } finally {
-            setRefreshing(false);
         }
-    }, [fetchModels]);
+    }, []);
 
-    const connected = allModels.length > 0;
+    // The provider name driving the vision_options field-visibility logic.
+    const visionProvider = settings.vision_provider || (providers[0]?.name ?? '');
 
     if (loading) return null;
 
@@ -130,10 +117,13 @@ export default function SystemSettings({ onRunWizard }) {
                 </div>
                 <div className={styles.pickerRow} data-testid="vision-model-picker">
                     <ModelPicker
-                        models={visionModels}
-                        selected={settings.vision_model || null}
-                        onSelect={(name) => updateSetting('vision_model', name || '')}
-                        placeholder="Search for a vision model…"
+                        providers={providers}
+                        selectedProvider={settings.vision_provider || null}
+                        selectedModel={settings.vision_model || null}
+                        onSelect={(p, m) => updateProviderModel('vision_provider', 'vision_model', p, m)}
+                        placeholder="Choose a vision model…"
+                        capability="vision"
+                        inline
                     />
                 </div>
 
@@ -167,7 +157,7 @@ export default function SystemSettings({ onRunWizard }) {
                             { key: 'top_p', label: 'Top P', desc: '0.5 = focused, 0.9 = general, 1.0 = everything.', step: 0.05 },
                             { key: 'num_ctx', label: 'Context Window', desc: 'Maximum context window in tokens.', providers: ['ollama'] },
                             { key: 'num_predict', label: 'Max Output (num_predict)', desc: 'Tokens the model can generate per call.' },
-                        ].filter(({ providers }) => !providers || providers.includes(provider)).map(({ key, label, desc, step }) => (
+                        ].filter(({ providers }) => !providers || providers.includes(visionProvider)).map(({ key, label, desc, step }) => (
                             <div key={key} className={styles.groupRow}>
                                 <div className={styles.settingInfo}>
                                     <span className={styles.settingTitle}>{label}</span>
@@ -197,7 +187,8 @@ export default function SystemSettings({ onRunWizard }) {
             <div className={styles.note}>
                 Vision was tested with Qwen3.5.
             </div>
-            {/* Compaction Model */}
+
+            {/* Compaction */}
             <div className={styles.sectionLabel}>Compaction</div>
 
             <div className={styles.groupCard}>
@@ -212,10 +203,12 @@ export default function SystemSettings({ onRunWizard }) {
                 </div>
                 <div className={styles.pickerRow} data-testid="compaction-model-picker">
                     <ModelPicker
-                        models={allModels}
-                        selected={settings.compaction_model || null}
-                        onSelect={(name) => updateSetting('compaction_model', name || '')}
-                        placeholder="Search for a compaction model…"
+                        providers={providers}
+                        selectedProvider={settings.compaction_provider || null}
+                        selectedModel={settings.compaction_model || null}
+                        onSelect={(p, m) => updateProviderModel('compaction_provider', 'compaction_model', p, m)}
+                        placeholder="Choose a compaction model…"
+                        inline
                     />
                 </div>
             </div>
@@ -224,45 +217,29 @@ export default function SystemSettings({ onRunWizard }) {
                 Compaction was fine-tuned to work with kimi-k2.5 — using a different model may produce lower quality summaries.
             </div>
 
-            {/* LLM Provider */}
-            <div className={styles.sectionLabel}>LLM Provider</div>
+            {/* Title Generation */}
+            <div className={styles.sectionLabel}>Title Generation</div>
 
-            <div className={styles.settingRow}>
-                <div className={styles.settingIcon} style={{ opacity: 1 }}>
-                    <StatusDot status={connected ? 'connected' : 'disconnected'} />
+            <div className={styles.groupCard}>
+                <div className={styles.settingRow}>
+                    <div className={styles.settingIcon}>
+                        <PackageIcon />
+                    </div>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Title Model</span>
+                        <span className={styles.settingDesc}>Generates a 3–5 word title for each new conversation from the first message.</span>
+                    </div>
                 </div>
-                <div className={styles.settingInfo}>
-                    <span className={styles.settingTitle}>
-                        {connected ? 'Connected' : 'Disconnected'}
-                    </span>
-                    <span className={styles.settingDesc}>
-                        {connected
-                            ? `${providerLabel} — ${allModels.length} model${allModels.length === 1 ? '' : 's'} available`
-                            : `Unable to reach ${providerLabel}`}
-                    </span>
+                <div className={styles.pickerRow} data-testid="title-model-picker">
+                    <ModelPicker
+                        providers={providers}
+                        selectedProvider={settings.title_provider || null}
+                        selectedModel={settings.title_model || null}
+                        onSelect={(p, m) => updateProviderModel('title_provider', 'title_model', p, m)}
+                        placeholder="Choose a title model…"
+                        inline
+                    />
                 </div>
-                <Button
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                >
-                    {refreshing ? 'Refreshing…' : 'Refresh'}
-                </Button>
-            </div>
-
-            {/* Setup */}
-            <div className={styles.sectionLabel}>Setup</div>
-
-            <div className={styles.settingRow}>
-                <div className={styles.settingIcon}>
-                    <WrenchIcon size={16} />
-                </div>
-                <div className={styles.settingInfo}>
-                    <span className={styles.settingTitle}>Setup Wizard</span>
-                    <span className={styles.settingDesc}>Re-run the initial configuration wizard</span>
-                </div>
-                <Button onClick={onRunWizard}>
-                    Run Setup Wizard
-                </Button>
             </div>
         </div>
     );

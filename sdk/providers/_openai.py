@@ -7,10 +7,8 @@ from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any
 
-from config import LLMConfig
-
 from ._base import BaseAPIProvider
-from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, LLMConfig, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 from sdk.tools import callable_to_json_schema
 
 logger = logging.getLogger(__name__)
@@ -68,8 +66,8 @@ class OpenAIProvider(BaseAPIProvider):
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OpenAIProvider":
-        """Construct from application config."""
-        return cls(api_key=llm_config.api_key, base_url=llm_config.base_url)
+        """Construct from a direct-provider config (no API key — that path is brokered)."""
+        return cls(base_url=llm_config.base_url)
 
     def _build_kwargs(
         self,
@@ -142,10 +140,11 @@ class OpenAIProvider(BaseAPIProvider):
         try:
             stream = await self._client.chat.completions.create(**kwargs)
             async for chunk in stream:
-                # Usage-only chunk (last, when stream_options.include_usage is honoured)
+                # Some providers send usage on a dedicated empty-choices chunk;
+                # others attach it to the final chunk alongside finish_reason.
+                if chunk.usage:
+                    usage_data = chunk.usage
                 if not chunk.choices:
-                    if chunk.usage:
-                        usage_data = chunk.usage
                     continue
 
                 choice = chunk.choices[0]
@@ -186,10 +185,7 @@ class OpenAIProvider(BaseAPIProvider):
                 thinking="".join(thinking_parts) or None,
                 tool_calls=tool_calls,
             ),
-            usage=TokenUsage(
-                prompt_tokens=getattr(usage_data, "prompt_tokens", 0) or 0,
-                completion_tokens=getattr(usage_data, "completion_tokens", 0) or 0,
-            ),
+            usage=_extract_usage(usage_data),
             done_reason=_DONE_REASON_MAP.get(finish_reason or "", finish_reason),
         )
 
@@ -350,6 +346,34 @@ def _build_tool_calls(tc_accum: dict[int, dict[str, str]]) -> list[ToolCall] | N
 # ---------------------------------------------------------------------------
 
 
+def _extract_usage(usage: Any) -> TokenUsage:
+    """Extract token counts including cache metrics from an OpenAI usage object.
+
+    OpenAI includes cached prompt tokens in usage.prompt_tokens_details.cached_tokens.
+    OpenRouter may include similar fields. Gracefully degrade when absent.
+    """
+    if usage is None:
+        return TokenUsage()
+
+    prompt = getattr(usage, "prompt_tokens", 0) or 0
+    completion = getattr(usage, "completion_tokens", 0) or 0
+
+    # OpenAI / OpenRouter: usage.prompt_tokens_details.cached_tokens
+    cache_read = 0
+    details = getattr(usage, "prompt_tokens_details", None)
+    if details is not None:
+        cache_read = getattr(details, "cached_tokens", 0) or 0
+
+    result = TokenUsage(
+        prompt_tokens=prompt,
+        completion_tokens=completion,
+        cache_read_tokens=cache_read,
+    )
+    if cache_read:
+        logger.debug("cache tokens: read=%d (prompt=%d, completion=%d)", cache_read, prompt, completion)
+    return result
+
+
 def _normalize_response(raw: Any) -> ChatResponse:
     """Convert an OpenAI ChatCompletion to our normalized ChatResponse."""
     choice = raw.choices[0]
@@ -372,17 +396,13 @@ def _normalize_response(raw: Any) -> ChatResponse:
 
     thinking = getattr(msg, "reasoning", None) or getattr(msg, "reasoning_content", None) or None
 
-    usage = raw.usage
     return ChatResponse(
         message=ChatMessage(
             content=msg.content,
             thinking=thinking,
             tool_calls=tool_calls or None,
         ),
-        usage=TokenUsage(
-            prompt_tokens=usage.prompt_tokens if usage else 0,
-            completion_tokens=usage.completion_tokens if usage else 0,
-        ),
+        usage=_extract_usage(raw.usage),
         done_reason=_DONE_REASON_MAP.get(choice.finish_reason or "", choice.finish_reason),
         raw=raw,
     )

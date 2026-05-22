@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { ToastProvider } from './components/ToastProvider.jsx';
+import { AppDataProvider } from './contexts/AppData.jsx';
 import './global.css';
 import './hljs-tokens.css';
 
@@ -21,7 +22,9 @@ window.fetch = (input, init = {}) => {
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
         <ToastProvider>
-            <App />
+            <AppDataProvider>
+                <App />
+            </AppDataProvider>
         </ToastProvider>
     </React.StrictMode>
 );

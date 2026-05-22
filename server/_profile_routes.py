@@ -14,7 +14,6 @@ from agents._agent_profiles import (
     get_agent_profile,
     list_agent_profiles,
     save_agent_profile,
-    set_model_on_profiles,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,25 +147,6 @@ async def handle_profile_usage(request: web.Request) -> web.Response:
     return web.json_response({"usage": usage})
 
 
-async def handle_apply_model_to_profiles(request: web.Request) -> web.Response:
-    """Set the model on agent profiles. Used by setup wizard."""
-    try:
-        body = await request.json()
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return web.json_response({"error": "Invalid JSON"}, status=400)
-    model = body.get("model")
-    if not model:
-        return web.json_response({"error": "model is required"}, status=400)
-    context_window = body.get("context_window")
-    if context_window is not None:
-        context_window = int(context_window)
-    try:
-        set_model_on_profiles(model, force=bool(body.get("force")), context_window=context_window)
-        return web.json_response({"ok": True})
-    except Exception as exc:
-        return web.json_response({"error": str(exc)}, status=500)
-
-
 def _get_profile_usage(profile_id: str) -> list[dict]:
     """Find goals/tasks referencing a profile."""
     try:
@@ -204,7 +184,6 @@ def register_profile_routes(app: web.Application) -> None:
     app.router.add_route("GET", "/api/agents", handle_list_agents)
     app.router.add_route("GET", "/api/profiles", handle_list_profiles)
     app.router.add_route("POST", "/api/profiles", handle_create_profile)
-    app.router.add_route("POST", "/api/profiles/set-model", handle_apply_model_to_profiles)
     app.router.add_route("GET", "/api/profiles/{id}", handle_get_profile)
     app.router.add_route("PUT", "/api/profiles/{id}", handle_update_profile)
     app.router.add_route("DELETE", "/api/profiles/{id}", handle_delete_profile)

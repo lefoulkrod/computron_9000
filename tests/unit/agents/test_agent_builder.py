@@ -9,6 +9,7 @@ def _make_profile(**overrides) -> AgentProfile:
     defaults = {
         "id": "test",
         "name": "Test",
+        "provider": "ollama",
         "model": "test-model:7b",
         "system_prompt": "You are a test agent.",
     }
@@ -48,7 +49,13 @@ class TestBuildAgent:
     def test_missing_model_raises(self):
         """Profile with no model raises RuntimeError."""
         p = _make_profile(id="child", model="")
-        with pytest.raises(RuntimeError, match="no model configured"):
+        with pytest.raises(RuntimeError, match="not fully configured"):
+            build_agent(p, tools=[])
+
+    def test_missing_provider_raises(self):
+        """Profile with no provider raises RuntimeError."""
+        p = _make_profile(id="child", provider="")
+        with pytest.raises(RuntimeError, match="not fully configured"):
             build_agent(p, tools=[])
 
     def test_name_override(self):

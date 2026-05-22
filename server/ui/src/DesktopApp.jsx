@@ -7,12 +7,9 @@ import DesktopPreview from './components/DesktopPreview.jsx';
 import CustomToolsPanel from './components/CustomToolsPanel.jsx';
 import ConversationsPanel from './components/ConversationsPanel.jsx';
 import MemoryPanel from './components/MemoryPanel.jsx';
-import IntegrationsTab from './components/integrations/IntegrationsTab.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
-import SystemSettings from './components/SystemSettings.jsx';
-import ProfilesTab from './components/ProfilesTab.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
-import useAgentProfiles from './hooks/useAgentProfiles.js';
+import { useAppData } from './contexts/AppData.jsx';
 import TerminalPanel from './components/TerminalOutput.jsx';
 import GenerationPreview from './components/GenerationPreview.jsx';
 import AgentNetwork from './components/AgentNetwork.jsx';
@@ -25,7 +22,6 @@ import SplitHandle from './components/SplitHandle.jsx';
 import FilePreviewInline from './components/FilePreviewInline.jsx';
 import FileFullscreen from './components/FileFullscreen.jsx';
 import BrowserFullscreen from './components/BrowserFullscreen.jsx';
-import useFeatures from './hooks/useFeatures.js';
 import useGoals from './hooks/useGoals.js';
 // useModelSettings removed — replaced by profile-based configuration
 import useStreamingChat from './hooks/useStreamingChat.js';
@@ -54,7 +50,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     const [muted, setMuted] = useState(false);
     const [userDesktopOpen, setUserDesktopOpen] = useState(false);
     const [networkViewOpen, setNetworkViewOpen] = useState(false);
-    const features = useFeatures();
+    const { profilesHook, features } = useAppData();
     const [selectedProfileId, setSelectedProfileId] = useState(() => {
         return localStorage.getItem('computron_profile_id') || 'computron';
     });
@@ -65,19 +61,12 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     // Setup wizard state
     const [setupComplete, setSetupComplete] = useState(null); // null = loading
-    const wasSetupComplete = useRef(false);
-    const [settingsTab, setSettingsTab] = useState('profiles');
 
     useEffect(() => {
         fetch('/api/settings').then(r => r.json()).then(data => {
-            const done = data.setup_complete || false;
-            wasSetupComplete.current = done;
-            setSetupComplete(done);
+            setSetupComplete(data.setup_complete || false);
         }).catch(() => setSetupComplete(false));
     }, []);
-
-    // Agent profiles for the settings page builder
-    const profilesHook = useAgentProfiles();
 
     const goalsState = useGoals(flyoutPanel === 'goals');
     const goalsActive = flyoutPanel === 'goals';
@@ -259,7 +248,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     // Show setup wizard if setup is not complete
     if (setupComplete === false) {
         return (
-            <SetupWizard isRerun={wasSetupComplete.current} onComplete={() => {
+            <SetupWizard onComplete={() => {
                 setSetupComplete(true);
                 profilesHook.refresh();
             }} />
@@ -332,19 +321,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                 {/* Main content area */}
                 <div className={styles.mainContent}>
                     {/* Settings page — full view when settings icon clicked */}
-                    {flyoutPanel === 'settings' && (
-                        <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab}>
-                            {settingsTab === 'profiles' && (
-                                <ProfilesTab profilesHook={profilesHook} features={features} />
-                            )}
-                            {settingsTab === 'integrations' && (
-                                <IntegrationsTab />
-                            )}
-                            {settingsTab === 'system' && (
-                                <SystemSettings onRunWizard={() => setSetupComplete(false)} />
-                            )}
-                        </SettingsPage>
-                    )}
+                    {flyoutPanel === 'settings' && <SettingsPage />}
 
                     {/* Goals split-screen view */}
                     {goalsActive && (

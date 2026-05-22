@@ -65,7 +65,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
     import sdk.turn._execution as mod
 
     # Patch provider used by the module under test
-    monkeypatch.setattr(mod, "get_provider", lambda: _ProviderScript([resp1, resp2]))
+    monkeypatch.setattr(mod, "get_provider", lambda *_a, **_k: _ProviderScript([resp1, resp2]))
 
     # Minimal tool implementation that will be found by name
     def echo_tool(x: int) -> dict[str, int]:  # noqa: D401 - simple dummy
@@ -84,6 +84,7 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
         name="Test Agent",
         description="desc",
         instruction="ctx",
+        provider="ollama",
         model="dummy",
         options={},
         tools=[echo_tool],

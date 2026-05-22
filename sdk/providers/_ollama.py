@@ -12,9 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from config import LLMConfig
-
-from ._models import ChatDelta, ChatMessage, ChatResponse, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
+from ._models import ChatDelta, ChatMessage, ChatResponse, LLMConfig, ModelInfo, ProviderError, TokenUsage, ToolCall, ToolCallFunction
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -74,9 +72,8 @@ class OllamaProvider:
 
     @classmethod
     def from_config(cls, llm_config: LLMConfig) -> "OllamaProvider":
-        """Construct from application config."""
-        # base_url comes from settings.json (wizard); host comes from config.yaml/env var
-        return cls(host=llm_config.base_url or llm_config.host)
+        """Construct from a direct-provider config (base_url from settings.json)."""
+        return cls(host=llm_config.base_url)
 
     async def chat(
         self,

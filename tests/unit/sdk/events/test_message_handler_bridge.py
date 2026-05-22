@@ -54,6 +54,7 @@ async def test_message_handler_bridges_events_without_duplicates(monkeypatch: py
     mock_profile = AgentProfile(
         id="computron",
         name="Test",
+        provider="ollama",
         model="test-model",
         system_prompt="test",
         skills=[],

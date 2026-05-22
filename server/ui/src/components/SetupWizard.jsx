@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ModelPicker from './ModelPicker.jsx';
 import styles from './SetupWizard.module.css';
 
@@ -16,7 +16,10 @@ const PROVIDER_LABELS = {
     openai_compat: 'OpenAI-compatible',
 };
 
-const stripTrailingV1 = (url) => url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+// Defaults pre-filled in the connect step; the server still requires the
+// URL be present in the request body.
+const OLLAMA_DEFAULT_URL = 'http://host.docker.internal:11434';
+const OPENAI_COMPAT_DEFAULT_URL = 'http://localhost:1234/v1';
 
 function ProgressBar({ currentStep }) {
     return (
@@ -92,64 +95,7 @@ function ModelCard({ name, value, description, model, selected, onSelect }) {
     );
 }
 
-// Receives a key prop from the parent that changes on each new error, so the
-// component remounts and moves focus to the panel automatically.
-function ModelsErrorPanel({ error, onRetry, loading, selectedProvider }) {
-    const ref = useRef(null);
-    useEffect(() => { ref.current?.focus(); }, []);
-
-    const isOllama = !selectedProvider || selectedProvider === PROVIDER_OLLAMA;
-    const isCloud = selectedProvider === PROVIDER_CLOUD;
-
-    return (
-        <div ref={ref} className={styles.errorPanel} role="alert" tabIndex={-1}>
-            <div className={styles.errorTitle}>
-                {isOllama ? "Can't reach Ollama" : "Can't reach provider"}
-            </div>
-            <div className={styles.errorMessage}>{error.message}</div>
-            {error.llmHost && (
-                <div className={styles.errorDetail}>
-                    Trying: <code>{error.llmHost}</code>
-                </div>
-            )}
-            {isOllama && (
-                <ul className={styles.errorHints}>
-                    <li>Make sure Ollama is running on the host (<code>ollama serve</code>).</li>
-                    <li>
-                        On macOS / Windows / WSL2, use{' '}
-                        <code>http://host.docker.internal:11434</code> as the URL.
-                    </li>
-                    <li>
-                        On Linux, start the container with <code>--network=host</code> and
-                        use <code>http://localhost:11434</code>.
-                    </li>
-                </ul>
-            )}
-            {selectedProvider === PROVIDER_OPENAI_COMPAT && (
-                <ul className={styles.errorHints}>
-                    <li>Check that your server is running and the URL is correct.</li>
-                    <li>Make sure the server is reachable from this container.</li>
-                </ul>
-            )}
-            {isCloud && (
-                <ul className={styles.errorHints}>
-                    <li>Check that your API key is correct.</li>
-                    <li>Ensure you have a working internet connection.</li>
-                </ul>
-            )}
-            <button
-                className={styles.retryBtn}
-                type="button"
-                onClick={onRetry}
-                disabled={loading}
-            >
-                {loading ? 'Retrying…' : 'Retry'}
-            </button>
-        </div>
-    );
-}
-
-export default function SetupWizard({ isRerun = false, onComplete }) {
+export default function SetupWizard({ onComplete }) {
     const [step, setStep] = useState(0);
 
     // Provider step state
@@ -160,18 +106,24 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
     const [providerError, setProviderError] = useState(null);
     const [providerSaving, setProviderSaving] = useState(false);
 
-    // Model step state
-    const [allModels, setAllModels] = useState([]);
-    const [visionModels, setVisionModels] = useState(null);
+    // Model step state. The ModelPicker handles its own list fetching;
+    // we just track which model is picked and its metadata (for context_window).
     const [selectedMain, setSelectedMain] = useState(null);
+    const [mainModelMeta, setMainModelMeta] = useState(null);
     // undefined = not chosen yet; null = explicit skip; string = model name
     const [selectedVision, setSelectedVision] = useState(undefined);
     const [saving, setSaving] = useState(false);
-    const [modelsError, setModelsError] = useState(null);
-    const [modelsLoading, setModelsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const [updateAllProfiles, setUpdateAllProfiles] = useState(true);
+    // The provider name as stored in settings / on profiles ('ollama',
+    // 'openai_compat', 'anthropic', 'openai', ...).
+    const resolvedProviderName = useMemo(() => (
+        selectedProvider === PROVIDER_CLOUD
+            ? cloudProvider
+            : selectedProvider === PROVIDER_OPENAI_COMPAT
+                ? 'openai_compat'
+                : 'ollama'
+    ), [selectedProvider, cloudProvider]);
 
     // Refs for a11y
     const cardRef = useRef(null);
@@ -212,160 +164,57 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
 
 
 
-    const fetchModels = useCallback(async (url, setter) => {
-        setModelsLoading(true);
-        setModelsError(null);
-        try {
-            const res = await fetch(url);
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                setModelsError({
-                    message: data.message || `Request failed (${res.status})`,
-                    llmHost: data.llm_host || null,
-                });
-                return;
-            }
-            setter(data.models || []);
-        } catch (err) {
-            setModelsError({ message: err.message, llmHost: null });
-        } finally {
-            setModelsLoading(false);
-        }
-    }, []);
-
-    // Fetch all models when entering step 2 (if not already populated by the probe)
-    useEffect(() => {
-        if (step !== 2 || allModels.length > 0) return;
-        fetchModels('/api/models', setAllModels);
-    }, [step, allModels.length, fetchModels]);
-
-    // Fetch vision models when entering step 3 (same list as main models)
-    useEffect(() => {
-        if (step !== 3 || visionModels !== null) return;
-        fetchModels('/api/models', setVisionModels);
-    }, [step, visionModels, fetchModels]);
-
-    const retryFetch = () => {
-        if (step === 2) fetchModels('/api/models', setAllModels);
-        else if (step === 3) fetchModels('/api/models', setVisionModels);
-    };
-
-    // ── Provider step: save settings and probe connection ───────────
+    // ── Provider step: create+probe via POST /api/providers ─────────
+    // One server-side call. The server picks the storage (direct settings
+    // entry vs. brokered vault integration) from the body shape, then
+    // probes the new provider — 201 on success, 503 with a message if it
+    // can't connect.
     const handleSaveProvider = useCallback(async () => {
         setProviderSaving(true);
         setProviderError(null);
 
-        const providerName = selectedProvider === PROVIDER_CLOUD
-            ? cloudProvider
-            : selectedProvider === PROVIDER_OPENAI_COMPAT
-                ? 'openai_compat'
-                : 'ollama';
+        const body = { name: resolvedProviderName };
+        if (selectedProvider === PROVIDER_OLLAMA) {
+            body.base_url = providerUrl.trim() || OLLAMA_DEFAULT_URL;
+        } else if (selectedProvider === PROVIDER_OPENAI_COMPAT) {
+            body.base_url = providerUrl.trim() || OPENAI_COMPAT_DEFAULT_URL;
+            if (providerApiKey.trim()) body.api_key = providerApiKey.trim();
+        } else {
+            body.api_key = providerApiKey.trim();
+        }
 
         try {
-            // Remove any existing LLM integration — only one provider active at a time.
-            try {
-                const existing = await fetch('/api/integrations').then(r => r.json());
-                const llmIntegrations = (existing.integrations || []).filter(i =>
-                    i.capabilities?.includes('llm_proxy')
-                );
-                await Promise.all(llmIntegrations.map(i =>
-                    fetch(`/api/integrations/${encodeURIComponent(i.id)}`, { method: 'DELETE' }).catch(() => { })
-                ));
-            } catch (_) { /* supervisor offline — handled below */ }
-
-            const settingsBody = { llm_provider: providerName, llm_base_url: null };
-
-            if (selectedProvider === PROVIDER_OLLAMA) {
-                // Direct connection — no API key, just a base URL.
-                settingsBody.llm_base_url = providerUrl || 'http://host.docker.internal:11434';
-            } else if (selectedProvider === PROVIDER_OPENAI_COMPAT && !providerApiKey) {
-                // Direct connection — compat endpoint that doesn't require auth.
-                if (providerUrl) settingsBody.llm_base_url = providerUrl;
-            } else {
-                // Proxied connection — API key stored in vault, broker handles auth.
-                // No llm_base_url in settings; its absence tells the provider
-                // factory to connect through the broker socket.
-                const slug = `llm_${providerName}`;
-                const label = PROVIDER_LABELS[providerName];
-                const authBlob = { api_key: providerApiKey };
-                if (selectedProvider === PROVIDER_OPENAI_COMPAT) {
-                    // Compat endpoints have a user-supplied upstream URL that
-                    // the broker needs — stored alongside the key in the vault.
-                    authBlob.base_url = stripTrailingV1(providerUrl || 'http://localhost:1234');
-                }
-
-                const integRes = await fetch('/api/integrations', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ slug, label, auth_blob: authBlob, write_allowed: false }),
-                });
-                if (!integRes.ok) {
-                    const data = await integRes.json().catch(() => ({}));
-                    const msg = data.error?.message || data.error || `Failed to store API key (${integRes.status})`;
-                    setProviderError(msg);
-                    return;
-                }
-            }
-
-            const settingsRes = await fetch('/api/settings', {
-                method: 'PUT',
+            const res = await fetch('/api/providers', {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(settingsBody),
+                body: JSON.stringify(body),
             });
-            if (!settingsRes.ok) {
-                const data = await settingsRes.json().catch(() => ({}));
-                setProviderError(data.error || 'Failed to save provider settings');
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setProviderError(data.message || data.error || `Failed to connect (${res.status})`);
                 return;
             }
-
-            // Probe the connection by listing models
-            const modelsRes = await fetch('/api/models');
-            const modelsData = await modelsRes.json().catch(() => ({}));
-            if (!modelsRes.ok) {
-                setProviderError(modelsData.message || 'Could not connect to provider');
-                return;
-            }
-
-            // Cache probe results so step 2 doesn't re-fetch
-            setAllModels(modelsData.models || []);
-            setVisionModels(null);
             setStep((s) => s + 1);
         } catch (err) {
             setProviderError(err.message);
         } finally {
             setProviderSaving(false);
         }
-    }, [selectedProvider, cloudProvider, providerUrl, providerApiKey]);
+    }, [selectedProvider, resolvedProviderName, providerUrl, providerApiKey]);
 
-    // ── Final save: mark setup complete ─────────────────────────────
+    // ── Final save: server-side orchestration ───────────────────────
     const handleFinish = useCallback(async () => {
         setSaving(true);
         setError(null);
         try {
-            const force = isRerun && updateAllProfiles;
-            const meta = allModels.find((m) => m.name === selectedMain);
-            const setModelRes = await fetch('/api/profiles/set-model', {
+            const res = await fetch('/api/setup/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: selectedMain,
-                    force,
-                    context_window: meta?.context_window ?? null,
-                }),
-            });
-            if (!setModelRes.ok) {
-                const data = await setModelRes.json().catch(() => ({}));
-                throw new Error(data.error || 'Failed to set model on profiles');
-            }
-
-            const res = await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    setup_complete: true,
-                    default_agent: 'computron',
+                    provider: resolvedProviderName,
+                    main_model: selectedMain,
                     vision_model: selectedVision,
-                    compaction_model: selectedMain,
+                    context_window: mainModelMeta?.context_window ?? null,
                 }),
             });
             if (!res.ok) {
@@ -379,7 +228,7 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
             setError(`Connection error: ${err.message}`);
             setSaving(false);
         }
-    }, [selectedMain, selectedVision, isRerun, updateAllProfiles, allModels, onComplete]);
+    }, [selectedMain, selectedVision, mainModelMeta, resolvedProviderName, onComplete]);
 
     const canContinue =
         step === 0 ||
@@ -396,16 +245,11 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
 
     const handleBack = () => {
         if (step === 2) {
-            // Reset so re-probe in step 1 repopulates models
-            setAllModels([]);
-            setVisionModels([]);
             setSelectedMain(null);
-            setModelsError(null);
+            setMainModelMeta(null);
         }
         if (step === 3) {
-            setVisionModels([]);
             setSelectedVision(undefined);
-            setModelsError(null);
         }
         setStep((s) => s - 1);
     };
@@ -612,35 +456,18 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                             This will be set as the default model for all built-in agent
                             profiles. You can change individual profiles later in Settings.
                         </p>
-                        {modelsError ? (
-                            <ModelsErrorPanel
-                                key={modelsError.message}
-                                error={modelsError}
-                                onRetry={retryFetch}
-                                loading={modelsLoading}
-                                selectedProvider={selectedProvider}
-                            />
-                        ) : modelsLoading ? (
-                            <p className={styles.hint}>Loading models…</p>
-                        ) : (
-                            <ModelPicker
-                                models={allModels}
-                                selected={selectedMain}
-                                onSelect={setSelectedMain}
-                            />
-                        )}
-                        {isRerun && (
-                            <label className={styles.checkRow} data-testid="update-profiles-check">
-                                <input
-                                    type="checkbox"
-                                    checked={updateAllProfiles}
-                                    onChange={(e) => setUpdateAllProfiles(e.target.checked)}
-                                />
-                                <span className={styles.checkLabel}>
-                                    Update all agent profiles to use this model
-                                </span>
-                            </label>
-                        )}
+                        <ModelPicker
+                            providers={[{ name: resolvedProviderName, label: PROVIDER_LABELS[resolvedProviderName] || resolvedProviderName }]}
+                            selectedProvider={resolvedProviderName}
+                            selectedModel={selectedMain}
+                            onSelect={(_p, m, meta) => {
+                                setSelectedMain(m);
+                                setMainModelMeta(meta);
+                            }}
+                            placeholder="Choose a main model…"
+                            defaultOpen
+                            inline
+                        />
                     </div>
                 )}
 
@@ -660,23 +487,16 @@ export default function SetupWizard({ isRerun = false, onComplete }) {
                             that supports vision (image input).
                         </p>
 
-                        {modelsError ? (
-                            <ModelsErrorPanel
-                                key={modelsError.message}
-                                error={modelsError}
-                                onRetry={retryFetch}
-                                loading={modelsLoading}
-                                selectedProvider={selectedProvider}
-                            />
-                        ) : modelsLoading ? (
-                            <p className={styles.hint}>Loading models…</p>
-                        ) : (
-                            <ModelPicker
-                                models={visionModels || []}
-                                selected={selectedVision}
-                                onSelect={setSelectedVision}
-                            />
-                        )}
+                        <ModelPicker
+                            providers={[{ name: resolvedProviderName, label: PROVIDER_LABELS[resolvedProviderName] || resolvedProviderName }]}
+                            selectedProvider={resolvedProviderName}
+                            selectedModel={selectedVision || null}
+                            onSelect={(_p, m) => setSelectedVision(m)}
+                            placeholder="Choose a vision model…"
+                            capability="vision"
+                            defaultOpen
+                            inline
+                        />
 
                         <button
                             type="button"

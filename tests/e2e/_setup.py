@@ -76,12 +76,13 @@ def _complete_setup_wizard(browser, wizard_choices):
     page.get_by_role("button", name="Connect").click()
 
     # Step 2: Main Model
-    page.get_by_text("Choose your main model").wait_for(state="visible", timeout=15_000)
+    page.get_by_role("heading", name="Choose your main model").wait_for(state="visible", timeout=15_000)
     wizard_choices["main_model"] = _pick_model(page, "kimi-k2.5")
     page.get_by_role("button", name="Continue").click()
 
-    # Step 3: Vision Model
-    page.get_by_text("Choose a vision model").wait_for(state="visible")
+    # Step 3: Vision Model. The picker's placeholder repeats the heading
+    # text, so match by role to keep the locator unambiguous.
+    page.get_by_role("heading", name="Choose a vision model").wait_for(state="visible")
     wizard_choices["vision_model"] = _pick_model(page, "qwen3.5:cloud")
     page.get_by_role("button", name="Continue").click()
 

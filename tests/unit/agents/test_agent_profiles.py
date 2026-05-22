@@ -6,13 +6,13 @@ import pytest
 
 from agents._agent_profiles import (
     AgentProfile,
+    apply_llm_config_to_profiles,
     delete_agent_profile,
     duplicate_agent_profile,
     get_agent_profile,
     get_default_profile,
     list_agent_profiles,
     save_agent_profile,
-    set_model_on_profiles,
     _profiles_dir,
 )
 
@@ -204,14 +204,14 @@ class TestDuplicate:
 
 
 @pytest.mark.unit
-class TestSetModelOnProfiles:
-    """Bulk model setting for setup wizard."""
+class TestApplyLLMConfigToProfiles:
+    """Bulk LLM config setting for setup wizard."""
 
     def test_sets_model_on_empty_profiles(self):
         """Profiles with no model get the new model."""
         save_agent_profile(_make_profile(id="a", name="A", model=""))
         save_agent_profile(_make_profile(id="b", name="B", model=""))
-        set_model_on_profiles("new-model:32b")
+        apply_llm_config_to_profiles("new-model:32b")
         assert get_agent_profile("a").model == "new-model:32b"
         assert get_agent_profile("b").model == "new-model:32b"
 
@@ -219,9 +219,23 @@ class TestSetModelOnProfiles:
         """Profiles that already have a model are untouched."""
         save_agent_profile(_make_profile(id="a", name="A", model="existing:7b"))
         save_agent_profile(_make_profile(id="b", name="B", model=""))
-        set_model_on_profiles("new-model:32b")
+        apply_llm_config_to_profiles("new-model:32b")
         assert get_agent_profile("a").model == "existing:7b"
         assert get_agent_profile("b").model == "new-model:32b"
+
+    def test_sets_provider_alongside_model(self):
+        """When provider is given, it's written to each updated profile."""
+        save_agent_profile(_make_profile(id="a", name="A", model=""))
+        apply_llm_config_to_profiles("claude-x", provider="anthropic")
+        updated = get_agent_profile("a")
+        assert updated.model == "claude-x"
+        assert updated.provider == "anthropic"
+
+    def test_provider_omitted_leaves_existing(self):
+        """Without a provider arg, the profile's provider is left as-is."""
+        save_agent_profile(_make_profile(id="a", name="A", model="", provider="ollama"))
+        apply_llm_config_to_profiles("new-model:32b")
+        assert get_agent_profile("a").provider == "ollama"
 
 
 @pytest.mark.unit
