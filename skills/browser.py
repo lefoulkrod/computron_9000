@@ -20,6 +20,7 @@ from tools.browser import (
     scroll_page,
     select_option,
 )
+from tools.web import fetch_url
 from tools.virtual_computer import run_bash_cmd
 
 _SKILL = Skill(
@@ -50,6 +51,16 @@ _SKILL = Skill(
         - Stop when you have enough data — do NOT scroll for completeness.
         - Prefer site search/filters over scrolling through results.
         - Dismiss overlays early (click close/dismiss buttons).
+
+        TEXT-ONLY READING (fast path):
+        When you already have a URL, fetch_url(url) reads it as text with no
+        browser. It returns the page content inline and saves the full page
+        to a file; if the result is marked truncated, read the rest of that
+        file with run_bash_cmd (grep, sed, cat).
+        Use the browser (open_url + read_page / browse_page) when:
+        - fetch_url returns a blocked / bot-challenge / failed message,
+        - the page needs JavaScript rendering or interactive navigation, or
+        - you need to search for a page rather than read a known URL.
 
         LOCAL FILES: ALL files under /home/computron/ are already served at
         http://localhost:8080/home/computron/... by the app server. To view any
@@ -91,6 +102,7 @@ _SKILL = Skill(
         inspect_page,
         execute_javascript,
         save_page_content,
+        fetch_url,
         run_bash_cmd,
     ],
 )
