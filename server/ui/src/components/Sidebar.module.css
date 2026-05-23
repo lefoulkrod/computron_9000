@@ -30,8 +30,12 @@
 }
 
 /* ── Primary action ──────────────────────────────────── */
+/* No bottom padding — New chat and the nav below it visually belong
+ * to the same section. The Recent Conversations area is what gets the
+ * separating gap (see RecentConversations .search margin).
+ */
 .primary {
-    padding: var(--sp-2);
+    padding: var(--sp-2) var(--sp-2) 0;
 }
 
 .newChat {
@@ -40,24 +44,37 @@
     gap: var(--sp-2);
     width: 100%;
     height: 32px;
-    padding: 0 10px;
+    padding: 0 var(--sp-2);
     border-radius: var(--radius-md);
-    background: var(--accent);
-    border: 1px solid var(--accent);
-    color: #fff;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
     font-size: 12.5px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
 }
-.newChat:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.newChat:hover { background: var(--elevated); }
 .collapsed .newChat { justify-content: center; padding: 0; }
+
+.newChatIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    font-size: 11px;
+    flex-shrink: 0;
+}
 
 /* ── Nav ─────────────────────────────────────────────── */
 .nav {
     display: flex;
     flex-direction: column;
     gap: 1px;
-    padding: var(--sp-1) var(--sp-2);
+    padding: 1px var(--sp-2) var(--sp-2);
 }
 
 .navItem {

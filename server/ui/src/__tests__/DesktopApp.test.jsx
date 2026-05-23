@@ -63,10 +63,6 @@ vi.mock('../components/Sidebar.jsx', () => ({
     default: () => <div data-testid="sidebar">Sidebar</div>,
 }));
 
-vi.mock('../components/FlyoutPanel.jsx', () => ({
-    default: () => null,
-}));
-
 vi.mock('../components/PreviewPanel.jsx', () => ({
     default: ({ children }) => <div data-testid="preview-panel">{children}</div>,
 }));

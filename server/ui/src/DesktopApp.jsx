@@ -3,8 +3,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ChatPanel from './components/ChatPanel.jsx';
 import BrowserPreview from './components/BrowserPreview.jsx';
 import DesktopPreview from './components/DesktopPreview.jsx';
-import CustomToolsPanel from './components/CustomToolsPanel.jsx';
-import MemoryPanel from './components/MemoryPanel.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
 import { useAppData } from './contexts/AppData.jsx';
@@ -13,7 +11,6 @@ import GenerationPreview from './components/GenerationPreview.jsx';
 import AgentNetwork from './components/AgentNetwork.jsx';
 import AgentActivityView from './components/AgentActivityView.jsx';
 import Sidebar from './components/Sidebar.jsx';
-import FlyoutPanel from './components/FlyoutPanel.jsx';
 import GoalsView from './components/goals/GoalsView.jsx';
 import PreviewPanel from './components/PreviewPanel.jsx';
 import SplitHandle from './components/SplitHandle.jsx';
@@ -41,7 +38,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     // ── UI-only state (not duplicated in the reducer) ───────────────
     const [attachment, setAttachment] = useState(null);
     const [flyoutPanel, setFlyoutPanel] = useState(null);
-    const [toolsPanelKey, setToolsPanelKey] = useState(0);
     const [memoryRefreshSignal, setMemoryRefreshSignal] = useState(0);
     const [toolsRefreshSignal, setToolsRefreshSignal] = useState(0);
     const [conversationsRefresh, setConversationsRefresh] = useState(0);
@@ -193,7 +189,6 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         await chatNewConversation();
         preview.reset();
         setNetworkViewOpen(false);
-        setToolsPanelKey((k) => k + 1);
         agentDispatch({ type: 'RESET' });
     }, [chatNewConversation, preview.reset, agentDispatch]);
 
@@ -279,8 +274,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
             <div className={styles.bodyRow}>
                 {/* Navigation sidebar */}
                 <Sidebar
-                    hiddenPanels={features.custom_tools ? [] : ['tools']}
-                    activePanel={networkViewOpen ? 'agents' : flyoutPanel}
+                    activePanel={flyoutPanel}
                     dark={dark}
                     onToggleTheme={onToggleTheme}
                     onNewConversation={newConversation}
@@ -293,43 +287,25 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     onLoadConversation={loadConversation}
                     conversationsRefresh={conversationsRefresh}
                     onPanelToggle={(panel) => {
-                        if (panel === 'agents') {
-                            // Toggle the network view open/closed
-                            if (networkViewOpen) {
-                                handleCloseNetwork();
-                            } else if (agentState.networkActivated) {
-                                handleOpenNetwork();
-                            }
-                            goalsState.setSelectedGoalId(null);
-                        } else {
-                            // Close network view when opening a flyout panel
-                            if (networkViewOpen) handleCloseNetwork();
-                            setFlyoutPanel(panel);
-                        }
+                        // Close network view when opening a flyout panel
+                        if (networkViewOpen) handleCloseNetwork();
+                        setFlyoutPanel(panel);
                     }}
                 />
-
-                {/* Flyout panel (memory, tools) — not for 'agents'/'goals'/'settings' which control the main view */}
-                {flyoutPanel && flyoutPanel !== 'agents' && flyoutPanel !== 'goals' && flyoutPanel !== 'settings' && (
-                    <FlyoutPanel
-                        title={flyoutPanel === 'memory' ? 'Memory'
-                            : flyoutPanel === 'tools' ? 'Custom Tools'
-                            : 'Panel'}
-                        onClose={() => setFlyoutPanel(null)}
-                    >
-                        {flyoutPanel === 'memory' && (
-                            <MemoryPanel refreshSignal={memoryRefreshSignal} />
-                        )}
-                        {flyoutPanel === 'tools' && (
-                            <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />
-                        )}
-                        </FlyoutPanel>
-                )}
 
                 {/* Main content area */}
                 <div className={styles.mainContent}>
                     {/* Settings page — full view when settings icon clicked */}
-                    {flyoutPanel === 'settings' && <SettingsPage />}
+                    {flyoutPanel === 'settings' && (
+                        <SettingsPage
+                            memoryRefreshSignal={memoryRefreshSignal}
+                            toolsRefreshSignal={toolsRefreshSignal}
+                        />
+                    )}
+                    {/* memoryRefreshSignal and toolsRefreshSignal are bumped
+                     * by streaming events (remember/forget, tool_created)
+                     * so the corresponding Settings tabs refetch on next
+                     * open. */}
 
                     {/* Goals split-screen view */}
                     {goalsActive && (

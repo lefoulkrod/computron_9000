@@ -94,13 +94,24 @@ def _mock_chat_with(body: str):
 
 
 def _get_entries(container):
-    """Return ordered (type, text) tuples for all activity entries."""
-    entries = container.locator(
+    """Return ordered (type, text) tuples for all activity entries.
+
+    Completed thinking blocks auto-collapse to a 'Show thinking' toggle;
+    expand them first so the inner text is readable for assertions.
+    """
+    selector = (
         "[data-testid='entry-thinking'],"
         "[data-testid='entry-content'],"
         "[data-testid='entry-tool-call']"
     )
+    entries = container.locator(selector)
     count = entries.count()
+    for i in range(count):
+        el = entries.nth(i)
+        if el.get_attribute("data-testid") == "entry-thinking":
+            toggle = el.get_by_test_id("thinking-toggle")
+            if toggle.count() > 0 and "Show thinking" in (toggle.inner_text() or ""):
+                toggle.click()
     result = []
     for i in range(count):
         el = entries.nth(i)

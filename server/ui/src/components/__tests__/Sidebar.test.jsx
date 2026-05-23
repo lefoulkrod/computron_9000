@@ -76,14 +76,14 @@ describe('Sidebar', () => {
     it('opens a panel from a nav item', async () => {
         const user = userEvent.setup();
         const { onPanelToggle } = setup();
-        await user.click(screen.getByTestId('sidebar-nav-memory'));
-        expect(onPanelToggle).toHaveBeenCalledWith('memory');
+        await user.click(screen.getByTestId('sidebar-nav-goals'));
+        expect(onPanelToggle).toHaveBeenCalledWith('goals');
     });
 
     it('toggles an already-active panel closed', async () => {
         const user = userEvent.setup();
-        const { onPanelToggle } = setup({ activePanel: 'memory' });
-        await user.click(screen.getByTestId('sidebar-nav-memory'));
+        const { onPanelToggle } = setup({ activePanel: 'goals' });
+        await user.click(screen.getByTestId('sidebar-nav-goals'));
         expect(onPanelToggle).toHaveBeenCalledWith(null);
     });
 
@@ -94,13 +94,7 @@ describe('Sidebar', () => {
         expect(onPanelToggle).toHaveBeenCalledWith('settings');
     });
 
-    it('hides nav panels listed in hiddenPanels', () => {
-        setup({ hiddenPanels: ['tools'] });
-        expect(screen.queryByTestId('sidebar-nav-tools')).not.toBeInTheDocument();
-        expect(screen.getByTestId('sidebar-nav-memory')).toBeInTheDocument();
-    });
-
-    it('hides the desktop button unless desktop is enabled', () => {
+it('hides the desktop button unless desktop is enabled', () => {
         setup();
         expect(screen.queryByTestId('sidebar-desktop')).not.toBeInTheDocument();
     });

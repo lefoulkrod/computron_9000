@@ -11,7 +11,10 @@
     align-items: center;
     gap: var(--sp-2);
     height: 32px;
-    margin: var(--sp-1) var(--sp-2);
+    /* Extra top margin separates the conversation search from the nav
+     * above — signals that recent conversations are a distinct section.
+     */
+    margin: var(--sp-3) var(--sp-2) var(--sp-1);
     padding: 0 10px;
     background: var(--elevated);
     border: 1px solid var(--border);

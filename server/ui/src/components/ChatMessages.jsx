@@ -26,6 +26,7 @@ export default function ChatMessages({ messages, onPreview, onStarterSelect, onS
 
     return (
         <div className={styles.chatMessages} id="chatMessages" ref={ref} onScroll={onScroll}>
+            <div className={`${styles.inner}${isEmpty ? ` ${styles.empty}` : ''}`}>
             {isEmpty ? (
                 <StarterPrompts onSelect={onStarterSelect} />
             ) : (
@@ -52,6 +53,7 @@ export default function ChatMessages({ messages, onPreview, onStarterSelect, onS
                     <div />
                 </>
             )}
+            </div>
         </div>
     );
 }

@@ -6,12 +6,11 @@ import styles from './Sidebar.module.css';
 const COLLAPSE_KEY = 'computron_sidebar_collapsed';
 
 // Panels reachable from the nav. Settings + theme live in the footer;
-// conversations live inline in the recent list below the nav.
+// conversations live inline in the recent list below the nav. The agent
+// network view is opened from the chat title-bar pill, not a nav item.
+// Memory and Custom Tools live under Settings, not in the nav.
 const NAV = [
-    { id: 'agents', icon: 'bi-diagram-3', label: 'Agents' },
     { id: 'goals', icon: 'bi-bullseye', label: 'Goals' },
-    { id: 'memory', icon: 'bi-database', label: 'Memory' },
-    { id: 'tools', icon: 'bi-wrench', label: 'Tools' },
 ];
 
 function _readCollapsed() {
@@ -30,7 +29,6 @@ function _readCollapsed() {
 export default function Sidebar({
     activePanel,
     onPanelToggle,
-    hiddenPanels = [],
     dark,
     onToggleTheme,
     onNewConversation,
@@ -58,7 +56,6 @@ export default function Sidebar({
         });
     }, []);
 
-    const nav = NAV.filter((n) => !hiddenPanels.includes(n.id));
     const settingsActive = activePanel === 'settings';
 
     return (
@@ -88,13 +85,15 @@ export default function Sidebar({
                     aria-label="New chat"
                     data-testid="sidebar-new-chat"
                 >
-                    <i className="bi bi-plus-lg" />
+                    <span className={styles.newChatIcon}>
+                        <i className="bi bi-plus-lg" />
+                    </span>
                     {!collapsed && <span>New chat</span>}
                 </button>
             </div>
 
             <nav className={styles.nav}>
-                {nav.map((panel) => {
+                {NAV.map((panel) => {
                     const active = activePanel === panel.id;
                     return (
                         <button
