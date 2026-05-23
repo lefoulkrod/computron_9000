@@ -26,6 +26,18 @@ export const PROVIDERS = [
         capabilities: ['email'],
     },
     {
+        slug: 'telegram',
+        authFlow: 'bot_token',
+        category: 'Messaging',
+        title: 'Telegram',
+        description: 'Bidirectional bot + push notifications',
+        icon: 'bi-telegram',
+        vendor: 'Telegram',
+        botFatherUrl: 'https://t.me/BotFather',
+        userInfoBotUrl: 'https://t.me/userinfobot',
+        capabilities: ['telegram'],
+    },
+    {
         slug: 'google_workspace',
         authFlow: 'oauth_device',
         category: 'Productivity Suites',
@@ -74,6 +86,7 @@ export const PROVIDERS = [
 export function errorCopy(error, provider) {
     const vendor = provider?.vendor ?? provider?.title ?? 'this provider';
     const isOauth = provider?.authFlow === 'oauth_device';
+    const isBotToken = provider?.authFlow === 'bot_token';
     switch (error?.code) {
         case 'AUTH':
             if (isOauth) {
@@ -84,6 +97,15 @@ export function errorCopy(error, provider) {
                         + 'Other common causes: the OAuth client type isn\'t "Desktop app", '
                         + 'or the app hasn\'t been published '
                         + '(Google Auth Platform → Audience → Publish app).',
+                };
+            }
+            if (isBotToken) {
+                return {
+                    title: `${vendor} rejected the bot token`,
+                    description:
+                        'The token from BotFather may be mistyped or revoked. '
+                        + 'Open @BotFather, run /mybots, pick your bot, and '
+                        + '"API Token" to copy a fresh token.',
                 };
             }
             return {
@@ -121,4 +143,12 @@ export function slugifyEmail(email) {
     if (!email) return '';
     const local = email.split('@')[0].toLowerCase();
     return local.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+}
+
+export function slugifyLabel(label) {
+    if (!label) return '';
+    return label.toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48);
 }

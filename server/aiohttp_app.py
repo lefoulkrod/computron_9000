@@ -44,6 +44,7 @@ from server._settings_routes import register_settings_routes
 from server._setup_routes import register_setup_routes
 from server._task_routes import register_task_routes
 from server.message_handler import handle_user_message, resume_conversation
+from channels.telegram import TelegramChannel
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.desktop._exec import DesktopExecError
 from tools.desktop._lifecycle import start_desktop
@@ -463,6 +464,7 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # ``app["ready"]`` and then initializes everything that needed to wait.
     app.on_startup.append(_start_deferred_subsystems)
     app.on_cleanup.append(_stop_deferred_subsystems)
+    app.on_cleanup.append(_stop_telegram_bot)
 
     return app
 
@@ -584,6 +586,7 @@ async def _start_deferred_subsystems(app: web.Application) -> None:
             await app["ready"].wait()
             logger.info("Ready — starting deferred subsystems")
             await _init_task_runner(app)
+            await _init_telegram_bot(app)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -605,7 +608,10 @@ async def _init_task_runner(app: web.Application) -> None:
 
     notifier = None
     if config.goals.notifications.enabled:
-        notifier = TelegramNotifier(config.goals.notifications)
+        notifier = TelegramNotifier(
+            config.goals.notifications,
+            app_sock_path=Path(config.integrations.app_sock_path),
+        )
         if not notifier.enabled:
             notifier = None
 
@@ -620,6 +626,28 @@ async def _stop_deferred_subsystems(app: web.Application) -> None:
     if init_task and not init_task.done():
         init_task.cancel()
     runner = app.get("task_runner")
+    if runner:
+        await runner.stop()
+
+
+async def _init_telegram_bot(app: web.Application) -> None:
+    """Start the Telegram channel if a telegram integration is registered.
+
+    The channel auto-discovers the integration via the supervisor — no
+    config flag, no integration_id field. Adding/removing a Telegram
+    integration in the wizard is the only enable/disable knob.
+    """
+    config = load_config()
+    runner = TelegramChannel(
+        app_sock_path=Path(config.integrations.app_sock_path),
+    )
+    await runner.start()
+    app["telegram_bot_runner"] = runner
+
+
+async def _stop_telegram_bot(app: web.Application) -> None:
+    """Stop the Telegram bot runner if present."""
+    runner: TelegramChannel | None = app.get("telegram_bot_runner")
     if runner:
         await runner.stop()
 

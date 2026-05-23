@@ -23,9 +23,11 @@ from ._store import (
 from ._title_generation import (
     generate_conversation_title,
 )
+from ._turn_persistence import DiskTurnPersistence
 
 __all__ = [
     "ConversationSummary",
+    "DiskTurnPersistence",
     "SummaryRecord",
     "delete_conversation",
     "generate_conversation_title",

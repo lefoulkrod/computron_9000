@@ -8,12 +8,12 @@ from rich.panel import Panel
 from rich.text import Text
 
 from agents import AgentProfile, build_agent, get_agent_profile
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
-from sdk.events import agent_span
-from sdk.hooks import PersistenceHook, default_hooks
+from sdk import Conversation, TurnExecutor
+from sdk.context import ConversationHistory
+from sdk.events._models import ContentPayload
 from sdk.skills import AgentState, get_skill, list_skills
 from sdk.tools._core import get_core_tools
-from sdk.turn import StopRequestedError, get_conversation_id, run_turn
+from sdk.turn import StopRequestedError, get_conversation_id
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,11 @@ async def spawn_agent(
         _log_spawn_error(agent_name, msg)
         return msg
 
-    agent_state = AgentState(await get_core_tools())
+    # Validate skills up-front so a missing one fails the spawn synchronously
+    # with a clear message rather than mid-turn with a generic warning. The
+    # executor itself also tolerates missing skills (logs + skips), but the
+    # tool's "tell the calling LLM what's wrong" surface beats that.
+    state = AgentState(await get_core_tools())
     for skill_name in agent_profile.skills:
         skill = get_skill(skill_name)
         if skill is None:
@@ -160,9 +164,9 @@ async def spawn_agent(
             )
             _log_spawn_error(agent_name, msg)
             return msg
-        agent_state.add(skill)
+        state.add(skill)
 
-    agent = build_agent(agent_profile, tools=agent_state.tools, name=agent_name)
+    agent = build_agent(agent_profile, tools=state.tools, name=agent_name)
 
     logger.info(
         "Spawning sub-agent '%s' (profile=%s, max_iter=%d, instruction=%.100s)",
@@ -170,58 +174,36 @@ async def spawn_agent(
     )
     _log_spawn(agent_name, agent_profile, instructions)
 
-    async with agent_span(
-        agent_name,
-        instruction=instructions,
-        agent_state=agent_state,
-        profile_name=agent_profile.name,
-    ):
-        conv_id = get_conversation_id() or "default"
-        short_id = _uuid.uuid4().hex[:8]
-        instance_id = f"{conv_id}/{agent_name}_{short_id}"
-        history = ConversationHistory(
-            [
-                {"role": "system", "content": agent.instruction},
-                {"role": "user", "content": instructions},
-            ],
-            instance_id=instance_id,
-        )
+    parent_conv_id = get_conversation_id() or "default"
+    short_id = _uuid.uuid4().hex[:8]
+    instance_id = f"{parent_conv_id}/{agent_name}_{short_id}"
+    conversation = Conversation(
+        id=instance_id,
+        history=ConversationHistory(instance_id=instance_id),
+    )
 
-        ctx_manager = ContextManager(
-            history=history,
-            agent_state=agent_state,
-            context_limit=agent.context_window,
-            agent_name=agent.name,
-            strategies=[
-                LLMCompactionStrategy(threshold=agent.compaction_threshold),
-            ],
-        )
-        hooks = default_hooks(
-            agent,
-            max_iterations=agent.max_iterations,
-            ctx_manager=ctx_manager,
-        )
-        hooks.append(PersistenceHook(
-            conversation_id=conv_id,
-            history=history,
+    accumulated: list[str] = []
+    try:
+        async for event in TurnExecutor().execute(
+            conversation=conversation,
+            agent=agent,
+            user_content=instructions,
+            preloaded_skills=agent_profile.skills,
+            profile_name=agent_profile.name,
             sub_agent_name=agent_name,
             sub_agent_id=short_id,
-        ))
+        ):
+            if event.type == "content" and isinstance(event.payload, ContentPayload):
+                if event.payload.content:
+                    accumulated.append(event.payload.content)
+    except StopRequestedError:
+        logger.info("Spawned agent '%s' stopped by user request", agent_name)
+        raise
+    except Exception as exc:
+        _log_spawn_error(agent_name, str(exc))
+        logger.exception("Unexpected error in spawned agent '%s'", agent_name)
+        raise
 
-        try:
-            result_text = await run_turn(
-                history=history,
-                agent=agent,
-                hooks=hooks,
-            )
-        except StopRequestedError:
-            logger.info("Spawned agent '%s' stopped by user request", agent_name)
-            raise
-        except Exception as exc:
-            _log_spawn_error(agent_name, str(exc))
-            logger.exception("Unexpected error in spawned agent '%s'", agent_name)
-            raise
-
-    result = (result_text or "").strip()
+    result = "".join(accumulated).strip()
     _log_spawn_complete(agent_name, result)
     return result

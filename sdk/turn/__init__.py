@@ -4,6 +4,10 @@ This package provides:
 - ``run_turn``: Async function driving the chat/tool loop.
 - ``turn_scope``: Async context manager for conversation turn lifecycle.
 - Stop/nudge signaling utilities for user-initiated control.
+
+The high-level ``TurnExecutor`` and ``Conversation`` are defined in
+``sdk.turn._executor`` and re-exported from the top-level ``sdk`` package.
+They are not re-exported here to avoid a load-order cycle with ``sdk.context``.
 """
 
 from ._execution import ToolLoopError, run_turn

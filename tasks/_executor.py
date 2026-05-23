@@ -7,16 +7,13 @@ from typing import TYPE_CHECKING
 
 from agents import build_agent, get_agent_profile
 from agents.types import Agent
-from sdk import PersistenceHook, default_hooks, run_turn
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
-from sdk.events._context import agent_span, get_current_dispatcher
-from sdk.events._models import FileOutputPayload
+from sdk import Conversation, TurnExecutor
+from sdk.context import ConversationHistory
+from sdk.events._models import ContentPayload, FileOutputPayload
 from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
-from sdk.turn import turn_scope
 
 if TYPE_CHECKING:
-    from sdk.events._models import AgentEvent
     from tasks._models import Goal, Task, TaskResult
     from tasks._store import TaskStore
 
@@ -28,6 +25,7 @@ class TaskExecutor:
 
     def __init__(self, store: TaskStore) -> None:
         self._store = store
+        self._executor = TurnExecutor()
 
     async def run(self, task_result: TaskResult, task: Task) -> tuple[str, list[str]]:
         """Execute a task and return (result_text, file_output_paths)."""
@@ -46,45 +44,34 @@ class TaskExecutor:
 
         agent = await self._build_agent(task)
 
-        history = ConversationHistory(
-            [
-                {"role": "system", "content": agent.instruction},
-                {"role": "user", "content": instruction},
-            ],
-            instance_id=conversation_id,
+        conversation = Conversation(
+            id=conversation_id,
+            history=ConversationHistory(instance_id=conversation_id),
         )
 
+        accumulated_text: list[str] = []
         file_paths: list[str] = []
 
-        def _capture_file_output(event: AgentEvent) -> None:
-            if isinstance(event.payload, FileOutputPayload) and event.payload.path:
-                file_paths.append(event.payload.path)
+        async for event in self._executor.execute(
+            conversation=conversation,
+            agent=agent,
+            user_content=instruction,
+        ):
+            payload = event.payload
+            if isinstance(payload, ContentPayload) and payload.content:
+                accumulated_text.append(payload.content)
+            elif isinstance(payload, FileOutputPayload) and payload.path:
+                file_paths.append(payload.path)
 
-        async with turn_scope(conversation_id=conversation_id):
-            dispatcher = get_current_dispatcher()
-            if dispatcher:
-                dispatcher.subscribe(_capture_file_output)
-            state = AgentState(await get_core_tools() + (agent.tools or []))
-            ctx_manager = ContextManager(
-                history=history,
-                agent_state=state,
-                context_limit=agent.context_window,
-                agent_name=agent.name,
-                strategies=[
-                    LLMCompactionStrategy(threshold=agent.compaction_threshold),
-                ],
-            )
-            hooks = default_hooks(agent, max_iterations=agent.max_iterations, ctx_manager=ctx_manager)
-            hooks.append(
-                PersistenceHook(conversation_id=conversation_id, history=history)
-            )
-            async with agent_span(agent.name, instruction=instruction, agent_state=state):
-                result = await run_turn(history, agent, hooks=hooks)
-
-        return result or "", file_paths
+        return "".join(accumulated_text), file_paths
 
     async def _build_agent(self, task: Task) -> Agent:
-        """Construct an Agent from the task's agent profile."""
+        """Construct an Agent from the task's agent profile.
+
+        Pre-validates the profile's skills so a missing one trips the task
+        runner with a clear message before the turn starts. ``TurnExecutor``
+        independently restores the same skills via ``preloaded_skills``.
+        """
         if not task.agent_profile:
             msg = f"Task {task.id} has no agent_profile set"
             raise RuntimeError(msg)
@@ -93,15 +80,15 @@ class TaskExecutor:
             msg = f"Agent profile '{task.agent_profile}' not found for task {task.id}"
             raise RuntimeError(msg)
 
-        agent_state = AgentState(await get_core_tools())
+        state = AgentState(await get_core_tools())
         for skill_name in profile.skills:
             skill = get_skill(skill_name)
             if skill is None:
                 msg = f"Profile '{profile.id}' references unregistered skill '{skill_name}'"
                 raise RuntimeError(msg)
-            agent_state.add(skill)
+            state.add(skill)
 
-        return build_agent(profile, tools=agent_state.tools, name="TASK_AGENT")
+        return build_agent(profile, tools=state.tools, name="TASK_AGENT")
 
     def _build_instruction(
         self, task_result: TaskResult, task: Task, goal: Goal

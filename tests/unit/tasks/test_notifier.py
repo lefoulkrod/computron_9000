@@ -1,4 +1,4 @@
-"""Tests for tasks._notifier — Telegram push notifications."""
+"""Tests for tasks._notifier — Telegram push notifications via the broker."""
 
 import os
 from pathlib import Path
@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from integrations.broker_client import IntegrationError
 from tasks._notifier import (
     TelegramNotifier,
     format_run_completed,
@@ -20,106 +21,102 @@ def _make_config(**overrides):
     return NotificationsConfig(**overrides)
 
 
+_ENABLED_ENV = {
+    "TELEGRAM_INTEGRATION_ID": "telegram_personal",
+    "TELEGRAM_CHAT_ID": "42",
+}
+
+_APP_SOCK = Path("/tmp/test_app.sock")
+
+
 @pytest.mark.unit
 class TestTelegramNotifier:
     """Test TelegramNotifier init and send behavior."""
 
     def test_enables_when_env_vars_present(self):
         """Notifier is enabled when both env vars are set."""
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "123"}):
-            notifier = TelegramNotifier(_make_config())
+        with patch.dict(os.environ, _ENABLED_ENV):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
             assert notifier.enabled
 
-    async def test_send_noop_when_disabled(self):
-        """Sending on a disabled notifier is a silent no-op."""
+    def test_disabled_when_env_vars_missing(self):
+        """Notifier disables itself with a warning when either env is unset."""
         with patch.dict(os.environ, {}, clear=True):
-            notifier = TelegramNotifier(_make_config())
-            # Should not raise
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+            assert not notifier.enabled
+
+    def test_disabled_when_chat_id_not_numeric(self):
+        """A non-integer chat ID disables the notifier."""
+        with patch.dict(
+            os.environ,
+            {"TELEGRAM_INTEGRATION_ID": "telegram_personal", "TELEGRAM_CHAT_ID": "not-a-number"},
+        ):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+            assert not notifier.enabled
+
+    async def test_send_noop_when_disabled(self):
+        """Sending on a disabled notifier is a silent no-op (no broker call)."""
+        with patch.dict(os.environ, {}, clear=True):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+        with patch("tasks._notifier.broker_call", new_callable=AsyncMock) as mock_call:
             await notifier.send("hello")
+            mock_call.assert_not_called()
 
-    async def test_send_calls_telegram_api(self):
-        """Sends a message via the Telegram Bot API."""
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "42"}):
-            notifier = TelegramNotifier(_make_config())
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        with patch("tasks._notifier.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client
+    async def test_send_calls_broker(self):
+        """Sends a message via broker_client.call('send_message', ...)."""
+        with patch.dict(os.environ, _ENABLED_ENV):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+        with patch("tasks._notifier.broker_call", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = {"message_id": 1}
 
             await notifier.send("test message")
 
-            mock_client.post.assert_called_once()
-            call_args = mock_client.post.call_args
-            assert "/sendMessage" in call_args[0][0]
-            assert call_args[1]["json"]["chat_id"] == "42"
-            assert call_args[1]["json"]["text"] == "test message"
+            mock_call.assert_awaited_once_with(
+                "telegram_personal",
+                "send_message",
+                {"chat_id": 42, "text": "test message"},
+                app_sock_path=_APP_SOCK,
+            )
 
-    async def test_send_document(self, tmp_path):
-        """Sends a file attachment via sendDocument."""
+    async def test_send_truncates_long_messages(self):
+        """Messages over the Telegram limit are truncated before sending."""
+        with patch.dict(os.environ, _ENABLED_ENV):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+        with patch("tasks._notifier.broker_call", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = {"message_id": 1}
+
+            await notifier.send("x" * 5000)
+
+            args = mock_call.await_args.args
+            sent_text = args[2]["text"]
+            assert len(sent_text) <= 4096
+            assert sent_text.endswith("… (truncated)")
+
+    async def test_send_skips_attachments_for_now(self, tmp_path):
+        """Attachments are logged-and-skipped until broker send_document lands."""
         test_file = tmp_path / "report.pdf"
         test_file.write_bytes(b"fake pdf content")
 
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "42"}):
-            notifier = TelegramNotifier(_make_config())
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        with patch("tasks._notifier.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client
+        with patch.dict(os.environ, _ENABLED_ENV):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+        with patch("tasks._notifier.broker_call", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = {"message_id": 1}
 
             await notifier.send("msg", attachments=[test_file])
 
-            assert mock_client.post.call_count == 2
-            send_doc_call = mock_client.post.call_args_list[1]
-            assert "/sendDocument" in send_doc_call[0][0]
+            # Only the text send_message call; no document call.
+            assert mock_call.await_count == 1
+            assert mock_call.await_args.args[1] == "send_message"
 
-    async def test_skips_large_files(self, tmp_path):
-        """Files exceeding max_attachment_size_mb are skipped."""
-        test_file = tmp_path / "huge.bin"
-        test_file.write_bytes(b"x" * 100)
-
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "42"}):
-            # Set max to 0 MB so the 100-byte file exceeds it
-            notifier = TelegramNotifier(_make_config(max_attachment_size_mb=0))
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-
-        with patch("tasks._notifier.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client
-
-            await notifier.send("msg", attachments=[test_file])
-
-            # Only sendMessage, no sendDocument
-            assert mock_client.post.call_count == 1
-
-    async def test_send_does_not_raise_on_error(self):
-        """Errors in send are logged, never raised."""
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": "42"}):
-            notifier = TelegramNotifier(_make_config())
-
-        with patch("tasks._notifier.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post.side_effect = ConnectionError("offline")
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client
-
+    async def test_send_does_not_raise_on_broker_error(self):
+        """Errors from the broker are logged, never raised."""
+        with patch.dict(os.environ, _ENABLED_ENV):
+            notifier = TelegramNotifier(_make_config(), app_sock_path=_APP_SOCK)
+        with patch(
+            "tasks._notifier.broker_call",
+            new_callable=AsyncMock,
+            side_effect=IntegrationError("broker offline"),
+        ):
             # Should not raise
             await notifier.send("test")
 

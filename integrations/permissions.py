@@ -17,6 +17,7 @@ class Capability(StrEnum):
     DRIVE = "drive"
     CONTACTS = "contacts"
     LLM_PROXY = "llm_proxy"
+    TELEGRAM = "telegram"
 
 
 class Access(IntEnum):
