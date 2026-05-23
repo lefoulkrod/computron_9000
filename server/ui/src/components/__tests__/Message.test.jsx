@@ -69,3 +69,72 @@ describe('Message user attachments', () => {
         expect(screen.queryByTestId('attachment-file')).not.toBeInTheDocument();
     });
 });
+
+describe('Message spawn card', () => {
+    const entries = [
+        { type: 'content', content: 'dispatching a sub-agent', timestamp: Date.now() },
+        { type: 'spawn_requested', correlationId: 'c-1', timestamp: Date.now() },
+        { type: 'content', content: 'sub-agent done', timestamp: Date.now() },
+    ];
+
+    it('renders a spawn card inline where the turn spawned agents', () => {
+        render(<Message role="assistant" entries={entries} spawnedAgents={[
+            { id: 'a1', name: 'coder', status: 'running', correlationId: 'c-1' },
+        ]} />);
+        expect(screen.getByTestId('spawn-card')).toBeInTheDocument();
+        expect(screen.getByText('Coder')).toBeInTheDocument();
+    });
+
+    it('renders the spawn card between the surrounding content entries', () => {
+        render(<Message role="assistant" entries={entries} spawnedAgents={[
+            { id: 'a1', name: 'coder', status: 'running', correlationId: 'c-1' },
+        ]} />);
+        const bubble = screen.getByTestId('message-assistant');
+        const order = [...bubble.querySelectorAll('[data-testid="entry-content"], [data-testid="spawn-card"]')]
+            .map((el) => el.getAttribute('data-testid'));
+        expect(order).toEqual(['entry-content', 'spawn-card', 'entry-content']);
+    });
+
+    it('renders no spawn card when no children match the request', () => {
+        render(<Message role="assistant" entries={entries} spawnedAgents={[]} />);
+        expect(screen.queryByTestId('spawn-card')).not.toBeInTheDocument();
+    });
+
+    it('renders raw spawn_agent tool-call line on the resume path', () => {
+        // Resumed conversations have no spawn_requested entry — just the
+        // plain tool_call from history. It should render as a raw line.
+        const resumed = [
+            { type: 'content', content: 'about to spawn', timestamp: Date.now() },
+            { type: 'tool_call', name: 'spawn_agent' },
+            { type: 'content', content: 'after', timestamp: Date.now() },
+        ];
+        render(<Message role="assistant" entries={resumed} />);
+        expect(screen.queryByTestId('spawn-card')).not.toBeInTheDocument();
+        const toolCalls = screen.getAllByTestId('entry-tool-call');
+        expect(toolCalls.some((el) => el.textContent.includes('spawn_agent'))).toBe(true);
+    });
+
+    it('groups consecutive spawn_requested entries into one card', () => {
+        const grouped = [
+            { type: 'content', content: 'spawning two', timestamp: Date.now() },
+            { type: 'spawn_requested', correlationId: 'c-1', timestamp: Date.now() },
+            { type: 'spawn_requested', correlationId: 'c-2', timestamp: Date.now() },
+            { type: 'content', content: 'both done', timestamp: Date.now() },
+            { type: 'spawn_requested', correlationId: 'c-3', timestamp: Date.now() },
+            { type: 'content', content: 'third done', timestamp: Date.now() },
+        ];
+        const agents = [
+            { id: 'a1', name: 'coder', status: 'running', correlationId: 'c-1' },
+            { id: 'a2', name: 'researcher', status: 'running', correlationId: 'c-2' },
+            { id: 'a3', name: 'writer', status: 'running', correlationId: 'c-3' },
+        ];
+        render(<Message role="assistant" entries={grouped} spawnedAgents={agents} />);
+        const cards = screen.getAllByTestId('spawn-card');
+        expect(cards).toHaveLength(2);
+        expect(cards[0]).toHaveTextContent('2 agents');
+        expect(cards[0]).toHaveTextContent('Coder');
+        expect(cards[0]).toHaveTextContent('Researcher');
+        expect(cards[1]).toHaveTextContent('1 agent');
+        expect(cards[1]).toHaveTextContent('Writer');
+    });
+});

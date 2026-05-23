@@ -14,7 +14,7 @@ import styles from './ChatPanel.module.css';
  * When sub-agents have been spawned, a network indicator appears in the
  * title bar so the user can navigate to the full agent network view.
  */
-export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork, selectedProfileId, onProfileChange, profileRefreshSignal }) {
+export default function ChatPanel({ messages, onSend, onStop, isStreaming, attachment, onPreview, onSelectAgent, rootAgent, networkActivated, networkAgentCount, networkRunningCount, onOpenNetwork, selectedProfileId, onProfileChange, profileRefreshSignal }) {
     const [draft, setDraft] = useState('');
     const clearDraft = useCallback(() => setDraft(''), []);
 
@@ -32,8 +32,8 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                         {turnCount} turn{turnCount !== 1 ? 's' : ''}
                     </span>
                 )}
-                <span className={styles.spacer} />
                 <ContextMeter contextUsage={rootAgent?.contextUsage} />
+                <span className={styles.spacer} />
                 {networkActivated && (
                     <button className={styles.networkBtn} onClick={onOpenNetwork} title="Open agent network view" data-testid="network-indicator">
                         <StatusDot status={networkRunningCount > 0 ? 'running' : 'complete'} />
@@ -41,7 +41,7 @@ export default function ChatPanel({ messages, onSend, onStop, isStreaming, attac
                     </button>
                 )}
             </div>
-            <ChatMessages messages={messages} onPreview={onPreview} onStarterSelect={setDraft} />
+            <ChatMessages messages={messages} onPreview={onPreview} onSelectAgent={onSelectAgent} onStarterSelect={setDraft} />
             <ChatInput
                 onSend={onSend}
                 onStop={onStop}

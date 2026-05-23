@@ -12,7 +12,7 @@ import styles from './ChatMessages.module.css';
  * (same source as the activity view). Falls back to msg.entries for
  * loaded conversation history where no agent state exists.
  */
-export default function ChatMessages({ messages, onPreview, onStarterSelect }) {
+export default function ChatMessages({ messages, onPreview, onStarterSelect, onSelectAgent }) {
     const { agents, rootId } = useAgentState();
     // Scroll when messages change OR when the root agent's content grows.
     // We track the last entry's text length so scroll fires as tokens
@@ -32,8 +32,20 @@ export default function ChatMessages({ messages, onPreview, onStarterSelect }) {
                 <>
                     {messages.map((msg, idx) => {
                         if (msg.role === 'assistant' && msg.agentId) {
-                            const entries = agents[msg.agentId]?.activityLog;
-                            return <Message key={msg.id || idx} {...msg} entries={entries} onPreview={onPreview} />;
+                            const agent = agents[msg.agentId];
+                            const spawnedAgents = (agent?.childIds || [])
+                                .map((id) => agents[id])
+                                .filter(Boolean);
+                            return (
+                                <Message
+                                    key={msg.id || idx}
+                                    {...msg}
+                                    entries={agent?.activityLog}
+                                    spawnedAgents={spawnedAgents}
+                                    onSelectAgent={onSelectAgent}
+                                    onPreview={onPreview}
+                                />
+                            );
                         }
                         return <Message key={msg.id || idx} {...msg} onPreview={onPreview} />;
                     })}

@@ -7,10 +7,11 @@ import ThinkingPlaceholder from './ThinkingPlaceholder.jsx';
 
 /**
  * One assistant message. Uses AgentOutput for the actual content rendering
- * (same component the activity view uses). The only additions here are
- * the layout wrapper and the "Thinking..." placeholder.
+ * (same component the activity view uses). When the turn spawned
+ * sub-agents, AgentOutput renders a SpawnCard inline at each spawn
+ * request so the card flows with the surrounding output.
  */
-function AssistantMessage({ entries, onPreview, streaming }) {
+function AssistantMessage({ entries, onPreview, streaming, spawnedAgents, onSelectAgent }) {
     const hasEntries = entries && entries.length > 0;
     return (
         <div className={`${styles.message} ${styles.assistant}`} data-testid="message-assistant">
@@ -21,6 +22,8 @@ function AssistantMessage({ entries, onPreview, streaming }) {
                         entries={entries}
                         streaming={streaming}
                         onPreview={onPreview}
+                        spawnedAgents={spawnedAgents}
+                        onSelectAgent={onSelectAgent}
                     />
                 )}
             </div>

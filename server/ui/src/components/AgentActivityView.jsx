@@ -49,6 +49,8 @@ export default function AgentActivityView({ onNudge, onPreview }) {
     if (!agent) return null;
 
     const breadcrumb = _buildBreadcrumb(agents, selectedAgentId);
+    const spawnedAgents = agent.childIds.map((id) => agents[id]).filter(Boolean);
+    const selectAgent = (agentId) => dispatch({ type: 'SELECT_AGENT', agentId });
 
     return (
         <div className={styles.container} data-testid="agent-activity-view">
@@ -98,6 +100,8 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                         entries={agent.activityLog}
                         showFileOutputs={true}
                         onPreview={onPreview}
+                        spawnedAgents={spawnedAgents}
+                        onSelectAgent={selectAgent}
                     />
                     {agent.status === 'running' && (
                         <span className={styles.cursor} />

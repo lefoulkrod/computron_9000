@@ -116,6 +116,55 @@ describe('AgentActivityView', () => {
         });
     });
 
+    describe('spawn card', () => {
+        function spawnChildren(dispatch) {
+            startAgent(dispatch, 'a1');
+            dispatch({
+                type: 'APPEND_ACTIVITY',
+                agentId: 'a1',
+                entry: { type: 'spawn_requested', correlationId: 'c-1' },
+            });
+            dispatch({
+                type: 'APPEND_ACTIVITY',
+                agentId: 'a1',
+                entry: { type: 'spawn_requested', correlationId: 'c-2' },
+            });
+            dispatch({
+                type: 'AGENT_STARTED', agentId: 'c1', agentName: 'research_agent',
+                parentAgentId: 'a1', instruction: '', correlationId: 'c-1', timestamp: Date.now(),
+            });
+            dispatch({
+                type: 'AGENT_STARTED', agentId: 'c2', agentName: 'code_expert',
+                parentAgentId: 'a1', instruction: '', correlationId: 'c-2', timestamp: Date.now(),
+            });
+            dispatch({ type: 'SELECT_AGENT', agentId: 'a1' });
+        }
+
+        it('renders an inline spawn card for the agent\'s sub-agents', () => {
+            const { dispatch } = renderView();
+            spawnChildren(dispatch);
+
+            expect(screen.getByTestId('spawn-card')).toBeInTheDocument();
+            expect(screen.getAllByTestId('spawn-card-row')).toHaveLength(2);
+        });
+
+        it('clicking a spawn card row switches the view to that sub-agent', () => {
+            const { dispatch } = renderView();
+            spawnChildren(dispatch);
+
+            act(() => {
+                screen.getAllByTestId('spawn-card-row')[0].click();
+            });
+            expect(screen.getByTestId('agent-activity-title')).toHaveTextContent('Research Agent');
+        });
+
+        it('renders no spawn card when the agent spawned nothing', () => {
+            const { dispatch } = renderView();
+            startAgent(dispatch, 'a1');
+            expect(screen.queryByTestId('spawn-card')).not.toBeInTheDocument();
+        });
+    });
+
     describe('transitions', () => {
         it('shows running cursor while agent is running', () => {
             const { dispatch, container } = renderView();

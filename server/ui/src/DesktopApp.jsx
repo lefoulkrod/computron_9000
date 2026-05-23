@@ -115,6 +115,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     agentName: event.agent_name,
                     parentAgentId: event.parent_agent_id || null,
                     instruction: event.instruction,
+                    correlationId: event.correlation_id || null,
                     timestamp: Date.now(),
                 });
             } else if (event.type === 'agent_completed') {
@@ -249,6 +250,13 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         agentDispatch({ type: 'SELECT_AGENT', agentId: null });
     }, [agentDispatch]);
 
+    // Drill straight into a sub-agent's activity view — e.g. from a
+    // SpawnCard row in the chat.
+    const handleSelectAgent = useCallback((agentId) => {
+        handleOpenNetwork();
+        agentDispatch({ type: 'SELECT_AGENT', agentId });
+    }, [handleOpenNetwork, agentDispatch]);
+
     const hasPreview = preview.tabs.length > 0 && !goalsActive && flyoutPanel !== 'settings' && (!networkViewOpen || !!agentState.selectedAgentId);
 
     // Show setup wizard if setup is not complete
@@ -366,6 +374,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             networkAgentCount={networkAgentCount}
                             networkRunningCount={networkRunningCount}
                             onOpenNetwork={handleOpenNetwork}
+                            onSelectAgent={handleSelectAgent}
                             selectedProfileId={selectedProfileId}
                             onProfileChange={handleProfileChange}
                             profileRefreshSignal={profilesHook.revision}
