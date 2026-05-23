@@ -171,11 +171,18 @@ class TestBuildToolCalls:
         assert result[0].function.name == "search"
         assert result[0].function.arguments == {"q": "hello"}
 
-    def test_falls_back_to_id_when_call_id_empty(self):
+    def test_derives_call_id_from_fc_prefixed_id(self):
+        """When call_id is empty but id starts with fc_, derive call_… from it."""
         accum = {0: {"id": "fc_xyz", "call_id": "", "name": "fn", "arguments": "{}"}}
         result = _build_tool_calls(accum)
         assert result is not None
-        assert result[0].id == "fc_xyz"
+        assert result[0].id == "call_xyz"
+
+    def test_none_id_when_both_empty(self):
+        accum = {0: {"id": "", "call_id": "", "name": "fn", "arguments": "{}"}}
+        result = _build_tool_calls(accum)
+        assert result is not None
+        assert result[0].id is None
 
     def test_invalid_json_arguments(self):
         accum = {0: {"id": "x", "call_id": "x", "name": "fn", "arguments": "bad{"}}

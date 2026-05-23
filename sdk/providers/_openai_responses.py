@@ -367,8 +367,13 @@ def _build_tool_calls(tc_accum: dict[int, dict[str, str]]) -> list[ToolCall] | N
                 args = json.loads(tc["arguments"])
             except json.JSONDecodeError:
                 args = {}
+        # Use call_id only — the "id" field holds the Responses API item
+        # ID (fc_…), which does not match tool_result call_ids (call_…).
+        call_id = tc["call_id"]
+        if not call_id and tc["id"].startswith("fc_"):
+            call_id = "call_" + tc["id"][3:]
         result.append(ToolCall(
-            id=tc["call_id"] or tc["id"] or None,
+            id=call_id or None,
             function=ToolCallFunction(name=tc["name"], arguments=args),
         ))
     return result or None
