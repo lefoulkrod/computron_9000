@@ -371,6 +371,7 @@ def _normalize_tool_calls(
         if func is None:
             continue
         result.append(ToolCall(
+            id=getattr(tc, "id", None),
             function=ToolCallFunction(
                 name=getattr(func, "name", ""),
                 arguments=getattr(func, "arguments", {}),

@@ -17,7 +17,8 @@ class _FakeFunc:
 
 @dataclass
 class _FakeToolCall:
-    function: _FakeFunc
+    id: str | None = None
+    function: _FakeFunc | None = None
 
 
 @dataclass
@@ -64,15 +65,28 @@ class TestNormalizeResponse:
         assert result.message.thinking == "reasoning"
 
     def test_tool_calls(self):
-        tc = _FakeToolCall(_FakeFunc(name="search", arguments={"q": "test"}))
+        tc = _FakeToolCall(
+            id="call_abc123",
+            function=_FakeFunc(name="search", arguments={"q": "test"}),
+        )
         raw = _FakeOllamaResponse(
             message=_FakeMessage(tool_calls=[tc]),
         )
         result = _normalize_response(raw)
         assert result.message.tool_calls is not None
         assert len(result.message.tool_calls) == 1
+        assert result.message.tool_calls[0].id == "call_abc123"
         assert result.message.tool_calls[0].function.name == "search"
         assert result.message.tool_calls[0].function.arguments == {"q": "test"}
+
+    def test_tool_calls_id_none_when_missing(self):
+        """ToolCall.id should be None when the Ollama object has no id field."""
+        tc = _FakeToolCall(function=_FakeFunc(name="search", arguments={"q": "test"}))
+        raw = _FakeOllamaResponse(
+            message=_FakeMessage(tool_calls=[tc]),
+        )
+        result = _normalize_response(raw)
+        assert result.message.tool_calls is not None
         assert result.message.tool_calls[0].id is None
 
     def test_done_reason(self):
