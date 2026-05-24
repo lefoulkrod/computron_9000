@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect } from 'vitest';
 import Message from '../Message.jsx';
 
@@ -100,9 +101,11 @@ describe('Message spawn card', () => {
         expect(screen.queryByTestId('spawn-card')).not.toBeInTheDocument();
     });
 
-    it('renders raw spawn_agent tool-call line on the resume path', () => {
+    it('surfaces resumed spawn_agent tool calls via the activity footer', async () => {
         // Resumed conversations have no spawn_requested entry — just the
-        // plain tool_call from history. It should render as a raw line.
+        // plain tool_call from history. It's hidden from the inline body
+        // and shown in the activity panel.
+        const user = userEvent.setup();
         const resumed = [
             { type: 'content', content: 'about to spawn', timestamp: Date.now() },
             { type: 'tool_call', name: 'spawn_agent' },
@@ -110,8 +113,12 @@ describe('Message spawn card', () => {
         ];
         render(<Message role="assistant" entries={resumed} />);
         expect(screen.queryByTestId('spawn-card')).not.toBeInTheDocument();
-        const toolCalls = screen.getAllByTestId('entry-tool-call');
-        expect(toolCalls.some((el) => el.textContent.includes('spawn_agent'))).toBe(true);
+        expect(screen.queryByTestId('entry-tool-call')).not.toBeInTheDocument();
+        const toggle = screen.getByTestId('activity-toggle');
+        expect(toggle).toHaveTextContent('1 tool');
+        await user.click(toggle);
+        const panel = screen.getByTestId('activity-panel');
+        expect(panel).toHaveTextContent('spawn_agent');
     });
 
     it('groups consecutive spawn_requested entries into one card', () => {
@@ -136,5 +143,102 @@ describe('Message spawn card', () => {
         expect(cards[0]).toHaveTextContent('Researcher');
         expect(cards[1]).toHaveTextContent('1 agent');
         expect(cards[1]).toHaveTextContent('Writer');
+    });
+});
+
+describe('Message ephemeral status and activity footer', () => {
+    it('shows ephemeral row while streaming when last entry is thinking', () => {
+        const entries = [
+            { type: 'content', content: 'starting', timestamp: 1 },
+            { type: 'thinking', thinking: 'planning the next step', timestamp: 2 },
+        ];
+        render(<Message role="assistant" entries={entries} streaming />);
+        const eph = screen.getByTestId('ephemeral-status');
+        expect(eph).toHaveTextContent('Thinking…');
+    });
+
+    it('shows ephemeral with tool name when last entry is a tool_call', () => {
+        const entries = [
+            { type: 'content', content: 'about to look', timestamp: 1 },
+            { type: 'tool_call', name: 'run_bash_cmd', arguments: { cmd: 'ls' }, timestamp: 2 },
+        ];
+        render(<Message role="assistant" entries={entries} streaming />);
+        expect(screen.getByTestId('ephemeral-status')).toHaveTextContent('Calling run_bash_cmd…');
+    });
+
+    it('hides ephemeral while streaming when last entry is visible content', () => {
+        const entries = [
+            { type: 'thinking', thinking: '...', timestamp: 1 },
+            { type: 'tool_call', name: 'run_bash_cmd', timestamp: 2 },
+            { type: 'content', content: 'here is the answer', timestamp: 3 },
+        ];
+        render(<Message role="assistant" entries={entries} streaming />);
+        expect(screen.queryByTestId('ephemeral-status')).not.toBeInTheDocument();
+    });
+
+    it('hides thinking and raw tool_call entries from the inline body', () => {
+        const entries = [
+            { type: 'thinking', thinking: 'private thoughts', timestamp: 1 },
+            { type: 'tool_call', name: 'run_bash_cmd', arguments: { cmd: 'ls' }, timestamp: 2 },
+            { type: 'content', content: 'visible content', timestamp: 3 },
+        ];
+        render(<Message role="assistant" entries={entries} />);
+        const bubble = screen.getByTestId('message-assistant');
+        expect(bubble).toHaveTextContent('visible content');
+        expect(bubble.querySelector('[data-testid="entry-tool-call"]')).toBeNull();
+        expect(bubble.querySelector('[data-testid="entry-thinking"]')).toBeNull();
+        expect(bubble).not.toHaveTextContent('private thoughts');
+    });
+
+    it('shows the activity footer once streaming is done', () => {
+        const entries = [
+            { type: 'thinking', thinking: 't1', timestamp: 1 },
+            { type: 'tool_call', name: 'run_bash_cmd', timestamp: 2 },
+            { type: 'thinking', thinking: 't2', timestamp: 3 },
+            { type: 'content', content: 'done', timestamp: 4 },
+        ];
+        render(<Message role="assistant" entries={entries} />);
+        const toggle = screen.getByTestId('activity-toggle');
+        expect(toggle).toHaveTextContent('Show activity');
+        expect(toggle).toHaveTextContent('1 tool');
+        expect(toggle).toHaveTextContent('2 thoughts');
+    });
+
+    it('does not render the activity footer while streaming', () => {
+        const entries = [
+            { type: 'thinking', thinking: 't1', timestamp: 1 },
+            { type: 'tool_call', name: 'run_bash_cmd', timestamp: 2 },
+        ];
+        render(<Message role="assistant" entries={entries} streaming />);
+        expect(screen.queryByTestId('activity-toggle')).not.toBeInTheDocument();
+    });
+
+    it('does not render the activity footer when there is no hidden activity', () => {
+        const entries = [{ type: 'content', content: 'just text', timestamp: 1 }];
+        render(<Message role="assistant" entries={entries} />);
+        expect(screen.queryByTestId('activity-toggle')).not.toBeInTheDocument();
+    });
+
+    it('clicking the footer reveals the activity panel with all hidden entries', async () => {
+        const user = userEvent.setup();
+        const entries = [
+            { type: 'thinking', thinking: 'first thought', timestamp: 1 },
+            { type: 'tool_call', name: 'run_bash_cmd', arguments: { cmd: 'ls' }, timestamp: 2 },
+            { type: 'thinking', thinking: 'second thought', timestamp: 3 },
+            { type: 'content', content: 'answer', timestamp: 4 },
+        ];
+        render(<Message role="assistant" entries={entries} />);
+        expect(screen.queryByTestId('activity-panel')).not.toBeInTheDocument();
+
+        await user.click(screen.getByTestId('activity-toggle'));
+        const panel = screen.getByTestId('activity-panel');
+        expect(panel).toHaveTextContent('first thought');
+        expect(panel).toHaveTextContent('second thought');
+        expect(panel).toHaveTextContent('run_bash_cmd');
+        expect(panel).toHaveTextContent('cmd="ls"');
+
+        // Toggling again hides the panel
+        await user.click(screen.getByTestId('activity-toggle'));
+        expect(screen.queryByTestId('activity-panel')).not.toBeInTheDocument();
     });
 });

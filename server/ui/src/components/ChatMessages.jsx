@@ -42,6 +42,7 @@ export default function ChatMessages({ messages, onPreview, onStarterSelect, onS
                                     key={msg.id || idx}
                                     {...msg}
                                     entries={agent?.activityLog}
+                                    streaming={agent?.status === 'running'}
                                     spawnedAgents={spawnedAgents}
                                     onSelectAgent={onSelectAgent}
                                     onPreview={onPreview}

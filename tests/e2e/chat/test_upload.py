@@ -55,10 +55,16 @@ def test_image_upload_round_trip(page: Page):
     user_msg = page.get_by_test_id("message-user").last
     expect(user_msg.locator("img[src^='data:image/']")).to_be_visible(timeout=5_000)
 
-    # Vision model should identify red. Scope to the latest assistant bubble
-    # so we don't accidentally match stray "red" in headers/tooltips/etc.
+    # Vision model should identify red. Read only the visible content
+    # entries so the activity footer / panel labels don't leak into the
+    # match.
     assistant = page.get_by_test_id("message-assistant").last
-    reply = (assistant.text_content() or "").lower()
+    content_locator = assistant.get_by_test_id("entry-content")
+    reply_parts = [
+        (content_locator.nth(i).text_content() or "")
+        for i in range(content_locator.count())
+    ]
+    reply = " ".join(reply_parts).lower()
     assert "red" in reply, (
         f"Expected assistant reply to mention 'red'; got: {reply[:200]!r}"
     )

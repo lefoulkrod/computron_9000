@@ -125,8 +125,9 @@ def _get_entries(container):
 
 
 @pytest.mark.e2e
-def test_chat_view_entry_order(page: Page):
-    """Thinking → content → tool_call → thinking → content in the chat view."""
+def test_chat_view_hides_thinking_and_tool_calls(page: Page):
+    """Chat view shows only content inline; thinking and tool_calls are
+    hidden and surfaced via the per-turn activity footer."""
     chat = ChatView(page).goto().new_conversation()
     page.route("**/api/chat", _mock_chat_with(SINGLE_AGENT_EVENTS))
     chat.send("test")
@@ -136,21 +137,45 @@ def test_chat_view_entry_order(page: Page):
     msg = page.get_by_test_id("message-assistant").last
     expect(msg).to_be_visible(timeout=5000)
 
-    entries = _get_entries(msg)
-    types = [t for t, _ in entries]
-    assert types == [
-        "entry-thinking",
-        "entry-content",
-        "entry-tool-call",
-        "entry-thinking",
-        "entry-content",
-    ], f"Chat view entries out of order: {types}"
+    # Only content entries render inline — no thinking, no raw tool_call.
+    expect(msg.get_by_test_id("entry-thinking")).to_have_count(0)
+    expect(msg.get_by_test_id("entry-tool-call")).to_have_count(0)
+    contents = msg.get_by_test_id("entry-content")
+    expect(contents).to_have_count(2)
+    expect(contents.nth(0)).to_contain_text("Here is my plan.")
+    expect(contents.nth(1)).to_contain_text("Done.")
 
-    assert "Planning the approach" in entries[0][1]
-    assert "Here is my plan." in entries[1][1]
-    assert "run_bash_cmd" in entries[2][1]
-    assert "Reviewing the output" in entries[3][1]
-    assert "Done." in entries[4][1]
+
+@pytest.mark.e2e
+def test_chat_view_activity_footer_reveals_hidden(page: Page):
+    """The activity footer summarises the hidden thinking + tool calls
+    and reveals them in a panel on click."""
+    chat = ChatView(page).goto().new_conversation()
+    page.route("**/api/chat", _mock_chat_with(SINGLE_AGENT_EVENTS))
+    chat.send("test")
+    chat.wait_streaming()
+    page.wait_for_timeout(500)
+
+    msg = page.get_by_test_id("message-assistant").last
+    expect(msg).to_be_visible(timeout=5000)
+
+    toggle = msg.get_by_test_id("activity-toggle")
+    expect(toggle).to_be_visible()
+    expect(toggle).to_contain_text("1 tool")
+    expect(toggle).to_contain_text("2 thoughts")
+
+    expect(msg.get_by_test_id("activity-panel")).to_have_count(0)
+    toggle.click()
+
+    panel = msg.get_by_test_id("activity-panel")
+    expect(panel).to_be_visible()
+    expect(panel).to_contain_text("Planning the approach")
+    expect(panel).to_contain_text("Reviewing the output")
+    expect(panel).to_contain_text("run_bash_cmd")
+
+    # Toggling again hides the panel
+    toggle.click()
+    expect(msg.get_by_test_id("activity-panel")).to_have_count(0)
 
 
 # ── Activity view ──────────────────────────────────────────────────────

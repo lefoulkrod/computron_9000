@@ -5,13 +5,14 @@ import FileOutput from './FileOutput.jsx';
 import SpawnCard from './SpawnCard.jsx';
 
 /**
- * Renders agent output as an ordered list of entries: thinking blocks,
- * content text, tool calls, and file outputs. Used by both the chat
- * view (Message.jsx) and the agent activity view (AgentActivityView.jsx).
+ * Pure renderer for an ordered list of agent entries: thinking blocks,
+ * content text, tool calls, file outputs, spawn cards. Each entry's
+ * `type` field picks the sub-component; the list renders in order.
  *
- * Each entry has a `type` field that determines how it renders.
- * Entries are displayed in chronological order — the same order
- * they were emitted by the agent.
+ * This component renders every entry it's given. Per-view filtering
+ * (e.g. hiding thinking + tool_calls in the chat) belongs in the
+ * caller — do NOT bake those rules in here, because one consumer (the
+ * agent activity view) intentionally wants the full inline trace.
  */
 const _isSpawnRequested = (e) => e?.type === 'spawn_requested';
 
