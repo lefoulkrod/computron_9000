@@ -289,6 +289,46 @@ def test_int_conversion_error():
         _prepare_tool_arguments(tool, {"count": "not_a_number"})
 
 
+@pytest.mark.unit
+def test_none_rejected_for_non_optional_bool():
+    """None passed to a non-Optional bool param raises TypeError."""
+
+    def tool(flag: bool) -> str: ...
+
+    with pytest.raises(TypeError, match="Cannot pass None"):
+        _prepare_tool_arguments(tool, {"flag": None})
+
+
+@pytest.mark.unit
+def test_none_rejected_for_non_optional_int():
+    """None passed to a non-Optional int param raises TypeError."""
+
+    def tool(count: int) -> str: ...
+
+    with pytest.raises(TypeError, match="Cannot pass None"):
+        _prepare_tool_arguments(tool, {"count": None})
+
+
+@pytest.mark.unit
+def test_none_rejected_for_non_optional_str():
+    """None passed to a non-Optional str param raises TypeError."""
+
+    def tool(name: str) -> str: ...
+
+    with pytest.raises(TypeError, match="Cannot pass None"):
+        _prepare_tool_arguments(tool, {"name": None})
+
+
+@pytest.mark.unit
+def test_none_rejected_for_non_optional_float():
+    """None passed to a non-Optional float param raises TypeError."""
+
+    def tool(price: float) -> str: ...
+
+    with pytest.raises(TypeError, match="Cannot pass None"):
+        _prepare_tool_arguments(tool, {"price": None})
+
+
 # ── Self-referencing models ─────────────────────────────────────────
 
 

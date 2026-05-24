@@ -95,6 +95,15 @@ def _coerce_value(expected_type: Any, value: Any) -> Any:
     if value is None and unwrapped is not expected_type:
         return None
 
+    # If value is None but the type is NOT Optional, raise a consistent
+    # error rather than silently converting (bool→False, str→"None") or
+    # raising an unhelpful TypeError from int(None)/float(None).
+    if value is None:
+        raise TypeError(
+            f"Cannot pass None to non-Optional parameter of type "
+            f"{getattr(expected_type, '__name__', expected_type)}"
+        )
+
     origin = get_origin(unwrapped)
 
     # list[T] — coerce each element when the item type is known.
