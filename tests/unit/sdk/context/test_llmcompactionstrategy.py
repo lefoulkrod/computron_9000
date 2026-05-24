@@ -152,6 +152,18 @@ def test_extract_prior_summary_returns_none_when_absent():
     assert _extract_prior_summary(messages) is None
 
 
+@pytest.mark.unit
+def test_extract_prior_summary_returns_most_recent():
+    """When multiple summaries exist, the most recent (last) one is returned."""
+    messages = [
+        {"role": "assistant", "content": _SUMMARY_PREFIX + "oldest summary"},
+        {"role": "user", "content": "intermediate message"},
+        {"role": "assistant", "content": _SUMMARY_PREFIX + "newest summary"},
+        {"role": "user", "content": "latest user message"},
+    ]
+    assert _extract_prior_summary(messages) == "newest summary"
+
+
 # ── _find_first_user ───────────────────────────────────────────────────
 
 

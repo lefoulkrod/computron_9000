@@ -667,7 +667,7 @@ def _find_first_user(non_system: list[dict]) -> tuple[int, bool]:
 
 def _extract_prior_summary(messages: list[dict]) -> str | None:
     """Find and return the most recent prior summary from old messages."""
-    for msg in messages:
+    for msg in reversed(messages):
         content = msg.get("content") or ""
         if content.startswith(_SUMMARY_PREFIX):
             return content[len(_SUMMARY_PREFIX):]
