@@ -58,3 +58,15 @@ class TestConversationMap:
         cmap.get(15)
         new = cmap.reset(15)
         assert cmap.conversation_id_for(15) == new
+
+    def test_set_binds_chat_to_existing_id(self):
+        cmap = ConversationMap()
+        cmap.set(42, "telegram_42_abc123")
+        assert cmap.get(42) == "telegram_42_abc123"
+
+    def test_set_overwrites_any_previous_binding(self):
+        cmap = ConversationMap()
+        cmap.get(42)                              # default id
+        cmap.reset(42)                            # uuid id
+        cmap.set(42, "telegram_42_explicit")      # explicit override
+        assert cmap.conversation_id_for(42) == "telegram_42_explicit"

@@ -20,7 +20,12 @@ from agents.types import Agent
 from channels.telegram._formatter import TelegramFormatter
 from channels.telegram._profile_map import ProfileMap
 from channels.telegram._state import ConversationMap
-from conversations import DiskTurnPersistence, load_conversation_history
+from conversations import (
+    DiskTurnPersistence,
+    list_conversations,
+    load_conversation_history,
+)
+from conversations._models import ConversationSummary
 from integrations import supervisor_client
 from integrations.broker_client import (
     IntegrationAuthFailed,
@@ -56,6 +61,13 @@ _TYPING_INDICATOR_INTERVAL_SECONDS = 4.0
 # callback_data prefix encoding profile picks. Keeps the payload format
 # self-describing so unrelated callbacks (future verbs) don't collide.
 _PROFILE_CALLBACK_PREFIX = "profile:"
+
+# callback_data prefix for picking a past conversation to resume.
+_CONV_CALLBACK_PREFIX = "conv:"
+
+# How many past conversations to show in a /list reply. Keeps the inline
+# keyboard within Telegram's reasonable-rendering range and the chat tidy.
+_LIST_MAX_RESULTS = 10
 
 # Initial status text shown while we wait for the first event from the agent.
 _STATUS_THINKING = "🤔 Thinking..."
@@ -289,13 +301,17 @@ class TelegramChannel:
         attachments = update.get("attachments") or []
 
         if update.get("is_command"):
-            cmd = text.split(maxsplit=1)[0][1:]  # strip leading "/"
+            parts = text.split(maxsplit=1)
+            cmd = parts[0][1:]  # strip leading "/"
+            arg = parts[1] if len(parts) > 1 else ""
             if cmd == "new":
                 await self._handle_new(chat_id)
             elif cmd == "stop":
                 await self._handle_stop(chat_id)
             elif cmd == "profile":
                 await self._handle_profile(chat_id)
+            elif cmd == "list":
+                await self._handle_list(chat_id, arg)
             elif cmd == "help":
                 await self._handle_help(chat_id)
             else:
@@ -340,6 +356,11 @@ class TelegramChannel:
         if data.startswith(_PROFILE_CALLBACK_PREFIX):
             profile_id = data[len(_PROFILE_CALLBACK_PREFIX):]
             await self._select_profile(chat_id, profile_id, callback_id)
+            return
+
+        if data.startswith(_CONV_CALLBACK_PREFIX):
+            target = data[len(_CONV_CALLBACK_PREFIX):]
+            await self._resume_conversation(chat_id, target, callback_id)
             return
 
         # Unknown callback — dismiss the loading spinner anyway so the
@@ -396,12 +417,92 @@ class TelegramChannel:
     async def _handle_help(self, chat_id: int) -> None:
         lines = [
             "Commands:",
-            "  /new      — start a new conversation",
-            "  /stop     — stop the current turn",
-            "  /profile  — pick an agent profile for this chat",
-            "  /help     — this message",
+            "  /new          — start a new conversation",
+            "  /stop         — stop the current turn",
+            "  /profile      — pick an agent profile for this chat",
+            "  /list [query] — list past conversations, optionally filtered",
+            "  /help         — this message",
         ]
         await self._send_text(chat_id, "\n".join(lines))
+
+    async def _handle_list(self, chat_id: int, query: str) -> None:
+        """Show past conversations for this chat as an inline keyboard.
+
+        Filters to conversations belonging to *chat_id* (default id +
+        ``/new``-spawned uuids). Optional ``query`` is a case-insensitive
+        substring match on title and first message — handy for "find that
+        conversation about taxes" without scrolling.
+        """
+        query = query.strip()
+        summaries = list_conversations()
+        matches = [
+            s for s in summaries
+            if _belongs_to_chat(s.conversation_id, chat_id)
+            and (not query or _matches_query(s, query))
+        ][:_LIST_MAX_RESULTS]
+
+        if not matches:
+            msg = (
+                f"No conversations match '{query}'."
+                if query
+                else "No past conversations yet."
+            )
+            await self._send_text(chat_id, msg)
+            return
+
+        current = self._state.conversation_id_for(chat_id)
+        buttons = [
+            [{
+                "text": _row_label(s, is_current=s.conversation_id == current),
+                "data": f"{_CONV_CALLBACK_PREFIX}{s.conversation_id}",
+            }]
+            for s in matches
+        ]
+        header = (
+            f"Conversations matching '{query}':"
+            if query
+            else "Recent conversations:"
+        )
+        try:
+            await broker_call(
+                self._integration_id,
+                "send_message",
+                {"chat_id": chat_id, "text": header, "buttons": buttons},
+                app_sock_path=self._app_sock,
+            )
+        except IntegrationError as exc:
+            logger.warning("telegram /list failed chat_id=%s: %s", chat_id, exc)
+
+    async def _resume_conversation(
+        self, chat_id: int, conv_id: str, callback_id: str,
+    ) -> None:
+        """Bind this chat to *conv_id* so the next message continues it.
+
+        Validates that the picked conversation actually belongs to this
+        chat — a malicious callback payload can't trick the channel into
+        binding to an unrelated user's conversation.
+        """
+        if not _belongs_to_chat(conv_id, chat_id):
+            logger.warning(
+                "telegram resume rejected — conv_id=%s not for chat_id=%s",
+                conv_id, chat_id,
+            )
+            await self._answer_callback(callback_id, text="Not your conversation")
+            return
+        if load_conversation_history(conv_id) is None:
+            await self._answer_callback(callback_id, text="Conversation not found")
+            return
+
+        self._state.set(chat_id, conv_id)
+        # Drop the cached in-memory Conversation so the next turn rehydrates
+        # the picked one's history from disk.
+        self._conversations.pop(conv_id, None)
+        await self._answer_callback(callback_id, text="Resumed")
+        await self._send_text(chat_id, f"📂 Resumed conversation: {conv_id}")
+        logger.info(
+            "telegram resumed conversation  chat_id=%s  conv_id=%s",
+            chat_id, conv_id,
+        )
 
     async def _select_profile(
         self, chat_id: int, profile_id: str, callback_id: str,
@@ -635,6 +736,43 @@ class TelegramChannel:
             )
         except IntegrationError as exc:
             logger.debug("telegram answer_callback_query failed: %s", exc)
+
+
+def _belongs_to_chat(conv_id: str, chat_id: int) -> bool:
+    """True iff ``conv_id`` was created by this Telegram chat.
+
+    Default conv id is ``telegram_<chat_id>``; ``/new`` appends an
+    underscore + uuid. Strict prefix match on either form avoids the
+    false-positive a naive startswith would hit when one chat_id is a
+    prefix of another (e.g. ``8617`` vs ``8617268723``).
+    """
+    prefix = f"telegram_{chat_id}"
+    return conv_id == prefix or conv_id.startswith(prefix + "_")
+
+
+def _matches_query(summary: ConversationSummary, query: str) -> bool:
+    """Case-insensitive substring match on title and first message."""
+    needle = query.lower()
+    return (
+        needle in (summary.title or "").lower()
+        or needle in (summary.first_message or "").lower()
+    )
+
+
+def _row_label(summary: ConversationSummary, *, is_current: bool) -> str:
+    """Human-readable label for a /list inline-keyboard row."""
+    if summary.title:
+        body = summary.title
+    elif summary.first_message:
+        # Some conversations don't get a title (turn errored before
+        # title-generation fired). Fall back to a clipped first message.
+        body = f"({summary.first_message[:50]}…)"
+    else:
+        body = f"(empty • {summary.conversation_id})"
+    # Telegram button labels render best within ~64 chars.
+    body = body[:60]
+    prefix = "✓ " if is_current else ""
+    return f"{prefix}{body}"
 
 
 def _build_user_content(

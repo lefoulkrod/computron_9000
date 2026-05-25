@@ -24,6 +24,17 @@ class ConversationMap:
         """Return the conversation ID for *chat_id*, creating a default if absent."""
         return self._map.setdefault(chat_id, f"telegram_{chat_id}")
 
+    # -- explicit bind (used by /list to resume a past conversation) ----
+
+    def set(self, chat_id: int, conversation_id: str) -> None:
+        """Bind ``chat_id`` to an existing conversation id.
+
+        The next ``get`` returns this value; the channel hydrates the
+        history from disk on the cache miss. No effect on the conversation
+        store itself — only on which conversation this chat resolves to.
+        """
+        self._map[chat_id] = conversation_id
+
     # -- reset (used by /new) -------------------------------------------
 
     def reset(self, chat_id: int) -> str:
