@@ -1,56 +1,45 @@
 .inputAreaWrapper {
-  padding: 0.5rem 0.75rem;
+  padding: 14px 18px 18px;
 }
 
-.customInputWrapper {
-  position: relative;
-  width: 100%;
+/* ── Composer card ───────────────────────────────────── */
+.inputArea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 6px 6px 6px 14px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+
+.inputArea:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), var(--shadow-glow);
 }
 
 .customInput {
-  min-height: 2rem;
-  max-height: 10rem;
+  min-height: 44px;
+  max-height: 200px;
   overflow-y: auto;
-  font-size: 0.875rem;
-  padding: 0.5rem 0.6rem;
-  outline: none;
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--canvas);
+  padding: 8px 4px 4px 0;
+  border: none;
+  background: transparent;
   color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  outline: none;
   resize: none;
-}
-
-/* Adds headroom when an inline preview is shown */
-.withPreview {
-  padding-left: 208px;
-  padding-top: 12px;
-  min-height: 148px;
 }
 
 .customInput::placeholder {
   color: var(--text-tertiary);
-}
-
-.customInput:focus {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-glow);
-}
-
-.inputArea {
-  display: flex;
-  flex-direction: column;
-}
-
-.inputArea button {
-  margin: 0;
-}
-
-.inputArea button:disabled {
-  opacity: 0.5;
 }
 
 .customInput:disabled {
@@ -58,113 +47,80 @@
   cursor: not-allowed;
 }
 
+/* ── Controls row ────────────────────────────────────── */
 .inputAreaButtons {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--sp-2);
   align-items: center;
   justify-content: space-between;
+  padding-right: var(--sp-1);
 }
 
 .actionButtons {
   display: flex;
-  gap: 0.25rem;
+  gap: var(--sp-1);
   align-items: center;
 }
 
+/* Ghost icon button — attach */
 .iconButton {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   background: none;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   border: none;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
-
 .iconButton svg { width: 16px; height: 16px; display: block; }
-
-.iconButton:hover:not(:disabled) { background: var(--surface); color: var(--text-primary); }
+.iconButton:hover:not(:disabled) { background: var(--accent-muted); color: var(--text-primary); }
 .iconButton:active:not(:disabled) { transform: translateY(1px); }
 .iconButton:disabled { opacity: 0.4; cursor: not-allowed; }
-.iconButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.iconButton:focus-visible { outline: none; box-shadow: var(--shadow-glow); }
 
-.stopButton {
-  color: var(--danger);
-}
-.stopButton:hover { background: var(--danger-muted); color: var(--danger); }
-
-/* Inline preview that sits inside the textarea area (top-left) */
-.inlinePreview {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 180px;
-  height: 120px;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  pointer-events: none;
-}
-
-.inlinePreview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.removeAttachment {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  display: flex;
+/* Filled circular send button */
+.sendButton {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: #fff;
+  border: none;
   cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-  pointer-events: auto;
+  transition: background 120ms ease;
 }
-
-.removeAttachment:hover {
-  background: var(--border-strong);
-}
-
-/* Generic file chip for non-image attachments */
-.fileChip {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  height: 100%;
-  padding: 0.5rem;
-  box-sizing: border-box;
+.sendButton svg { width: 16px; height: 16px; display: block; }
+.sendButton:hover:not(:disabled) { background: var(--accent-hover); }
+.sendButton:active:not(:disabled) { transform: translateY(1px); }
+.sendButton:disabled {
   background: var(--surface);
-  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
 }
+.sendButton:focus-visible { outline: none; box-shadow: var(--shadow-glow); }
 
-.fileChipIcon {
-  font-size: 1.4rem;
-  flex-shrink: 0;
+/* Streaming — send becomes a danger-tinted stop */
+.stopButton {
+  background: var(--danger);
+  color: #fff;
 }
+.stopButton:hover:not(:disabled) { background: var(--danger); filter: brightness(1.1); }
 
-.fileChipName {
-  font-family: var(--font-brand);
-  font-size: 0.75em;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* ── Attachment tray ─────────────────────────────────── */
+/* Attachments stack above the textarea rather than overlapping it.
+   Each item is rendered by the shared AttachmentChip component. */
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 8px 8px 2px 0;
 }

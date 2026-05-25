@@ -1,9 +1,9 @@
 """E2E tests for resuming a prior conversation.
 
 Verifies that conversations persist across "New conversation" and reload
-from the Conversations flyout with the full message history reconstructed
-from history.json — user messages, assistant content, and tool-call
-markers, in chronological order.
+from the recent-conversations list with the full message history
+reconstructed from history.json — user messages, assistant content, and
+tool-call markers, in chronological order.
 """
 
 import time
@@ -11,7 +11,7 @@ import time
 import pytest
 from playwright.sync_api import expect
 
-from tests.e2e.pages import ChatView, ConversationsFlyout
+from tests.e2e.pages import ChatView, RecentConversations
 
 LLM_TIMEOUT = 180_000
 
@@ -38,22 +38,23 @@ def resumed(browser, browser_context_args):
     )
 
     # Sanity: confirm the live render produced what we'll later expect to
-    # come back. If this fails, the rest of the suite is meaningless.
+    # come back. Tool calls are hidden inline and surfaced via the per-turn
+    # activity footer, so check that footer instead of bare tool-name text.
     assert page.get_by_text(cw1).count() >= 1, "cw1 missing before switch"
-    assert page.get_by_text("run_bash_cmd").count() >= 1, "tool call badge missing before switch"
+    assert page.get_by_test_id("activity-toggle").count() >= 1, (
+        "activity footer missing before switch — tool calls did not register"
+    )
     assert page.get_by_text(cw2).count() >= 1, "cw2 missing before switch"
 
     # Switch to a fresh conversation; previous markers should leave the DOM.
     chat.new_conversation()
     expect(page.get_by_text(cw1)).to_have_count(0)
     expect(page.get_by_text(cw2)).to_have_count(0)
-    expect(page.get_by_text("run_bash_cmd")).to_have_count(0)
+    expect(page.get_by_test_id("activity-toggle")).to_have_count(0)
 
     # Resume the prior conversation. Topmost row = most recent
     # (sorted by started_at in conversations/_store.py).
-    flyout = ConversationsFlyout(page).open()
-    flyout.resume_top()
-    flyout.close()  # so per-test assertions can't false-match list rows
+    RecentConversations(page).open_top()
 
     # Wait until the first restored user message bubble is visible
     # before yielding. Scoped to message-user so we don't false-match
@@ -78,12 +79,13 @@ def test_turn_one_user_message_restored(resumed):
 
 
 def test_turn_one_tool_call_badge_restored(resumed):
-    """Turn 1's assistant tool_call entry renders as a ToolCallBlock badge."""
-    assistant_msgs = resumed["page"].get_by_test_id("message-assistant")
-    # `.first` on the inner locator: the tool name often appears both in
-    # the rendered text (e.g. inside markdown <code>) and the badge <span>.
-    # We just need at least one occurrence inside the scoped bubble.
-    expect(assistant_msgs.first.get_by_text("run_bash_cmd").first).to_be_visible()
+    """Turn 1's assistant tool_call is surfaced via the activity footer."""
+    assistant = resumed["page"].get_by_test_id("message-assistant").first
+    toggle = assistant.get_by_test_id("activity-toggle")
+    expect(toggle).to_be_visible()
+    expect(toggle).to_contain_text("tool")
+    toggle.click()
+    expect(assistant.get_by_test_id("activity-panel")).to_contain_text("run_bash_cmd")
 
 
 # ── Turn 2 — assistant message with content-only entries ────────────

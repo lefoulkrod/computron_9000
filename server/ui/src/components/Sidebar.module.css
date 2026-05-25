@@ -1,65 +1,157 @@
 .sidebar {
-    width: 44px;
     background: var(--surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: var(--sp-2) 0;
-    gap: var(--sp-1);
     flex-shrink: 0;
     z-index: var(--z-sticky);
+    transition: width 160ms var(--ease);
 }
 
-.btn {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-md);
-    background: transparent;
+.collapsed { width: var(--sidebar-width); }
+.expanded { width: 264px; }
+
+/* ── Brand row ───────────────────────────────────────── */
+.brand {
     display: flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-tertiary);
-    border: none;
-    padding: 0;
-    font-size: 14px;
-    position: relative;
-    transition: color 150ms var(--ease), background 150ms var(--ease);
-    box-shadow: none;
+    height: 44px;
+    padding: 0 var(--sp-2);
+    border-bottom: 1px solid var(--border);
 }
-.btn:hover {
-    background: var(--accent-muted);
+.collapsed .brand { justify-content: center; padding: 0; }
+
+.wordmark {
+    flex: 1;
+    font-family: var(--font-brand);
+    font-size: 13px;
+    letter-spacing: 0.06em;
     color: var(--text-primary);
 }
-.btn:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-glow);
+
+/* ── Primary action ──────────────────────────────────── */
+/* No bottom padding — New chat and the nav below it visually belong
+ * to the same section. The Recent Conversations area is what gets the
+ * separating gap (see RecentConversations .search margin).
+ */
+.primary {
+    padding: var(--sp-2) var(--sp-2) 0;
 }
 
-/* Signal Line -- 2px accent bar on left edge */
-.btn.active {
-    color: var(--accent);
-    background: var(--accent-muted);
+.newChat {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    height: 32px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
 }
-.btn.active::before {
+.newChat:hover { background: var(--elevated); }
+.collapsed .newChat { justify-content: center; padding: 0; }
+
+.newChatIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+/* ── Nav ─────────────────────────────────────────────── */
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 1px var(--sp-2) var(--sp-2);
+}
+
+.navItem {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    position: relative;
+}
+.navItem i { font-size: 14px; color: var(--text-tertiary); width: 16px; text-align: center; flex-shrink: 0; }
+.navItem:hover { background: var(--accent-muted); color: var(--text-primary); }
+.navItem:hover i { color: var(--text-primary); }
+.collapsed .navItem { justify-content: center; padding: 0; }
+
+.navLabel { flex: 1; text-align: left; }
+
+/* Signal Line — 2px accent bar on the active item's left edge */
+.navItem.active {
+    background: var(--accent-muted);
+    color: var(--accent);
+}
+.navItem.active i { color: var(--accent); }
+.navItem.active::before {
     content: '';
     position: absolute;
     left: -8px;
-    top: 4px;
-    bottom: 4px;
+    top: 6px;
+    bottom: 6px;
     width: 2px;
     background: var(--accent);
     border-radius: var(--radius-full);
 }
 
-.sep {
-    width: 20px;
-    height: 1px;
-    background: var(--border);
-    margin: var(--sp-1) 0;
+.grow { flex: 1; }
+
+/* ── Footer ──────────────────────────────────────────── */
+.footer {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-2);
+    border-top: 1px solid var(--border);
+}
+.collapsed .footer { flex-direction: column; }
+
+.footerSpacer { flex: 1; }
+.collapsed .footerSpacer { display: none; }
+
+/* ── Shared icon button ──────────────────────────────── */
+.iconBtn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.iconBtn:hover { background: var(--accent-muted); color: var(--text-primary); }
+
+/* Theme toggle — tinted when light mode is active */
+.iconBtn.themeOn {
+    background: var(--accent-muted);
+    color: var(--accent);
 }
 
-.spacer {
-    flex: 1;
+.iconBtn.active {
+    background: var(--accent-muted);
+    color: var(--accent);
 }

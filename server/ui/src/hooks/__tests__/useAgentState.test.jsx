@@ -127,6 +127,34 @@ describe('useAgentState reducer', () => {
             expect(getState().agents['root-2'].generationPreview).toEqual(GENERATION_PREVIEW);
         });
 
+        it('carries context usage from previous root to new root', () => {
+            const { getState, dispatch } = renderWithProvider();
+            const contextUsage = {
+                context_used: 12000, context_limit: 200000,
+                fill_ratio: 0.06, compaction_threshold: 0.75,
+            };
+
+            dispatch(agentStarted('root-1'));
+            dispatch({ type: 'UPDATE_ITERATION', agentId: 'root-1', iteration: 4, maxIterations: 40, contextUsage });
+
+            dispatch(agentStarted('root-2'));
+
+            expect(getState().agents['root-2'].contextUsage).toEqual(contextUsage);
+        });
+
+        it('new context usage replaces carried-over usage in new turn', () => {
+            const { getState, dispatch } = renderWithProvider();
+            const first = { context_used: 12000, context_limit: 200000, fill_ratio: 0.06, compaction_threshold: 0.75 };
+            const second = { context_used: 30000, context_limit: 200000, fill_ratio: 0.15, compaction_threshold: 0.75 };
+
+            dispatch(agentStarted('root-1'));
+            dispatch({ type: 'UPDATE_ITERATION', agentId: 'root-1', iteration: 4, maxIterations: 40, contextUsage: first });
+            dispatch(agentStarted('root-2'));
+            dispatch({ type: 'UPDATE_ITERATION', agentId: 'root-2', iteration: 1, maxIterations: 40, contextUsage: second });
+
+            expect(getState().agents['root-2'].contextUsage).toEqual(second);
+        });
+
         it('new preview data replaces carried-over data in new turn', () => {
             const { getState, dispatch } = renderWithProvider();
 

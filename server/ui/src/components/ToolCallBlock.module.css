@@ -1,19 +1,32 @@
-.toolBlock {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+/* Tool call rendered as a function call — monospace, one line.
+   Single muted colour (matches the prior tool-call styling); structure
+   comes from the syntax and small opacity steps, not extra colours. */
+.toolCall {
+  display: block;
+  font-family: var(--font-code);
+  font-size: 0.82em;
+  color: var(--text-tertiary);
   padding: 3px 0;
   margin: 2px 0;
-  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.toolIcon {
-  flex-shrink: 0;
+/* Leading run marker — quiet, sits just before the tool name. */
+.marker {
+  opacity: 0.5;
+  margin-right: 5px;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.punct {
+  opacity: 0.5;
+}
+
+.key {
   opacity: 0.6;
-}
-
-.toolName {
-  font-size: 0.85em;
-  font-family: var(--font-brand);
-  color: var(--text-tertiary);
 }

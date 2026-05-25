@@ -9,7 +9,12 @@ from rich.text import Text
 
 from agents import AgentProfile, build_agent, get_agent_profile
 from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
-from sdk.events import agent_span
+from sdk.events import (
+    AgentEvent,
+    SpawnRequestedPayload,
+    agent_span,
+    publish_event,
+)
 from sdk.hooks import PersistenceHook, default_hooks
 from sdk.skills import AgentState, get_skill, list_skills
 from sdk.tools._core import get_core_tools
@@ -170,11 +175,22 @@ async def spawn_agent(
     )
     _log_spawn(agent_name, agent_profile, instructions)
 
+    # Mint a fresh correlation id and announce the spawn before the child's
+    # context frame opens — the matching AgentStartedPayload carries the
+    # same id, letting the UI anchor a card to this request and attach the
+    # child to it.
+    correlation_id = _uuid.uuid4().hex
+    publish_event(AgentEvent(payload=SpawnRequestedPayload(
+        type="spawn_requested",
+        correlation_id=correlation_id,
+    )))
+
     async with agent_span(
         agent_name,
         instruction=instructions,
         agent_state=agent_state,
         profile_name=agent_profile.name,
+        correlation_id=correlation_id,
     ):
         conv_id = get_conversation_id() or "default"
         short_id = _uuid.uuid4().hex[:8]
@@ -192,6 +208,7 @@ async def spawn_agent(
             agent_state=agent_state,
             context_limit=agent.context_window,
             agent_name=agent.name,
+            compaction_threshold=agent.compaction_threshold,
             strategies=[
                 LLMCompactionStrategy(threshold=agent.compaction_threshold),
             ],

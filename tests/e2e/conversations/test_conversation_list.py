@@ -1,8 +1,8 @@
-"""E2E tests for the conversations flyout panel.
+"""E2E tests for the inline recent-conversations list in the sidebar.
 
-Verifies creating, listing, switching between, and deleting conversations.
-One test uses a real LLM response; the rest seed conversations directly
-in the container for speed and determinism.
+Verifies listing, recency order, switching between, and deleting
+conversations. One test uses a real LLM response; the rest seed
+conversations directly in the container for speed and determinism.
 """
 
 import json
@@ -11,8 +11,7 @@ import time
 from playwright.sync_api import Page, expect
 
 from tests.e2e._helpers import container_exec
-from tests.e2e.pages import ChatView
-from tests.e2e.pages.conversations_flyout import ConversationsFlyout
+from tests.e2e.pages import ChatView, RecentConversations
 
 LLM_TIMEOUT = 180_000
 CONV_DIR = "/var/lib/computron/conversations"
@@ -48,32 +47,44 @@ def _delete_conversation(conv_id: str) -> None:
     )
 
 
-def test_flyout_opens_and_closes(page: Page):
-    """The flyout can be toggled open and closed."""
+def test_recent_list_is_visible_on_load(page: Page):
+    """The recent-conversations list is present in the expanded sidebar."""
     ChatView(page).goto()
-    flyout = ConversationsFlyout(page)
-
-    flyout.open()
-    flyout_panel = page.locator("[class*='flyout']")
-    expect(flyout_panel.first).to_be_visible(timeout=5000)
-
-    flyout.close()
-    page.wait_for_timeout(500)
-    expect(flyout_panel.first).not_to_be_visible()
+    expect(RecentConversations(page).root).to_be_visible()
 
 
 def test_conversation_appears_after_real_message(page: Page):
-    """A real LLM conversation shows up in the flyout with correct metadata."""
+    """A real LLM conversation shows up in the recent list."""
     chat = ChatView(page).goto().new_conversation()
     chat.send("reply with just the word yes").wait_streaming(timeout=LLM_TIMEOUT)
 
-    flyout = ConversationsFlyout(page).open()
-    expect(flyout.items.first).to_be_visible(timeout=5000)
+    recent = RecentConversations(page)
+    expect(recent.items.first).to_be_visible(timeout=10_000)
 
-    top = flyout.item(0)
-    expect(top.description).to_contain_text("1 turn")
-    expect(top.resume_button).to_be_visible()
-    expect(top.delete_button).to_be_visible()
+
+def test_search_filters_the_recent_list(page: Page):
+    """Typing in the search box narrows the list to matching titles."""
+    nonce = time.time_ns()
+    keep_id = f"e2e_search_keep_{nonce}"
+    other_id = f"e2e_search_other_{nonce}"
+    _seed_conversation(keep_id, [
+        {"role": "user", "content": "x"}, {"role": "assistant", "content": "y"},
+    ], title=f"FindMe {nonce}")
+    _seed_conversation(other_id, [
+        {"role": "user", "content": "x"}, {"role": "assistant", "content": "y"},
+    ], title=f"Unrelated {nonce}")
+
+    try:
+        ChatView(page).goto()
+        recent = RecentConversations(page)
+        expect(recent.items.first).to_be_visible(timeout=5000)
+
+        recent.search.fill(f"FindMe {nonce}")
+        expect(page.get_by_text(f"FindMe {nonce}")).to_be_visible()
+        expect(page.get_by_text(f"Unrelated {nonce}")).not_to_be_visible()
+    finally:
+        _delete_conversation(keep_id)
+        _delete_conversation(other_id)
 
 
 def test_multiple_conversations_listed_in_recency_order(page: Page):
@@ -91,70 +102,22 @@ def test_multiple_conversations_listed_in_recency_order(page: Page):
 
     try:
         ChatView(page).goto()
-        flyout = ConversationsFlyout(page).open()
-        expect(flyout.items.first).to_be_visible(timeout=5000)
+        recent = RecentConversations(page)
+        expect(recent.items.first).to_be_visible(timeout=5000)
+        assert recent.items.count() >= 3
 
-        assert flyout.items.count() >= 3
-
-        # Most recent (last seeded) should be first in the list
-        name_locators = page.locator("[class*='item'] [class*='name']")
-        top_three = [name_locators.nth(i).text_content() for i in range(3)]
-
-        assert titles[2] in top_three[0], (
-            f"Most recent conv should be first, got: {top_three}"
-        )
-        assert titles[1] in top_three[1], (
-            f"Middle conv should be second, got: {top_three}"
-        )
-        assert titles[0] in top_three[2], (
-            f"Oldest conv should be third, got: {top_three}"
-        )
+        # Most recent (last seeded) should be first in the list.
+        top_three = [recent.item(i).title for i in range(3)]
+        assert titles[2] in top_three[0], f"Most recent first, got: {top_three}"
+        assert titles[1] in top_three[1], f"Middle conv second, got: {top_three}"
+        assert titles[0] in top_three[2], f"Oldest conv third, got: {top_three}"
     finally:
         for cid in ids:
             _delete_conversation(cid)
 
 
-def test_conversation_shows_correct_turn_count(page: Page):
-    """Turn count reflects the number of user messages."""
-    nonce = time.time_ns()
-    one_turn_id = f"e2e_1turn_{nonce}"
-    three_turn_id = f"e2e_3turn_{nonce}"
-
-    _seed_conversation(one_turn_id, [
-        {"role": "user", "content": "only question"},
-        {"role": "assistant", "content": "only answer"},
-    ], title=f"OneTurn {nonce}")
-
-    time.sleep(0.2)
-
-    _seed_conversation(three_turn_id, [
-        {"role": "user", "content": "q1"},
-        {"role": "assistant", "content": "a1"},
-        {"role": "user", "content": "q2"},
-        {"role": "assistant", "content": "a2"},
-        {"role": "user", "content": "q3"},
-        {"role": "assistant", "content": "a3"},
-    ], title=f"ThreeTurns {nonce}")
-
-    try:
-        ChatView(page).goto()
-        flyout = ConversationsFlyout(page).open()
-        expect(flyout.items.first).to_be_visible(timeout=5000)
-
-        # 3-turn conv is most recent (seeded last) → item(0)
-        top = flyout.item(0)
-        expect(top.description).to_contain_text("3 turns")
-
-        # 1-turn conv is older → item(1)
-        second = flyout.item(1)
-        expect(second.description).to_contain_text("1 turn")
-    finally:
-        _delete_conversation(one_turn_id)
-        _delete_conversation(three_turn_id)
-
-
 def test_switch_between_conversations(page: Page):
-    """Resuming a conversation loads its messages into the chat view."""
+    """Clicking a row loads that conversation's messages into the chat view."""
     nonce = time.time_ns()
     older_id = f"e2e_switch_old_{nonce}"
     newer_id = f"e2e_switch_new_{nonce}"
@@ -173,26 +136,21 @@ def test_switch_between_conversations(page: Page):
 
     try:
         ChatView(page).goto()
-        flyout = ConversationsFlyout(page).open()
-        expect(flyout.items.first).to_be_visible(timeout=5000)
+        recent = RecentConversations(page)
+        expect(recent.items.first).to_be_visible(timeout=5000)
 
-        # Resume the newer conversation (item 0)
-        flyout.item(0).resume()
-        flyout.close()
+        # Load the newer conversation (item 0).
+        recent.item(0).open()
 
         user_msgs = page.get_by_test_id("message-user")
         expect(user_msgs.first).to_contain_text(
             f"BETA_MARKER_{nonce}", timeout=10_000
         )
-
         assistant_msgs = page.get_by_test_id("message-assistant")
         expect(assistant_msgs.first).to_contain_text("I see beta.")
 
-        # Switch to the older conversation (item 1)
-        flyout.open()
-        flyout.item(1).resume()
-        flyout.close()
-
+        # Switch to the older conversation (item 1).
+        recent.item(1).open()
         expect(user_msgs.first).to_contain_text(
             f"ALPHA_MARKER_{nonce}", timeout=10_000
         )
@@ -224,18 +182,16 @@ def test_delete_conversation(page: Page):
 
     try:
         ChatView(page).goto()
-        flyout = ConversationsFlyout(page).open()
-        expect(flyout.items.first).to_be_visible(timeout=5000)
+        recent = RecentConversations(page)
+        expect(recent.items.first).to_be_visible(timeout=5000)
 
-        # Verify both are visible
         expect(page.get_by_text(delete_title)).to_be_visible()
         expect(page.get_by_text(keep_title)).to_be_visible()
 
-        # Delete the most recent one (item 0 = delete_title)
-        flyout.item(0).delete()
+        # Delete the most recent one (item 0 = delete_title).
+        recent.item(0).delete()
         page.wait_for_timeout(1000)
 
-        # Deleted conversation is gone; kept one remains
         expect(page.get_by_text(delete_title)).not_to_be_visible()
         expect(page.get_by_text(keep_title)).to_be_visible()
     finally:

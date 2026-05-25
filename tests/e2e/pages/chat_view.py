@@ -37,7 +37,7 @@ class ChatView:
         return self
 
     def new_conversation(self) -> "ChatView":
-        self.page.locator("button[title='New conversation']").click()
+        self.page.get_by_test_id("sidebar-new-chat").click()
         self.page.wait_for_timeout(500)
         return self
 

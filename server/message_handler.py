@@ -278,6 +278,7 @@ async def _run_turn(
         agent_state=agent_state,
         context_limit=active_agent.context_window,
         agent_name=active_agent.name,
+        compaction_threshold=active_agent.compaction_threshold,
         strategies=[
             LLMCompactionStrategy(threshold=active_agent.compaction_threshold),
         ],

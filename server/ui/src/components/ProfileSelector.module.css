@@ -19,13 +19,11 @@
 }
 
 .select:hover:not(:disabled) {
-    border-color: var(--text-primary);
+    border-color: var(--border-strong);
 }
 
-.select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
+/* No focus accent of its own — the composer card's focus-within ring is
+   the focus signal; a second accent border here just reads as clutter. */
 
 .select:disabled {
     opacity: 0.5;

@@ -4,9 +4,22 @@ import PaperclipIcon from './icons/PaperclipIcon.jsx';
 import SendIcon from './icons/SendIcon.jsx';
 import StopIcon from './icons/StopIcon.jsx';
 import ProfileSelector from './ProfileSelector.jsx';
+import AttachmentChip from './AttachmentChip.jsx';
+
+/** Approximate decoded byte size of a base64 string. */
+function _base64Bytes(b64) {
+    const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+    return Math.max(0, Math.floor(b64.length * 3 / 4) - padding);
+}
 
 function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftConsumed, selectedProfileId, onProfileChange, profileRefreshSignal }) {
     const [message, setMessage] = useState('');
+    const [selectedProfile, setSelectedProfile] = useState(null);
+
+    const profileName = selectedProfile?.name;
+    const placeholder = isStreaming
+        ? `Send a nudge${profileName ? ` to ${profileName}` : ''}…`
+        : `Message ${profileName || 'Computron'}…`;
 
     useEffect(() => {
         if (draft) {
@@ -98,48 +111,36 @@ function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftCons
     return (
         <div className={styles.inputAreaWrapper}>
             <form className={styles.inputArea} onSubmit={handleSubmit}>
-                <div className={styles.customInputWrapper}>
-                    {hasAttachment && (
-                        <div className={styles.inlinePreview}>
-                            {filePreview ? (
-                                <img src={filePreview} alt="selected" />
-                            ) : (
-                                <div className={styles.fileChip}>
-                                    <span className={styles.fileChipIcon}>📎</span>
-                                    <span className={styles.fileChipName}>{fileName}</span>
-                                </div>
-                            )}
-                            <button
-                                type="button"
-                                className={styles.removeAttachment}
-                                aria-label="Remove attachment"
-                                title="Remove attachment"
-                                onClick={clearAttachment}
-                            >
-                                ×
-                            </button>
-                        </div>
-                    )}
-                    <textarea
-                        className={`${styles.customInput} ${hasAttachment ? styles.withPreview : ''}`}
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSubmit(e);
-                            }
-                        }}
-                        onPaste={handlePaste}
-                        placeholder={isStreaming ? "Send a nudge to the agent..." : "Type your message..."}
-                    />
-                </div>
+                {hasAttachment && (
+                    <div className={styles.tray}>
+                        <AttachmentChip
+                            src={filePreview || undefined}
+                            filename={fileName}
+                            sizeBytes={fileData?.base64 ? _base64Bytes(fileData.base64) : undefined}
+                            onRemove={clearAttachment}
+                        />
+                    </div>
+                )}
+                <textarea
+                    className={styles.customInput}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSubmit(e);
+                        }
+                    }}
+                    onPaste={handlePaste}
+                    placeholder={placeholder}
+                />
                 <div className={styles.inputAreaButtons}>
                     <ProfileSelector
                         selectedId={selectedProfileId}
                         onChange={onProfileChange}
                         disabled={isStreaming}
                         refreshSignal={profileRefreshSignal}
+                        onSelectedProfile={setSelectedProfile}
                     />
                     <div className={styles.actionButtons}>
                     <button
@@ -162,23 +163,25 @@ function ChatInput({ onSend, onStop, isStreaming, attachment, draft, onDraftCons
                         }}
                         onChange={handleFile}
                     />
-                    <button
-                        type="submit"
-                        className={styles.iconButton}
-                        title={isStreaming ? "Send nudge" : "Send message"}
-                        aria-label={isStreaming ? "Send nudge" : "Send message"}
-                    >
-                        <SendIcon />
-                    </button>
-                    {isStreaming && (
+                    {isStreaming ? (
                         <button
                             type="button"
-                            className={`${styles.iconButton} ${styles.stopButton}`}
+                            className={`${styles.sendButton} ${styles.stopButton}`}
                             title="Stop generation"
                             aria-label="Stop generation"
                             onClick={onStop}
                         >
                             <StopIcon />
+                        </button>
+                    ) : (
+                        <button
+                            type="submit"
+                            className={styles.sendButton}
+                            title="Send message"
+                            aria-label="Send message"
+                            disabled={!message.trim() && !fileData}
+                        >
+                            <SendIcon />
                         </button>
                     )}
                     </div>

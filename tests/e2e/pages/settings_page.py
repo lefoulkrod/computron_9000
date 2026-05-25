@@ -232,6 +232,13 @@ class SettingsPage:
         self.page.get_by_test_id("providers-tab").wait_for(state="visible")
         return self
 
+    def goto_memory(self) -> "SettingsPage":
+        """Open Settings and switch to the Memory tab."""
+        self.goto()
+        self.page.get_by_role("button", name="Memory").click()
+        self.page.get_by_test_id("memory-tab").wait_for(state="visible")
+        return self
+
     def close(self) -> "SettingsPage":
         """Toggle the Settings sidebar entry to leave the Settings view."""
         self.page.get_by_role("button", name="Settings", exact=True).click()

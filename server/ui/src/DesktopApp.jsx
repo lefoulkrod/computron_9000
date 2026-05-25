@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
-import Header from './components/Header.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
 import BrowserPreview from './components/BrowserPreview.jsx';
 import DesktopPreview from './components/DesktopPreview.jsx';
-import CustomToolsPanel from './components/CustomToolsPanel.jsx';
-import ConversationsPanel from './components/ConversationsPanel.jsx';
-import MemoryPanel from './components/MemoryPanel.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
 import { useAppData } from './contexts/AppData.jsx';
@@ -15,7 +11,6 @@ import GenerationPreview from './components/GenerationPreview.jsx';
 import AgentNetwork from './components/AgentNetwork.jsx';
 import AgentActivityView from './components/AgentActivityView.jsx';
 import Sidebar from './components/Sidebar.jsx';
-import FlyoutPanel from './components/FlyoutPanel.jsx';
 import GoalsView from './components/goals/GoalsView.jsx';
 import PreviewPanel from './components/PreviewPanel.jsx';
 import SplitHandle from './components/SplitHandle.jsx';
@@ -43,9 +38,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
     // ── UI-only state (not duplicated in the reducer) ───────────────
     const [attachment, setAttachment] = useState(null);
     const [flyoutPanel, setFlyoutPanel] = useState(null);
-    const [toolsPanelKey, setToolsPanelKey] = useState(0);
     const [memoryRefreshSignal, setMemoryRefreshSignal] = useState(0);
     const [toolsRefreshSignal, setToolsRefreshSignal] = useState(0);
+    const [conversationsRefresh, setConversationsRefresh] = useState(0);
     const [pendingAudio, setPendingAudio] = useState(null);
     const [muted, setMuted] = useState(false);
     const [userDesktopOpen, setUserDesktopOpen] = useState(false);
@@ -116,6 +111,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     agentName: event.agent_name,
                     parentAgentId: event.parent_agent_id || null,
                     instruction: event.instruction,
+                    correlationId: event.correlation_id || null,
                     timestamp: Date.now(),
                 });
             } else if (event.type === 'agent_completed') {
@@ -193,9 +189,15 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         await chatNewConversation();
         preview.reset();
         setNetworkViewOpen(false);
-        setToolsPanelKey((k) => k + 1);
         agentDispatch({ type: 'RESET' });
     }, [chatNewConversation, preview.reset, agentDispatch]);
+
+    // Refresh the recent-conversations list when a turn finishes — a new
+    // conversation only lands in the sessions list once its first turn is
+    // saved, and titles are generated shortly after.
+    useEffect(() => {
+        if (!isStreaming) setConversationsRefresh((n) => n + 1);
+    }, [isStreaming]);
 
     // ── Which layout to show ───────────────────────────────────────────
     // Two top-level views:
@@ -243,6 +245,13 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         agentDispatch({ type: 'SELECT_AGENT', agentId: null });
     }, [agentDispatch]);
 
+    // Drill straight into a sub-agent's activity view — e.g. from a
+    // SpawnCard row in the chat.
+    const handleSelectAgent = useCallback((agentId) => {
+        handleOpenNetwork();
+        agentDispatch({ type: 'SELECT_AGENT', agentId });
+    }, [handleOpenNetwork, agentDispatch]);
+
     const hasPreview = preview.tabs.length > 0 && !goalsActive && flyoutPanel !== 'settings' && (!networkViewOpen || !!agentState.selectedAgentId);
 
     // Show setup wizard if setup is not complete
@@ -262,66 +271,41 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     return (
         <div className={styles.appShell}>
-            {/* Slim header */}
-            <Header
-                dark={dark}
-                onToggleTheme={onToggleTheme}
-                onNewConversation={newConversation}
-                audio={pendingAudio}
-                muted={muted}
-                onToggleMute={() => setMuted((m) => !m)}
-                onAudioEnded={() => setPendingAudio(null)}
-                desktopEnabled={features.desktop}
-                onOpenDesktop={openDesktop}
-            />
-
             <div className={styles.bodyRow}>
-                {/* Icon sidebar */}
+                {/* Navigation sidebar */}
                 <Sidebar
-                    hiddenPanels={features.custom_tools ? [] : ['tools']}
-                    activePanel={networkViewOpen ? 'agents' : flyoutPanel}
+                    activePanel={flyoutPanel}
+                    dark={dark}
+                    onToggleTheme={onToggleTheme}
+                    onNewConversation={newConversation}
+                    audio={pendingAudio}
+                    muted={muted}
+                    onToggleMute={() => setMuted((m) => !m)}
+                    onAudioEnded={() => setPendingAudio(null)}
+                    desktopEnabled={features.desktop}
+                    onOpenDesktop={openDesktop}
+                    onLoadConversation={loadConversation}
+                    conversationsRefresh={conversationsRefresh}
                     onPanelToggle={(panel) => {
-                        if (panel === 'agents') {
-                            // Toggle the network view open/closed
-                            if (networkViewOpen) {
-                                handleCloseNetwork();
-                            } else if (agentState.networkActivated) {
-                                handleOpenNetwork();
-                            }
-                            goalsState.setSelectedGoalId(null);
-                        } else {
-                            // Close network view when opening a flyout panel
-                            if (networkViewOpen) handleCloseNetwork();
-                            setFlyoutPanel(panel);
-                        }
+                        // Close network view when opening a flyout panel
+                        if (networkViewOpen) handleCloseNetwork();
+                        setFlyoutPanel(panel);
                     }}
                 />
-
-                {/* Flyout panel (settings, memory, goals, etc.) — not for 'agents' which controls the main view */}
-                {flyoutPanel && flyoutPanel !== 'agents' && flyoutPanel !== 'goals' && flyoutPanel !== 'settings' && (
-                    <FlyoutPanel
-                        title={flyoutPanel === 'memory' ? 'Memory'
-                            : flyoutPanel === 'conversations' ? 'Conversations'
-                            : flyoutPanel === 'tools' ? 'Custom Tools'
-                            : 'Panel'}
-                        onClose={() => setFlyoutPanel(null)}
-                    >
-                        {flyoutPanel === 'memory' && (
-                            <MemoryPanel refreshSignal={memoryRefreshSignal} />
-                        )}
-                        {flyoutPanel === 'conversations' && (
-                            <ConversationsPanel onLoadConversation={loadConversation} />
-                        )}
-                        {flyoutPanel === 'tools' && (
-                            <CustomToolsPanel key={toolsPanelKey} refreshSignal={toolsRefreshSignal} onToolsChanged={() => setToolsPanelKey(k => k + 1)} />
-                        )}
-                        </FlyoutPanel>
-                )}
 
                 {/* Main content area */}
                 <div className={styles.mainContent}>
                     {/* Settings page — full view when settings icon clicked */}
-                    {flyoutPanel === 'settings' && <SettingsPage />}
+                    {flyoutPanel === 'settings' && (
+                        <SettingsPage
+                            memoryRefreshSignal={memoryRefreshSignal}
+                            toolsRefreshSignal={toolsRefreshSignal}
+                        />
+                    )}
+                    {/* memoryRefreshSignal and toolsRefreshSignal are bumped
+                     * by streaming events (remember/forget, tool_created)
+                     * so the corresponding Settings tabs refetch on next
+                     * open. */}
 
                     {/* Goals split-screen view */}
                     {goalsActive && (
@@ -366,6 +350,7 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                             networkAgentCount={networkAgentCount}
                             networkRunningCount={networkRunningCount}
                             onOpenNetwork={handleOpenNetwork}
+                            onSelectAgent={handleSelectAgent}
                             selectedProfileId={selectedProfileId}
                             onProfileChange={handleProfileChange}
                             profileRefreshSignal={profilesHook.revision}

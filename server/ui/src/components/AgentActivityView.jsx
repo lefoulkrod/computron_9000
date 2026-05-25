@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAgentState, useAgentDispatch } from '../hooks/useAgentState.jsx';
 import useAutoScroll from '../hooks/useAutoScroll.js';
 import { formatAgentName } from './AgentCard.jsx';
 import BackButton from './BackButton.jsx';
 import { formatElapsed } from '../utils/agentUtils.js';
-import ContextUsageBadge from './ContextUsageBadge.jsx';
-import AgentOutput from './AgentOutput.jsx';
+import ContextMeter from './ContextMeter.jsx';
+import ActivityRail from './ActivityRail.jsx';
 import MarkdownContent from './MarkdownContent.jsx';
 import StatusDot from './StatusDot.jsx';
 import styles from './AgentActivityView.module.css';
@@ -24,17 +24,18 @@ function _buildBreadcrumb(agents, agentId) {
 }
 
 /**
- * Full-screen view of a single agent's work. Two panes:
- *   Left: activity stream (thinking, text, tool calls) — auto-scrolls
- *   Right: preview panels (browser, terminal, files) scoped to this agent
+ * Full-screen view of a single agent's work. Stacked bars at the top
+ * carry the crumb nav, the agent's name + meta, and the instruction;
+ * below them, the activity stream renders via ActivityRail. Preview
+ * panels (browser, terminal, files) live in the shared panel.
  *
  * The nudge bar at the bottom sends to the currently viewed agent.
- * "← Agents" goes back to the network graph.
  */
 export default function AgentActivityView({ onNudge, onPreview }) {
     const { agents, selectedAgentId } = useAgentState();
     const dispatch = useAgentDispatch();
     const agent = selectedAgentId ? agents[selectedAgentId] : null;
+    const [instructionOpen, setInstructionOpen] = useState(false);
 
     const { ref: scrollRef, onScroll: handleScroll, resetScroll } = useAutoScroll(
         [agent?.activityLog?.length, agent?.status],
@@ -49,24 +50,28 @@ export default function AgentActivityView({ onNudge, onPreview }) {
     if (!agent) return null;
 
     const breadcrumb = _buildBreadcrumb(agents, selectedAgentId);
+    const spawnedAgents = agent.childIds.map((id) => agents[id]).filter(Boolean);
+    const selectAgent = (agentId) => dispatch({ type: 'SELECT_AGENT', agentId });
 
     return (
         <div className={styles.container} data-testid="agent-activity-view">
-            {/* Agent header with back button */}
-            <div className={styles.agentBar}>
-                <div className={styles.backRow}>
-                    <BackButton label="Agents" onClick={() => dispatch({ type: 'SELECT_AGENT', agentId: null })} />
-                    <span className={styles.breadcrumb}>
-                        {breadcrumb.map((a, i) => (
-                            <span key={a.id}>
-                                {i > 0 && ' \u203A '}
-                                <span className={i === breadcrumb.length - 1 ? styles.breadcrumbCurrent : ''}>
-                                    {formatAgentName(a.name)}
-                                </span>
+            {/* Crumb bar — back + breadcrumb, full width */}
+            <div className={styles.crumbBar}>
+                <BackButton label="Agents" onClick={() => dispatch({ type: 'SELECT_AGENT', agentId: null })} />
+                <span className={styles.breadcrumb}>
+                    {breadcrumb.map((a, i) => (
+                        <span key={a.id}>
+                            {i > 0 && ' › '}
+                            <span className={i === breadcrumb.length - 1 ? styles.breadcrumbCurrent : ''}>
+                                {formatAgentName(a.name)}
                             </span>
-                        ))}
-                    </span>
-                </div>
+                        </span>
+                    ))}
+                </span>
+            </div>
+
+            {/* Agent name + meta */}
+            <div className={styles.agentBar}>
                 <div className={styles.titleRow}>
                     <StatusDot status={agent.status} />
                     <span className={styles.title} data-testid="agent-activity-title">{formatAgentName(agent.name)}</span>
@@ -77,7 +82,7 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                                 iter {agent.iteration}{agent.maxIterations ? `/${agent.maxIterations}` : ''}
                             </span>
                         )}
-                        <ContextUsageBadge contextUsage={agent.contextUsage} />
+                        <ContextMeter contextUsage={agent.contextUsage} />
                         {agent.childIds.length > 0 && (
                             <span>{agent.childIds.length} sub-agent{agent.childIds.length !== 1 ? 's' : ''}</span>
                         )}
@@ -85,23 +90,42 @@ export default function AgentActivityView({ onNudge, onPreview }) {
                 </div>
             </div>
 
-            {/* Activity stream — previews are in the shared panel */}
-            <div className={styles.body}>
-                <div className={`${styles.activity} ${styles.activityFull}`} ref={scrollRef} onScroll={handleScroll}>
-                    {agent.instruction && (
-                        <div className={styles.instruction}>
-                            <span className={styles.instructionLabel}>Instruction</span>
+            {/* Instruction bar — collapsed by default so long task descriptions
+              * don't dominate the view. Click to expand. */}
+            {agent.instruction && (
+                <div className={`${styles.instruction}${instructionOpen ? ` ${styles.instructionOpen}` : ''}`}>
+                    <button
+                        type="button"
+                        className={styles.instructionToggle}
+                        onClick={() => setInstructionOpen((v) => !v)}
+                        data-testid="instruction-toggle"
+                        aria-expanded={instructionOpen}
+                    >
+                        <span className={styles.instructionToggleChev} aria-hidden="true">▶</span>
+                        Instruction
+                        {!instructionOpen && (
+                            <span className={styles.instructionPreview}>
+                                {agent.instruction.split('\n')[0]}
+                            </span>
+                        )}
+                    </button>
+                    {instructionOpen && (
+                        <div className={styles.instructionBody} data-testid="instruction-body">
                             <MarkdownContent>{agent.instruction}</MarkdownContent>
                         </div>
                     )}
-                    <AgentOutput
+                </div>
+            )}
+
+            {/* Activity stream — previews live in the shared panel */}
+            <div className={styles.body}>
+                <div className={`${styles.activity} ${styles.activityFull}`} ref={scrollRef} onScroll={handleScroll}>
+                    <ActivityRail
                         entries={agent.activityLog}
-                        showFileOutputs={true}
+                        spawnedAgents={spawnedAgents}
+                        onSelectAgent={selectAgent}
                         onPreview={onPreview}
                     />
-                    {agent.status === 'running' && (
-                        <span className={styles.cursor} />
-                    )}
                 </div>
             </div>
 

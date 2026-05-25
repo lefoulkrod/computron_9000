@@ -65,43 +65,13 @@
   100% { opacity: 0; }
 }
 
-/* ── User message images ── */
-
-.messageImages {
-  margin-top: var(--sp-2);
+/* ── User message attachments ── */
+/* A row of shared AttachmentChip items, above the message text. */
+.attachments {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-
-.messageImages img {
-  max-width: 300px;
-  max-height: 220px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-}
-
-/* ── User file attachment chips ── */
-
-.userFiles {
-  margin-top: var(--sp-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-}
-
-.userFileChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--accent-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  padding: 2px 8px;
-  font-size: 11px;
-  font-family: var(--font-code);
-  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
 }
 
 /* ── Inline markdown images ── */
@@ -113,3 +83,129 @@
   margin: 0.5em 0;
   object-fit: contain;
 }
+
+/* Breathing room between consecutive narration paragraphs inside an
+ * assistant turn — each agent content entry is its own div, so without
+ * this they would butt up against each other when the agent emits
+ * multiple paragraphs across thinking + tool steps. */
+.assistant .bubble [data-testid="entry-content"] + [data-testid="entry-content"] {
+  margin-top: 0.65em;
+}
+
+/* ── Ephemeral status (shown only while the agent is working) ── */
+
+.ephemeral {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+.pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  animation: ephemeralPulse 1.2s infinite;
+  flex-shrink: 0;
+}
+
+.ephemeralText {
+  display: inline-block;
+}
+
+@keyframes ephemeralPulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+/* ── Activity footer + panel (revealed after the turn settles) ── */
+
+.activityFooter {
+  padding: 2px var(--sp-3) var(--sp-2);
+  opacity: 0.5;
+  transition: opacity 0.15s var(--ease);
+}
+
+.assistant:hover .activityFooter,
+.activityFooterOpen { opacity: 1; }
+
+.activityFooter button {
+  background: transparent;
+  border: none;
+  padding: 2px 6px;
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.activityFooter button:hover {
+  color: var(--text-secondary);
+  background: var(--surface);
+}
+
+.activityChev {
+  font-size: 8px;
+  opacity: 0.7;
+  transition: transform 0.15s var(--ease);
+}
+
+.activityFooterOpen .activityChev { transform: rotate(90deg); }
+
+.activityPanel {
+  margin: 0 var(--sp-3) var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.entry {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 2px 0;
+}
+
+.marker {
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.entryBody {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.entry_thinking .entryBody {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.entry_tool_call .entryBody {
+  font-family: var(--font-code);
+  font-size: 11.5px;
+}
+
+.toolName { color: var(--text-primary); font-weight: 500; }
+.toolArgs { color: var(--text-tertiary); }

@@ -1,9 +1,9 @@
 import React from 'react';
-import styles from './Header.module.css';
-import ThemeIcon from './icons/ThemeIcon.jsx';
+import styles from './MobileHeader.module.css';
 import AudioIndicator from './AudioIndicator.jsx';
 
-export default function Header({ dark, onToggleTheme, onNewConversation, audio, muted, onToggleMute, onAudioEnded, desktopEnabled, onOpenDesktop }) {
+/** Top bar for the mobile layout. The desktop shell has no header. */
+export default function MobileHeader({ dark, onToggleTheme, onNewConversation, audio, muted, onToggleMute, onAudioEnded, desktopEnabled, onOpenDesktop }) {
   return (
     <div className={styles.header}>
       <div className={styles.headerInner}>
@@ -31,7 +31,7 @@ export default function Header({ dark, onToggleTheme, onNewConversation, audio, 
             aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
             title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            <ThemeIcon dark={dark} />
+            <i className={`bi ${dark ? 'bi-sun' : 'bi-moon'}`} />
           </button>
           <button
             onClick={onNewConversation}

@@ -86,6 +86,7 @@ async def agent_span(
     instruction: str | None = None,
     agent_state: AgentState | None = None,
     profile_name: str | None = None,
+    correlation_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Push an attribution frame for the duration of the block.
 
@@ -105,6 +106,9 @@ async def agent_span(
         agent_state: AgentState to use for this span. A fresh empty one is
             created when None.
         profile_name: Name of the agent profile, shown in the UI.
+        correlation_id: Id shared with a preceding SpawnRequestedPayload
+            so the UI can attach this agent to the spawn that produced it.
+            None for root agents.
 
     Yields:
         str: The context id pushed onto the stack.
@@ -142,6 +146,7 @@ async def agent_span(
         parent_agent_id=parent_id,
         instruction=instruction,
         profile_name=profile_name,
+        correlation_id=correlation_id,
     )))
 
     status = "success"

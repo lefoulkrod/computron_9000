@@ -53,10 +53,31 @@ class ToolCallPayload(BaseModel):
     Attributes:
         type: Discriminator; always "tool_call".
         name: The name of the tool being invoked.
+        arguments: Tool arguments, stringified and length-capped for
+            display. None when the call carried no arguments.
     """
 
     type: Literal["tool_call"]
     name: str
+    arguments: dict[str, str] | None = None
+
+
+class SpawnRequestedPayload(BaseModel):
+    """Emitted by the spawn_agent tool when it begins spawning a sub-agent.
+
+    Carries a correlation id that the matching AgentStartedPayload also
+    carries, letting the UI anchor a card to this request and attach the
+    child agent to it. Always emitted from the parent agent's context,
+    so the publish layer fills in the parent agent_id.
+
+    Attributes:
+        type: Discriminator; always "spawn_requested".
+        correlation_id: Id shared with the AgentStartedPayload of the
+            sub-agent this request will spawn.
+    """
+
+    type: Literal["spawn_requested"]
+    correlation_id: str
 
 
 class BrowserScreenshotPayload(BaseModel):
@@ -166,12 +187,16 @@ class ContextUsagePayload(BaseModel):
         context_used: Prompt + completion tokens consumed on the last call.
         context_limit: The model's context window size.
         fill_ratio: Fraction of the context window consumed (0.0-1.0+).
+        compaction_threshold: Fill ratio at which compaction fires for the
+            agent active on this call. Per-profile and configurable, so it
+            is emitted with every event rather than assumed constant.
     """
 
     type: Literal["context_usage"]
     context_used: int
     context_limit: int
     fill_ratio: float
+    compaction_threshold: float = 0.75
     iteration: int | None = None
     max_iterations: int | None = None
 
@@ -220,6 +245,9 @@ class AgentStartedPayload(BaseModel):
         parent_agent_id: Context id of the parent agent, or None for root.
         instruction: The instruction or user message this agent was given.
         profile_name: Name of the agent profile used, if any.
+        correlation_id: For sub-agents spawned via spawn_agent, the id
+            shared with the originating SpawnRequestedPayload. None for
+            root agents.
     """
 
     type: Literal["agent_started"]
@@ -228,6 +256,7 @@ class AgentStartedPayload(BaseModel):
     parent_agent_id: str | None = None
     instruction: str | None = None
     profile_name: str | None = None
+    correlation_id: str | None = None
 
 
 class AgentCompletedPayload(BaseModel):
@@ -259,7 +288,8 @@ AgentEventPayload = Annotated[
     | ContextUsagePayload
     | DesktopActivePayload
     | AgentStartedPayload
-    | AgentCompletedPayload,
+    | AgentCompletedPayload
+    | SpawnRequestedPayload,
     Field(discriminator="type"),
 ]
 
@@ -297,6 +327,7 @@ __all__ = [
     "DesktopActivePayload",
     "FileOutputPayload",
     "GenerationPreviewPayload",
+    "SpawnRequestedPayload",
     "TerminalOutputPayload",
     "ToolCallPayload",
     "ToolCreatedPayload",
