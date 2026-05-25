@@ -205,9 +205,8 @@ async def spawn_agent(
             sub_agent_id=short_id,
             correlation_id=correlation_id,
         ):
-            if event.type == "content" and isinstance(event.payload, ContentPayload):
-                if event.payload.content:
-                    accumulated.append(event.payload.content)
+            if isinstance(event.payload, ContentPayload) and event.payload.content:
+                accumulated.append(event.payload.content)
     except StopRequestedError:
         logger.info("Spawned agent '%s' stopped by user request", agent_name)
         raise

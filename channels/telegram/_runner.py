@@ -437,19 +437,20 @@ class TelegramChannel:
                 profile_name=profile.name,
             ):
                 payload = event.payload
-                if event.type == "tool_call" and hasattr(payload, "name"):
+                ptype = payload.type
+                if ptype == "tool_call" and hasattr(payload, "name"):
                     await status.set(f"🔧 Calling {payload.name}...")
-                elif event.type == "agent_started" and hasattr(payload, "agent_name"):
+                elif ptype == "agent_started" and hasattr(payload, "agent_name"):
                     await status.set(f"🚀 Spawning {payload.agent_name}...")
-                elif event.type == "agent_completed":
+                elif ptype == "agent_completed":
                     await status.set(_STATUS_THINKING)
-                elif event.type == "content" and hasattr(payload, "content"):
+                elif ptype == "content" and hasattr(payload, "content"):
                     if payload.content:
                         collected_text += payload.content
                         if not wrote_started:
                             wrote_started = True
                             await status.set(_STATUS_WRITING)
-                elif event.type == "file_output" and hasattr(payload, "path"):
+                elif ptype == "file_output" and hasattr(payload, "path"):
                     if payload.path:
                         file_paths.append(payload.path)
         except Exception:
