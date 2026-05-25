@@ -6,13 +6,18 @@ an internal queue. Verb handlers drain the queue via ``next_updates``.
 Drops from non-allowlisted senders are silent — replying would confirm the
 bot is live and waste outbound rate limits. Drop counts are logged
 periodically rather than per-message so a spam burst doesn't spam the log.
+
+Photo and document attachments are downloaded eagerly before the update is
+enqueued — the wire shape carries a local path the channel can read.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
+from pathlib import Path
 from typing import Any
 
 from aiogram import Bot
@@ -36,12 +41,23 @@ _LONG_POLL_TIMEOUT_SECONDS = 25
 _BACKOFF_INITIAL_SECONDS = 1.0
 _BACKOFF_CAP_SECONDS = 30.0
 
+# Sanitize document filenames before writing — strip path separators and any
+# character that isn't safe in a filename. Length-cap so a hostile sender
+# can't blow out the directory listing.
+_FILENAME_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+_FILENAME_MAX_LEN = 120
+
 
 def update_to_dict(update: Any) -> dict[str, Any] | None:
     """Flatten an aiogram ``Update`` to the wire shape, or ``None`` to skip.
 
-    Forwards text ``message`` updates and ``callback_query`` updates
-    (inline-keyboard button taps). Other update kinds are dropped.
+    Forwards text/caption ``message`` updates (including photo/document
+    attachments) and ``callback_query`` updates. Other update kinds are
+    dropped.
+
+    Attachments are returned with metadata + a ``file_id`` placeholder;
+    ``UpdatePump`` downloads the bytes asynchronously before the update is
+    queued and populates ``path`` on each attachment.
     """
     message = getattr(update, "message", None)
     if message is not None:
@@ -53,22 +69,86 @@ def update_to_dict(update: Any) -> dict[str, Any] | None:
 
 
 def _message_to_dict(message: Any) -> dict[str, Any] | None:
-    text = getattr(message, "text", None)
-    if not text:
-        return None
+    """Map a ``message`` update to the wire shape.
+
+    A message qualifies for forwarding if it has text, a caption, or at
+    least one supported attachment. ``text`` is the user-typed content
+    (either ``message.text`` for plain messages or ``message.caption`` when
+    a photo/document was sent with explanatory text).
+    """
     user = message.from_user
     if user is None:
         return None
-    return {
+    text = getattr(message, "text", None) or getattr(message, "caption", None)
+    attachments = _extract_attachment_meta(message)
+    if not text and not attachments:
+        return None
+    payload: dict[str, Any] = {
         "type": "message",
         "message_id": message.message_id,
         "chat_id": message.chat.id,
         "from_user_id": user.id,
         "from_username": getattr(user, "username", None),
         "text": text,
-        "is_command": text.startswith("/"),
+        "is_command": bool(text and text.startswith("/")),
         "timestamp": int(message.date.timestamp()) if message.date else int(time.time()),
     }
+    if attachments:
+        payload["attachments"] = attachments
+    return payload
+
+
+def _extract_attachment_meta(message: Any) -> list[dict[str, Any]]:
+    """Return a list of attachment-metadata dicts for this message.
+
+    Photos arrive as multiple sizes; we keep the largest. Documents arrive
+    as a single object with its own filename and mime type. Other kinds
+    (voice, video, sticker, animation) are intentionally dropped today.
+    """
+    out: list[dict[str, Any]] = []
+
+    photos = getattr(message, "photo", None) or []
+    if photos:
+        # Photo sizes are returned smallest-to-largest; pick the last.
+        biggest = photos[-1]
+        out.append({
+            "kind": "photo",
+            "file_id": biggest.file_id,
+            "file_unique_id": getattr(biggest, "file_unique_id", ""),
+            "file_size": getattr(biggest, "file_size", None),
+            "file_name": _photo_filename(biggest),
+            "mime_type": "image/jpeg",
+            "width": getattr(biggest, "width", None),
+            "height": getattr(biggest, "height", None),
+        })
+
+    document = getattr(message, "document", None)
+    if document is not None:
+        out.append({
+            "kind": "document",
+            "file_id": document.file_id,
+            "file_unique_id": getattr(document, "file_unique_id", ""),
+            "file_size": getattr(document, "file_size", None),
+            "file_name": _safe_filename(
+                getattr(document, "file_name", None) or f"document_{document.file_id}",
+            ),
+            "mime_type": getattr(document, "mime_type", None) or "application/octet-stream",
+        })
+
+    return out
+
+
+def _photo_filename(photo: Any) -> str:
+    """Telegram photos have no user-supplied name; derive a stable one."""
+    unique = getattr(photo, "file_unique_id", None) or getattr(photo, "file_id", "photo")
+    return _safe_filename(f"photo_{unique}.jpg")
+
+
+def _safe_filename(name: str) -> str:
+    """Strip path separators and unsafe characters; cap length."""
+    base = Path(name).name  # drop any leading path
+    cleaned = _FILENAME_UNSAFE.sub("_", base).strip("._") or "file"
+    return cleaned[:_FILENAME_MAX_LEN]
 
 
 def _callback_to_dict(callback: Any) -> dict[str, Any] | None:
@@ -105,10 +185,12 @@ class UpdatePump:
         allowed_user_ids: frozenset[int],
         *,
         integration_id: str,
+        downloads_dir: Path,
     ) -> None:
         self._bot = bot
         self._allowed = allowed_user_ids
         self._integration_id = integration_id
+        self._downloads_dir = downloads_dir
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
         # Aggregate drop tracking — keyed by sender so a single bad actor
@@ -156,12 +238,12 @@ class UpdatePump:
 
             for update in updates:
                 offset = update.update_id + 1
-                self._handle_update(update)
+                await self._handle_update(update)
 
             self._maybe_flush_drop_log()
 
-    def _handle_update(self, update: Any) -> None:
-        """Filter and enqueue a single update."""
+    async def _handle_update(self, update: Any) -> None:
+        """Filter, download any attachments, and enqueue a single update."""
         payload = update_to_dict(update)
         if payload is None:
             return
@@ -170,7 +252,43 @@ class UpdatePump:
                 self._drop_counts.get(payload["from_user_id"], 0) + 1
             )
             return
+        if payload.get("attachments"):
+            await self._download_attachments(payload)
         self.queue.put_nowait(payload)
+
+    async def _download_attachments(self, payload: dict[str, Any]) -> None:
+        """Download each attachment's bytes; populate ``path`` on each.
+
+        Failures drop the attachment from the wire shape rather than the
+        whole message — the agent still gets the text/caption and any
+        successful peers.
+        """
+        kept: list[dict[str, Any]] = []
+        for att in payload["attachments"]:
+            try:
+                local_path = await self._download_one(att)
+            except Exception:
+                logger.exception(
+                    "telegram attachment download failed  file_id=%s  kind=%s",
+                    att.get("file_id"), att.get("kind"),
+                )
+                continue
+            att["path"] = str(local_path)
+            att.pop("file_id", None)  # drop the internal handle from the wire shape
+            kept.append(att)
+        payload["attachments"] = kept
+
+    async def _download_one(self, att: dict[str, Any]) -> Path:
+        """Pull the file's bytes from Telegram into the downloads dir."""
+        file_id = att["file_id"]
+        file_name = att["file_name"]
+        tg_file = await self._bot.get_file(file_id)
+        dest = self._downloads_dir / file_name
+        # If the dir doesn't exist yet, create it — the supervisor's
+        # entrypoint normally sets perms but be defensive.
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        await self._bot.download(tg_file, destination=dest)
+        return dest
 
     def _maybe_flush_drop_log(self) -> None:
         """Emit aggregate drop counts once per window."""

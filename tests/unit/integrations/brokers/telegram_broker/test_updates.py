@@ -175,12 +175,13 @@ class TestUpdateToDict:
 # ---------------------------------------------------------------------------
 
 
-def _make_pump(allowed_ids: frozenset[int]) -> UpdatePump:
+def _make_pump(allowed_ids: frozenset[int], *, downloads_dir=None) -> UpdatePump:
     """UpdatePump with a stubbed Bot — _handle_update doesn't use the bot."""
     return UpdatePump(
         bot=MagicMock(),
         allowed_user_ids=allowed_ids,
         integration_id="telegram_test",
+        downloads_dir=downloads_dir or __import__("pathlib").Path("/tmp"),
     )
 
 
@@ -199,42 +200,46 @@ def _msg_update(*, user_id: int, text: str = "hi", update_id: int = 1) -> _FakeU
 @pytest.mark.unit
 class TestUpdatePumpFilter:
 
-    def test_allowed_user_is_enqueued(self):
+    async def test_allowed_user_is_enqueued(self):
         pump = _make_pump(frozenset({100}))
-        pump._handle_update(_msg_update(user_id=100, text="hello"))
+        await pump._handle_update(_msg_update(user_id=100, text="hello"))
         assert pump.queue.qsize() == 1
         out = pump.queue.get_nowait()
         assert out["from_user_id"] == 100
         assert out["text"] == "hello"
 
-    def test_disallowed_user_is_dropped(self):
+    async def test_disallowed_user_is_dropped(self):
         pump = _make_pump(frozenset({100}))
-        pump._handle_update(_msg_update(user_id=999, text="spam"))
+        await pump._handle_update(_msg_update(user_id=999, text="spam"))
         assert pump.queue.qsize() == 0
         # Drop accounted for.
         assert pump._drop_counts == {999: 1}
 
-    def test_disallowed_drops_accumulate_per_user(self):
+    async def test_disallowed_drops_accumulate_per_user(self):
         pump = _make_pump(frozenset({100}))
         for i in range(3):
-            pump._handle_update(_msg_update(user_id=999, text=f"spam{i}", update_id=i))
+            await pump._handle_update(
+                _msg_update(user_id=999, text=f"spam{i}", update_id=i),
+            )
         for i in range(2):
-            pump._handle_update(_msg_update(user_id=888, text=f"x{i}", update_id=100 + i))
+            await pump._handle_update(
+                _msg_update(user_id=888, text=f"x{i}", update_id=100 + i),
+            )
         assert pump.queue.qsize() == 0
         assert pump._drop_counts == {999: 3, 888: 2}
 
-    def test_skippable_update_is_neither_queued_nor_counted(self):
+    async def test_skippable_update_is_neither_queued_nor_counted(self):
         # No-message update — update_to_dict returns None and the filter
         # path is bypassed entirely. Drops counter must not bump.
         pump = _make_pump(frozenset({100}))
-        pump._handle_update(_FakeUpdate(update_id=1, message=None))
+        await pump._handle_update(_FakeUpdate(update_id=1, message=None))
         assert pump.queue.qsize() == 0
         assert pump._drop_counts == {}
 
-    def test_empty_allowlist_drops_everyone(self):
+    async def test_empty_allowlist_drops_everyone(self):
         pump = _make_pump(frozenset())
-        pump._handle_update(_msg_update(user_id=1))
-        pump._handle_update(_msg_update(user_id=2))
+        await pump._handle_update(_msg_update(user_id=1))
+        await pump._handle_update(_msg_update(user_id=2))
         assert pump.queue.qsize() == 0
         assert sum(pump._drop_counts.values()) == 2
 
@@ -242,18 +247,18 @@ class TestUpdatePumpFilter:
 @pytest.mark.unit
 class TestUpdatePumpDropLog:
 
-    def test_drop_log_does_not_flush_within_window(self, caplog):
+    async def test_drop_log_does_not_flush_within_window(self, caplog):
         pump = _make_pump(frozenset({100}))
-        pump._handle_update(_msg_update(user_id=999))
+        await pump._handle_update(_msg_update(user_id=999))
         # Calling flush immediately (window not elapsed) should not log
         # and should leave the counter intact.
         pump._maybe_flush_drop_log()
         assert pump._drop_counts == {999: 1}
 
-    def test_drop_log_flushes_and_resets_after_window(self, caplog, monkeypatch):
+    async def test_drop_log_flushes_and_resets_after_window(self, caplog, monkeypatch):
         pump = _make_pump(frozenset({100}))
-        pump._handle_update(_msg_update(user_id=999))
-        pump._handle_update(_msg_update(user_id=888))
+        await pump._handle_update(_msg_update(user_id=999))
+        await pump._handle_update(_msg_update(user_id=888))
 
         # Pretend the window started 9999 seconds ago so the flush fires.
         pump._drop_window_started_at = time.monotonic() - 9999.0

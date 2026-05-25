@@ -208,6 +208,13 @@ _TELEGRAM = CatalogEntry(
         "token": "TELEGRAM_BOT_TOKEN",
         "allowed_user_ids": "TELEGRAM_ALLOWED_USER_IDS",
     },
+    host_paths=(
+        # Inbound photos/documents land in the shared "downloads" role —
+        # same place email attachments and browser saves are written. The
+        # broker writes; the main app process (and the agent's virtual
+        # computer view) reads from the same path.
+        HostPathBinding(role="downloads", env_var="DOWNLOADS_DIR", mode="write"),
+    ),
 )
 
 

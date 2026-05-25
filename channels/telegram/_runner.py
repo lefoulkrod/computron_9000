@@ -279,7 +279,8 @@ class TelegramChannel:
 
     async def _dispatch_message(self, update: dict[str, Any]) -> None:
         chat_id = update["chat_id"]
-        text = update["text"]
+        text = update.get("text")
+        attachments = update.get("attachments") or []
 
         if update.get("is_command"):
             cmd = text.split(maxsplit=1)[0][1:]  # strip leading "/"
@@ -295,14 +296,22 @@ class TelegramChannel:
                 await self._send_text(chat_id, f"Unknown command: /{cmd}")
             return
 
-        # Regular text — spawn a turn task if one isn't already running.
+        # Text only, attachments only, or both — all flow through one turn.
+        # Build the augmented user_content here so the agent sees a single
+        # human-readable description rather than a flag dict.
+        user_content = _build_user_content(text, attachments)
+        if not user_content:
+            # Nothing actionable (would be unusual — broker already filters
+            # bare messages with neither text nor attachments).
+            return
+
         conv_id = self._state.get(chat_id)
         if is_turn_active(conv_id):
             await self._send_text(
                 chat_id, "⏳ A turn is already running. Use /stop to cancel it.",
             )
             return
-        task = asyncio.create_task(self._run_turn(chat_id, text))
+        task = asyncio.create_task(self._run_turn(chat_id, user_content))
         self._turn_tasks.add(task)
         task.add_done_callback(self._turn_tasks.discard)
 
@@ -610,6 +619,34 @@ class TelegramChannel:
             )
         except IntegrationError as exc:
             logger.debug("telegram answer_callback_query failed: %s", exc)
+
+
+def _build_user_content(
+    text: str | None, attachments: list[dict[str, Any]],
+) -> str:
+    """Compose the agent-facing user message from text + attachment paths.
+
+    Mirrors the SSE channel's ``_augment_message_with_attachments`` shape so
+    the agent sees consistent file references regardless of how the message
+    arrived (web upload vs. Telegram document).
+    """
+    body = (text or "").strip()
+    if not attachments:
+        return body
+    lines: list[str] = []
+    for att in attachments:
+        path = att.get("path")
+        if not path:
+            continue
+        name = att.get("file_name") or path.rsplit("/", 1)[-1]
+        mime = att.get("mime_type") or "application/octet-stream"
+        lines.append(f"  - {name} ({mime}) -> {path}")
+    if not lines:
+        return body
+    files_block = "\n".join(lines)
+    if body:
+        return f"{body}\n\n[Attached files written to virtual computer]\n{files_block}"
+    return f"[Attached files written to virtual computer]\n{files_block}"
 
 
 class _StatusMessage:

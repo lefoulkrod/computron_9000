@@ -20,10 +20,12 @@ _NONE = {Capability.TELEGRAM: Access.OFF}
 
 
 def _make_pump() -> UpdatePump:
+    import pathlib
     return UpdatePump(
         bot=MagicMock(),
         allowed_user_ids=frozenset({1}),
         integration_id="telegram_test",
+        downloads_dir=pathlib.Path("/tmp"),
     )
 
 

@@ -66,6 +66,7 @@ async def _run() -> int:
     token = env_required("TELEGRAM_BOT_TOKEN")
     permissions = permissions_from_env(env_required("PERMISSIONS"))
     allowed = _parse_allowed_user_ids(env_required("TELEGRAM_ALLOWED_USER_IDS"))
+    downloads_dir = Path(env_required("DOWNLOADS_DIR"))
 
     # Wipe the token from the process environ once captured. Best-effort
     # hygiene: narrows in-process exposure (debuggers, traceback locals,
@@ -104,7 +105,11 @@ async def _run() -> int:
         me.username, me.id, sorted(allowed),
     )
 
-    pump = UpdatePump(bot, allowed, integration_id=integration_id)
+    pump = UpdatePump(
+        bot, allowed,
+        integration_id=integration_id,
+        downloads_dir=downloads_dir,
+    )
     pump_task = asyncio.create_task(pump.run(), name="telegram-update-pump")
 
     dispatcher = VerbDispatcher(bot, pump, permissions=permissions)
