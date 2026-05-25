@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from channels.telegram._runner import _belongs_to_chat, _matches_query, _row_label
+from channels.telegram._runner import _matches_query, _row_label
 from conversations._models import ConversationSummary
 
 
@@ -21,33 +21,6 @@ def _summary(
         started_at="2026-05-25T00:00:00+00:00",
         turn_count=1,
     )
-
-
-@pytest.mark.unit
-class TestBelongsToChat:
-
-    def test_default_id_matches(self):
-        assert _belongs_to_chat("telegram_42", 42) is True
-
-    def test_uuid_suffix_matches(self):
-        assert _belongs_to_chat("telegram_42_a1b2c3d4", 42) is True
-
-    def test_partial_chat_id_does_not_match(self):
-        # ``telegram_8617`` must NOT match chat_id 8617268723 — naive
-        # startswith would.
-        assert _belongs_to_chat("telegram_8617", 8617268723) is False
-
-    def test_longer_chat_id_does_not_match(self):
-        # The other direction: ``telegram_86172687230`` (extra digit)
-        # must not match chat_id 8617268723.
-        assert _belongs_to_chat("telegram_86172687230", 8617268723) is False
-
-    def test_unrelated_id_does_not_match(self):
-        assert _belongs_to_chat("chat_abc", 42) is False
-        assert _belongs_to_chat("telegram_99", 42) is False
-
-    def test_empty_string_does_not_match(self):
-        assert _belongs_to_chat("", 42) is False
 
 
 @pytest.mark.unit

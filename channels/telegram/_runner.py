@@ -426,19 +426,18 @@ class TelegramChannel:
         await self._send_text(chat_id, "\n".join(lines))
 
     async def _handle_list(self, chat_id: int, query: str) -> None:
-        """Show past conversations for this chat as an inline keyboard.
+        """Show past conversations as an inline keyboard.
 
-        Filters to conversations belonging to *chat_id* (default id +
-        ``/new``-spawned uuids). Optional ``query`` is a case-insensitive
-        substring match on title and first message — handy for "find that
-        conversation about taxes" without scrolling.
+        Lists every conversation in the store (Telegram, web, anywhere) —
+        the conversation store is the single source of truth and the user
+        shouldn't have to remember where they started. Optional ``query``
+        is a case-insensitive substring match on title and first message.
         """
         query = query.strip()
         summaries = list_conversations()
         matches = [
             s for s in summaries
-            if _belongs_to_chat(s.conversation_id, chat_id)
-            and (not query or _matches_query(s, query))
+            if not query or _matches_query(s, query)
         ][:_LIST_MAX_RESULTS]
 
         if not matches:
@@ -478,17 +477,11 @@ class TelegramChannel:
     ) -> None:
         """Bind this chat to *conv_id* so the next message continues it.
 
-        Validates that the picked conversation actually belongs to this
-        chat — a malicious callback payload can't trick the channel into
-        binding to an unrelated user's conversation.
+        Callback data is whatever the bot put on the button — only valid
+        conversation ids are sent — so no per-chat prefix validation is
+        needed here. The disk check below catches a stale callback whose
+        conversation was deleted between list-and-tap.
         """
-        if not _belongs_to_chat(conv_id, chat_id):
-            logger.warning(
-                "telegram resume rejected — conv_id=%s not for chat_id=%s",
-                conv_id, chat_id,
-            )
-            await self._answer_callback(callback_id, text="Not your conversation")
-            return
         if load_conversation_history(conv_id) is None:
             await self._answer_callback(callback_id, text="Conversation not found")
             return
@@ -736,18 +729,6 @@ class TelegramChannel:
             )
         except IntegrationError as exc:
             logger.debug("telegram answer_callback_query failed: %s", exc)
-
-
-def _belongs_to_chat(conv_id: str, chat_id: int) -> bool:
-    """True iff ``conv_id`` was created by this Telegram chat.
-
-    Default conv id is ``telegram_<chat_id>``; ``/new`` appends an
-    underscore + uuid. Strict prefix match on either form avoids the
-    false-positive a naive startswith would hit when one chat_id is a
-    prefix of another (e.g. ``8617`` vs ``8617268723``).
-    """
-    prefix = f"telegram_{chat_id}"
-    return conv_id == prefix or conv_id.startswith(prefix + "_")
 
 
 def _matches_query(summary: ConversationSummary, query: str) -> bool:
