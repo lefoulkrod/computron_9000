@@ -166,6 +166,19 @@ describe('Message ephemeral status and activity footer', () => {
         expect(screen.getByTestId('ephemeral-status')).toHaveTextContent('Calling run_bash_cmd…');
     });
 
+    it('shows Thinking… ephemeral row when streaming with no entries yet', () => {
+        // Brand-new assistant turn: stream is open but nothing has arrived.
+        // The ephemeral row is the only thing in the bubble.
+        render(<Message role="assistant" entries={[]} streaming />);
+        expect(screen.getByTestId('ephemeral-status')).toHaveTextContent('Thinking…');
+    });
+
+    it('renders nothing when not streaming and there are no entries', () => {
+        render(<Message role="assistant" entries={[]} />);
+        expect(screen.queryByTestId('ephemeral-status')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('activity-toggle')).not.toBeInTheDocument();
+    });
+
     it('hides ephemeral while streaming when last entry is visible content', () => {
         const entries = [
             { type: 'thinking', thinking: '...', timestamp: 1 },
@@ -217,6 +230,40 @@ describe('Message ephemeral status and activity footer', () => {
         const entries = [{ type: 'content', content: 'just text', timestamp: 1 }];
         render(<Message role="assistant" entries={entries} />);
         expect(screen.queryByTestId('activity-toggle')).not.toBeInTheDocument();
+    });
+
+    it('counts spawn_agent tool calls toward the tool tally', () => {
+        // spawn_agent calls are stored in the activityLog as both a
+        // tool_call (for the panel + count) AND a spawn_requested (for
+        // the SpawnCard). The footer count uses tool_call entries.
+        const entries = [
+            { type: 'thinking', thinking: 'planning', timestamp: 1 },
+            { type: 'tool_call', name: 'spawn_agent', arguments: { agent_name: 'A' }, timestamp: 2 },
+            { type: 'spawn_requested', correlationId: 'c-1', timestamp: 3 },
+            { type: 'tool_call', name: 'spawn_agent', arguments: { agent_name: 'B' }, timestamp: 4 },
+            { type: 'spawn_requested', correlationId: 'c-2', timestamp: 5 },
+            { type: 'tool_call', name: 'run_bash_cmd', timestamp: 6 },
+            { type: 'content', content: 'done', timestamp: 7 },
+        ];
+        render(<Message role="assistant" entries={entries} />);
+        const toggle = screen.getByTestId('activity-toggle');
+        // 2 spawn_agent + 1 run_bash_cmd = 3 tools
+        expect(toggle).toHaveTextContent('3 tools');
+        expect(toggle).toHaveTextContent('1 thought');
+    });
+
+    it('surfaces spawn_agent rows in the expanded activity panel', async () => {
+        const user = userEvent.setup();
+        const entries = [
+            { type: 'tool_call', name: 'spawn_agent', arguments: { agent_name: 'WORKER' }, timestamp: 1 },
+            { type: 'spawn_requested', correlationId: 'c-1', timestamp: 2 },
+            { type: 'content', content: 'spawned', timestamp: 3 },
+        ];
+        render(<Message role="assistant" entries={entries} />);
+        await user.click(screen.getByTestId('activity-toggle'));
+        const panel = screen.getByTestId('activity-panel');
+        expect(panel).toHaveTextContent('spawn_agent');
+        expect(panel).toHaveTextContent('agent_name="WORKER"');
     });
 
     it('clicking the footer reveals the activity panel with all hidden entries', async () => {

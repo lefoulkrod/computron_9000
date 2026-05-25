@@ -3,7 +3,6 @@ import styles from './Message.module.css';
 import MarkdownContent from './MarkdownContent.jsx';
 import AgentOutput from './AgentOutput.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
-import ThinkingPlaceholder from './ThinkingPlaceholder.jsx';
 
 // Entry types that remain visible inline in the chat. Thinking and raw
 // tool_call entries are hidden — surfaced via the ephemeral status row
@@ -62,7 +61,6 @@ function AssistantMessage({ entries, onPreview, streaming, spawnedAgents, onSele
     return (
         <div className={`${styles.message} ${styles.assistant}`} data-testid="message-assistant">
             <div className={styles.bubble}>
-                {!hasEntries && <ThinkingPlaceholder />}
                 {hasEntries && visibleEntries.length > 0 && (
                     <AgentOutput
                         entries={visibleEntries}
@@ -78,7 +76,7 @@ function AssistantMessage({ entries, onPreview, streaming, spawnedAgents, onSele
                         <span className={styles.ephemeralText}>{_ephemeralText(lastEntry)}</span>
                     </div>
                 )}
-                {!streaming && hiddenEntries.length > 0 && summary && (
+                {!streaming && summary && (
                     <>
                         <div className={`${styles.activityFooter}${activityOpen ? ` ${styles.activityFooterOpen}` : ''}`}>
                             <button

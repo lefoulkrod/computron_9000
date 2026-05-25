@@ -366,24 +366,22 @@ export default function useStreamingChat(callbacks) {
                         }
 
                         if (payload?.type === 'tool_call' && data.agent_id && callbacks.onActivityEntry) {
-                            // spawn_agent calls aren't shown as raw tool lines on the
-                            // live path — the matching SpawnRequestedPayload appended
-                            // its own entry that renders as the grouped SpawnCard.
-                            if (payload.name !== 'spawn_agent') {
-                                pending.push({
-                                    callback: callbacks.onActivityEntry,
-                                    args: {
-                                        agentId: data.agent_id,
-                                        entry: {
-                                            type: 'tool_call',
-                                            name: payload.name,
-                                            arguments: payload.arguments || null,
-                                            timestamp: Date.now(),
-                                        },
+                            // Every tool call lands in the activityLog regardless
+                            // of name. spawn_agent is double-emitted as a tool_call
+                            // + a spawn_requested so renderers can pick either one.
+                            pending.push({
+                                callback: callbacks.onActivityEntry,
+                                args: {
+                                    agentId: data.agent_id,
+                                    entry: {
+                                        type: 'tool_call',
+                                        name: payload.name,
+                                        arguments: payload.arguments || null,
+                                        timestamp: Date.now(),
                                     },
-                                });
-                                scheduleFlush();
-                            }
+                                },
+                            });
+                            scheduleFlush();
                         }
 
                         if (payload?.type === 'spawn_requested' && data.agent_id && callbacks.onActivityEntry) {

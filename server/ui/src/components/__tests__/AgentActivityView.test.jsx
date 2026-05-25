@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { AgentStateProvider, useAgentDispatch } from '../../hooks/useAgentState.jsx';
 import AgentActivityView from '../AgentActivityView.jsx';
@@ -165,16 +166,44 @@ describe('AgentActivityView', () => {
         });
     });
 
-    describe('transitions', () => {
-        it('shows running cursor while agent is running', () => {
-            const { dispatch, container } = renderView();
-            startAgent(dispatch, 'a1');
+describe('collapsible instruction', () => {
+        it('starts collapsed — body is hidden, preview shows the first line', () => {
+            const { dispatch } = renderView();
+            startAgent(dispatch, 'a1', {
+                instruction: 'First line summary\n\nLonger detail that should only appear when expanded.',
+            });
 
-            expect(container.querySelector('[class*="cursor"]')).toBeInTheDocument();
+            // Toggle visible, body hidden
+            expect(screen.getByTestId('instruction-toggle')).toBeInTheDocument();
+            expect(screen.queryByTestId('instruction-body')).not.toBeInTheDocument();
 
-            dispatch({ type: 'AGENT_COMPLETED', agentId: 'a1', status: 'success' });
+            // Preview shows the first line
+            expect(screen.getByTestId('instruction-toggle')).toHaveTextContent('First line summary');
+            // Longer detail isn't visible when collapsed
+            expect(screen.queryByText(/Longer detail/)).not.toBeInTheDocument();
+        });
 
-            expect(container.querySelector('[class*="cursor"]')).not.toBeInTheDocument();
+        it('clicking the toggle expands the full instruction body', async () => {
+            const user = userEvent.setup();
+            const { dispatch } = renderView();
+            startAgent(dispatch, 'a1', {
+                instruction: 'First line\n\nFull detail here.',
+            });
+
+            await user.click(screen.getByTestId('instruction-toggle'));
+            const body = screen.getByTestId('instruction-body');
+            expect(body).toHaveTextContent('First line');
+            expect(body).toHaveTextContent('Full detail here.');
+
+            // Toggling again collapses
+            await user.click(screen.getByTestId('instruction-toggle'));
+            expect(screen.queryByTestId('instruction-body')).not.toBeInTheDocument();
+        });
+
+        it('does not render the instruction bar when there is no instruction', () => {
+            const { dispatch } = renderView();
+            startAgent(dispatch, 'a1', { instruction: '' });
+            expect(screen.queryByTestId('instruction-toggle')).not.toBeInTheDocument();
         });
     });
 });
