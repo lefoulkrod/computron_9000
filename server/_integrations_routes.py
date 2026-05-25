@@ -166,6 +166,12 @@ async def handle_add_integration(request: web.Request) -> web.Response:
         result.get("state") or "running",
     )
 
+    # Wake channels that were waiting on a relevant integration to appear.
+    # Each channel filters by slug so unrelated adds are no-ops.
+    telegram_runner = request.app.get("telegram_bot_runner")
+    if telegram_runner is not None:
+        telegram_runner.notify_integration_added(slug)
+
     return web.json_response(result, status=201)
 
 

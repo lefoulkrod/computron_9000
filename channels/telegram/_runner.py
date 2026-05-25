@@ -78,24 +78,43 @@ class TelegramChannel:
         self._pull_task: asyncio.Task[None] | None = None
         self._turn_tasks: set[asyncio.Task[None]] = set()
         self._stopping = False
+        # Signalled by ``notify_integration_added`` so the supervise loop
+        # wakes the moment the user finishes the wizard. Default-low; the
+        # supervise loop clears it before each retry.
+        self._integration_added_event = asyncio.Event()
+
+    def notify_integration_added(self, slug: str) -> None:
+        """Wake the supervise loop after a relevant integration is added.
+
+        The integrations HTTP route calls this on every successful add.
+        Filters by slug so adding Gmail or iCloud doesn't trigger any
+        Telegram-side work.
+        """
+        if slug == "telegram":
+            self._integration_added_event.set()
 
     # -- lifecycle ------------------------------------------------------
 
     async def start(self) -> None:
-        """Auto-discover a Telegram integration and start the pull loop.
+        """Launch the supervisor task; discovery happens lazily.
 
-        Queries the supervisor for any integration with slug=telegram. If
-        none is registered, logs and exits — there's nothing to drive. If
-        more than one exists, binds to the first and notes the choice so the
-        behavior is explicit.
+        Channels boot once at app start, but integrations can be added at any
+        time via the wizard. So discovery runs inside a background task that
+        polls until a Telegram integration appears, then transitions into the
+        pull loop. ``start()`` itself returns immediately.
         """
-        integration_id = await self._discover_integration()
+        self._pull_task = asyncio.create_task(
+            self._supervise(), name="telegram-supervise",
+        )
+
+    async def _supervise(self) -> None:
+        """Wait for a Telegram integration to exist, probe it, then pull."""
+        integration_id = await self._wait_for_integration()
         if integration_id is None:
-            logger.info("No Telegram integration registered; channel not starting")
+            # Stopping was requested before discovery succeeded.
             return
         self._integration_id = integration_id
 
-        # Identity probe — confirms the broker is reachable and authenticated.
         try:
             me = await broker_call(
                 integration_id, "get_me", {}, app_sock_path=self._app_sock,
@@ -124,7 +143,27 @@ class TelegramChannel:
             "telegram channel started  integration_id=%s  bot=@%s (id=%d)",
             integration_id, me.get("username"), me.get("id"),
         )
-        self._pull_task = asyncio.create_task(self._pull_loop(), name="telegram-pull")
+        await self._pull_loop()
+
+    async def _wait_for_integration(self) -> str | None:
+        """Discover or wait for a Telegram integration.
+
+        No polling: discovery runs once. If nothing's registered, the
+        supervise task parks on an event that the integrations HTTP route
+        sets when a Telegram integration is added. Returns the integration
+        id, or ``None`` if the channel was stopped while waiting.
+        """
+        while not self._stopping:
+            integration_id = await self._discover_integration()
+            if integration_id is not None:
+                return integration_id
+            logger.info(
+                "No Telegram integration registered; channel waiting for one "
+                "to be added via the wizard",
+            )
+            self._integration_added_event.clear()
+            await self._integration_added_event.wait()
+        return None
 
     async def _discover_integration(self) -> str | None:
         """Pick the telegram integration the channel should bind to.
@@ -161,6 +200,10 @@ class TelegramChannel:
     async def stop(self) -> None:
         """Stop the pull loop and any in-flight turns."""
         self._stopping = True
+        # Wake the supervise loop if it's parked waiting for an integration —
+        # cancel alone is enough, but setting the event keeps the code path
+        # symmetric with the add-side wake.
+        self._integration_added_event.set()
         if self._pull_task is not None:
             self._pull_task.cancel()
             with suppress(asyncio.CancelledError):
