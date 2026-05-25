@@ -77,6 +77,12 @@ class TelegramChannel:
         self._default_profile_id: str = "computron"
         self._pull_task: asyncio.Task[None] | None = None
         self._turn_tasks: set[asyncio.Task[None]] = set()
+        # Per-chat in-flight turn tracker. Owned by the dispatch loop so the
+        # "one turn at a time" check is race-free — ContextVar-based
+        # ``is_turn_active`` doesn't flip True until the task actually runs,
+        # so two messages in the same broker batch would both pass that
+        # check and double-spawn.
+        self._turn_by_chat: dict[int, asyncio.Task[None]] = {}
         self._stopping = False
         # Signalled by ``notify_integration_added`` so the supervise loop
         # wakes the moment the user finishes the wizard. Default-low; the
@@ -305,15 +311,25 @@ class TelegramChannel:
             # bare messages with neither text nor attachments).
             return
 
-        conv_id = self._state.get(chat_id)
-        if is_turn_active(conv_id):
+        existing = self._turn_by_chat.get(chat_id)
+        if existing is not None and not existing.done():
             await self._send_text(
                 chat_id, "⏳ A turn is already running. Use /stop to cancel it.",
             )
             return
+
         task = asyncio.create_task(self._run_turn(chat_id, user_content))
         self._turn_tasks.add(task)
-        task.add_done_callback(self._turn_tasks.discard)
+        self._turn_by_chat[chat_id] = task
+
+        def _on_done(t: asyncio.Task[None]) -> None:
+            self._turn_tasks.discard(t)
+            # Only clear if this is still the current one — a /stop + new
+            # message could have already swapped a fresh task in.
+            if self._turn_by_chat.get(chat_id) is t:
+                self._turn_by_chat.pop(chat_id, None)
+
+        task.add_done_callback(_on_done)
 
     async def _dispatch_callback(self, update: dict[str, Any]) -> None:
         """Handle an inline-keyboard button tap."""
