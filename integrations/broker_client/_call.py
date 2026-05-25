@@ -19,6 +19,7 @@ touching callers.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -106,12 +107,20 @@ async def _rpc_one_shot(
     """Open a UDS, send one frame, read one frame, close.
 
     Wraps the framing helpers in ``integrations._rpc`` so the two hops above
-    aren't repeating the same 8 lines of connection plumbing.
+    aren't repeating the same 8 lines of connection plumbing. Maps every
+    connection/IO failure to ``IntegrationError`` so callers don't have to
+    catch low-level asyncio exceptions to survive a broker dying mid-call
+    or a socket being unlinked between integration remove/re-add cycles.
     """
-    reader, writer = await asyncio.open_unix_connection(str(socket_path))
     try:
-        await write_frame(writer, frame)
+        reader, writer = await asyncio.open_unix_connection(str(socket_path))
+    except (FileNotFoundError, ConnectionRefusedError, OSError) as exc:
+        raise IntegrationError(
+            f"connect to {socket_path} failed: {exc}",
+        ) from exc
+    try:
         try:
+            await write_frame(writer, frame)
             return await read_frame(reader)
         except RpcError as exc:
             # A malformed response from the broker / supervisor is a protocol
@@ -121,6 +130,14 @@ async def _rpc_one_shot(
             raise IntegrationError(
                 f"malformed response from {socket_path}: {exc.code}: {exc.message}",
             ) from exc
+        except (asyncio.IncompleteReadError, ConnectionError, OSError) as exc:
+            # Broker died (or socket was unlinked) after we connected — common
+            # during integration remove/re-add or a broker crash + supervisor
+            # respawn. Let the caller's normal retry-with-backoff path handle it.
+            raise IntegrationError(
+                f"connection to {socket_path} dropped: {exc}",
+            ) from exc
     finally:
         writer.close()
-        await writer.wait_closed()
+        with suppress(Exception):
+            await writer.wait_closed()

@@ -252,6 +252,17 @@ class TelegramChannel:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _BACKOFF_CAP_SECONDS)
                 continue
+            except Exception:
+                # Defensive: anything else is a bug, but a crashed pull task
+                # silently stops the bot until app restart. Log with traceback
+                # and back off rather than die.
+                logger.exception(
+                    "telegram pull loop: unexpected error (retrying in %.1fs)",
+                    backoff,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, _BACKOFF_CAP_SECONDS)
+                continue
 
             for update in result.get("updates", []):
                 await self._dispatch(update)
