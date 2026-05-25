@@ -107,6 +107,9 @@ async def test_tool_loop_emits_model_and_tool_call_events(monkeypatch):
         ev.type == "tool_call" and ev.name == "echo_tool"
         for ev in tool_events
     )
+    # The tool_call event carries the (stringified) arguments.
+    echo_event = next(ev for ev in tool_events if ev.name == "echo_tool")
+    assert echo_event.arguments == {"x": "1"}
     # Ensure order: model event occurs before tool_call for the same cycle
     first_model_idx = next(
         i for i, e in enumerate(captured)

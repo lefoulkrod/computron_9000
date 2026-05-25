@@ -79,6 +79,26 @@ async def test_after_model_publishes_event():
     assert event.payload.context_limit == 128_000
     assert event.payload.iteration == 3
     assert event.payload.max_iterations == 10
+    # Threshold defaults when not supplied to the manager.
+    assert event.payload.compaction_threshold == 0.75
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_after_model_emits_configured_compaction_threshold():
+    history = ConversationHistory([{"role": "user", "content": "x" * 300}])
+    cm = ContextManager(
+        history=history,
+        agent_state=_empty_state(),
+        context_limit=128_000,
+        compaction_threshold=0.6,
+    )
+
+    with patch("sdk.context._manager.publish_event") as mock_pub:
+        await cm.after_model()
+
+    event = mock_pub.call_args[0][0]
+    assert event.payload.compaction_threshold == 0.6
 
 
 @pytest.mark.asyncio

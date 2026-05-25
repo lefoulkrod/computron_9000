@@ -98,3 +98,18 @@ When `ENABLE_DESKTOP=true`, `container/entrypoint.sh` starts `startxfce4`, `x11v
 ## Backoff for app restart loop
 
 `container/entrypoint.sh:96-97` sleeps 2 seconds between app restarts. If `main.py` crashes on import (e.g. bad config, broken migration), the loop respawns it every 2s indefinitely, flooding logs and burning CPU. An exponential backoff capped at ~30s would make crash-loops obvious without the noise — and a max retry count would let the container exit cleanly so an orchestrator could surface the failure.
+
+## Unify the two `entries[]` builders (live reducer vs. resume transform)
+
+The UI represents an assistant turn as an ordered `entries[]` array (thinking / content / tool_call / file_output). It is built two different ways that converge on the same shape:
+
+- **Live** — streaming events flow into the `useAgentState` reducer, which accumulates each agent's `activityLog` and merges consecutive same-type deltas.
+- **Resume** — `_historyToMessages` in `useStreamingChat.js` converts a loaded conversation's raw LLM messages into the same `entries[]`, including merging a turn's tool-call round-trips into one message.
+
+This is a duplicated *contract*, not duplicated code — the two can't share a function because one is an incremental reducer and the other a batch transform. The risk is drift: the entry types, ordering, and merge rule must stay in sync across both.
+
+**Goal:** make the reducer the single `entries[]` builder. On resume, replay the loaded history as synthetic reducer actions (`AGENT_STARTED`, `APPEND_STREAM_CHUNK`, `APPEND_ACTIVITY`) instead of transforming to `entries[]` directly. The resume side then shrinks to a thin "raw message → which actions" mapper.
+
+**Why it's non-trivial:** the reducer was built for the live flow. Bulk-replaying a whole conversation pokes at behavior it doesn't expect — multiple historical root agents (each past turn is its own root), `AGENT_STARTED` side effects (preview carryover, `networkActivated`, `selectedAgentId`), synthetic agent ids/timestamps, and tool-call arg shapes. `setMessages` is still needed for user messages and the assistant stubs that carry `agentId`. It needs its own testing pass — medium effort, real edge-case risk. Own commit/PR, not a fold-in.
+
+Until then `_historyToMessages` stays — small, pure, tested.

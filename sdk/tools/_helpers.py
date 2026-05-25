@@ -148,6 +148,32 @@ def _prepare_tool_arguments(
     return validated
 
 
+# Tool argument values are summarized for UI display: stringified,
+# whitespace-collapsed to one line, and capped to this length. The cap
+# doubles as a payload guard — large args (file content) never ship in
+# full on the event.
+_MAX_ARG_DISPLAY_LEN = 64
+
+
+def _summarize_arguments(arguments: dict[str, Any]) -> dict[str, str]:
+    """Stringify, whitespace-collapse, and length-cap tool arguments for
+    display. Each value becomes a single short string."""
+    summary: dict[str, str] = {}
+    for key, value in arguments.items():
+        if isinstance(value, str):
+            text = value
+        else:
+            try:
+                text = json.dumps(value, default=str)
+            except (TypeError, ValueError):
+                text = str(value)
+        text = " ".join(text.split())
+        if len(text) > _MAX_ARG_DISPLAY_LEN:
+            text = text[: _MAX_ARG_DISPLAY_LEN - 1] + "…"
+        summary[str(key)] = text
+    return summary
+
+
 async def _execute_tool_call(
     tool_name: str,
     arguments: dict[str, Any],
@@ -192,7 +218,11 @@ async def _execute_tool_call(
                         arguments[k.strip()] = v.strip("\"'")
 
     try:
-        publish_event(AgentEvent(payload=ToolCallPayload(type="tool_call", name=str(tool_name))))
+        publish_event(AgentEvent(payload=ToolCallPayload(
+            type="tool_call",
+            name=str(tool_name),
+            arguments=_summarize_arguments(arguments) if arguments else None,
+        )))
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to publish tool_call event for tool '%s'", tool_name)
 

@@ -110,6 +110,7 @@ class TurnExecutor:
         profile_name: str | None = None,
         sub_agent_name: str | None = None,
         sub_agent_id: str | None = None,
+        correlation_id: str | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         """Run a single turn and yield events.
 
@@ -135,6 +136,9 @@ class TurnExecutor:
                 directory instead of overwriting the main history.
             sub_agent_id: When this turn is a sub-agent invocation, a short
                 unique id (UUID hex prefix). Pairs with ``sub_agent_name``.
+            correlation_id: Optional id linking this turn to a prior
+                ``SpawnRequestedPayload`` event so the UI can anchor a card
+                to the request and attach the child agent to it.
 
         Yields:
             AgentEvent: Events emitted by the agent during the turn.
@@ -183,6 +187,7 @@ class TurnExecutor:
             agent_state=agent_state,
             context_limit=agent.context_window,
             agent_name=agent.name,
+            compaction_threshold=agent.compaction_threshold,
             strategies=[
                 LLMCompactionStrategy(threshold=agent.compaction_threshold),
             ],
@@ -214,6 +219,7 @@ class TurnExecutor:
                         instruction=user_content,
                         agent_state=agent_state,
                         profile_name=profile_name,
+                        correlation_id=correlation_id,
                     ):
                         conversation.history.append(
                             {"role": "user", "content": user_content},

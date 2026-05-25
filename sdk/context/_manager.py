@@ -33,6 +33,9 @@ class ContextManager:
         context_limit: Maximum context window size in tokens.
         strategies: Context management strategies to apply.
         agent_name: Optional label used in log output.
+        compaction_threshold: Fill ratio at which compaction fires, surfaced
+            on each context-usage event so the UI can show the real
+            per-profile threshold.
     """
 
     def __init__(
@@ -42,11 +45,13 @@ class ContextManager:
         context_limit: int,
         strategies: list[ContextStrategy] | None = None,
         agent_name: str = "",
+        compaction_threshold: float = 0.75,
     ) -> None:
         self._history = history
         self._agent_state = agent_state
         self._context_limit = context_limit
         self._agent_name = agent_name
+        self._compaction_threshold = compaction_threshold
         self._strategies: list[ContextStrategy] = list(strategies) if strategies else []
 
     @property
@@ -70,6 +75,7 @@ class ContextManager:
                 context_used=stats.context_used,
                 context_limit=stats.context_limit,
                 fill_ratio=stats.fill_ratio,
+                compaction_threshold=self._compaction_threshold,
                 iteration=iteration,
                 max_iterations=max_iterations,
             )))

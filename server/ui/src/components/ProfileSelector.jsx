@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import styles from './ProfileSelector.module.css';
 
-export default function ProfileSelector({ selectedId, onChange, disabled, refreshSignal }) {
+export default function ProfileSelector({ selectedId, onChange, disabled, refreshSignal, onSelectedProfile }) {
     const [profiles, setProfiles] = useState([]);
 
     useEffect(() => {
@@ -21,6 +21,14 @@ export default function ProfileSelector({ selectedId, onChange, disabled, refres
             onChange(profiles[0].id);
         }
     }, [profiles, selectedId, onChange]);
+
+    // Surface the resolved profile so callers can label themselves
+    // (e.g. the composer's "Message {profile}" placeholder).
+    useEffect(() => {
+        if (onSelectedProfile) {
+            onSelectedProfile(profiles.find((p) => p.id === selectedId) || null);
+        }
+    }, [profiles, selectedId, onSelectedProfile]);
 
     if (profiles.length === 0) return null;
 

@@ -2,21 +2,32 @@
   flex: 1;
   overflow-y: auto;
   background: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 8px 10px;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
-
-  /* Provide a stable interior width so assistant responses always render to same max line length */
+  /* Flex column so .inner can grow to fill vertically — the empty
+   * starter state vertically centers within this column. Scrollbar
+   * lives on the panel's right edge; .inner caps content at a readable
+   * max-width and centers horizontally. */
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
 }
 
-/* Inner wrapper to constrain message bubble width consistently regardless of content length */
-.chatMessages>.assistant,
-.chatMessages>.user {
-  /* Allow full width usage of column while keeping a readable max width for content */
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 18px;
+  box-sizing: border-box;
+}
+
+/* When the conversation has no messages yet, the inner wrapper grows
+ * to fill the column and vertically centers the StarterPrompts. */
+.empty {
+  flex: 1;
+  justify-content: center;
 }
 

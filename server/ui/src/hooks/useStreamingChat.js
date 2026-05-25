@@ -106,25 +106,60 @@ function _handleStreamEvent(data, callbacks) {
                     context_used: payload.context_used,
                     context_limit: payload.context_limit,
                     fill_ratio: payload.fill_ratio,
+                    compaction_threshold: payload.compaction_threshold,
                 },
             });
         }
     }
 }
 
+// Resume-path equivalent of the backend's _summarize_arguments cap.
+const _MAX_ARG_LEN = 64;
+
+/**
+ * Normalize a stored tool-call's arguments into a display string map.
+ * History stores them as a JSON string (or object); live events arrive
+ * pre-summarized by the backend, so this only runs on the resume path.
+ * Values are stringified, whitespace-collapsed, and length-capped to
+ * match what the backend emits for live calls.
+ */
+function _summarizeToolArgs(raw) {
+    if (!raw) return null;
+    let obj = raw;
+    if (typeof raw === 'string') {
+        try {
+            obj = JSON.parse(raw);
+        } catch {
+            return null;
+        }
+    }
+    if (!obj || typeof obj !== 'object') return null;
+    const out = {};
+    for (const [key, value] of Object.entries(obj)) {
+        const text = (typeof value === 'string' ? value : JSON.stringify(value))
+            .replace(/\s+/g, ' ').trim();
+        out[key] = text.length > _MAX_ARG_LEN ? `${text.slice(0, _MAX_ARG_LEN - 1)}…` : text;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+}
+
 /**
  * Convert raw LLM messages into UI-friendly message objects for display.
  *
- * Each assistant message becomes an `entries[]` carrying thinking, content,
- * and tool-call markers in chronological order — the same shape AgentOutput
- * renders during live streaming. Tool result messages are skipped: the chat
- * surface intentionally doesn't display them.
+ * A turn spans several assistant messages in history — one per tool-call
+ * round-trip. They are merged into a single assistant message with one
+ * ordered `entries[]` (thinking, content, tool calls), matching how a
+ * live turn renders as one message. A user message closes the run.
+ * Tool result messages are skipped: the chat doesn't display them.
  */
-function _historyToMessages(rawMessages) {
+export function _historyToMessages(rawMessages) {
     const uiMessages = [];
+    let openAssistant = null;
+
     for (const msg of rawMessages) {
         if (msg.role === 'system' || msg.role === 'tool') continue;
         if (msg.role === 'user') {
+            openAssistant = null;
             uiMessages.push({
                 id: `hist_u_${uiMessages.length}`,
                 role: 'user',
@@ -137,15 +172,24 @@ function _historyToMessages(rawMessages) {
             if (msg.thinking) entries.push({ type: 'thinking', thinking: msg.thinking });
             if (msg.content) entries.push({ type: 'content', content: msg.content });
             for (const tc of (msg.tool_calls || [])) {
-                entries.push({ type: 'tool_call', name: tc?.function?.name || '' });
+                entries.push({
+                    type: 'tool_call',
+                    name: tc?.function?.name || '',
+                    arguments: _summarizeToolArgs(tc?.function?.arguments),
+                });
             }
             if (entries.length === 0) continue;
-            uiMessages.push({
-                id: `hist_a_${uiMessages.length}`,
-                role: 'assistant',
-                entries,
-                streaming: false,
-            });
+            if (openAssistant) {
+                openAssistant.entries.push(...entries);
+            } else {
+                openAssistant = {
+                    id: `hist_a_${uiMessages.length}`,
+                    role: 'assistant',
+                    entries,
+                    streaming: false,
+                };
+                uiMessages.push(openAssistant);
+            }
         }
     }
     return uiMessages;
@@ -322,11 +366,34 @@ export default function useStreamingChat(callbacks) {
                         }
 
                         if (payload?.type === 'tool_call' && data.agent_id && callbacks.onActivityEntry) {
+                            // Every tool call lands in the activityLog regardless
+                            // of name. spawn_agent is double-emitted as a tool_call
+                            // + a spawn_requested so renderers can pick either one.
                             pending.push({
                                 callback: callbacks.onActivityEntry,
                                 args: {
                                     agentId: data.agent_id,
-                                    entry: { type: 'tool_call', name: payload.name, timestamp: Date.now() },
+                                    entry: {
+                                        type: 'tool_call',
+                                        name: payload.name,
+                                        arguments: payload.arguments || null,
+                                        timestamp: Date.now(),
+                                    },
+                                },
+                            });
+                            scheduleFlush();
+                        }
+
+                        if (payload?.type === 'spawn_requested' && data.agent_id && callbacks.onActivityEntry) {
+                            pending.push({
+                                callback: callbacks.onActivityEntry,
+                                args: {
+                                    agentId: data.agent_id,
+                                    entry: {
+                                        type: 'spawn_requested',
+                                        correlationId: payload.correlation_id,
+                                        timestamp: Date.now(),
+                                    },
                                 },
                             });
                             scheduleFlush();

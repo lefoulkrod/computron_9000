@@ -1,24 +1,49 @@
 """E2E tests for chat-input file uploads.
 
-Verifies the upload mechanic end-to-end: file selected via the paperclip
-input → posted to the backend → made available to the agent → agent
-responds with content derived from the uploaded data.
+The text-file test still runs end-to-end against the real model — the
+agent's ability to quote back the codeword from a small text file is a
+cheap, reliable signal that the upload pipeline works.
 
-Both a text file and an image are exercised. Image case requires the
-configured vision model to identify a solid red square.
+The image test does NOT depend on a vision model. It mocks the chat
+endpoint so it can verify two deterministic things:
+    1. The outgoing /api/chat request carries the image bytes encoded
+       correctly (base64 + content_type + filename).
+    2. The user bubble renders the uploaded image as a base64 data URL.
 """
 
+import base64
+import json
 from pathlib import Path
 import time
 
-import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page, Route, expect
 
 from tests.e2e.pages import ChatView
 
 LLM_TIMEOUT = 180_000
 
 _FIXTURE_RED_SQUARE = Path(__file__).resolve().parent.parent / "fixtures" / "red_square.png"
+
+
+def _minimal_chat_response() -> str:
+    """JSONL response with just enough to let the UI finish streaming."""
+    events = [
+        {"payload": {"type": "agent_started", "agent_id": "root",
+                     "agent_name": "computron", "parent_agent_id": None},
+         "agent_id": "root", "agent_name": "computron",
+         "timestamp": "2026-05-09T00:00:00", "depth": 0},
+        {"payload": {"type": "content", "content": "ok"},
+         "agent_id": "root", "agent_name": "computron",
+         "timestamp": "2026-05-09T00:00:00", "depth": 0},
+        {"payload": {"type": "agent_completed", "agent_id": "root",
+                     "agent_name": "computron", "status": "success"},
+         "agent_id": "root", "agent_name": "computron",
+         "timestamp": "2026-05-09T00:00:00", "depth": 0},
+        {"payload": {"type": "turn_end"},
+         "agent_id": "root", "agent_name": "computron",
+         "timestamp": "2026-05-09T00:00:00", "depth": 0},
+    ]
+    return "".join(json.dumps(e) + "\n" for e in events)
 
 
 def test_text_file_upload_round_trip(page: Page, tmp_path):
@@ -42,23 +67,46 @@ def test_text_file_upload_round_trip(page: Page, tmp_path):
 
 
 def test_image_upload_round_trip(page: Page):
-    """Uploading a solid-red image lets the vision model identify the color."""
+    """An attached image is base64-encoded into the /api/chat request and
+    rendered in the user bubble as a data URL.
+
+    Does not exercise the vision model — that's a model-quality check,
+    not an upload-pipeline check.
+    """
     assert _FIXTURE_RED_SQUARE.exists(), f"missing fixture {_FIXTURE_RED_SQUARE}"
+    expected_b64 = base64.b64encode(_FIXTURE_RED_SQUARE.read_bytes()).decode()
+
+    captured: dict = {}
+
+    def handler(route: Route) -> None:
+        captured["body"] = route.request.post_data
+        route.fulfill(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=_minimal_chat_response(),
+        )
+
+    page.route("**/api/chat", handler)
 
     chat = ChatView(page).goto().new_conversation()
-    chat.attach_file(str(_FIXTURE_RED_SQUARE)).send(
-        "what is the dominant color of the image i just uploaded? "
-        "answer with just the single color word.",
-    ).wait_streaming(timeout=LLM_TIMEOUT)
+    chat.attach_file(str(_FIXTURE_RED_SQUARE)).send("describe this image")
+    chat.wait_streaming(timeout=10_000)
 
-    # The user bubble should render the uploaded image as a base64 data URL.
+    # 1. Outgoing request carried the image bytes.
+    body = json.loads(captured["body"])
+    assert body.get("data"), f"expected data[] in request body, got: {body!r}"
+    attachment = body["data"][0]
+    assert attachment["content_type"] == "image/png", attachment
+    assert attachment["filename"] == _FIXTURE_RED_SQUARE.name, attachment
+    assert attachment["base64"] == expected_b64, (
+        "uploaded base64 doesn't match the original file bytes"
+    )
+
+    # 2. User bubble renders the image as a base64 data URL.
     user_msg = page.get_by_test_id("message-user").last
-    expect(user_msg.locator("img[src^='data:image/']")).to_be_visible(timeout=5_000)
-
-    # Vision model should identify red. Scope to the latest assistant bubble
-    # so we don't accidentally match stray "red" in headers/tooltips/etc.
-    assistant = page.get_by_test_id("message-assistant").last
-    reply = (assistant.text_content() or "").lower()
-    assert "red" in reply, (
-        f"Expected assistant reply to mention 'red'; got: {reply[:200]!r}"
+    img = user_msg.locator("img[src^='data:image/']")
+    expect(img).to_be_visible(timeout=5_000)
+    src = img.get_attribute("src") or ""
+    assert expected_b64 in src, (
+        "user bubble image src doesn't contain the uploaded image bytes"
     )

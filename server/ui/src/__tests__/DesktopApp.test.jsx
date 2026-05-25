@@ -9,10 +9,6 @@ const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAADElEQVR4nGMAAQ
 // ── Mock heavy child components ─────────────────────────────────────
 // We only care about which panels / views are mounted, not their internals.
 
-vi.mock('../components/Header.jsx', () => ({
-    default: () => <div data-testid="header">Header</div>,
-}));
-
 vi.mock('../components/ChatPanel.jsx', () => ({
     default: ({ networkActivated, networkAgentCount, onOpenNetwork }) => (
         <div data-testid="chat-panel">
@@ -65,10 +61,6 @@ vi.mock('../components/AgentActivityView.jsx', () => ({
 
 vi.mock('../components/Sidebar.jsx', () => ({
     default: () => <div data-testid="sidebar">Sidebar</div>,
-}));
-
-vi.mock('../components/FlyoutPanel.jsx', () => ({
-    default: () => null,
 }));
 
 vi.mock('../components/PreviewPanel.jsx', () => ({

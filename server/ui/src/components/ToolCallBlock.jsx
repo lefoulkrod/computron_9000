@@ -1,13 +1,31 @@
 import styles from './ToolCallBlock.module.css';
 
-/** Shared tool call badge — wrench icon + tool name. */
-export default function ToolCallBlock({ name }) {
+/**
+ * Tool-call line, rendered as the function call it is —
+ * `› name(key="value", …)` in monospace. The leading chevron marks it as
+ * something the agent ran. Argument values arrive already
+ * whitespace-collapsed and length-capped (see _summarize_arguments /
+ * _summarizeToolArgs); the row's CSS ellipsis is the final guard for narrow widths.
+ */
+export default function ToolCallBlock({ name, arguments: args }) {
+    const pairs = args && typeof args === 'object' ? Object.entries(args) : [];
     return (
-        <div className={styles.toolBlock} data-testid="entry-tool-call">
-            <svg className={styles.toolIcon} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
-            </svg>
-            <span className={styles.toolName}>{name}</span>
-        </div>
+        <code className={styles.toolCall} data-testid="entry-tool-call">
+            <span className={styles.marker} aria-hidden="true">›</span>
+            <span className={styles.name}>{name}</span>
+            <span className={styles.punct}>(</span>
+            {pairs.length > 0 && (
+                <span data-testid="tool-call-args">
+                    {pairs.map(([key, value], i) => (
+                        <span key={key}>
+                            {i > 0 && <span className={styles.punct}>, </span>}
+                            <span className={styles.key}>{key}=</span>
+                            <span>{`"${value}"`}</span>
+                        </span>
+                    ))}
+                </span>
+            )}
+            <span className={styles.punct}>)</span>
+        </code>
     );
 }

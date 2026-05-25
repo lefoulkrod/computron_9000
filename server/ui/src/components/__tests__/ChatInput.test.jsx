@@ -10,7 +10,7 @@ describe('ChatInput', () => {
     it('renders textarea and buttons', () => {
         render(<ChatInput onSend={vi.fn()} isStreaming={false} />);
 
-        expect(screen.getByPlaceholderText('Type your message...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Message Computron…')).toBeInTheDocument();
         expect(screen.getByLabelText('Attach file')).toBeInTheDocument();
         expect(screen.getByLabelText('Send message')).toBeInTheDocument();
     });
@@ -20,7 +20,7 @@ describe('ChatInput', () => {
         const user = userEvent.setup();
         render(<ChatInput onSend={onSend} isStreaming={false} />);
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
+        const textarea = screen.getByPlaceholderText('Message Computron…');
         await user.type(textarea, 'Hello world');
         await user.click(screen.getByLabelText('Send message'));
 
@@ -32,7 +32,7 @@ describe('ChatInput', () => {
         const user = userEvent.setup();
         render(<ChatInput onSend={onSend} isStreaming={false} />);
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
+        const textarea = screen.getByPlaceholderText('Message Computron…');
         await user.type(textarea, '  test message  ');
         await user.click(screen.getByLabelText('Send message'));
 
@@ -44,7 +44,7 @@ describe('ChatInput', () => {
         const user = userEvent.setup();
         render(<ChatInput onSend={onSend} isStreaming={false} />);
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
+        const textarea = screen.getByPlaceholderText('Message Computron…');
         await user.type(textarea, 'Hello');
         await user.click(screen.getByLabelText('Send message'));
 
@@ -56,7 +56,7 @@ describe('ChatInput', () => {
         const user = userEvent.setup();
         render(<ChatInput onSend={onSend} isStreaming={false} />);
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
+        const textarea = screen.getByPlaceholderText('Message Computron…');
         await user.type(textarea, 'Test{Enter}');
 
         expect(onSend).toHaveBeenCalledWith('Test', null);
@@ -67,7 +67,7 @@ describe('ChatInput', () => {
         const user = userEvent.setup();
         render(<ChatInput onSend={onSend} isStreaming={false} />);
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
+        const textarea = screen.getByPlaceholderText('Message Computron…');
         await user.type(textarea, 'Line 1{Shift>}{Enter}{/Shift}Line 2');
 
         expect(onSend).not.toHaveBeenCalled();
@@ -78,7 +78,48 @@ describe('ChatInput', () => {
         render(<ChatInput onSend={vi.fn()} onStop={vi.fn()} isStreaming={true} />);
 
         expect(screen.getByLabelText('Stop generation')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Send a nudge to the agent...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Send a nudge…')).toBeInTheDocument();
+        // While streaming the send button is replaced by stop.
+        expect(screen.queryByLabelText('Send message')).not.toBeInTheDocument();
+    });
+
+    it('builds the placeholder from the selected profile name', async () => {
+        const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+            json: () => Promise.resolve([{ id: 'p1', name: 'Code Expert' }]),
+        });
+        try {
+            render(<ChatInput onSend={vi.fn()} isStreaming={false}
+                selectedProfileId="p1" onProfileChange={vi.fn()} />);
+            expect(await screen.findByPlaceholderText('Message Code Expert…')).toBeInTheDocument();
+        } finally {
+            fetchSpy.mockRestore();
+        }
+    });
+
+    it('names the profile in the streaming nudge placeholder', async () => {
+        const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+            json: () => Promise.resolve([{ id: 'p1', name: 'Code Expert' }]),
+        });
+        try {
+            render(<ChatInput onSend={vi.fn()} onStop={vi.fn()} isStreaming={true}
+                selectedProfileId="p1" onProfileChange={vi.fn()} />);
+            expect(await screen.findByPlaceholderText('Send a nudge to Code Expert…')).toBeInTheDocument();
+        } finally {
+            fetchSpy.mockRestore();
+        }
+    });
+
+    it('disables the send button when there is nothing to send', () => {
+        render(<ChatInput onSend={vi.fn()} isStreaming={false} />);
+        expect(screen.getByLabelText('Send message')).toBeDisabled();
+    });
+
+    it('renders a file card (not an image) for a non-image attachment', async () => {
+        render(<ChatInput onSend={vi.fn()} isStreaming={false}
+            attachment={{ base64: 'YWJj', contentType: 'application/pdf', filename: 'report.pdf' }} />);
+        expect(await screen.findByText('report.pdf')).toBeInTheDocument();
+        expect(screen.getByText(/^PDF/)).toBeInTheDocument();
+        expect(screen.queryByTestId('attachment-image')).not.toBeInTheDocument();
     });
 
     it('handles file selection and displays preview', async () => {
@@ -92,7 +133,7 @@ describe('ChatInput', () => {
         await user.upload(fileInput, file);
 
         await waitFor(() => {
-            expect(screen.getByAltText('selected')).toBeInTheDocument();
+            expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
         });
     });
 
@@ -107,13 +148,13 @@ describe('ChatInput', () => {
         await user.upload(fileInput, file);
 
         await waitFor(() => {
-            expect(screen.getByAltText('selected')).toBeInTheDocument();
+            expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
         });
 
         const removeButton = screen.getByLabelText('Remove attachment');
         await user.click(removeButton);
 
-        expect(screen.queryByAltText('selected')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('attachment-image')).not.toBeInTheDocument();
     });
 
     it('sends file data with message', async () => {
@@ -129,10 +170,10 @@ describe('ChatInput', () => {
         await user.upload(fileInput, file);
 
         await waitFor(() => {
-            expect(screen.getByAltText('selected')).toBeInTheDocument();
+            expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
         });
 
-        const textarea = screen.getByPlaceholderText('Type your message...');
+        const textarea = screen.getByPlaceholderText('Message Computron…');
         await user.type(textarea, 'Check this image');
         await user.click(screen.getByLabelText('Send message'));
 
@@ -157,12 +198,12 @@ describe('ChatInput', () => {
         await user.upload(fileInput, file);
 
         await waitFor(() => {
-            expect(screen.getByAltText('selected')).toBeInTheDocument();
+            expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
         });
 
         await user.click(screen.getByLabelText('Send message'));
 
-        expect(screen.queryByAltText('selected')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('attachment-image')).not.toBeInTheDocument();
     });
 
     describe('attachment prop', () => {
@@ -170,7 +211,7 @@ describe('ChatInput', () => {
             const onSend = vi.fn();
             const { rerender } = render(<ChatInput onSend={onSend} isStreaming={false} />);
 
-            expect(screen.queryByAltText('selected')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('attachment-image')).not.toBeInTheDocument();
 
             rerender(
                 <ChatInput
@@ -181,7 +222,7 @@ describe('ChatInput', () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByAltText('selected')).toBeInTheDocument();
+                expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
             });
         });
 
@@ -197,10 +238,10 @@ describe('ChatInput', () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByAltText('selected')).toBeInTheDocument();
+                expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
             });
 
-            const textarea = screen.getByPlaceholderText('Type your message...');
+            const textarea = screen.getByPlaceholderText('Message Computron…');
             await user.type(textarea, 'External image');
             await user.click(screen.getByLabelText('Send message'));
 
@@ -224,7 +265,7 @@ describe('ChatInput', () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByAltText('selected')).toBeInTheDocument();
+                expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
             });
         });
 
@@ -240,13 +281,13 @@ describe('ChatInput', () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByAltText('selected')).toBeInTheDocument();
+                expect(screen.getByTestId('attachment-image')).toBeInTheDocument();
             });
 
             const removeButton = screen.getByLabelText('Remove attachment');
             await user.click(removeButton);
 
-            expect(screen.queryByAltText('selected')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('attachment-image')).not.toBeInTheDocument();
         });
     });
 });

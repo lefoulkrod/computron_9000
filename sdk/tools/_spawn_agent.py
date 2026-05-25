@@ -10,6 +10,7 @@ from rich.text import Text
 from agents import AgentProfile, build_agent, get_agent_profile
 from sdk import Conversation, TurnExecutor
 from sdk.context import ConversationHistory
+from sdk.events import AgentEvent, SpawnRequestedPayload, publish_event
 from sdk.events._models import ContentPayload
 from sdk.skills import AgentState, get_skill, list_skills
 from sdk.tools._core import get_core_tools
@@ -174,6 +175,16 @@ async def spawn_agent(
     )
     _log_spawn(agent_name, agent_profile, instructions)
 
+    # Mint a fresh correlation id and announce the spawn before the child's
+    # context frame opens — the matching AgentStartedPayload carries the same
+    # id, letting the UI anchor a card to this request and attach the child
+    # agent to it.
+    correlation_id = _uuid.uuid4().hex
+    publish_event(AgentEvent(payload=SpawnRequestedPayload(
+        type="spawn_requested",
+        correlation_id=correlation_id,
+    )))
+
     parent_conv_id = get_conversation_id() or "default"
     short_id = _uuid.uuid4().hex[:8]
     instance_id = f"{parent_conv_id}/{agent_name}_{short_id}"
@@ -192,6 +203,7 @@ async def spawn_agent(
             profile_name=agent_profile.name,
             sub_agent_name=agent_name,
             sub_agent_id=short_id,
+            correlation_id=correlation_id,
         ):
             if event.type == "content" and isinstance(event.payload, ContentPayload):
                 if event.payload.content:

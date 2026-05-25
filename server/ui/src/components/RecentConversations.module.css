@@ -1,0 +1,103 @@
+.recent {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* ── Search ──────────────────────────────────────────── */
+.search {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: 32px;
+    /* Extra top margin separates the conversation search from the nav
+     * above — signals that recent conversations are a distinct section.
+     */
+    margin: var(--sp-3) var(--sp-2) var(--sp-1);
+    padding: 0 10px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+}
+.search:focus-within { border-color: var(--accent); }
+.search i { font-size: 12px; flex-shrink: 0; }
+.search input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-family: var(--font-body);
+    outline: none;
+}
+.search input::placeholder { color: var(--text-tertiary); }
+
+/* ── Scrollable list ─────────────────────────────────── */
+.list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--sp-1) var(--sp-2) var(--sp-2);
+}
+.list::-webkit-scrollbar { width: 5px; }
+.list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: var(--radius-full); }
+
+.dayLabel {
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-tertiary);
+    padding: 10px 10px 4px;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: 30px;
+    padding: 0 var(--sp-1) 0 10px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+}
+.item:hover { background: var(--accent-muted); color: var(--text-primary); }
+.item.active { background: var(--accent-muted); color: var(--text-primary); }
+.item:focus-visible { outline: none; box-shadow: var(--shadow-glow); }
+
+.itemTitle {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Delete — hidden until the row is hovered. */
+.deleteBtn {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+}
+.item:hover .deleteBtn,
+.deleteBtn:focus-visible { opacity: 1; }
+.deleteBtn:hover { background: var(--danger-muted); color: var(--danger); }
+
+.empty {
+    padding: var(--sp-3) 10px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+}

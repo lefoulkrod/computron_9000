@@ -1,0 +1,193 @@
+/* Activity rail — the full-transcript renderer for the agent activity
+ * view. Continuous left rail with neutral dot markers, content column
+ * on the right. Weight hierarchy: content (outcome) is the heaviest;
+ * thinking and tool calls (process) share a lighter weight. */
+
+.stream {
+  position: relative;
+  padding: var(--sp-2) 0;
+}
+
+/* Continuous rail line — runs down the gutter behind every row so the
+ * vertical line doesn't break between rows. Each row's marker sits on
+ * top with a canvas-colored border, which "punches" the line cleanly. */
+.stream::before {
+  content: '';
+  position: absolute;
+  left: 7px;  /* center of the 14px rail column */
+  top: var(--sp-2);
+  bottom: var(--sp-2);
+  width: 1px;
+  background: var(--border-subtle);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  column-gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+
+/* A row that "joins" the previous row in the rail — no marker drawn,
+ * the rail line continues unbroken. Used for consecutive same-kind
+ * rows (e.g. multiple tool calls in a row share one visual marker). */
+.rowJoin {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+  position: relative;
+}
+
+.marker {
+  position: relative;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  border: 2px solid var(--canvas);
+}
+
+/* Content rows earn a slightly brighter marker — narration is the
+ * main outcome the agent communicates. */
+.markerContent {
+  background: var(--text-secondary);
+}
+
+.main {
+  min-width: 0;
+}
+
+/* ── Content — primary, weight 500 (outcome) ───────────────────── */
+.content {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.content :global(p) { margin: 0 0 0.55em 0; }
+.content :global(p:last-child) { margin-bottom: 0; }
+
+/* ── Thinking — italic dim, weight 400 (process) ───────────────── */
+.thinking {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-weight: 400;
+}
+.thinking :global(p) { margin: 0 0 0.5em 0; }
+.thinking :global(p:last-child) { margin-bottom: 0; }
+.thinking :global(code) {
+  font-style: normal;
+  font-family: var(--font-code);
+  font-size: 0.95em;
+}
+
+/* ── Tool call — monospace function-call signature, weight 400 (process) ── */
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 2px 0;
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+}
+.tool:hover .toolName { color: var(--text-primary); }
+
+.chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: transform 0.15s var(--ease);
+}
+.toolOpen .chev { transform: rotate(90deg); }
+
+.toolBody {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolName {
+  font-weight: 400;
+  color: var(--text-secondary);
+  transition: color 0.12s var(--ease);
+}
+
+.punct { color: var(--text-tertiary); }
+.argInline { color: var(--text-secondary); }
+.argKey { color: var(--text-tertiary); }
+.more { color: var(--text-tertiary); font-style: italic; }
+
+/* Expanded args panel — drops below the tool row, indented to align
+ * with the body of the tool call. No card box; uses a hairline left
+ * border so it visually belongs to the row above. */
+.toolDetail {
+  margin: 4px 0 var(--sp-2) 12px;
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--border);
+}
+
+.sectionLabel {
+  font-family: var(--font-brand);
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  margin-top: 4px;
+}
+
+.pair {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 1px 0;
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.pairKey {
+  color: var(--text-tertiary);
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.pairValue {
+  color: var(--text-primary);
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}

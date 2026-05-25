@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 
-import Header from './components/Header.jsx';
+import MobileHeader from './components/MobileHeader.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import ChatMessages from './components/ChatMessages.jsx';
 import MobileSettingsDrawer from './components/MobileSettingsDrawer.jsx';
@@ -60,12 +60,10 @@ export default function MobileApp({ dark, onToggleTheme }) {
 
     return (
         <div className={styles.mobileLayout}>
-            <Header
+            <MobileHeader
                 dark={dark}
                 onToggleTheme={onToggleTheme}
                 onNewConversation={newConversation}
-                compact
-                onOpenSettings={() => setDrawerOpen(true)}
             />
             <div className={styles.messageArea}>
                 <ChatMessages

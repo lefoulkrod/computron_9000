@@ -260,7 +260,7 @@
     border-color: var(--accent-muted);
 }
 
-/* Per-row delete button — matches MemoryPanel/CustomToolsPanel pattern */
+/* Per-row delete button — small icon-button revealed on hover. */
 .rowDeleteBtn {
     background: transparent;
     border: 1px solid transparent;

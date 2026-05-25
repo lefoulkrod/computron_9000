@@ -23,11 +23,15 @@ const _INITIAL_STATE = {
  * Create a fresh agent node with all the data an agent card or
  * detail view might need.
  */
-function _makeAgent(id, name, parentId, instruction, startedAt) {
+function _makeAgent(id, name, parentId, instruction, startedAt, correlationId = null) {
     return {
         id,
         name,
         parentId,
+        // Set on sub-agents only: the same id the parent's spawn_requested
+        // activity entry carries. AgentOutput uses it to drop each child
+        // into the right SpawnCard. None on root agents.
+        correlationId,
         status: 'running',       // running | success | error | stopped
         childIds: [],            // sub-agents spawned by this agent
         startedAt,               // for elapsed time display
@@ -61,8 +65,8 @@ function _agentReducer(state, action) {
     switch (action.type) {
         // New agent appeared — create its node and wire it to its parent.
         case 'AGENT_STARTED': {
-            const { agentId, agentName, parentAgentId, instruction, timestamp } = action;
-            const agent = _makeAgent(agentId, agentName, parentAgentId, instruction, timestamp);
+            const { agentId, agentName, parentAgentId, instruction, timestamp, correlationId } = action;
+            const agent = _makeAgent(agentId, agentName, parentAgentId, instruction, timestamp, correlationId || null);
 
             // When a new root agent starts (new turn), carry over persistent
             // preview state so panels don't vanish between turns. Previews are
@@ -74,6 +78,10 @@ function _agentReducer(state, action) {
                 agent.desktopActive = prev.desktopActive;
                 agent.generationPreview = prev.generationPreview;
                 agent.openFiles = prev.openFiles;
+                // Keep the last turn's context usage visible until this
+                // turn's first context_usage event replaces it — the window
+                // doesn't empty between turns, so the meter shouldn't blink out.
+                agent.contextUsage = prev.contextUsage;
             }
 
             const agents = { ...state.agents, [agentId]: agent };
