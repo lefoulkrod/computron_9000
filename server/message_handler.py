@@ -18,8 +18,10 @@ from agents import (
 from agents.types import Agent, Data
 from conversations import (
     generate_conversation_title,
+    load_agent_events,
     load_conversation_history,
     load_loaded_skills,
+    load_preview_state,
     save_agent_events,
     save_conversation_title,
     save_loaded_skills,
@@ -172,10 +174,18 @@ async def _evict_lru_conversation(exclude: str | None = None) -> None:
             return
 
 
-async def resume_conversation(conversation_id: str) -> list[dict] | None:
-    """Load a conversation's full-fidelity history and install it.
+async def resume_conversation(conversation_id: str) -> dict | None:
+    """Load a conversation's full-fidelity history, events, and preview state.
 
-    Returns the raw messages for the UI to display, or None if not found.
+    Returns a dict with:
+        messages: LLM messages from history.json.
+        events: persisted agent events (file_output, browser_screenshot, etc.)
+            from events.json. The UI uses these to reconstruct inline file
+            blocks in the chat and the preview tabs on restore.
+        preview_state: persisted preview-panel state (open file list,
+            active tab, per-preview visibility flags).
+
+    None if the conversation isn't found.
     """
     messages = load_conversation_history(conversation_id)
     if messages is None:
@@ -184,7 +194,11 @@ async def resume_conversation(conversation_id: str) -> list[dict] | None:
     _conversations[conversation_id] = ConversationHistory(messages, instance_id=conversation_id)
     _conversations.move_to_end(conversation_id)
     await _evict_lru_conversation(exclude=conversation_id)
-    return messages
+    return {
+        "messages": messages,
+        "events": load_agent_events(conversation_id),
+        "preview_state": load_preview_state(conversation_id),
+    }
 
 
 def _refresh_system_message(history: ConversationHistory, system_prompt: str) -> None:
