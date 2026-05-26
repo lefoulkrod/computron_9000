@@ -8,9 +8,10 @@ import styles from './ChatMessages.module.css';
  * Scrollable message list. Sticks to the bottom as new text arrives,
  * but stops auto-scrolling if the user scrolls up.
  *
- * Assistant message content comes from the agent reducer's activityLog
- * (same source as the activity view). Falls back to msg.entries for
- * loaded conversation history where no agent state exists.
+ * Every assistant message renders from `agent.activityLog`. Live turns
+ * get an agentId from the streaming agent_started event; resumed turns
+ * get a synthetic agentId per turn from the loadConversation path. One
+ * render path either way.
  */
 export default function ChatMessages({ messages, onPreview, onStarterSelect, onSelectAgent }) {
     const { agents, rootId } = useAgentState();
@@ -32,7 +33,7 @@ export default function ChatMessages({ messages, onPreview, onStarterSelect, onS
             ) : (
                 <>
                     {messages.map((msg, idx) => {
-                        if (msg.role === 'assistant' && msg.agentId) {
+                        if (msg.role === 'assistant') {
                             const agent = agents[msg.agentId];
                             const spawnedAgents = (agent?.childIds || [])
                                 .map((id) => agents[id])

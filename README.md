@@ -1,29 +1,15 @@
 # COMPUTRON
 
-A self-hosted AI assistant that runs entirely inside a single container. It can browse the web, write and run code, control a Linux desktop, generate images and music — all on your own hardware.
+A self-hosted agentic workbench in a single container. Bring your own LLMs — securely-brokered cloud providers (OpenAI, Anthropic, OpenRouter, any OpenAI-compatible endpoint) or local Ollama models — and connect the integrations your agents need (Gmail, Calendar, Drive, custom MCP servers). Agents browse the web, write and run code, and control a Linux desktop. Everything runs on your hardware.
 
 ![COMPUTRON Logo](image.png)
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [Ollama](https://ollama.com/) running on the host
+- An LLM provider — a cloud account (OpenAI, Anthropic, OpenRouter, or any OpenAI-compatible endpoint) or [Ollama](https://ollama.com/) for local models
 
-Pull at least one model before starting. You need a main model and a vision model — if your main model supports vision, one model covers both.
-
-```bash
-ollama pull kimi-k2.5    # main model
-ollama pull qwen3.5      # vision model
-```
-
-Cloud models skip local GPU but still need to be pulled so they appear in the app: `ollama login && ollama pull kimi-k2.5:cloud`
-
-Any Ollama model works. The setup wizard shows what you have pulled and filters to vision-capable models where needed.
-
-| Role | Suggested | Notes |
-|------|-----------|-------|
-| Main | `kimi-k2.5` | Also used for compaction (context summarization) |
-| Vision | `qwen3.5` | Must have vision capability — or use your main model if it supports vision |
+The setup wizard walks you through adding a provider and picking your main model (used for chat, compaction, and titles) plus an optional vision model on first launch. Cloud providers list their models automatically; Ollama lists whatever you've pulled.
 
 ## Try It Out
 
@@ -36,11 +22,23 @@ docker run -d --name computron --shm-size=256m --network=host \
 
 **Docker Desktop (macOS / Windows / WSL2):**
 
+*bash (macOS / Linux / WSL2):*
+
 ```bash
 docker run -d --name computron --shm-size=256m \
   -p 8080:8080 \
   --add-host=host.docker.internal:host-gateway \
   -e LLM_HOST=http://host.docker.internal:11434 \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+*PowerShell (Windows):*
+
+```powershell
+docker run -d --name computron --shm-size=256m `
+  -p 8080:8080 `
+  --add-host=host.docker.internal:host-gateway `
+  -e LLM_HOST=http://host.docker.internal:11434 `
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -63,6 +61,8 @@ docker run -d --name computron --shm-size=256m --network=host \
 
 **Docker Desktop:**
 
+*bash (macOS / Linux / WSL2):*
+
 ```bash
 docker run -d --name computron --shm-size=256m \
   -p 8080:8080 \
@@ -73,7 +73,41 @@ docker run -d --name computron --shm-size=256m \
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
+*PowerShell (Windows):*
+
+```powershell
+docker run -d --name computron --shm-size=256m `
+  -p 8080:8080 `
+  --add-host=host.docker.internal:host-gateway `
+  -e LLM_HOST=http://host.docker.internal:11434 `
+  -v computron_home:/home/computron `
+  -v computron_state:/var/lib/computron `
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
 Conversations, memory, custom tools, agent profiles, and generated files now survive restarts.
+
+### Using Ollama for Local Models
+
+If you'd rather run models locally than use a cloud provider, install [Ollama](https://ollama.com/) on the host and pull at least one model. The setup wizard lists whatever you've pulled.
+
+```bash
+ollama pull kimi-k2.5    # main model
+ollama pull qwen3.5      # vision model
+```
+
+| Role | Suggested | Notes |
+|------|-----------|-------|
+| Main | `kimi-k2.5` | Also used for compaction (context summarization) and title generation |
+| Vision | `qwen3.5` | Must support image input — or use your main model if it does |
+
+**Ollama cloud models** — Ollama can broker cloud-hosted variants alongside your local models so they show up the same way in the app. After `ollama login`, pull a cloud variant:
+
+```bash
+ollama pull kimi-k2.5:cloud
+```
+
+Cloud variants skip your local GPU but still need to be pulled so Ollama exposes them.
 
 ### Enable GPU Features
 
@@ -102,6 +136,8 @@ docker run -d --name computron --shm-size=256m --network=host \
 
 **Docker Desktop (Windows + WSL2):**
 
+*bash (WSL2):*
+
 ```bash
 docker run -d --name computron --shm-size=256m \
   -p 8080:8080 \
@@ -113,6 +149,22 @@ docker run -d --name computron --shm-size=256m \
   -e ENABLE_MUSIC_GEN=1 \
   -v computron_home:/home/computron \
   -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+*PowerShell (Windows):*
+
+```powershell
+docker run -d --name computron --shm-size=256m `
+  -p 8080:8080 `
+  --add-host=host.docker.internal:host-gateway `
+  --gpus all `
+  -e LLM_HOST=http://host.docker.internal:11434 `
+  -e HF_TOKEN=hf_your_token_here `
+  -e ENABLE_IMAGE_GEN=1 `
+  -e ENABLE_MUSIC_GEN=1 `
+  -v computron_home:/home/computron `
+  -v computron_state:/var/lib/computron `
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -142,6 +194,8 @@ docker run -d --name computron --shm-size=256m --network=host \
 
 **Docker Desktop (Windows + WSL2):**
 
+*bash (WSL2):*
+
 ```bash
 docker run -d --name computron --shm-size=256m \
   -p 8080:8080 -p 5900:5900 -p 6080:6080 \
@@ -152,6 +206,21 @@ docker run -d --name computron --shm-size=256m \
   -e ENABLE_GROUNDING=1 \
   -v computron_home:/home/computron \
   -v computron_state:/var/lib/computron \
+  ghcr.io/lefoulkrod/computron_9000:latest
+```
+
+*PowerShell (Windows):*
+
+```powershell
+docker run -d --name computron --shm-size=256m `
+  -p 8080:8080 -p 5900:5900 -p 6080:6080 `
+  --add-host=host.docker.internal:host-gateway `
+  --gpus all `
+  -e LLM_HOST=http://host.docker.internal:11434 `
+  -e ENABLE_DESKTOP=1 `
+  -e ENABLE_GROUNDING=1 `
+  -v computron_home:/home/computron `
+  -v computron_state:/var/lib/computron `
   ghcr.io/lefoulkrod/computron_9000:latest
 ```
 
@@ -378,6 +447,18 @@ These are independent — you don't need to add them up. The author runs all fea
 docker stop computron        # Docker
 sudo podman stop computron   # Podman
 ```
+
+### Upgrading
+
+Pull the latest image, replace the old container, then re-run your original `docker run …` command. Named volumes (`computron_home`, `computron_state`) preserve your data, and schema migrations run automatically on startup.
+
+```bash
+docker pull ghcr.io/lefoulkrod/computron_9000:latest
+docker stop computron && docker rm computron
+# re-run your original `docker run …` from "Try It Out"
+```
+
+(Podman: `sudo podman pull / stop / rm`.)
 
 ## Troubleshooting
 

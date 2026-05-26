@@ -69,6 +69,10 @@ function DesktopAppInner({ dark, onToggleTheme }) {
 
     const preview = usePreviewState(agentState, agentDispatch);
 
+    // Holds the active-tab id the resume callback wants to apply once
+    // usePreviewState has the new root in scope. Synced in an effect below.
+    const _pendingActiveTabRef = useRef(null);
+
     // ── Stream callbacks ──────────────────────────────────────────────
     // Called by useStreamingChat when events arrive from the backend.
     // Preview events dispatch once to the agent reducer — no dual state.
@@ -149,6 +153,67 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         onActivityEntry: ({ agentId, entry }) => {
             agentDispatch({ type: 'APPEND_ACTIVITY', agentId, entry });
         },
+        // A previously-saved conversation just finished loading. Replay each
+        // turn through the same actions a live turn fires (AGENT_STARTED →
+        // APPEND_ACTIVITY × N → AGENT_COMPLETED) so resume and live share one
+        // render path. React 18 batches all dispatches within this async
+        // callback into a single render — no streaming/replay animation.
+        onConversationLoaded: ({ conversationId, turnSpecs, previewState }) => {
+            agentDispatch({ type: 'RESET' });
+
+            for (const turn of turnSpecs) {
+                agentDispatch({
+                    type: 'AGENT_STARTED',
+                    agentId: turn.agentId,
+                    agentName: 'COMPUTRON',
+                    parentAgentId: null,
+                    instruction: '',
+                    correlationId: null,
+                    timestamp: Date.now(),
+                });
+                for (const entry of turn.entries) {
+                    agentDispatch({ type: 'APPEND_ACTIVITY', agentId: turn.agentId, entry });
+                }
+                agentDispatch({
+                    type: 'AGENT_COMPLETED',
+                    agentId: turn.agentId,
+                    status: 'success',
+                });
+            }
+
+            const lastTurn = turnSpecs[turnSpecs.length - 1];
+            if (!lastTurn) {
+                _pendingActiveTabRef.current = null;
+                return;
+            }
+
+            // Preview state hangs on the LAST synthetic agent. When the user
+            // sends a new live message, the reducer's per-turn carry-over
+            // copies the preview state onto the new live root.
+            const openFilenames = Array.isArray(previewState?.open_files)
+                ? previewState.open_files
+                : [];
+            if (openFilenames.length > 0) {
+                const byName = new Map();
+                for (const t of turnSpecs) {
+                    for (const e of t.entries) {
+                        if (e?.type === 'file_output' && e.filename && !byName.has(e.filename)) {
+                            byName.set(e.filename, e);
+                        }
+                    }
+                }
+                for (const name of openFilenames) {
+                    const item = byName.get(name);
+                    if (item) {
+                        agentDispatch({ type: 'OPEN_FILE', agentId: lastTurn.agentId, item });
+                    }
+                }
+            }
+
+            _pendingActiveTabRef.current = typeof previewState?.active_tab === 'string'
+                ? previewState.active_tab
+                : null;
+        },
     }).current;
 
     const {
@@ -159,7 +224,45 @@ function DesktopAppInner({ dark, onToggleTheme }) {
         stopGeneration,
         loadConversation,
         newConversation: chatNewConversation,
+        savePreviewState,
     } = useStreamingChat(_callbacks);
+
+    // After a resume, apply the pending active-tab once the preview hook
+    // re-renders with the new root agent and its restored files.
+    useEffect(() => {
+        if (_pendingActiveTabRef.current === null) return;
+        const target = _pendingActiveTabRef.current;
+        if (preview.tabs.some((t) => t.id === target)) {
+            preview.setActiveTab(target);
+            _pendingActiveTabRef.current = null;
+        }
+    }, [preview.tabs, preview.setActiveTab]);
+
+    // Debounced persist of the preview-panel state on any tab/active-tab
+    // change. The shape mirrors what the backend writes into metadata.json.
+    const _previewStateSnapshot = useMemo(() => {
+        const hasTab = (id) => preview.tabs.some((t) => t.id === id);
+        return {
+            open_files: preview.openFiles.map((f) => f.filename).filter(Boolean),
+            active_tab: preview.activeTab,
+            browser_visible: hasTab('browser'),
+            terminal_visible: hasTab('terminal'),
+            desktop_visible: hasTab('desktop'),
+            generation_visible: hasTab('generation'),
+        };
+    }, [preview.tabs, preview.activeTab, preview.openFiles]);
+
+    useEffect(() => {
+        const s = _previewStateSnapshot;
+        const empty = !s.open_files.length && !s.active_tab
+            && !s.browser_visible && !s.terminal_visible
+            && !s.desktop_visible && !s.generation_visible;
+        if (empty) return;
+        const handle = setTimeout(() => {
+            savePreviewState(s);
+        }, 500);
+        return () => clearTimeout(handle);
+    }, [_previewStateSnapshot, savePreviewState]);
 
     const handleSend = useCallback((message, fileData) => {
         setAttachment(null);

@@ -171,7 +171,7 @@ def save_conversation_title(conversation_id: str, title: str) -> None:
 
 def load_conversation_metadata(conversation_id: str) -> dict[str, Any]:
     """Load conversation metadata including title.
-    
+
     Returns an empty dict if no metadata exists for the conversation.
     """
     path = _get_conv_dir(conversation_id) / "metadata.json"
@@ -181,6 +181,43 @@ def load_conversation_metadata(conversation_id: str) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def save_preview_state(conversation_id: str, state: dict[str, Any]) -> None:
+    """Persist the user's preview-panel tab state for a conversation.
+
+    Shape of `state`:
+        {
+            "open_files": ["report.html", ...],
+            "active_tab": "file:report.html" | "browser" | null,
+            "browser_visible": bool,
+            "terminal_visible": bool,
+            "desktop_visible": bool,
+            "generation_visible": bool,
+        }
+    """
+    conv_dir = _get_conv_dir(conversation_id)
+    conv_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata_path = conv_dir / "metadata.json"
+    metadata: dict[str, Any] = {}
+    if metadata_path.exists():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    metadata["preview_state"] = state
+    tmp = metadata_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    tmp.replace(metadata_path)
+
+
+def load_preview_state(conversation_id: str) -> dict[str, Any]:
+    """Load the persisted preview-panel state, or empty dict if none."""
+    metadata = load_conversation_metadata(conversation_id)
+    state = metadata.get("preview_state")
+    return state if isinstance(state, dict) else {}
 
 
 # -- Conversation listing and deletion -----------------------------------------

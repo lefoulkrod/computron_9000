@@ -14,7 +14,12 @@ from agents import (
     get_agent_profile,
 )
 from agents.types import Data
-from conversations import DiskTurnPersistence, load_conversation_history
+from conversations import (
+    DiskTurnPersistence,
+    load_agent_events,
+    load_conversation_history,
+    load_preview_state,
+)
 from sdk import Conversation, TurnExecutor
 from sdk.context import ConversationHistory
 from sdk.events import (
@@ -158,10 +163,18 @@ async def _evict_lru_conversation(exclude: str | None = None) -> None:
             return
 
 
-async def resume_conversation(conversation_id: str) -> list[dict] | None:
-    """Load a conversation's full-fidelity history and install it.
+async def resume_conversation(conversation_id: str) -> dict | None:
+    """Load a conversation's full-fidelity history, events, and preview state.
 
-    Returns the raw messages for the UI to display, or None if not found.
+    Returns a dict with:
+        messages: LLM messages from history.json.
+        events: persisted agent events (file_output, browser_screenshot, etc.)
+            from events.json. The UI uses these to reconstruct inline file
+            blocks in the chat and the preview tabs on restore.
+        preview_state: persisted preview-panel state (open file list,
+            active tab, per-preview visibility flags).
+
+    None if the conversation isn't found.
     """
     messages = load_conversation_history(conversation_id)
     if messages is None:
@@ -173,7 +186,11 @@ async def resume_conversation(conversation_id: str) -> list[dict] | None:
     )
     _conversations.move_to_end(conversation_id)
     await _evict_lru_conversation(exclude=conversation_id)
-    return messages
+    return {
+        "messages": messages,
+        "events": load_agent_events(conversation_id),
+        "preview_state": load_preview_state(conversation_id),
+    }
 
 
 def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str:
