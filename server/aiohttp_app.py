@@ -27,13 +27,8 @@ import asyncio
 
 from agents.types import Data
 from config import load_config
-from conversations import (
-    delete_conversation as _delete_conversation,
-)
-from conversations import (
-    list_conversations as _list_conversations,
-)
 from sdk.turn import is_turn_active, queue_nudge, request_stop
+from server._conversation_routes import register_conversation_routes
 from server._feature_routes import register_feature_routes
 from server._integrations_oauth_routes import register_oauth_routes
 from server._integrations_routes import register_integrations_routes
@@ -43,7 +38,7 @@ from server._provider_routes import register_provider_routes
 from server._settings_routes import register_settings_routes
 from server._setup_routes import register_setup_routes
 from server._task_routes import register_task_routes
-from server.message_handler import handle_user_message, resume_conversation
+from server.message_handler import handle_user_message
 from tools.custom_tools.registry import delete_tool, list_tools
 from tools.desktop._exec import DesktopExecError
 from tools.desktop._lifecycle import start_desktop
@@ -319,31 +314,6 @@ async def delete_memory_handler(request: Request) -> Response:
     return web.Response(status=204)
 
 
-async def list_conversations_handler(_request: Request) -> Response:
-    """Return past conversation summaries for the conversations panel."""
-    summaries = _list_conversations()
-    data = [s.model_dump() for s in summaries]
-    return web.json_response(data)
-
-
-async def delete_conversation_handler(request: Request) -> Response:
-    """Delete a conversation and all its turns/history."""
-    conversation_id = request.match_info["conversation_id"]
-    found = _delete_conversation(conversation_id)
-    if not found:
-        return web.json_response({"error": "Conversation not found"}, status=404)
-    return web.Response(status=204)
-
-
-async def resume_conversation_handler(request: Request) -> Response:
-    """Resume a past conversation by loading its full-fidelity history."""
-    conversation_id = request.match_info["conversation_id"]
-    messages = await resume_conversation(conversation_id)
-    if messages is None:
-        return web.json_response({"error": "Conversation not found"}, status=404)
-    return web.json_response({"conversation_id": conversation_id, "messages": messages})
-
-
 async def set_memory_hidden_handler(request: Request) -> Response:
     """Set the hidden flag for a memory entry."""
     key = request.match_info["key"]
@@ -414,10 +384,8 @@ def create_app(*, client_max_size: int = 10 * 1024**2) -> web.Application:
     # Desktop API
     app.router.add_route("POST", "/api/desktop/start", desktop_start_handler)
 
-    # Sessions API (conversation resume) — must be before {id} wildcard routes
-    app.router.add_route("GET", "/api/conversations/sessions", list_conversations_handler)
-    app.router.add_route("POST", "/api/conversations/sessions/{conversation_id}/resume", resume_conversation_handler)
-    app.router.add_route("DELETE", "/api/conversations/sessions/{conversation_id}", delete_conversation_handler)
+    # Conversation sessions API
+    register_conversation_routes(app)
 
     # Task engine routes
     register_task_routes(app)

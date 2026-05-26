@@ -196,6 +196,39 @@ export function _historyToMessages(rawMessages) {
 }
 
 /**
+ * Inject file_output events from events.json into the assistant message
+ * for the turn they belong to.
+ *
+ * Mapping: every root-level `agent_started` in events.json marks a new
+ * turn. The Nth root agent_started corresponds to the Nth assistant ui
+ * message (assistant messages and turns are 1:1 after `_historyToMessages`
+ * merges multi-round tool calls).
+ *
+ * Mutates and returns `uiMessages` for convenience.
+ */
+export function _mergeFileOutputs(uiMessages, events) {
+    if (!Array.isArray(events) || events.length === 0) return uiMessages;
+    const assistants = uiMessages.filter((m) => m.role === 'assistant');
+    let turnIdx = -1;
+    for (const ev of events) {
+        if (ev?.type === 'agent_started' && !ev.parent_agent_id) {
+            turnIdx += 1;
+            continue;
+        }
+        if (ev?.type === 'file_output' && turnIdx >= 0 && turnIdx < assistants.length) {
+            assistants[turnIdx].entries.push({
+                type: 'file_output',
+                filename: ev.filename,
+                content_type: ev.content_type,
+                path: ev.path || null,
+                timestamp: ev.timestamp,
+            });
+        }
+    }
+    return uiMessages;
+}
+
+/**
  * Manages the streaming chat connection with the backend.
  *
  * POSTs to /api/chat and reads the response as a stream of JSON lines.
@@ -479,10 +512,51 @@ export default function useStreamingChat(callbacks) {
             if (!resp.ok) return false;
             const data = await resp.json();
             conversationIdRef.current = conversationId;
-            setMessages(_historyToMessages(data.messages || []));
+
+            // Build messages-with-entries the same as before, then split out
+            // per-turn entries (one synthetic agent per turn) and reduce the
+            // ui-messages to bare {role, agentId} pointers. The caller's
+            // onConversationLoaded callback dispatches the entries through the
+            // same live actions (AGENT_STARTED + APPEND_ACTIVITY + AGENT_COMPLETED)
+            // so resume and live share one render path.
+            const merged = _mergeFileOutputs(
+                _historyToMessages(data.messages || []),
+                data.events || [],
+            );
+            const turnSpecs = [];
+            const transformed = merged.map((msg) => {
+                if (msg.role !== 'assistant') return msg;
+                const agentId = `resumed-${conversationId}-${turnSpecs.length}`;
+                turnSpecs.push({ agentId, entries: msg.entries });
+                return { id: msg.id, role: 'assistant', agentId };
+            });
+
+            if (callbacks.onConversationLoaded) {
+                callbacks.onConversationLoaded({
+                    conversationId,
+                    turnSpecs,
+                    previewState: data.preview_state || {},
+                });
+            }
+            setMessages(transformed);
             return true;
         } catch (_) {
             return false;
+        }
+    }, [callbacks]);
+
+    /** Persist the user's preview-panel tab state for the current conversation. */
+    const savePreviewState = useCallback(async (state) => {
+        const id = conversationIdRef.current;
+        if (!id) return;
+        try {
+            await fetch(`/api/conversations/sessions/${id}/preview-state`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state),
+            });
+        } catch {
+            // best-effort; preview state is non-critical UI affordance
         }
     }, []);
 
@@ -512,5 +586,6 @@ export default function useStreamingChat(callbacks) {
         stopGeneration,
         loadConversation,
         newConversation,
+        savePreviewState,
     };
 }
