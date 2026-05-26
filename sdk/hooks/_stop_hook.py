@@ -17,7 +17,15 @@ class StopHook:
     async def after_model(
         self, response: Any, history: Any, iteration: int, agent_name: str
     ) -> Any:
-        """Strip tool calls and raise ``StopRequestedError`` on stop request."""
+        """Strip tool calls and append a nudge on stop request.
+
+        Does **not** raise ``StopRequestedError`` here — raising would skip
+        the assistant-message append in :func:`run_turn`, losing the model's
+        response content from the conversation history.  Instead we strip
+        any tool calls so the turn ends cleanly (no dangling calls) and let
+        the next iteration's ``before_model`` raise if the stop event is
+        still set.
+        """
         try:
             check_stop()
         except StopRequestedError:
@@ -28,5 +36,5 @@ class StopHook:
                 "role": "user",
                 "content": "The user has requested to stop. Wrap up your response.",
             })
-            raise
+            # Return the modified response — do NOT re-raise.
         return response
