@@ -216,6 +216,9 @@ async def run_turn(
                             logger.exception("Failed to publish delta event")
                     elif isinstance(chunk, ChatResponse):
                         response = chunk
+                        # If deltas were already streamed before a retry,
+                        # reset the flag so the full response is published below.
+                        streamed_deltas = False
 
                 if response is None:
                     raise ToolLoopError("No ChatResponse received from provider")

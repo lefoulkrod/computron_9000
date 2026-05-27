@@ -624,6 +624,68 @@ async def test_parallel_tool_failure_recorded_as_result(_patch_parallel_config: 
         _active_agent_state.reset(token)
 
 
+# ---------------------------------------------------------------------------
+# Tests: streaming retry fallback
+# ---------------------------------------------------------------------------
+
+
+async def test_streaming_retry_publishes_full_response(_patch_publish_event: MagicMock) -> None:
+    """When a stream fails mid-way after emitting deltas, the retry path
+    (non-streaming chat()) must still publish the full response content.
+
+    Bug: streamed_deltas stayed True after the retry, so the guard at
+    ``if not streamed_deltas:`` silently dropped the full response from the UI.
+    """
+    # Simulate a provider whose chat_stream yields a delta then raises a
+    # retryable error, and whose chat (retry path) returns a full response.
+    class StreamingRetryProvider:
+        def __init__(self) -> None:
+            self._stream_calls = 0
+            self._chat_calls = 0
+
+        async def chat_stream(self, **kw: Any) -> AsyncGenerator[ChatDelta | ChatResponse, None]:
+            self._stream_calls += 1
+            if self._stream_calls == 1:
+                # Emit one delta then fail with a retryable error
+                yield ChatDelta(content="partial ")
+                raise ProviderError("stream interrupted", retryable=True)
+            # Should not be called again
+            raise RuntimeError("unexpected second stream call")
+
+        async def chat(self, **kw: Any) -> ChatResponse:
+            self._chat_calls += 1
+            return _text_response("partial complete response from retry")
+
+    provider = StreamingRetryProvider()
+    history = ConversationHistory([{"role": "user", "content": "tell me something"}])
+
+    with patch(f"{_MOD}.get_provider", return_value=provider):
+        result = await run_turn(history, _make_agent())
+
+    assert result == "partial complete response from retry"
+    assert provider._chat_calls == 1  # retry path was used
+
+    # The delta event should have been published
+    delta_calls = [
+        c for c in _patch_publish_event.call_args_list
+        if hasattr(c.args[0].payload, "delta") and c.args[0].payload.delta is True
+    ]
+    assert len(delta_calls) == 1
+    assert delta_calls[0].args[0].payload.content == "partial "
+
+    # The full (non-delta) content event from the retry MUST also be published
+    full_calls = [
+        c for c in _patch_publish_event.call_args_list
+        if hasattr(c.args[0].payload, "delta") and c.args[0].payload.delta is not True
+        and hasattr(c.args[0].payload, "type") and c.args[0].payload.type == "content"
+    ]
+    assert len(full_calls) >= 1, "Full response from retry was NOT published to frontend"
+    assert any(
+        "partial complete response from retry" in str(c.args[0].payload.content)
+        for c in full_calls
+    ), "Full response content not found in published events"
+
+
 async def test_parallel_stop_requested_propagates(_patch_parallel_config: MagicMock) -> None:
     """StopRequestedError from a parallel tool halts the turn, not silently recorded."""
     _patch_parallel_config.enabled = True
