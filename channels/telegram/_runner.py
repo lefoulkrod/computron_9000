@@ -21,6 +21,7 @@ from channels.telegram._formatter import TelegramFormatter
 from channels.telegram._profile_map import ProfileMap
 from channels.telegram._state import ConversationMap
 from conversations import (
+    ConversationCache,
     DiskTurnPersistence,
     list_conversations,
     load_conversation_history,
@@ -33,8 +34,7 @@ from integrations.broker_client import (
     IntegrationNotConnected,
     call as broker_call,
 )
-from sdk import Conversation, TurnExecutor
-from sdk.context import ConversationHistory
+from sdk import TurnExecutor
 from sdk.turn import is_turn_active, request_stop
 from tools.memory import forget, memory_prompt_block, remember
 from tools.virtual_computer.run_bash_cmd import run_bash_cmd
@@ -84,7 +84,9 @@ class TelegramChannel:
         self._formatter = TelegramFormatter()
         self._turn_executor = TurnExecutor()
         self._persistence = DiskTurnPersistence()
-        self._conversations: dict[str, Conversation] = {}
+        # Same bounded LRU the web/SSE side uses; on_evict is None because
+        # the channel doesn't own per-conversation Playwright contexts.
+        self._cache = ConversationCache(is_active=is_turn_active)
         self._integration_id: str = ""
         self._default_profile_id: str = "computron"
         self._pull_task: asyncio.Task[None] | None = None
@@ -371,7 +373,7 @@ class TelegramChannel:
 
     async def _handle_new(self, chat_id: int) -> None:
         conv_id = self._state.reset(chat_id)
-        self._conversations.pop(conv_id, None)
+        self._cache.pop(conv_id)
         await self._send_text(chat_id, f"🔄 New conversation started ({conv_id})")
         logger.info("telegram /new  chat_id=%s  conv_id=%s", chat_id, conv_id)
 
@@ -489,7 +491,7 @@ class TelegramChannel:
         self._state.set(chat_id, conv_id)
         # Drop the cached in-memory Conversation so the next turn rehydrates
         # the picked one's history from disk.
-        self._conversations.pop(conv_id, None)
+        self._cache.pop(conv_id)
         await self._answer_callback(callback_id, text="Resumed")
         await self._send_text(chat_id, f"📂 Resumed conversation: {conv_id}")
         logger.info(
@@ -519,7 +521,7 @@ class TelegramChannel:
     async def _run_turn(self, chat_id: int, text: str) -> None:
         """Execute one agent turn for the given chat and deliver the reply."""
         conversation_id = self._state.get(chat_id)
-        conversation, is_new = self._get_conversation(conversation_id)
+        conversation, is_new = await self._cache.get(conversation_id)
 
         profile = self._resolve_profile(chat_id)
         if profile is None:
@@ -639,34 +641,6 @@ class TelegramChannel:
                 await asyncio.sleep(_TYPING_INDICATOR_INTERVAL_SECONDS)
         except asyncio.CancelledError:
             raise
-
-    # -- conversation cache ---------------------------------------------
-
-    def _get_conversation(self, conversation_id: str) -> tuple[Conversation, bool]:
-        """Return the conversation for *conversation_id*, creating if needed.
-
-        Returns:
-            ``(conversation, is_new)`` where ``is_new`` is True only when no
-            on-disk history existed (a genuine first-time use).
-        """
-        if conversation_id in self._conversations:
-            return self._conversations[conversation_id], False
-
-        messages = load_conversation_history(conversation_id)
-        if messages is not None:
-            conversation = Conversation(
-                id=conversation_id,
-                history=ConversationHistory(messages, instance_id=conversation_id),
-            )
-            self._conversations[conversation_id] = conversation
-            return conversation, False
-
-        conversation = Conversation(
-            id=conversation_id,
-            history=ConversationHistory(instance_id=conversation_id),
-        )
-        self._conversations[conversation_id] = conversation
-        return conversation, True
 
     # -- outbound -------------------------------------------------------
 

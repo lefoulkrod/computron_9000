@@ -13,11 +13,9 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable, Iterable, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
 from typing import Protocol
 
 from agents.types import Agent
-from sdk.context._history import ConversationHistory
 from sdk.context._manager import ContextManager
 from sdk.context._strategy import LLMCompactionStrategy
 from sdk.events._context import agent_span, get_current_dispatcher
@@ -27,6 +25,7 @@ from sdk.hooks._default import default_hooks
 from sdk.hooks._persistence import PersistenceHook
 from sdk.skills import AgentState, get_skill
 from sdk.tools._core import get_core_tools
+from sdk.turn._conversation import Conversation
 from sdk.turn._execution import run_turn
 from sdk.turn._turn import StopRequestedError, turn_scope
 
@@ -34,19 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Background tasks held to prevent GC; cleared via done callback.
 _background_tasks: set[asyncio.Task] = set()
-
-
-@dataclass
-class Conversation:
-    """Per-conversation state owned by the caller.
-
-    Attributes:
-        id: Unique conversation identifier.
-        history: The conversation history.
-    """
-
-    id: str
-    history: ConversationHistory
 
 
 class TurnPersistence(Protocol):

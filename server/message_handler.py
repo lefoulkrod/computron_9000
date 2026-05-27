@@ -1,7 +1,6 @@
 """Message handler for user prompts."""
 
 import logging
-from collections import OrderedDict
 from collections.abc import AsyncGenerator, Sequence
 
 from rich.console import Console
@@ -15,13 +14,12 @@ from agents import (
 )
 from agents.types import Data
 from conversations import (
+    ConversationCache,
     DiskTurnPersistence,
     load_agent_events,
-    load_conversation_history,
     load_preview_state,
 )
-from sdk import Conversation, TurnExecutor
-from sdk.context import ConversationHistory
+from sdk import TurnExecutor
 from sdk.events import (
     AgentEvent,
     ContentPayload,
@@ -87,80 +85,19 @@ def _log_turn_start(profile: AgentProfile) -> None:
     )
 
 
-# In-memory conversation cache. LRU-bounded so a long-lived process
-# doesn't hold every conversation a user has ever opened. The on-disk
-# state is authoritative; an evicted entry is rehydrated from disk on
-# next access.
-_MAX_CACHED_CONVERSATIONS = 25
-_conversations: OrderedDict[str, Conversation] = OrderedDict()
+# Shared in-memory conversation cache. The on-disk store is authoritative;
+# the cache exists so consecutive turns reuse the same Conversation object
+# (and the PersistenceHook's in-place history mutations survive across
+# turns). Eviction releases per-conversation browser contexts so evicted
+# rows don't leak a Playwright instance.
+_cache = ConversationCache(
+    is_active=is_turn_active,
+    on_evict=lambda cid: release_agent_browser(f"conv:{cid}"),
+)
 
 # Shared turn executor — stateless, safe to reuse across conversations.
 _turn_executor = TurnExecutor()
 _persistence = DiskTurnPersistence()
-
-
-async def _get_conversation(conversation_id: str) -> tuple[Conversation, bool]:
-    """Return ``(conversation, is_new)`` for the given ID, creating it if needed.
-
-    ``is_new`` is True only when the conversation has no in-memory entry
-    AND no on-disk history — a genuine first-time use. On any cache miss
-    we hydrate from disk so turns survive process restarts: the browser
-    preserves a conversation id across server bounces (e.g. ``just
-    restart-app``), and without hydration the next turn would build on an
-    empty history and the persistence hook would overwrite the saved file.
-
-    Cache hits move the entry to the end of the LRU; cache misses insert
-    at the end and may evict the least-recently-used entry whose turn is
-    not currently active.
-    """
-    if not conversation_id:
-        msg = "conversation_id is required"
-        raise ValueError(msg)
-    if conversation_id in _conversations:
-        _conversations.move_to_end(conversation_id)
-        return _conversations[conversation_id], False
-    persisted = load_conversation_history(conversation_id)
-    is_new = persisted is None
-    if is_new:
-        logger.info("Creating new conversation %s", conversation_id)
-    _conversations[conversation_id] = Conversation(
-        id=conversation_id,
-        history=ConversationHistory(persisted, instance_id=conversation_id),
-    )
-    await _evict_lru_conversation(exclude=conversation_id)
-    return _conversations[conversation_id], is_new
-
-
-async def _evict_lru_conversation(exclude: str | None = None) -> None:
-    """Drop the oldest non-active entries until we are at or below the cap.
-
-    Conversations whose turn is currently in flight are skipped — popping
-    them from the dict would leave the running turn writing to a referent
-    nobody else can find, and a subsequent chat for the same id would
-    rehydrate from disk, producing two parallel writers.
-
-    ``exclude`` skips the conversation that triggered this eviction. The
-    caller has not yet entered ``turn_scope`` for it, so ``is_turn_active``
-    cannot recognize it as protected — without this guard the just-inserted
-    entry would be evicted by its own insert in the rare case where every
-    other cached entry is mid-turn.
-    """
-    while len(_conversations) > _MAX_CACHED_CONVERSATIONS:
-        for cid in _conversations:
-            if cid == exclude:
-                continue
-            if not is_turn_active(cid):
-                _conversations.pop(cid)
-                await release_agent_browser(f"conv:{cid}")
-                logger.info(
-                    "Evicted LRU conversation %s from in-memory cache", cid,
-                )
-                break
-        else:
-            # Every cached conversation is mid-turn (or is the just-inserted
-            # caller) — accept temporary overflow rather than evict an
-            # active one. The next insert will retry.
-            return
 
 
 async def resume_conversation(conversation_id: str) -> dict | None:
@@ -176,18 +113,11 @@ async def resume_conversation(conversation_id: str) -> dict | None:
 
     None if the conversation isn't found.
     """
-    messages = load_conversation_history(conversation_id)
-    if messages is None:
+    conversation = await _cache.resume(conversation_id)
+    if conversation is None:
         return None
-
-    _conversations[conversation_id] = Conversation(
-        id=conversation_id,
-        history=ConversationHistory(messages, instance_id=conversation_id),
-    )
-    _conversations.move_to_end(conversation_id)
-    await _evict_lru_conversation(exclude=conversation_id)
     return {
-        "messages": messages,
+        "messages": list(conversation.history.messages),
         "events": load_agent_events(conversation_id),
         "preview_state": load_preview_state(conversation_id),
     }
@@ -230,7 +160,7 @@ async def handle_user_message(
     if not conversation_id:
         msg = "conversation_id is required"
         raise ValueError(msg)
-    conversation, is_new_conversation = await _get_conversation(conversation_id)
+    conversation, is_new_conversation = await _cache.get(conversation_id)
 
     user_content = message
     if data:

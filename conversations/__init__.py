@@ -22,12 +22,14 @@ from ._store import (
     save_sub_agent_history,
     save_summary_record,
 )
+from ._cache import ConversationCache
 from ._title_generation import (
     generate_conversation_title,
 )
 from ._turn_persistence import DiskTurnPersistence
 
 __all__ = [
+    "ConversationCache",
     "ConversationSummary",
     "DiskTurnPersistence",
     "SummaryRecord",
