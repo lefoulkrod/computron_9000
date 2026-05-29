@@ -7,12 +7,14 @@ from tools.browser import (
     browse_page,
     browser_visual_action,
     click,
+    close_tab,
     drag,
     execute_javascript,
     fill_field,
     go_back,
+    goto,
     inspect_page,
-    open_url,
+    new_tab,
     press_and_hold,
     press_keys,
     read_page,
@@ -44,6 +46,31 @@ _SKILL = Skill(
             [checkbox]              → click("7")  (toggles on/off)
             [radio]                 → click("7")
             [button]                → click("7")
+            [link]                  → click("7")  (NOT goto)
+
+        NAVIGATION: goto(url) is for URLs from outside the browser — user
+        input, fetch_url output, addresses you were told to visit. To follow a
+        link that appears in the current page (search results, article links,
+        nav items), always use click(ref) on the [link]'s ref number. Never
+        fabricate a URL from the visible link text — the ref already knows the
+        real href, and guessed URLs land on unrelated pages.
+
+        TABS: every tab has a stable ID shown in snapshot headers as
+        ``tab=N``. Once you've seen an ID it never changes — closing a
+        tab does not renumber the rest.
+            goto(url)            — navigate the current tab (creates the
+                                   first tab if none exist)
+            goto(url, tab="3")   — navigate tab 3 to a new URL
+            new_tab(url)         — open a new tab at url (keeps existing
+                                   tabs intact; use this for parallel reads
+                                   or "open in new tab" workflows)
+            close_tab(tab="3")   — close a tab when you're done with it
+        Page-acting tools (click, scroll_page, read_page, browse_page,
+        fill_field, ...) all take optional ``tab="N"``. Omit it when only
+        one tab is open; pass it when multiple. Tools error with a tab
+        listing when ``tab`` is missing or unknown. Concurrent goto on the
+        same tab errors — use new_tab(url) for parallel navigation.
+
         SLIDERS: [slider] elements are adjusted with drag(). browse_page() shows
         the current value after dragging (e.g. [7] [slider] Volume = 8).
 
@@ -57,7 +84,7 @@ _SKILL = Skill(
         browser. It returns the page content inline and saves the full page
         to a file; if the result is marked truncated, read the rest of that
         file with run_bash_cmd (grep, sed, cat).
-        Use the browser (open_url + read_page / browse_page) when:
+        Use the browser (goto + read_page / browse_page) when:
         - fetch_url returns a blocked / bot-challenge / failed message,
         - the page needs JavaScript rendering or interactive navigation, or
         - you need to search for a page rather than read a known URL.
@@ -87,7 +114,9 @@ _SKILL = Skill(
         - Page too complex → save_page_content("page.md") + run_bash_cmd("grep ...")
     """),
     tools=[
-        open_url,
+        goto,
+        new_tab,
+        close_tab,
         browse_page,
         read_page,
         click,

@@ -24,7 +24,9 @@ _console = Console(stderr=True)
 _CODE_PREVIEW_LEN = 120
 
 
-async def execute_javascript(code: str, timeout_ms: int = 10000) -> str:
+async def execute_javascript(
+    code: str, timeout_ms: int = 10000, tab: str | None = None,
+) -> str:
     """Execute JavaScript in the page context.  Advanced — prefer structured tools.
 
     Only use when ``click()``, ``fill_field()``, ``browse_page()`` cannot
@@ -44,11 +46,12 @@ async def execute_javascript(code: str, timeout_ms: int = 10000) -> str:
     Raises:
         BrowserToolError: If browser is not initialized or page is not available.
     """
-    _browser, view = await get_active_view("execute_javascript")
+    _browser, view = await get_active_view("execute_javascript", tab=tab)
+    from tools.browser.interactions import _page_of
 
     # Capture console output during execution
     console_lines: list[str] = []
-    page = await _browser.current_page()
+    page = _page_of(view)
 
     def _on_console(msg: Any) -> None:
         text = msg.text

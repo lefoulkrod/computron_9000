@@ -7,7 +7,9 @@ state. Call ``close_browser`` (or restart the process) to fully reset the
 browser and clear that state when needed.
 
 Public API:
-- open_url: Navigate to a URL and return a PageView.
+- goto: Navigate a tab to a URL (creates the first tab if none exist).
+- new_tab: Open a new tab at a URL.
+- close_tab: Close a tab; its ID is not reused.
 - browse_page: Browse the current page (no navigation) with ``[role] name``
   markers for interactive elements.  Optional ``scope`` parameter to focus
   on a specific section.
@@ -36,7 +38,7 @@ from .interactions import (
     scroll_page,
 )
 from .javascript import execute_javascript
-from .page import open_url
+from .navigation import close_tab, goto, new_tab
 from .read_content import read_page
 from .save_content import save_page_content
 from .select import select_option
@@ -53,13 +55,15 @@ __all__ = [
     "browse_page",
     "click",
     "close_browser",
+    "close_tab",
     "drag",
     "execute_javascript",
     "fill_field",
     "get_browser",
     "go_back",
+    "goto",
     "inspect_page",
-    "open_url",
+    "new_tab",
     "browser_visual_action",
     "press_and_hold",
     "press_keys",

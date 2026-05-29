@@ -10,7 +10,7 @@ from playwright.async_api import ElementHandle, Error as PlaywrightError, Page
 from .core import get_active_view
 from .core.exceptions import BrowserToolError
 from .core.human import human_click, human_press_keys
-from .interactions import _format_result, _resolve_or_raise
+from .interactions import _format_result, _page_of, _resolve_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,12 @@ async def _js_select(select_handle: ElementHandle, target_index: int) -> None:
     )
 
 
-async def select_option(selector: str, value: str, wait_after_select_ms: int | None = None) -> str:
+async def select_option(
+    selector: str,
+    value: str,
+    wait_after_select_ms: int | None = None,
+    tab: str | None = None,
+) -> str:
     """Select an option from a ``<select>`` dropdown by visible text.
 
     Args:
@@ -100,6 +105,7 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
         value: Exact visible text of the option (case-sensitive).
             Example: ``"Price: Low to High"``.
         wait_after_select_ms: Optional ms to wait after selecting.
+        tab: 1-based tab index when multiple tabs are open.
 
     Returns:
         Formatted string with action header and page snapshot.
@@ -109,7 +115,7 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
     """
     logger.info("Selecting option '%s' from dropdown '%s'", value, selector)
 
-    browser, view = await get_active_view("select_option")
+    browser, view = await get_active_view("select_option", tab=tab)
 
     try:
         # Resolve selector using shared resolution (ref number from page view).
@@ -131,7 +137,7 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
         select_handle = await select_locator.element_handle(timeout=5000)
 
         # Get the page for wait_for_timeout calls
-        page = await browser.current_page()
+        page = _page_of(view)
 
         async def _perform_select() -> None:
             # Click the dropdown to open it (human-like mouse movement).
@@ -156,7 +162,7 @@ async def select_option(selector: str, value: str, wait_after_select_ms: int | N
                 await page.wait_for_timeout(wait_after_select_ms)
 
         # Perform interaction and check for page changes
-        browser_result = await browser.perform_interaction(_perform_select)
+        browser_result = await browser.perform_interaction(_perform_select, page=page)
         return await _format_result(browser_result)
     except BrowserToolError:
         raise

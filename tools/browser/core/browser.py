@@ -36,6 +36,7 @@ from pydantic import BaseModel, ConfigDict
 
 import tools.browser.core.waits as browser_waits
 from config import load_config
+from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core._file_detection import DownloadInfo
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
@@ -152,6 +153,12 @@ class BrowserInteractionResult(BaseModel):
     settle_timings: browser_waits.SettleTimings | None = None
     frame_transition: str | None = None
     action_ms: float = 0.0
+    # The page this result was produced on.  Threaded through so parallel
+    # calls on different tabs each snapshot their own page rather than
+    # racing on whichever tab happens to be most recent at format time.
+    # Typed as ``Any`` for test-stub friendliness; in production it's
+    # always either ``None`` or a Playwright ``Page``.
+    page: Any = None
 
 
 def _chrome_ua_metadata(version: str) -> tuple[str, dict]:
@@ -240,6 +247,9 @@ class Browser:
         self._pw_browser: Any = pw_browser
         self._closed: bool = False
         self._active_frame: Frame | None = None
+        self._tab_id_of: dict[Page, int] = {}
+        self._next_tab_id: int = 0
+        self._navigating: set[Page] = set()
         self._pending_downloads: list[DownloadInfo] = []
         self._downloads_dir: str = ""
         self._download_listener_pages: set[int] = set()  # page id() tracking
@@ -557,13 +567,32 @@ class Browser:
     async def new_page(self) -> Page:
         """Open a new page within the persistent context.
 
+        Assigns a stable monotonic tab ID that never repeats — closing a
+        tab does not free its ID for reuse, so prior references stay
+        consistent (they fail loud rather than silently pointing at a
+        different page).
+
         Returns:
             The newly created Playwright ``Page``.
         """
         page = await self._context.new_page()
         await page.set_viewport_size(_viewport())
         self._attach_download_listener(page)
+        self._next_tab_id += 1
+        self._tab_id_of[page] = self._next_tab_id
+
+        def _on_close(_p: Any) -> None:
+            self._tab_id_of.pop(page, None)
+            self._navigating.discard(page)
+            if self._active_frame is not None and self._active_frame.page is page:
+                self._active_frame = None
+
+        page.on("close", _on_close)
         return page
+
+    def tab_id_of(self, page: Page) -> int | None:
+        """Return the stable tab ID for *page*, or ``None`` if untracked."""
+        return self._tab_id_of.get(page)
 
     async def current_page(self) -> Page:
         """Return the current page from the browser context.
@@ -582,7 +611,7 @@ class Browser:
             msg = "Browser context is closed; no current page available"
             raise RuntimeError(msg)
 
-        # Prefer the most recently opened page that hasn't been closed.
+        # Return the most recently opened page that hasn't been closed.
         pages = self._context.pages  # Playwright provides a list[Page]
         for page in reversed(pages):
             # ``is_closed`` is a synchronous check in Playwright's async API
@@ -592,6 +621,54 @@ class Browser:
 
         msg = "No open pages available in browser context"
         raise RuntimeError(msg)
+
+    def open_tabs(self) -> list[Page]:
+        """Return non-closed pages in the context, in opening order."""
+        return [p for p in self._context.pages if not p.is_closed()]
+
+    def _tab_listing(self) -> str:
+        """Render the open-tabs listing used in error messages."""
+        rows = []
+        for page in self.open_tabs():
+            tid = self._tab_id_of.get(page, "?")
+            rows.append(f"  tab={tid}: {page.url}")
+        return "Open tabs:\n" + "\n".join(rows) if rows else "No open tabs"
+
+    def resolve_tab(self, tab: str | int | None) -> Page:
+        """Look up the tab the tool should act on, by stable ID.
+
+        * ``tab=None`` and exactly one open tab → that tab.
+        * ``tab=None`` and multiple tabs → raises ``ValueError`` with the
+          listing so the caller knows to pass ``tab=``.
+        * ``tab="N"`` / ``tab=N`` → the open tab with that ID.
+
+        IDs are stable and monotonic — closing a tab does not free its
+        ID, so a stale reference always errors rather than silently
+        landing on a different tab.
+        """
+        tabs = self.open_tabs()
+        if not tabs:
+            raise ValueError("No open tabs; call new_tab(url) first")
+
+        if tab is None:
+            if len(tabs) == 1:
+                return tabs[0]
+            raise ValueError(
+                f"{len(tabs)} tabs open; specify tab=N. {self._tab_listing()}",
+            )
+
+        try:
+            target_id = int(str(tab).strip())
+        except ValueError:
+            raise ValueError(
+                f"tab={tab!r} is not a valid ID. {self._tab_listing()}",
+            ) from None
+        for page, tid in self._tab_id_of.items():
+            if tid == target_id and not page.is_closed():
+                return page
+        raise ValueError(
+            f"tab={tab!r} not found. {self._tab_listing()}",
+        )
 
     async def active_frame(self) -> Page | Frame:
         """Return the dominant iframe if one is active, otherwise the current page.
@@ -617,17 +694,24 @@ class Browser:
         """Reset the active frame so tools operate on the main page."""
         self._active_frame = None
 
-    async def active_view(self) -> ActiveView:
+    async def active_view(self, page: Page | None = None) -> ActiveView:
         """Return an ``ActiveView`` for tools to operate on.
 
-        Proactively detects a dominant iframe if none is currently tracked.
-        Reuses an already-set ``_active_frame`` without re-detecting.
-        Title and URL always come from the main page.
+        When *page* is given, build the view for that page.  Otherwise
+        fall back to ``current_page()`` (most recently opened).  Iframe
+        detection runs on the chosen page.  The cached ``_active_frame``
+        is only reused when it belongs to the chosen page.
         """
-        page = await self.current_page()
+        if page is None:
+            page = await self.current_page()
 
-        if self._active_frame is not None and not self._active_frame.is_detached():
-            frame: Page | Frame = self._active_frame
+        cached = self._active_frame
+        if (
+            cached is not None
+            and not cached.is_detached()
+            and cached.page is page
+        ):
+            frame: Page | Frame = cached
         else:
             self._active_frame = None
             try:
@@ -728,35 +812,58 @@ class Browser:
         """Return the underlying persistent ``BrowserContext``."""
         return self._context
 
-    async def navigate(self, url: str) -> BrowserInteractionResult:
-        """Navigate to *url* and return a ``BrowserInteractionResult``."""
-        try:
-            page = await self.current_page()
-        except RuntimeError:
-            page = await self.new_page()
+    async def navigate(
+        self, url: str, *, page: Page,
+    ) -> BrowserInteractionResult:
+        """Navigate *page* to *url* and return a ``BrowserInteractionResult``.
+
+        Raises ``BrowserToolError`` if *page* is already navigating —
+        concurrent goto on the same tab is the loud-error case that
+        teaches the agent to use ``new_tab`` for parallelism.
+        """
+        if page in self._navigating:
+            tid = self._tab_id_of.get(page, "?")
+            raise BrowserToolError(
+                f"Navigation already in flight on tab={tid}. "
+                f"Use new_tab(url) to open in parallel.",
+                tool="goto",
+            )
+        self._navigating.add(page)
         self.clear_active_frame()
         self._pending_downloads.clear()
         initial_url = getattr(page, "url", "")
         try:
-            response = await page.goto(url, wait_until="domcontentloaded")
-        except PlaywrightError as exc:
-            # When --disable-pdf-viewer converts a navigation to a download,
-            # Chromium aborts the page load with net::ERR_ABORTED.  The
-            # download listener captures the file asynchronously — wait
-            # for the download event before falling through to finalize.
-            if "net::ERR_ABORTED" not in str(exc):
-                raise
-            logger.debug("Navigation aborted (likely download): %s", url)
-            response = None
             try:
-                await page.wait_for_event("download", timeout=5_000)
-            except (PlaywrightTimeoutError, PlaywrightError):
-                pass
-        return await self._finalize_action(page, response=response, initial_url=initial_url)
+                response = await page.goto(url, wait_until="domcontentloaded")
+            except PlaywrightError as exc:
+                # When --disable-pdf-viewer converts a navigation to a download,
+                # Chromium aborts the page load with net::ERR_ABORTED.  The
+                # download listener captures the file asynchronously — wait
+                # for the download event before falling through to finalize.
+                if "net::ERR_ABORTED" not in str(exc):
+                    raise
+                logger.debug("Navigation aborted (likely download): %s", url)
+                response = None
+                try:
+                    await page.wait_for_event("download", timeout=5_000)
+                except (PlaywrightTimeoutError, PlaywrightError):
+                    pass
+            return await self._finalize_action(
+                page, response=response, initial_url=initial_url,
+            )
+        finally:
+            self._navigating.discard(page)
 
-    async def navigate_back(self) -> BrowserInteractionResult:
-        """Navigate back in history via ``perform_interaction``."""
-        page = await self.current_page()
+    async def navigate_back(
+        self, page: Page | None = None,
+    ) -> BrowserInteractionResult:
+        """Navigate back in history via ``perform_interaction``.
+
+        Pass *page* to operate on a specific tab; defaults to the most
+        recently opened.
+        """
+        if page is None:
+            page = await self.current_page()
 
         async def _back() -> None:
             try:
@@ -769,7 +876,7 @@ class Browser:
                 # domcontentloaded. Fall through to settle/snapshot.
                 logger.debug("go_back timed out (SPA likely handled navigation client-side)")
 
-        return await self.perform_interaction(_back)
+        return await self.perform_interaction(_back, page=page)
 
     # Timeouts for individual shutdown steps.  These are generous enough for
     # well-behaved pages but prevent indefinite hangs when Chromium is stuck.
@@ -986,6 +1093,7 @@ class Browser:
             download=download_info,
             settle_timings=settle_timings,
             frame_transition=frame_transition,
+            page=page,
         )
 
     async def _probe_file_url(self, new_page: Page, url: str) -> Page | None:
@@ -1030,9 +1138,16 @@ class Browser:
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
+        *,
+        page: Page | None = None,
     ) -> BrowserInteractionResult:
-        """Perform an interaction and run the shared post-action pipeline."""
-        page = await self.current_page()
+        """Perform an interaction and run the shared post-action pipeline.
+
+        Pass *page* to bind the interaction to a specific tab so parallel
+        tool calls on different tabs don't race for the "current" page.
+        """
+        if page is None:
+            page = await self.current_page()
         initial_url = getattr(page, "url", "")
 
         self._pending_downloads.clear()

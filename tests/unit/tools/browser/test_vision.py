@@ -18,7 +18,7 @@ from tools.browser.vision import inspect_page, browser_visual_action
 def _make_fake_get_active_view(browser):
     """Build a fake ``get_active_view`` from a ``_FakeBrowser``."""
 
-    async def _fake(tool_name):
+    async def _fake(tool_name, *, tab=None):
         view = await browser.active_view()
         if view.url in {"", "about:blank"}:
             raise BrowserToolError("Navigate to a page first.", tool=tool_name)
@@ -83,12 +83,21 @@ class _FakeBrowser:
     async def active_frame(self) -> _ScreenshotFakePage:
         return self._page
 
-    async def active_view(self):
+    async def active_view(self, page=None):
         from tools.browser.core.browser import ActiveView
 
         return ActiveView(frame=self._page, title="Example", url=self._page.url)
 
-    async def perform_interaction(self, action_fn):
+    def open_tabs(self):
+        return [self._page]
+
+    def tab_id_of(self, page):
+        return 1 if page is self._page else None
+
+    def resolve_tab(self, tab):
+        return self._page
+
+    async def perform_interaction(self, action_fn, *, page=None):
         from tools.browser.core.browser import BrowserInteractionResult
 
         await action_fn()
@@ -96,6 +105,7 @@ class _FakeBrowser:
             action_ms=10.0,
             settle_timings=None,
             navigation_response=None,
+            page=page if page is not None else self._page,
         )
 
 

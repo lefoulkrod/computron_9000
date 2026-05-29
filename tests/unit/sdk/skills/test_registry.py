@@ -72,17 +72,17 @@ class TestSkillRegistry:
 def test_strip_grounding_tools_removes_browser_visual_action():
     """The browser skill loses browser_visual_action when grounding is off."""
     from tools.browser.vision import browser_visual_action
-    from tools.browser import open_url
+    from tools.browser import goto
 
     skill = Skill(
         name="browser",
         description="test",
         prompt="p",
-        tools=[open_url, browser_visual_action],
+        tools=[goto, browser_visual_action],
     )
     stripped = _strip_grounding_tools(skill)
     assert browser_visual_action not in stripped.tools
-    assert open_url in stripped.tools
+    assert goto in stripped.tools
 
 
 @pytest.mark.unit

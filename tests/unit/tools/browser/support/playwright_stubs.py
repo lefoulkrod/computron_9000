@@ -640,7 +640,7 @@ class StubBrowser:
             return self._active_frame
         return self._page
 
-    async def active_view(self) -> Any:
+    async def active_view(self, page: Any = None) -> Any:
         from tools.browser.core.browser import ActiveView
         frame = await self.active_frame()
         try:
@@ -655,26 +655,39 @@ class StubBrowser:
     async def new_page(self) -> StubPage:
         return self._page
 
-    async def navigate(self, url: str) -> Any:
+    def open_tabs(self) -> list[StubPage]:
+        return [self._page]
+
+    def tab_id_of(self, page: Any) -> int | None:
+        return 1 if page is self._page else None
+
+    def resolve_tab(self, tab: Any) -> StubPage:
+        return self._page
+
+    async def navigate(self, url: str, *, page: Any = None) -> Any:
         from tools.browser.core.browser import BrowserInteractionResult
         self.clear_active_frame()
-        await self._page.goto(url)
+        target = page if page is not None else self._page
+        await target.goto(url)
         return BrowserInteractionResult(
             navigation_response=None,
             download=None,
+            page=target,
         )
 
-    async def navigate_back(self) -> Any:
+    async def navigate_back(self, page: Any = None) -> Any:
         from tools.browser.core.browser import BrowserInteractionResult
 
         async def _back() -> None:
             await self._page.go_back(wait_until="domcontentloaded")
 
-        return await self.perform_interaction(_back)
+        return await self.perform_interaction(_back, page=page)
 
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
+        *,
+        page: Any = None,
     ) -> Any:
         """Match Browser.perform return contract for tests."""
         await action()

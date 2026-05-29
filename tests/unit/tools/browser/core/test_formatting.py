@@ -109,3 +109,30 @@ class TestFormatPageView:
             truncated=False,
         )
         assert "[Viewport: unavailable]" in out
+
+    def test_tab_id_in_header(self) -> None:
+        """tab=N segment appears in the header when an ID is supplied."""
+        out = format_page_view(
+            title="Example",
+            url="https://example.com",
+            status_code=200,
+            viewport={"scroll_top": 0, "viewport_height": 800, "document_height": 2000},
+            content="",
+            truncated=False,
+            tab_id=4,
+        )
+        assert "[Page: Example | https://example.com | 200 | tab=4]" in out
+
+    def test_tab_id_omitted_when_none(self) -> None:
+        """Header has no tab segment when tab_id is None."""
+        out = format_page_view(
+            title="Example",
+            url="https://example.com",
+            status_code=200,
+            viewport={"scroll_top": 0, "viewport_height": 800, "document_height": 2000},
+            content="",
+            truncated=False,
+            tab_id=None,
+        )
+        assert "tab=" not in out.splitlines()[0]
+        assert "[Page: Example | https://example.com | 200]" in out

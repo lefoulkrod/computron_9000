@@ -13,7 +13,7 @@ from tests.unit.tools.browser.support.playwright_stubs import StubBrowser, StubP
 
 def _make_fake_get_active_view(browser: StubBrowser):
     """Build a fake ``get_active_view`` that returns a stub browser + ActiveView."""
-    async def _fake(tool_name: str):
+    async def _fake(tool_name: str, *, tab=None):
         from tools.browser.core.browser import ActiveView
         from tools.browser.core.exceptions import BrowserToolError as BTE
         view = await browser.active_view()
@@ -313,7 +313,7 @@ class TestReadPage:
         """read_page raises BrowserToolError when no browser is available."""
         from tools.browser.core.exceptions import BrowserToolError as BTE
 
-        async def _raise(tool_name: str):
+        async def _raise(tool_name: str, *, tab=None):
             raise BTE("No open page to read", tool=tool_name)
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _raise)

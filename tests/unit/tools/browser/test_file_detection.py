@@ -281,17 +281,17 @@ class TestFormatDownloadMessage:
 
 
 # ---------------------------------------------------------------------------
-# open_url file detection integration
+# goto file detection integration
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestOpenUrlFileDetection:
-    """Tests for open_url detecting file downloads."""
+class TestGotoFileDetection:
+    """Tests for goto() detecting file downloads."""
 
     @pytest.mark.asyncio
-    async def test_open_url_detects_pdf(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """open_url returns download message string for PDF."""
+    async def test_goto_detects_pdf(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """goto returns download message string for PDF."""
         from tools.browser.core.browser import BrowserInteractionResult
 
         pdf_body = b"%PDF-1.4 test"
@@ -307,18 +307,21 @@ class TestOpenUrlFileDetection:
             download=download_info,
         )
 
+        mock_page = AsyncMock()
         mock_browser = AsyncMock()
+        mock_browser.open_tabs = lambda: []  # bootstrap path
+        mock_browser.new_page = AsyncMock(return_value=mock_page)
         mock_browser.navigate = AsyncMock(return_value=result)
 
         async def _get_browser():
             return mock_browser
 
         monkeypatch.setattr("tools.browser.events.get_browser", _get_browser)
-        monkeypatch.setattr("tools.browser.page.browser_core.get_browser", _get_browser)
+        monkeypatch.setattr("tools.browser.navigation.browser_core.get_browser", _get_browser)
 
-        from tools.browser.page import open_url
+        from tools.browser.navigation import goto
 
-        output = await open_url("https://example.com/test.pdf")
+        output = await goto("https://example.com/test.pdf")
 
         assert isinstance(output, str)
         assert "test.pdf" in output
@@ -326,27 +329,32 @@ class TestOpenUrlFileDetection:
         assert "application/pdf" in output
 
     @pytest.mark.asyncio
-    async def test_open_url_normal_html(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """open_url returns formatted string for HTML responses."""
+    async def test_goto_normal_html(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """goto returns formatted string for HTML responses."""
         from tools.browser.core.browser import ActiveView, BrowserInteractionResult
         from tools.browser.core.page_view import PageView
 
+        mock_page = AsyncMock()
         result = BrowserInteractionResult(
             navigation_response=None,
             download=None,
+            page=mock_page,
         )
 
         mock_view = ActiveView(frame=AsyncMock(), title="Test", url="https://example.com")
 
         mock_browser = AsyncMock()
+        mock_browser.open_tabs = lambda: []
+        mock_browser.new_page = AsyncMock(return_value=mock_page)
         mock_browser.navigate = AsyncMock(return_value=result)
         mock_browser.active_view = AsyncMock(return_value=mock_view)
+        mock_browser.tab_id_of = lambda p: 1
 
         async def _get_browser() -> object:
             return mock_browser
 
         monkeypatch.setattr("tools.browser.events.get_browser", _get_browser)
-        monkeypatch.setattr("tools.browser.page.browser_core.get_browser", _get_browser)
+        monkeypatch.setattr("tools.browser.navigation.browser_core.get_browser", _get_browser)
         # _format_result calls get_browser from interactions module
         monkeypatch.setattr("tools.browser.interactions.get_browser", _get_browser)
 
@@ -362,9 +370,9 @@ class TestOpenUrlFileDetection:
 
         monkeypatch.setattr("tools.browser.interactions.build_page_view", _mock_build)
 
-        from tools.browser.page import open_url
+        from tools.browser.navigation import goto
 
-        output = await open_url("https://example.com")
+        output = await goto("https://example.com")
 
         assert isinstance(output, str)
         assert "Test" in output
@@ -416,7 +424,7 @@ class TestFormatResultFileDetection:
             download=None,
         )
 
-        async def _mock_build(response: object) -> PageView:
+        async def _mock_build(response: object, *, page: object = None) -> PageView:
             return PageView(
                 title="Test",
                 url="https://example.com",
@@ -427,6 +435,15 @@ class TestFormatResultFileDetection:
             )
 
         monkeypatch.setattr("tools.browser.interactions._build_snapshot", _mock_build)
+
+        # _format_result calls get_browser() to look up tab_id; stub it.
+        mock_browser = AsyncMock()
+        mock_browser.tab_id_of = lambda p: None
+
+        async def _get_browser() -> object:
+            return mock_browser
+
+        monkeypatch.setattr("tools.browser.interactions.get_browser", _get_browser)
 
         output = await _format_result(result)
 
