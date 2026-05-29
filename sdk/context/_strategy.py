@@ -429,7 +429,10 @@ class LLMCompactionStrategy:
         objective: str = "",
     ) -> tuple[str, str]:
         """Call the summarization LLM and return (summary_text, model_name)."""
-        provider_name, model, options = self._resolve_model()
+        resolved = self._resolve_model()
+        if resolved is None:
+            raise RuntimeError("No compaction model/provider configured")
+        provider_name, model, options = resolved
         provider = get_provider(provider_name)
 
         user_content = ""
@@ -464,7 +467,10 @@ class LLMCompactionStrategy:
         user message, indicating the user may have changed topics.  Uses
         the same model as the summarizer.
         """
-        provider_name, model, options = self._resolve_model()
+        resolved = self._resolve_model()
+        if resolved is None:
+            raise RuntimeError("No compaction model/provider configured")
+        provider_name, model, options = resolved
         provider = get_provider(provider_name)
 
         # Build the user content with numbered messages.

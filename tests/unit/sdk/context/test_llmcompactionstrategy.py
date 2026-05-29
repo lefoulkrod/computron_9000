@@ -279,3 +279,71 @@ async def test_unload_model_handles_subprocess_error():
                side_effect=OSError("ollama not found")):
         # Should not raise — the exception is caught and logged.
         await _unload_model("test-model")
+
+
+# ── _resolve_model None-unpacking guards ────────────────────────────────
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_call_summarizer_raises_when_resolve_model_returns_none():
+    """_call_summarizer should raise RuntimeError when _resolve_model returns None."""
+    from sdk.context._strategy import LLMCompactionStrategy
+
+    strategy = LLMCompactionStrategy(threshold=0.75)
+    with patch.object(strategy, "_resolve_model", return_value=None):
+        with pytest.raises(RuntimeError, match="No compaction model/provider configured"):
+            await strategy._call_summarizer("some conversation text")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_extract_intent_raises_when_resolve_model_returns_none():
+    """_extract_intent should raise RuntimeError when _resolve_model returns None."""
+    from sdk.context._strategy import LLMCompactionStrategy
+
+    strategy = LLMCompactionStrategy(threshold=0.75)
+    with patch.object(strategy, "_resolve_model", return_value=None):
+        with pytest.raises(RuntimeError, match="No compaction model/provider configured"):
+            await strategy._extract_intent(["user message 1", "user message 2"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_call_summarizer_works_when_resolve_model_succeeds():
+    """_call_summarizer should work normally when _resolve_model returns valid data."""
+    from sdk.context._strategy import LLMCompactionStrategy
+
+    strategy = LLMCompactionStrategy(threshold=0.75)
+    with patch.object(strategy, "_resolve_model", return_value=("ollama", "test-model", {})):
+        with patch("sdk.context._strategy.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.chat = AsyncMock()
+            mock_provider.chat.return_value = MagicMock()
+            mock_provider.chat.return_value.message.content = "summary result"
+            mock_get_provider.return_value = mock_provider
+
+            summary, model_name = await strategy._call_summarizer("some text")
+
+            assert summary == "summary result"
+            assert model_name == "test-model"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_extract_intent_works_when_resolve_model_succeeds():
+    """_extract_intent should work normally when _resolve_model returns valid data."""
+    from sdk.context._strategy import LLMCompactionStrategy
+
+    strategy = LLMCompactionStrategy(threshold=0.75)
+    with patch.object(strategy, "_resolve_model", return_value=("ollama", "test-model", {})):
+        with patch("sdk.context._strategy.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.chat = AsyncMock()
+            mock_provider.chat.return_value = MagicMock()
+            mock_provider.chat.return_value.message.content = "intent result"
+            mock_get_provider.return_value = mock_provider
+
+            result = await strategy._extract_intent(["msg1", "msg2"])
+
+            assert result == "intent result"
