@@ -327,6 +327,7 @@ e2e *args:
         -e PORT=$port \
         -e DISPLAY=:100 \
         -e ENABLE_DESKTOP=false \
+        -e ENABLE_CUSTOM_TOOLS=true \
         $env_args \
         -v "$state/home:/home/computron:rw" \
         -v "$state/state:/var/lib/computron:rw" \
