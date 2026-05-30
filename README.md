@@ -369,16 +369,16 @@ Pass these with `-e` when running the container:
 | `ENABLE_MUSIC_GEN` | No | Set to `1` to enable music generation (requires GPU). |
 | `ENABLE_DESKTOP` | No | Set to `1` to enable the desktop agent (GUI automation via Xfce). |
 | `ENABLE_GROUNDING` | No | Set to `1` to enable visual grounding in browser/desktop (requires GPU). |
-| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token for goal run notifications. |
-| `TELEGRAM_CHAT_ID` | No | Telegram chat ID to receive notifications. |
+
+Telegram bot setup (both bidirectional chat and goal-run push notifications)
+is configured in-app: add a Telegram integration on the Integrations tab,
+then wire push notifications to it from Settings → System → Notifications.
 
 To pass multiple env vars, add `-e` for each one:
 
 ```bash
 docker run -d --name computron --shm-size=256m --network=host \
   -e HF_TOKEN=hf_your_token_here \
-  -e TELEGRAM_BOT_TOKEN=your_bot_token \
-  -e TELEGRAM_CHAT_ID=your_chat_id \
   -v computron_home:/home/computron \
   -v computron_state:/var/lib/computron \
   ghcr.io/lefoulkrod/computron_9000:latest

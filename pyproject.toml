@@ -24,6 +24,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2",
     "google-api-python-client>=2.130",
     "aiogram>=3.7",
+    "telegramify-markdown>=1.1.5",
 ]
 
 [project.optional-dependencies]

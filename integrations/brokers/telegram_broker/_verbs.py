@@ -126,17 +126,23 @@ class VerbDispatcher:
         return {"updates": updates}
 
     async def _handle_send_message(self, args: dict[str, Any]) -> dict[str, Any]:
-        """``send_message {chat_id, text, reply_to_message_id?, buttons?}`` → ``{message_id}``.
+        """``send_message {chat_id, text, reply_to_message_id?, buttons?, parse_mode?}`` → ``{message_id}``.
 
         ``buttons`` is an optional 2-D array of ``{text, data}`` dicts that
         becomes an inline keyboard attached to the message. Each tap fires a
         callback_query update with ``data`` matching what was sent.
+
+        ``parse_mode`` is an optional Telegram parse-mode string
+        (``"MarkdownV2"``, ``"HTML"``, ``"Markdown"``). Omit for plain text.
         """
         chat_id = _require_int(args, "chat_id")
         text = _require_str(args, "text")
         reply_to = args.get("reply_to_message_id")
         if reply_to is not None and (isinstance(reply_to, bool) or not isinstance(reply_to, int)):
             raise RpcError("BAD_REQUEST", "'reply_to_message_id' must be an integer")
+        parse_mode = args.get("parse_mode")
+        if parse_mode is not None and not isinstance(parse_mode, str):
+            raise RpcError("BAD_REQUEST", "'parse_mode' must be a string")
         reply_markup = _coerce_inline_keyboard(args.get("buttons"))
         try:
             msg = await self._bot.send_message(
@@ -144,6 +150,7 @@ class VerbDispatcher:
                 text=text,
                 reply_to_message_id=reply_to,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
         except TelegramAPIError as exc:
             raise RpcError("INTERNAL", str(exc)) from exc

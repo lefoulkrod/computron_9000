@@ -7,11 +7,11 @@ channel uses); no Telegram credentials live in this process.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from integrations.broker_client import IntegrationError, call as broker_call
+from settings import load_settings
 
 if TYPE_CHECKING:
     from config import NotificationsConfig
@@ -26,10 +26,10 @@ _TELEGRAM_MSG_LIMIT = 4096
 class TelegramNotifier:
     """Sends notification messages to Telegram via the broker.
 
-    Reads ``TELEGRAM_INTEGRATION_ID`` and ``TELEGRAM_CHAT_ID`` from the
-    environment. If either is missing, the notifier disables itself with a
-    warning. All public methods are fire-and-forget — errors are logged,
-    never raised.
+    Configuration is read from app settings (``telegram_notifier_integration_id``
+    and ``telegram_notifier_chat_id``) on construction. If either is blank,
+    the notifier disables itself with a warning. All public methods are
+    fire-and-forget — errors are logged, never raised.
     """
 
     def __init__(
@@ -40,21 +40,15 @@ class TelegramNotifier:
     ) -> None:
         self._config = config
         self._app_sock = app_sock_path
-        self._integration_id = os.environ.get("TELEGRAM_INTEGRATION_ID", "")
-        chat_id_raw = os.environ.get("TELEGRAM_CHAT_ID", "")
-        try:
-            self._chat_id: int | None = int(chat_id_raw) if chat_id_raw else None
-        except ValueError:
-            logger.warning(
-                "TELEGRAM_CHAT_ID is not an integer (%r); Telegram notifications "
-                "disabled", chat_id_raw,
-            )
-            self._chat_id = None
+        settings = load_settings()
+        self._integration_id = settings.get("telegram_notifier_integration_id") or ""
+        chat_id = settings.get("telegram_notifier_chat_id")
+        self._chat_id: int | None = chat_id if isinstance(chat_id, int) else None
 
         if not self._integration_id or self._chat_id is None:
             logger.warning(
-                "TELEGRAM_INTEGRATION_ID or TELEGRAM_CHAT_ID not set — "
-                "Telegram notifications disabled",
+                "Telegram notifier integration_id or chat_id not configured — "
+                "notifications disabled",
             )
             self._disabled = True
         else:

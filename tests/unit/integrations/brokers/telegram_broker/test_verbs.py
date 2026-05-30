@@ -174,8 +174,31 @@ class TestSendMessage:
         )
         assert out == {"message_id": 777}
         bot.send_message.assert_awaited_once_with(
-            chat_id=42, text="hi", reply_to_message_id=None, reply_markup=None,
+            chat_id=42,
+            text="hi",
+            reply_to_message_id=None,
+            reply_markup=None,
+            parse_mode=None,
         )
+
+    async def test_passes_parse_mode_when_provided(self):
+        bot = MagicMock()
+        bot.send_message = AsyncMock(return_value=_FakeSentMessage(message_id=1))
+        dispatcher = _make_dispatcher(bot=bot)
+        await dispatcher.dispatch(
+            "send_message",
+            {"chat_id": 1, "text": "hi", "parse_mode": "MarkdownV2"},
+        )
+        assert bot.send_message.await_args.kwargs["parse_mode"] == "MarkdownV2"
+
+    async def test_rejects_non_string_parse_mode(self):
+        dispatcher = _make_dispatcher()
+        with pytest.raises(RpcError) as exc:
+            await dispatcher.dispatch(
+                "send_message",
+                {"chat_id": 1, "text": "hi", "parse_mode": 42},
+            )
+        assert exc.value.code == "BAD_REQUEST"
 
     async def test_passes_reply_to_message_id_when_provided(self):
         bot = MagicMock()

@@ -645,13 +645,23 @@ class TelegramChannel:
     # -- outbound -------------------------------------------------------
 
     async def _send_text(self, chat_id: int, text: str) -> None:
-        """Send *text* to *chat_id*, splitting if necessary."""
-        for chunk in self._formatter.split(text):
+        """Send *text* to *chat_id*, splitting if necessary.
+
+        Agent output is CommonMark-flavored markdown. We convert to
+        Telegram MarkdownV2 and tag the send with ``parse_mode`` so the
+        formatting renders natively instead of showing as literal
+        asterisks and backticks.
+        """
+        for chunk in self._formatter.to_markdownv2_chunks(text):
             try:
                 await broker_call(
                     self._integration_id,
                     "send_message",
-                    {"chat_id": chat_id, "text": chunk},
+                    {
+                        "chat_id": chat_id,
+                        "text": chunk,
+                        "parse_mode": "MarkdownV2",
+                    },
                     app_sock_path=self._app_sock,
                 )
             except IntegrationError as exc:

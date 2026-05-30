@@ -606,18 +606,18 @@ async def _init_telegram_bot(app: web.Application) -> None:
     integration in the wizard is the only enable/disable knob.
     """
     config = load_config()
-    runner = TelegramChannel(
+    channel = TelegramChannel(
         app_sock_path=Path(config.integrations.app_sock_path),
     )
-    await runner.start()
-    app["telegram_bot_runner"] = runner
+    await channel.start()
+    app["telegram_channel"] = channel
 
 
 async def _stop_telegram_bot(app: web.Application) -> None:
-    """Stop the Telegram bot runner if present."""
-    runner: TelegramChannel | None = app.get("telegram_bot_runner")
-    if runner:
-        await runner.stop()
+    """Stop the Telegram channel if present."""
+    channel: TelegramChannel | None = app.get("telegram_channel")
+    if channel:
+        await channel.stop()
 
 
 __all__ = ["create_app"]

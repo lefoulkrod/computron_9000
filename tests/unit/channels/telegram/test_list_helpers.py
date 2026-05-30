@@ -1,10 +1,10 @@
-"""Tests for the /list helpers in channels.telegram._runner."""
+"""Tests for the /list helpers in channels.telegram._channel."""
 
 from __future__ import annotations
 
 import pytest
 
-from channels.telegram._runner import _matches_query, _row_label
+from channels.telegram._channel import _matches_query, _row_label
 from conversations._models import ConversationSummary
 
 

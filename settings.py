@@ -52,6 +52,10 @@ _DEFAULTS: dict[str, Any] = {
     },
     "title_provider": "",
     "title_model": "",
+    # Goal-run push notifications. Empty integration_id or null chat_id
+    # leaves the notifier disabled.
+    "telegram_notifier_integration_id": "",
+    "telegram_notifier_chat_id": None,
 }
 
 # Metadata service IPs that must never be reachable via user-supplied URLs.
@@ -89,6 +93,8 @@ class SettingsUpdate(BaseModel):
     compaction_options: dict[str, Any] | None = None
     title_provider: str | None = None
     title_model: str | None = None
+    telegram_notifier_integration_id: str | None = None
+    telegram_notifier_chat_id: int | None = None
 
     @field_validator("direct_providers")
     @classmethod
