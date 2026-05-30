@@ -14,7 +14,18 @@ export default function usePreviewState(agentState, agentDispatch) {
     const selectedAgentId = agentState.selectedAgentId;
     const previewAgent = (selectedAgentId && agentState.agents[selectedAgentId]) || rootAgent;
 
-    const browserSnapshot = previewAgent?.browserSnapshot || null;
+    const browserTabs = previewAgent?.browserTabs || {};
+    // Stable rail order: numeric ids ascending.
+    // BrowserPreview owns which tab is shown; we just hand it the list.
+    const browserTabsList = useMemo(() => {
+        const entries = Object.entries(browserTabs).map(([k, snap]) => ({
+            id: Number(k),
+            snapshot: snap,
+        }));
+        entries.sort((a, b) => a.id - b.id);
+        return entries;
+    }, [browserTabs]);
+    const hasBrowser = browserTabsList.length > 0;
     const terminalLines = previewAgent?.terminalLines || [];
     const desktopActive = previewAgent?.desktopActive || false;
     const generationPreview = previewAgent?.generationPreview || null;
@@ -22,7 +33,7 @@ export default function usePreviewState(agentState, agentDispatch) {
 
     const tabs = useMemo(() => {
         const t = [];
-        if (browserSnapshot) t.push({ id: 'browser', label: 'Browser', icon: <BrowserIcon size={14} /> });
+        if (hasBrowser) t.push({ id: 'browser', label: 'Browser', icon: <BrowserIcon size={14} /> });
         for (const f of openFiles) {
             t.push({ id: `file:${f.filename}`, label: f.filename || 'File', icon: <FileIcon size={14} /> });
         }
@@ -30,7 +41,7 @@ export default function usePreviewState(agentState, agentDispatch) {
         if (desktopActive) t.push({ id: 'desktop', label: 'Desktop', icon: <DesktopIcon size={14} /> });
         if (generationPreview) t.push({ id: 'generation', label: 'Generation', icon: <SparkleIcon size={14} /> });
         return t;
-    }, [browserSnapshot, openFiles, terminalLines, desktopActive, generationPreview]);
+    }, [hasBrowser, openFiles, terminalLines, desktopActive, generationPreview]);
 
     useEffect(() => {
         if (tabs.length === 0) {
@@ -56,7 +67,8 @@ export default function usePreviewState(agentState, agentDispatch) {
         if (!agentId) return;
 
         if (id === 'browser') {
-            agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId, snapshot: null });
+            // The preview-panel close, not the agent's close_tab tool.
+            agentDispatch({ type: 'CLEAR_BROWSER_TABS', agentId });
         } else if (id.startsWith('file:')) {
             agentDispatch({ type: 'CLOSE_FILE', agentId, filename: id.slice(5) });
         } else if (id === 'terminal') {
@@ -88,7 +100,7 @@ export default function usePreviewState(agentState, agentDispatch) {
         openFile,
         closeTab,
         reset,
-        browserSnapshot,
+        browserTabsList,
         terminalLines,
         desktopActive,
         generationPreview,

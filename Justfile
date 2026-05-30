@@ -262,7 +262,7 @@ manual-test:
     docker run -d --rm --name "$name" \
         --gpus all --shm-size=256m --network=host \
         -e PORT=$port \
-        -e DISPLAY=:100 \
+        -e DISPLAY=:$port \
         -e ENABLE_DESKTOP=false \
         $env_args \
         -v "$state/home:/home/computron:rw" \
@@ -318,15 +318,17 @@ e2e *args:
     env_args=""; [ -f .env ] && env_args="--env-file .env"
 
     # --network=host so the container reaches host-local ollama (as :11434).
-    # DISPLAY=:100 avoids the abstract X socket clash with a dev container on :99.
+    # DISPLAY=:$port — derive from port so multiple containers (dev, manual-test,
+    # e2e) sharing the host network namespace can't collide on X abstract sockets.
     # ENABLE_DESKTOP=false (explicit) skips xfce + VNC + noVNC so ports 5900/6080
     # stay free for a concurrently-running dev container.
     # PORT=$port picks a non-8080 app port so the two aiohttp servers coexist.
     docker run -d --rm --name "$name" \
         --gpus all --shm-size=256m --network=host \
         -e PORT=$port \
-        -e DISPLAY=:100 \
+        -e DISPLAY=:$port \
         -e ENABLE_DESKTOP=false \
+        -e ENABLE_CUSTOM_TOOLS=true \
         $env_args \
         -v "$state/home:/home/computron:rw" \
         -v "$state/state:/var/lib/computron:rw" \

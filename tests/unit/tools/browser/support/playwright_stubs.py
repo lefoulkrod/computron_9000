@@ -630,51 +630,68 @@ class StubBrowser:
 
     def __init__(self, page: StubPage) -> None:
         self._page = page
-        self._active_frame: StubFrame | None = None
+        self._dominant_frames: dict[StubPage, StubFrame] = {}
 
     async def current_page(self) -> StubPage:
         return self._page
 
-    async def active_frame(self) -> StubPage | StubFrame:
-        if self._active_frame is not None and not self._active_frame.is_detached():
-            return self._active_frame
-        return self._page
+    async def active_frame(self, page: StubPage | None = None) -> StubPage | StubFrame:
+        if page is None:
+            page = self._page
+        cached = self._dominant_frames.get(page)
+        if cached is not None and not cached.is_detached():
+            return cached
+        return page
 
-    async def active_view(self) -> Any:
+    async def active_view(self, page: Any = None) -> Any:
         from tools.browser.core.browser import ActiveView
-        frame = await self.active_frame()
+        if page is None:
+            page = self._page
+        frame = await self.active_frame(page)
         try:
             title = await self._page.title()
         except Exception:
             title = "Test Page"
         return ActiveView(frame=frame, title=title, url=self._page.url)
 
-    def clear_active_frame(self) -> None:
-        self._active_frame = None
+    def invalidate_dominant_frame(self, page: Any) -> None:
+        self._dominant_frames.pop(page, None)
 
     async def new_page(self) -> StubPage:
         return self._page
 
-    async def navigate(self, url: str) -> Any:
+    def open_tabs(self) -> list[StubPage]:
+        return [self._page]
+
+    def tab_id_of(self, page: Any) -> int | None:
+        return 1 if page is self._page else None
+
+    def resolve_tab(self, tab: Any) -> StubPage:
+        return self._page
+
+    async def navigate(self, url: str, *, page: Any = None) -> Any:
         from tools.browser.core.browser import BrowserInteractionResult
-        self.clear_active_frame()
-        await self._page.goto(url)
+        target = page if page is not None else self._page
+        self.invalidate_dominant_frame(target)
+        await target.goto(url)
         return BrowserInteractionResult(
             navigation_response=None,
             download=None,
         )
 
-    async def navigate_back(self) -> Any:
+    async def navigate_back(self, page: Any = None) -> Any:
         from tools.browser.core.browser import BrowserInteractionResult
 
         async def _back() -> None:
             await self._page.go_back(wait_until="domcontentloaded")
 
-        return await self.perform_interaction(_back)
+        return await self.perform_interaction(_back, page=page)
 
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
+        *,
+        page: Any = None,
     ) -> Any:
         """Match Browser.perform return contract for tests."""
         await action()

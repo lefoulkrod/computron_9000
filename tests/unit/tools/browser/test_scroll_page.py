@@ -50,7 +50,7 @@ async def test_scroll_page_delegates(
 
     monkeypatch.setattr("tools.browser.interactions.human_scroll", fake_human_scroll)
 
-    result = await scroll_page("down")
+    result = await scroll_page("down", tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert "Viewport:" in result
@@ -61,7 +61,7 @@ async def test_scroll_page_delegates(
 @pytest.mark.asyncio
 async def test_scroll_page_invalid_direction() -> None:
     with pytest.raises(BrowserToolError):
-        await scroll_page("")
+        await scroll_page("", tab="1")
 
 
 @pytest.mark.unit
@@ -77,7 +77,7 @@ async def test_scroll_budget_warning_after_threshold(
     # Scroll up to the warning threshold
     result = ""
     for _ in range(_SCROLL_WARN_THRESHOLD):
-        result = await scroll_page("down")
+        result = await scroll_page("down", tab="1")
 
     # The last scroll should have a warning
     assert "SCROLL WARNING" in result
@@ -95,7 +95,7 @@ async def test_scroll_budget_no_warning_before_threshold(
 
     result = ""
     for _ in range(_SCROLL_WARN_THRESHOLD - 1):
-        result = await scroll_page("down")
+        result = await scroll_page("down", tab="1")
 
     assert "SCROLL WARNING" not in result
 
@@ -112,11 +112,11 @@ async def test_scroll_budget_hard_limit_raises(
 
     # Exhaust the budget
     for _ in range(_SCROLL_HARD_LIMIT):
-        await scroll_page("down")
+        await scroll_page("down", tab="1")
 
     # Next scroll should be refused
     with pytest.raises(BrowserToolError, match="Scroll limit reached"):
-        await scroll_page("down")
+        await scroll_page("down", tab="1")
 
 
 @pytest.mark.unit
@@ -142,13 +142,13 @@ async def test_scroll_budget_resets_on_url_change(
 
     # Use up most of the budget
     for _ in range(_SCROLL_HARD_LIMIT - 1):
-        await scroll_page("down")
+        await scroll_page("down", tab="1")
 
     # Simulate navigation to a new URL
     page.url = "https://example.test/page2"
 
     # Should work fine — budget is reset for the new URL
-    result = await scroll_page("down")
+    result = await scroll_page("down", tab="1")
     assert isinstance(result, str)
     # First scroll on new URL, no warning expected
     assert "SCROLL WARNING" not in result

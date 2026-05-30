@@ -16,9 +16,12 @@ from playwright.async_api import Page
 
 from settings import load_settings
 from tools.browser.core import get_active_view, get_browser
+from tools.browser.core._formatting import format_page_view
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
+from tools.browser.core.page_view import build_page_view
 from tools.browser.events import emit_screenshot_after
+from tools.browser.interactions import _format_result
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,7 @@ async def inspect_page(
     *,
     mode: str = "full_page",
     selector: str | None = None,
+    tab: str,
 ) -> str:
     """Inspect the current page visually and answer a question about it.  SLOW.
 
@@ -66,9 +70,9 @@ async def inspect_page(
         msg = "mode must be one of {'full_page', 'viewport', 'selector'}."
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
 
-    _browser, view = await get_active_view(_SCREENSHOT_TOOL_NAME)
+    _browser, view = await get_active_view(_SCREENSHOT_TOOL_NAME, tab=tab)
     # Screenshots require the Page object (not Frame)
-    page = await _browser.current_page()
+    page = view.page
 
     try:
         if normalized_mode == "selector":
@@ -119,7 +123,7 @@ async def inspect_page(
 
 
 @emit_screenshot_after
-async def browser_visual_action(task: str) -> str:
+async def browser_visual_action(task: str, *, tab: str) -> str:
     """Ask a vision model to decide and execute the next GUI action.
 
     Only the current viewport is screenshotted — the target element must
@@ -142,15 +146,14 @@ async def browser_visual_action(task: str) -> str:
     """
     from tools._grounding import run_grounding
     from tools.browser._action_map import execute_action
-    from tools.browser.interactions import _format_result
 
     clean_task = task.strip()
     if not clean_task:
         msg = "task must be a non-empty string."
         raise BrowserToolError(msg, tool=_VISUAL_ACTION_TOOL_NAME)
 
-    browser, view = await get_active_view(_VISUAL_ACTION_TOOL_NAME)
-    page = await browser.current_page()
+    browser, view = await get_active_view(_VISUAL_ACTION_TOOL_NAME, tab=tab)
+    page = view.page
 
     # Capture viewport screenshot.
     try:
@@ -180,9 +183,6 @@ async def browser_visual_action(task: str) -> str:
     # Handle finished — return snapshot with note.
     if response.action_type == "finished":
         finished_content = response.raw.get("finished_content", "")
-        from tools.browser.core._formatting import format_page_view
-        from tools.browser.core.page_view import build_page_view
-
         snapshot = await build_page_view(view, None)
         content = snapshot.content
         if finished_content:
@@ -194,14 +194,16 @@ async def browser_visual_action(task: str) -> str:
             viewport=snapshot.viewport,
             content=content,
             truncated=snapshot.truncated,
+            tab_id=browser.tab_id_of(page),
         )
 
     # Execute the action via perform_interaction for proper settle/snapshot.
     try:
         result = await browser.perform_interaction(
             lambda: execute_action(response, page, view.frame),
+            page=page,
         )
-        return await _format_result(result, tool_name=_VISUAL_ACTION_TOOL_NAME)
+        return await _format_result(result, page, tool_name=_VISUAL_ACTION_TOOL_NAME)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -221,7 +223,7 @@ async def _selector_screenshot(page: Page, selector: str | None) -> bytes:
 
     # Use active frame for locator resolution (element may be inside an iframe)
     browser = await get_browser()
-    active_view = await browser.active_view()
+    active_view = await browser.active_view(page=page)
 
     resolution = await _resolve_locator(
         active_view.frame,

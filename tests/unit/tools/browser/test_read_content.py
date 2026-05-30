@@ -13,7 +13,7 @@ from tests.unit.tools.browser.support.playwright_stubs import StubBrowser, StubP
 
 def _make_fake_get_active_view(browser: StubBrowser):
     """Build a fake ``get_active_view`` that returns a stub browser + ActiveView."""
-    async def _fake(tool_name: str):
+    async def _fake(tool_name: str, *, tab=None):
         from tools.browser.core.browser import ActiveView
         from tools.browser.core.exceptions import BrowserToolError as BTE
         view = await browser.active_view()
@@ -193,7 +193,7 @@ class TestReadPage:
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
-        result = await read_page()
+        result = await read_page(tab="1")
 
         assert isinstance(result, str)
         assert "My Article" in result
@@ -213,7 +213,7 @@ class TestReadPage:
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
-        result = await read_page()
+        result = await read_page(tab="1")
 
         assert isinstance(result, str)
         assert "truncated" in result
@@ -232,8 +232,8 @@ class TestReadPage:
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
-        page1 = await read_page(page_number=1)
-        page2 = await read_page(page_number=2)
+        page1 = await read_page(page_number=1, tab="1")
+        page2 = await read_page(page_number=2, tab="1")
 
         assert isinstance(page1, str)
         assert isinstance(page2, str)
@@ -252,7 +252,7 @@ class TestReadPage:
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
         with pytest.raises(BrowserToolError, match="past the end"):
-            await read_page(page_number=99)
+            await read_page(page_number=99, tab="1")
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -261,7 +261,7 @@ class TestReadPage:
     ) -> None:
         """page_number < 1 raises BrowserToolError."""
         with pytest.raises(BrowserToolError, match="page_number must be 1"):
-            await read_page(page_number=0)
+            await read_page(page_number=0, tab="1")
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -283,7 +283,7 @@ class TestReadPage:
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
-        result = await read_page(query="pricing")
+        result = await read_page(query="pricing", tab="1")
 
         assert isinstance(result, str)
         assert "pricing" in result.lower()
@@ -300,7 +300,7 @@ class TestReadPage:
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
-        result = await read_page(query="nonexistent")
+        result = await read_page(query="nonexistent", tab="1")
 
         assert isinstance(result, str)
         assert "No matches" in result
@@ -313,13 +313,13 @@ class TestReadPage:
         """read_page raises BrowserToolError when no browser is available."""
         from tools.browser.core.exceptions import BrowserToolError as BTE
 
-        async def _raise(tool_name: str):
+        async def _raise(tool_name: str, *, tab=None):
             raise BTE("No open page to read", tool=tool_name)
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _raise)
 
         with pytest.raises(BrowserToolError, match="No open page"):
-            await read_page()
+            await read_page(tab="1")
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -332,7 +332,7 @@ class TestReadPage:
 
         monkeypatch.setattr("tools.browser.read_content.get_active_view", _make_fake_get_active_view(browser))
 
-        result = await read_page()
+        result = await read_page(tab="1")
 
         assert isinstance(result, str)
         assert "Viewport:" in result

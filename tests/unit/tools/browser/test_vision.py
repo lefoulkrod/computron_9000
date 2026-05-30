@@ -18,7 +18,7 @@ from tools.browser.vision import inspect_page, browser_visual_action
 def _make_fake_get_active_view(browser):
     """Build a fake ``get_active_view`` from a ``_FakeBrowser``."""
 
-    async def _fake(tool_name):
+    async def _fake(tool_name, *, tab=None):
         view = await browser.active_view()
         if view.url in {"", "about:blank"}:
             raise BrowserToolError("Navigate to a page first.", tool=tool_name)
@@ -83,12 +83,21 @@ class _FakeBrowser:
     async def active_frame(self) -> _ScreenshotFakePage:
         return self._page
 
-    async def active_view(self):
+    async def active_view(self, page=None):
         from tools.browser.core.browser import ActiveView
 
         return ActiveView(frame=self._page, title="Example", url=self._page.url)
 
-    async def perform_interaction(self, action_fn):
+    def open_tabs(self):
+        return [self._page]
+
+    def tab_id_of(self, page):
+        return 1 if page is self._page else None
+
+    def resolve_tab(self, tab):
+        return self._page
+
+    async def perform_interaction(self, action_fn, *, page=None):
         from tools.browser.core.browser import BrowserInteractionResult
 
         await action_fn()
@@ -142,7 +151,7 @@ async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
     with patch("sdk.providers.vision_generate", _fake_vision_generate):
-        answer = await inspect_page("What is in the header?")
+        answer = await inspect_page("What is in the header?", tab="1")
 
     assert answer == "Mock answer"
     assert _fake_vision_generate.called
@@ -156,7 +165,7 @@ async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_inspect_page_rejects_blank_prompt() -> None:
     """Blank prompts should raise a BrowserToolError."""
     with pytest.raises(BrowserToolError):
-        await inspect_page("   ")
+        await inspect_page("   ", tab="1")
 
 
 @pytest.mark.unit
@@ -175,7 +184,7 @@ async def test_inspect_page_requires_navigation(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await inspect_page("Describe the page")
+        await inspect_page("Describe the page", tab="1")
 
 
 @pytest.mark.unit
@@ -202,7 +211,7 @@ async def test_inspect_page_selector_mode(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
     with patch("sdk.providers.vision_generate", _fake_vision_generate):
-        answer = await inspect_page("Describe the hero", mode="selector", selector="#hero")
+        answer = await inspect_page("Describe the hero", mode="selector", selector="#hero", tab="1")
 
     assert answer == "Mock answer"
     assert _fake_vision_generate.called
@@ -226,7 +235,7 @@ async def test_selector_requires_non_empty(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await inspect_page("prompt", mode="selector", selector="   ")
+        await inspect_page("prompt", mode="selector", selector="   ", tab="1")
 
 
 @pytest.mark.unit
@@ -244,7 +253,7 @@ async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError) as excinfo:
-        await inspect_page("Anything", mode="selector", selector="#missing")
+        await inspect_page("Anything", mode="selector", selector="#missing", tab="1")
 
     msg = str(excinfo.value)
     assert "No element matched selector handle '#missing'" in msg or "No element matched selector '#missing'" in msg
@@ -301,15 +310,13 @@ async def test_browser_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> N
     mock_execute = AsyncMock()
     monkeypatch.setattr("tools.browser._action_map.execute_action", mock_execute)
 
-    # Mock _format_result — it's imported lazily inside browser_visual_action
-    interactions_module = importlib.import_module("tools.browser.interactions")
-
-    async def fake_format_result(result, *, tool_name="", resolution=None):
+    # Mock _format_result — patch the name bound in the vision module.
+    async def fake_format_result(result, page=None, *, tool_name="", resolution=None):
         return "[page snapshot]"
 
-    monkeypatch.setattr(interactions_module, "_format_result", fake_format_result)
+    monkeypatch.setattr(module, "_format_result", fake_format_result)
 
-    result = await browser_visual_action("Click the login button")
+    result = await browser_visual_action("Click the login button", tab="1")
     assert isinstance(result, str)
 
 
@@ -330,9 +337,8 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(grounding_module, "run_grounding", fake_run_grounding)
 
-    # Mock build_page_view — it's lazy-imported inside browser_visual_action
+    # Mock build_page_view — patch the name bound in the vision module.
     from tools.browser.core.page_view import PageView
-    page_view_module = importlib.import_module("tools.browser.core.page_view")
 
     fake_snapshot = PageView(
         title="Test Page",
@@ -349,9 +355,9 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
     async def fake_build_page_view(view, response):
         return fake_snapshot
 
-    monkeypatch.setattr(page_view_module, "build_page_view", fake_build_page_view)
+    monkeypatch.setattr(module, "build_page_view", fake_build_page_view)
 
-    result = await browser_visual_action("Check if login succeeded")
+    result = await browser_visual_action("Check if login succeeded", tab="1")
     assert "finished" in result.lower() or "Login was successful" in result
 
 
@@ -360,7 +366,7 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 async def test_browser_visual_action_empty_task() -> None:
     """Empty task should raise BrowserToolError."""
     with pytest.raises(BrowserToolError):
-        await browser_visual_action("   ")
+        await browser_visual_action("   ", tab="1")
 
 
 @pytest.mark.unit
@@ -381,7 +387,7 @@ async def test_browser_visual_action_grounding_failure(monkeypatch: pytest.Monke
     monkeypatch.setattr(grounding_module, "run_grounding", failing_grounding)
 
     with pytest.raises(BrowserToolError, match="Grounding request failed"):
-        await browser_visual_action("Click login")
+        await browser_visual_action("Click login", tab="1")
 
 
 @pytest.mark.unit
@@ -395,4 +401,4 @@ async def test_browser_visual_action_requires_navigation(monkeypatch: pytest.Mon
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await browser_visual_action("Click login")
+        await browser_visual_action("Click login", tab="1")

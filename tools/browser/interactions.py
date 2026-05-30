@@ -12,7 +12,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Error as PlaywrightError, Page
 
 if TYPE_CHECKING:
     from playwright.async_api import Response
@@ -118,20 +118,28 @@ def _log_browser_panel(
 
 async def _build_snapshot(
     response: Response | None,
+    *,
+    page: Page,
 ) -> PageView:
-    """Build page view for interaction results using the active view."""
+    """Snapshot *page* into a ``PageView``."""
     browser = await get_browser()
-    view = await browser.active_view()
+    view = await browser.active_view(page=page)
     return await build_page_view(view, response)
 
 
 async def _format_result(
     result: BrowserInteractionResult,
+    page: Page,
     *,
     tool_name: str = "",
     resolution: _LocatorResolution | None = None,
 ) -> str:
-    """Format a BrowserInteractionResult as a page view string."""
+    """Format a BrowserInteractionResult as a page view string.
+
+    *page* is the tab the snapshot is taken from; its tab ID goes in
+    the header.  Parallel calls on different tabs each pass their own
+    page; nothing is read from any shared global page state.
+    """
     if result.download is not None:
         _log_browser_panel(result, snapshot=None, tool_name=tool_name, resolution=resolution)
         return format_page_view(
@@ -143,7 +151,9 @@ async def _format_result(
             truncated=False,
             downloaded_file=result.download,
         )
-    snapshot = await _build_snapshot(result.navigation_response)
+    snapshot = await _build_snapshot(result.navigation_response, page=page)
+    browser = await get_browser()
+    tab_id = browser.tab_id_of(page)
     _log_browser_panel(result, snapshot=snapshot, tool_name=tool_name, resolution=resolution)
     return format_page_view(
         title=snapshot.title,
@@ -152,6 +162,7 @@ async def _format_result(
         viewport=snapshot.viewport,
         content=snapshot.content,
         truncated=snapshot.truncated,
+        tab_id=tab_id,
     )
 
 
@@ -195,7 +206,7 @@ async def _resolve_or_raise(
 
 
 @emit_screenshot_after
-async def click(selector: str) -> str:
+async def click(selector: str, *, tab: str) -> str:
     """Click an element by its ref number from the page view.
 
     Always returns an updated page snapshot.  For AJAX actions (e.g. add-to-cart),
@@ -204,6 +215,7 @@ async def click(selector: str) -> str:
     Args:
         selector: Ref number from ``browse_page()`` output.
             Examples: ``"7"``, ``"12"``.
+        tab: Tab ID from new_tab() or browse_page() output.
 
     Returns:
         Updated page snapshot string.
@@ -216,7 +228,8 @@ async def click(selector: str) -> str:
         msg = "selector must be a non-empty string"
         raise BrowserToolError(msg, tool="click")
 
-    browser, view = await get_active_view("click")
+    browser, view = await get_active_view("click", tab=tab)
+    page = view.page
 
     try:
         resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="click")
@@ -224,8 +237,10 @@ async def click(selector: str) -> str:
         return str(exc)
 
     try:
-        result = await browser.perform_interaction(lambda: human_click(view.frame, resolution.locator))
-        return await _format_result(result, tool_name="click", resolution=resolution)
+        result = await browser.perform_interaction(
+            lambda: human_click(view.frame, resolution.locator), page=page,
+        )
+        return await _format_result(result, page, tool_name="click", resolution=resolution)
     except BrowserToolError as exc:
         return str(exc)
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -234,7 +249,9 @@ async def click(selector: str) -> str:
 
 
 @emit_screenshot_after
-async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
+async def press_and_hold(
+    selector: str, duration_ms: int = 3000, *, tab: str,
+) -> str:
     """Press and hold an element for a specified duration.
 
     Use this for bot-detection challenges that require holding a button down
@@ -258,7 +275,8 @@ async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
 
     clamped_duration = max(500, min(10000, duration_ms))
 
-    browser, view = await get_active_view("press_and_hold")
+    browser, view = await get_active_view("press_and_hold", tab=tab)
+    page = view.page
 
     resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="press_and_hold")
 
@@ -271,8 +289,9 @@ async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
     try:
         result = await browser.perform_interaction(
             lambda: human_press_and_hold(view.frame, resolution.locator, duration_ms=clamped_duration),
+            page=page,
         )
-        return await _format_result(result, tool_name="press_and_hold", resolution=resolution)
+        return await _format_result(result, page, tool_name="press_and_hold", resolution=resolution)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -288,6 +307,8 @@ async def press_and_hold(selector: str, duration_ms: int = 3000) -> str:
 async def drag(
     source: str,
     target: str,
+    *,
+    tab: str,
 ) -> str:
     """Drag from a source element to a target element.
 
@@ -309,7 +330,8 @@ async def drag(
     if not clean_target:
         raise BrowserToolError("target must be a non-empty string", tool="drag")
 
-    browser, view = await get_active_view("drag")
+    browser, view = await get_active_view("drag", tab=tab)
+    page = view.page
 
     source_resolution = await _resolve_or_raise(view.frame, clean_source, tool_name="drag")
 
@@ -334,7 +356,7 @@ async def drag(
         )
 
     try:
-        browser_result = await browser.perform_interaction(_perform_drag)
+        browser_result = await browser.perform_interaction(_perform_drag, page=page)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -342,11 +364,16 @@ async def drag(
         msg = "Playwright error performing drag"
         raise BrowserToolError(msg, tool="drag", details=details) from exc
 
-    return await _format_result(browser_result, tool_name="drag", resolution=source_resolution)
+    return await _format_result(browser_result, page, tool_name="drag", resolution=source_resolution)
 
 
 @emit_screenshot_after
-async def fill_field(selector: str, value: str | int | float | bool | None) -> str:
+async def fill_field(
+    selector: str,
+    value: str | int | float | bool | None,
+    *,
+    tab: str,
+) -> str:
     """Type into a text input or textarea field.
 
     Pass the complete text in a single call — do not call multiple times
@@ -371,7 +398,8 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
     # Allow callers to pass None; convert to empty string for typing into fields.
     text_value = "" if value is None else str(value)
 
-    browser, view = await get_active_view("fill_field")
+    browser, view = await get_active_view("fill_field", tab=tab)
+    page = view.page
 
     resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="fill_field")
 
@@ -412,8 +440,8 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
         await human_type(view.frame, locator, text_value, clear_existing=True)
 
     try:
-        result = await browser.perform_interaction(_perform_fill)
-        return await _format_result(result, tool_name="fill_field", resolution=resolution)
+        result = await browser.perform_interaction(_perform_fill, page=page)
+        return await _format_result(result, page, tool_name="fill_field", resolution=resolution)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -423,7 +451,7 @@ async def fill_field(selector: str, value: str | int | float | bool | None) -> s
 
 
 @emit_screenshot_after
-async def press_keys(keys: list[str]) -> str:
+async def press_keys(keys: list[str], *, tab: str) -> str:
     """Press keyboard keys on the currently focused element.
 
     Commonly used after ``fill_field()`` to submit a form
@@ -442,11 +470,14 @@ async def press_keys(keys: list[str]) -> str:
     if not isinstance(keys, list) or len(keys) == 0:
         raise BrowserToolError("keys must be a non-empty list of key names", tool="press_keys")
 
-    browser, view = await get_active_view("press_keys")
+    browser, view = await get_active_view("press_keys", tab=tab)
+    page = view.page
 
     try:
-        result = await browser.perform_interaction(lambda: human_press_keys(view.frame, keys))
-        return await _format_result(result, tool_name="press_keys")
+        result = await browser.perform_interaction(
+            lambda: human_press_keys(view.frame, keys), page=page,
+        )
+        return await _format_result(result, page, tool_name="press_keys")
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -456,7 +487,12 @@ async def press_keys(keys: list[str]) -> str:
 
 
 @emit_screenshot_after
-async def scroll_page(direction: str = "down", amount: int | None = None) -> str:
+async def scroll_page(
+    direction: str = "down",
+    amount: int | None = None,
+    *,
+    tab: str,
+) -> str:
     """Scroll the page and return an updated snapshot.
 
     A scroll budget is enforced per URL.  After several scrolls a warning
@@ -479,7 +515,8 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
     if not isinstance(direction, str) or not direction:
         raise BrowserToolError("direction must be a non-empty string", tool="scroll_page")
 
-    browser, view = await get_active_view("scroll_page")
+    browser, view = await get_active_view("scroll_page", tab=tab)
+    page = view.page
 
     cfg = load_config()
     warn_threshold = cfg.tools.browser.scroll_warn_threshold
@@ -506,7 +543,10 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
     _scroll_count_var.set(scroll_count)
 
     try:
-        interaction_result = await browser.perform_interaction(lambda: human_scroll(view.frame, direction=direction, amount=amount))
+        interaction_result = await browser.perform_interaction(
+            lambda: human_scroll(view.frame, direction=direction, amount=amount),
+            page=page,
+        )
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -514,7 +554,7 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
         raise BrowserToolError(f"Playwright error performing scroll: {exc}", tool="scroll_page") from exc
 
     # Build snapshot which includes viewport/scroll info
-    annotated = await _build_snapshot(None)  # Scroll never produces navigation
+    annotated = await _build_snapshot(None, page=page)  # Scroll never produces navigation
     _log_browser_panel(interaction_result, snapshot=annotated, tool_name="scroll_page")
 
     content = annotated.content
@@ -536,12 +576,16 @@ async def scroll_page(direction: str = "down", amount: int | None = None) -> str
         viewport=annotated.viewport,
         content=content,
         truncated=annotated.truncated,
+        tab_id=browser.tab_id_of(page),
     )
 
 
 @emit_screenshot_after
-async def go_back() -> str:
+async def go_back(*, tab: str) -> str:
     """Navigate back in browser history and return an updated snapshot.
+
+    Args:
+        tab: Tab ID to act on.
 
     Returns:
         Updated page snapshot string.
@@ -549,10 +593,11 @@ async def go_back() -> str:
     Raises:
         BrowserToolError: If back navigation fails.
     """
-    browser, _view = await get_active_view("go_back")
+    browser, view = await get_active_view("go_back", tab=tab)
+    page = view.page
 
     try:
-        browser_result = await browser.navigate_back()
+        browser_result = await browser.navigate_back(page=page)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -560,7 +605,7 @@ async def go_back() -> str:
         msg = "Failed to navigate back"
         raise BrowserToolError(msg, tool="go_back") from exc
 
-    return await _format_result(browser_result, tool_name="go_back")
+    return await _format_result(browser_result, page, tool_name="go_back")
 
 
 __all__ = [

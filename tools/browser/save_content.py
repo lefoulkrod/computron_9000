@@ -14,7 +14,7 @@ from tools.browser.core.exceptions import BrowserToolError
 logger = logging.getLogger(__name__)
 
 
-async def save_page_content(filename: str) -> str:
+async def save_page_content(filename: str, *, tab: str) -> str:
     """Save the current page as markdown to /home/computron/<filename>.
 
     Use when ``read_page()`` output is truncated and you need the full page
@@ -22,11 +22,12 @@ async def save_page_content(filename: str) -> str:
 
     Args:
         filename: Plain filename without directories (e.g. ``"page.md"``).
+        tab: 1-based tab index when multiple tabs are open.
 
     Returns:
         Formatted string with filename, container path, and size.
     """
-    _, view = await get_active_view("save_page_content")
+    _, view = await get_active_view("save_page_content", tab=tab)
 
     # Reject paths with directory separators to keep files in the home dir
     if "/" in filename or "\\" in filename:

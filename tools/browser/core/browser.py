@@ -36,6 +36,7 @@ from pydantic import BaseModel, ConfigDict
 
 import tools.browser.core.waits as browser_waits
 from config import load_config
+from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core._file_detection import DownloadInfo
 
 if TYPE_CHECKING:  # Imported only for type checking to avoid runtime dependency surface
@@ -60,6 +61,11 @@ class ActiveView(NamedTuple):
     frame: Page | Frame
     title: str
     url: str
+
+    @property
+    def page(self) -> Page:
+        """The ``Page`` owning ``frame`` — same as ``frame`` for the main page."""
+        return self.frame.page if isinstance(self.frame, Frame) else self.frame
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +245,25 @@ class Browser:
         self._pw: Playwright | None = pw
         self._pw_browser: Any = pw_browser
         self._closed: bool = False
-        self._active_frame: Frame | None = None
+        # Per-tab cache of the dominant iframe we detected on that tab.
+        #
+        # Some pages render their primary content inside a large iframe
+        # (booking widgets, payment frames, embedded apps).  When such a
+        # frame covers most of the viewport we cache it so subsequent
+        # tool calls read/click against its DOM instead of the parent
+        # page's.  Re-detecting on every tool call would be wasteful and
+        # would also disturb settle timings.
+        #
+        # Invalidated when any of these happen for a given page:
+        #   - the tab is closed (page "close" listener)
+        #   - the tab is about to navigate (cleared at the top of navigate())
+        #   - _finalize_action sees a download or a URL change (PDF
+        #     viewer stub or a fresh page — old frame is gone)
+        #   - the cached frame becomes detached (checked at read time)
+        self._dominant_frames: dict[Page, Frame] = {}
+        self._tab_id_of: dict[Page, int] = {}
+        self._next_tab_id: int = 0
+        self._pages_in_navigation: set[Page] = set()
         self._pending_downloads: list[DownloadInfo] = []
         self._downloads_dir: str = ""
         self._download_listener_pages: set[int] = set()  # page id() tracking
@@ -557,83 +581,114 @@ class Browser:
     async def new_page(self) -> Page:
         """Open a new page within the persistent context.
 
+        Assigns a stable monotonic tab ID that never repeats — closing a
+        tab does not free its ID for reuse, so a later call that uses
+        the old ID errors instead of pointing at a different page.
+
         Returns:
             The newly created Playwright ``Page``.
         """
         page = await self._context.new_page()
         await page.set_viewport_size(_viewport())
         self._attach_download_listener(page)
+        self._next_tab_id += 1
+        self._tab_id_of[page] = self._next_tab_id
+
+        def _on_close(_p: Any) -> None:
+            self._tab_id_of.pop(page, None)
+            self._pages_in_navigation.discard(page)
+            self._dominant_frames.pop(page, None)
+
+        page.on("close", _on_close)
         return page
 
-    async def current_page(self) -> Page:
-        """Return the current page from the browser context.
+    def tab_id_of(self, page: Page) -> int | None:
+        """Return the stable tab ID for *page*, or ``None`` if untracked.
 
-        This selects the most recently opened, non-closed page from the
-        underlying persistent ``BrowserContext``. If no such page exists,
-        a new page is created, configured, and returned.
-
-        Returns:
-            Page: The active page to use for interactions.
-
-        Raises:
-            RuntimeError: If the browser has already been closed.
+        The lookup lives on the Browser because Playwright's ``Page`` is
+        not our class — we can't hang an ID attribute on it.
         """
-        if self._closed:
-            msg = "Browser context is closed; no current page available"
-            raise RuntimeError(msg)
+        return self._tab_id_of.get(page)
 
-        # Prefer the most recently opened page that hasn't been closed.
-        pages = self._context.pages  # Playwright provides a list[Page]
-        for page in reversed(pages):
-            # ``is_closed`` is a synchronous check in Playwright's async API
-            if not page.is_closed():
-                self._attach_download_listener(page)
+    def open_tabs(self) -> list[Page]:
+        """Return non-closed pages in the context, in opening order."""
+        return [p for p in self._context.pages if not p.is_closed()]
+
+    def _tab_listing(self) -> str:
+        """Render the open-tabs listing used in error messages."""
+        rows = []
+        for page in self.open_tabs():
+            tid = self._tab_id_of.get(page, "?")
+            rows.append(f"  tab={tid}: {page.url}")
+        return "Open tabs:\n" + "\n".join(rows) if rows else "No open tabs"
+
+    def resolve_tab(self, tab: str | int) -> Page:
+        """Look up the open tab with the given stable ID.
+
+        IDs are monotonic — closing a tab does not free its ID, so a
+        stale reference always errors rather than silently landing on a
+        different tab.
+        """
+        try:
+            target_id = int(str(tab).strip())
+        except ValueError:
+            raise ValueError(
+                f"tab={tab!r} is not a valid ID. {self._tab_listing()}",
+            ) from None
+        for page, tid in self._tab_id_of.items():
+            if tid == target_id and not page.is_closed():
                 return page
+        raise ValueError(
+            f"tab={tab!r} not found. {self._tab_listing()}",
+        )
 
-        msg = "No open pages available in browser context"
-        raise RuntimeError(msg)
+    async def active_frame(self, page: Page) -> Page | Frame:
+        """Return the cached dominant iframe for *page*, else the page.
 
-    async def active_frame(self) -> Page | Frame:
-        """Return the dominant iframe if one is active, otherwise the current page.
+        When a tab has a large iframe overlay (booking widget, payment
+        frame, embedded app) that covers most of the viewport, all
+        DOM-reading tools should operate on that iframe instead of the
+        main page.  This method returns whichever the tools should use.
 
-        When a large iframe (e.g. a booking widget overlay) covers a significant
-        portion of the viewport, all DOM-reading tools should operate on that
-        iframe instead of the main frame.  This method transparently returns
-        whichever context the tools should use.
+        Args:
+            page: The tab to look up.
 
         Returns:
-            The active ``Frame`` if a dominant iframe is tracked and still
-            attached, otherwise the current ``Page``.
+            The cached dominant ``Frame`` if one is tracked for *page*
+            and still attached, otherwise *page* itself.
         """
-        if self._active_frame is not None:
-            if self._active_frame.is_detached():
-                logger.debug("Active frame detached; falling back to page")
-                self._active_frame = None
+        cached = self._dominant_frames.get(page)
+        if cached is not None:
+            if cached.is_detached():
+                logger.debug("Dominant frame for tab detached; falling back to page")
+                self._dominant_frames.pop(page, None)
             else:
-                return self._active_frame
-        return await self.current_page()
+                return cached
+        return page
 
-    def clear_active_frame(self) -> None:
-        """Reset the active frame so tools operate on the main page."""
-        self._active_frame = None
+    def invalidate_dominant_frame(self, page: Page) -> None:
+        """Drop the cached dominant iframe for *page*, if any.
 
-    async def active_view(self) -> ActiveView:
+        Call before a navigation on that tab (the new DOM won't share
+        the old iframe) or whenever the cache should be re-evaluated.
+        """
+        self._dominant_frames.pop(page, None)
+
+    async def active_view(self, page: Page) -> ActiveView:
         """Return an ``ActiveView`` for tools to operate on.
 
-        Proactively detects a dominant iframe if none is currently tracked.
-        Reuses an already-set ``_active_frame`` without re-detecting.
-        Title and URL always come from the main page.
+        Reads the dominant-iframe cache for *page*; re-detects (and
+        updates the cache) when the cached frame is missing or detached.
         """
-        page = await self.current_page()
-
-        if self._active_frame is not None and not self._active_frame.is_detached():
-            frame: Page | Frame = self._active_frame
+        cached = self._dominant_frames.get(page)
+        if cached is not None and not cached.is_detached():
+            frame: Page | Frame = cached
         else:
-            self._active_frame = None
+            self._dominant_frames.pop(page, None)
             try:
                 dominant = await self._detect_dominant_frame(page)
                 if dominant is not None:
-                    self._active_frame = dominant
+                    self._dominant_frames[page] = dominant
                     frame = dominant
                 else:
                     frame = page
@@ -728,35 +783,54 @@ class Browser:
         """Return the underlying persistent ``BrowserContext``."""
         return self._context
 
-    async def navigate(self, url: str) -> BrowserInteractionResult:
-        """Navigate to *url* and return a ``BrowserInteractionResult``."""
-        try:
-            page = await self.current_page()
-        except RuntimeError:
-            page = await self.new_page()
-        self.clear_active_frame()
+    async def navigate(
+        self, url: str, *, page: Page,
+    ) -> BrowserInteractionResult:
+        """Navigate *page* to *url* and return a ``BrowserInteractionResult``.
+
+        Raises ``BrowserToolError`` if *page* is already navigating —
+        concurrent goto on the same tab is the loud-error case that
+        teaches the agent to use ``new_tab`` for parallelism.
+        """
+        if page in self._pages_in_navigation:
+            tid = self._tab_id_of.get(page, "?")
+            raise BrowserToolError(
+                f"Navigation already in flight on tab={tid}. "
+                f"Use new_tab(url) to open in parallel.",
+                tool="goto",
+            )
+        self._pages_in_navigation.add(page)
+        # Any cached dominant iframe belongs to the old DOM; drop it
+        # so the post-nav settle re-detects against the new one.
+        self.invalidate_dominant_frame(page)
         self._pending_downloads.clear()
         initial_url = getattr(page, "url", "")
         try:
-            response = await page.goto(url, wait_until="domcontentloaded")
-        except PlaywrightError as exc:
-            # When --disable-pdf-viewer converts a navigation to a download,
-            # Chromium aborts the page load with net::ERR_ABORTED.  The
-            # download listener captures the file asynchronously — wait
-            # for the download event before falling through to finalize.
-            if "net::ERR_ABORTED" not in str(exc):
-                raise
-            logger.debug("Navigation aborted (likely download): %s", url)
-            response = None
             try:
-                await page.wait_for_event("download", timeout=5_000)
-            except (PlaywrightTimeoutError, PlaywrightError):
-                pass
-        return await self._finalize_action(page, response=response, initial_url=initial_url)
+                response = await page.goto(url, wait_until="domcontentloaded")
+            except PlaywrightError as exc:
+                # When --disable-pdf-viewer converts a navigation to a download,
+                # Chromium aborts the page load with net::ERR_ABORTED.  The
+                # download listener captures the file asynchronously — wait
+                # for the download event before falling through to finalize.
+                if "net::ERR_ABORTED" not in str(exc):
+                    raise
+                logger.debug("Navigation aborted (likely download): %s", url)
+                response = None
+                try:
+                    await page.wait_for_event("download", timeout=5_000)
+                except (PlaywrightTimeoutError, PlaywrightError):
+                    pass
+            return await self._finalize_action(
+                page, response=response, initial_url=initial_url,
+            )
+        finally:
+            self._pages_in_navigation.discard(page)
 
-    async def navigate_back(self) -> BrowserInteractionResult:
-        """Navigate back in history via ``perform_interaction``."""
-        page = await self.current_page()
+    async def navigate_back(
+        self, page: Page,
+    ) -> BrowserInteractionResult:
+        """Navigate *page* back in history via ``perform_interaction``."""
 
         async def _back() -> None:
             try:
@@ -769,7 +843,7 @@ class Browser:
                 # domcontentloaded. Fall through to settle/snapshot.
                 logger.debug("go_back timed out (SPA likely handled navigation client-side)")
 
-        return await self.perform_interaction(_back)
+        return await self.perform_interaction(_back, page=page)
 
     # Timeouts for individual shutdown steps.  These are generous enough for
     # well-behaved pages but prevent indefinite hangs when Chromium is stuck.
@@ -953,24 +1027,29 @@ class Browser:
                 )
 
         # 3. Iframe detection (skip if download — page may be a PDF viewer stub)
+        # Operates on this tab's dominant-frame slot only; other tabs'
+        # cached frames are untouched.
         frame_transition: str | None = None
         final_url = getattr(page, "url", initial_url)
         navigated = bool(initial_url and final_url and final_url != initial_url)
 
         if download_info is not None:
-            self._active_frame = None
+            self._dominant_frames.pop(page, None)
         elif navigated:
-            self._active_frame = None
+            self._dominant_frames.pop(page, None)
         else:
             try:
-                previous_frame = self._active_frame
+                previous_frame = self._dominant_frames.get(page)
                 dominant = await self._detect_dominant_frame(page)
-                if dominant != self._active_frame:
+                if dominant != previous_frame:
                     if dominant is not None:
                         frame_transition = f"→ iframe {dominant.url}"
-                    elif self._active_frame is not None:
+                    elif previous_frame is not None:
                         frame_transition = "→ main page"
-                    self._active_frame = dominant
+                    if dominant is not None:
+                        self._dominant_frames[page] = dominant
+                    else:
+                        self._dominant_frames.pop(page, None)
 
                 if dominant is not None and dominant != previous_frame:
                     try:
@@ -1030,9 +1109,10 @@ class Browser:
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
+        *,
+        page: Page,
     ) -> BrowserInteractionResult:
-        """Perform an interaction and run the shared post-action pipeline."""
-        page = await self.current_page()
+        """Perform an interaction on *page* and run the shared post-action pipeline."""
         initial_url = getattr(page, "url", "")
 
         self._pending_downloads.clear()
@@ -1179,23 +1259,28 @@ def _atexit_kill_browser() -> None:
 
 
 async def _get_root_browser() -> Browser:
-    """Return the persistent root browser, initializing it on first call."""
-    global _browser
-    if _browser is None:
-        register_agent_span_exit_hook(release_agent_browser)
+    """Return the persistent root browser, initializing it on first call.
 
-        config = load_config()
-        profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
-        downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
-        headless = config.tools.browser.headless
-        _browser = await Browser.start(
-            str(profile_path),
-            headless=headless,
-            downloads_path=downloads_dir,
-        )
-        _browser._downloads_dir = downloads_dir
-        atexit.register(_atexit_kill_browser)
-    return _browser
+    Locked so concurrent first callers don't each spin up their own root
+    Browser — without this, parallel tool calls that hit a cold cache
+    would each race past the ``_browser is None`` check and launch their
+    own Playwright instance.
+    """
+    global _browser
+    async with _agent_browser_lock:
+        if _browser is None:
+            config = load_config()
+            profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
+            downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
+            headless = config.tools.browser.headless
+            _browser = await Browser.start(
+                str(profile_path),
+                headless=headless,
+                downloads_path=downloads_dir,
+            )
+            _browser._downloads_dir = downloads_dir
+            atexit.register(_atexit_kill_browser)
+        return _browser
 
 
 async def get_browser() -> Browser:
@@ -1245,6 +1330,9 @@ async def release_agent_browser(key: str) -> None:
             logger.info("Released browser context for '%s'", key)
         except Exception:  # noqa: BLE001
             logger.warning("Failed to release browser context for '%s'", key)
+
+
+register_agent_span_exit_hook(release_agent_browser)
 
 
 async def close_browser() -> None:

@@ -37,8 +37,12 @@ function _makeAgent(id, name, parentId, instruction, startedAt, correlationId = 
         startedAt,               // for elapsed time display
         instruction: instruction || '',
         activityLog: [],         // everything the agent did: thinking, content, tool calls
-        browserSnapshot: null,   // latest screenshot (shown as card thumbnail too)
-        terminalLines: [],       // bash output
+        // Latest screenshot per tab id.  Each open tab is one entry; the
+        // BrowserPreview renders a thumbnail rail when there's more than
+        // one and owns which one is shown in the main area (local state).
+        browserTabs: {},          // { [tabId]: { url, title, screenshot } }
+        lastBrowserTabId: null,   // tab id of the most recently arrived snapshot
+        terminalLines: [],        // bash output
         desktopActive: false,
         generationPreview: null,
         openFiles: [],           // file preview tabs
@@ -73,7 +77,8 @@ function _agentReducer(state, action) {
             // only replaced by newer data or appended to (terminal).
             if (!parentAgentId && state.rootId && state.agents[state.rootId]) {
                 const prev = state.agents[state.rootId];
-                agent.browserSnapshot = prev.browserSnapshot;
+                agent.browserTabs = prev.browserTabs;
+                agent.lastBrowserTabId = prev.lastBrowserTabId;
                 agent.terminalLines = prev.terminalLines;
                 agent.desktopActive = prev.desktopActive;
                 agent.generationPreview = prev.generationPreview;
@@ -190,14 +195,35 @@ function _agentReducer(state, action) {
         }
 
         case 'UPDATE_BROWSER_SNAPSHOT': {
+            // Snapshots are keyed by tab id and update independently.
+            // BrowserPreview picks which tab to display from local state,
+            // so the reducer only stores; it doesn't track selection.
             const { agentId, snapshot } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            const key = snapshot.tabId;
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: {
+                        ...agent,
+                        browserTabs: { ...agent.browserTabs, [key]: snapshot },
+                        lastBrowserTabId: key,
+                    },
+                },
+            };
+        }
+
+        case 'CLEAR_BROWSER_TABS': {
+            const { agentId } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
             return {
                 ...state,
                 agents: {
                     ...state.agents,
-                    [agentId]: { ...agent, browserSnapshot: snapshot },
+                    [agentId]: { ...agent, browserTabs: {}, lastBrowserTabId: null },
                 },
             };
         }

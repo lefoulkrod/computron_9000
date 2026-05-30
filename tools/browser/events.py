@@ -89,11 +89,17 @@ async def _emit_screenshot(page: Page) -> None:
     except Exception:  # noqa: BLE001
         title = ""
 
+    # Tag the event with the tab ID so the UI can route each screenshot
+    # to its own thumbnail slot.
+    browser = await get_browser()
+    tab_id = browser.tab_id_of(page)
+
     publish_event(AgentEvent(payload=BrowserScreenshotPayload(
         type="browser_screenshot",
         url=url,
         title=title,
         screenshot=screenshot_base64,
+        tab_id=tab_id,
     )))
 
 
@@ -266,17 +272,23 @@ def emit_screenshot_after[F: Callable[..., Any]](func: F) -> F:
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         result = await func(*args, **kwargs)
 
-        # All decorated browser tools want a post-tool screenshot.
-        # With string returns, just always emit.
+        # Screenshot the tab the tool acted on, identified by the `tab`
+        # kwarg.  Tools that don't take a tab (new_tab, which creates one)
+        # emit their own screenshot explicitly; the decorator just skips
+        # them silently.
+        tab = kwargs.get("tab")
+        if tab is None:
+            return result
         page = None
         try:
             browser = await get_browser()
-            page = await browser.current_page()
-            logger.debug(
-                "Post-tool screenshot for %s (page=%s)",
-                func.__name__, getattr(page, "url", "?"),
-            )
-            await _emit_screenshot(page)
+            page = browser.resolve_tab(tab)
+            if page is not None and not page.is_closed():
+                logger.debug(
+                    "Post-tool screenshot for %s (tab=%s, page=%s)",
+                    func.__name__, tab, getattr(page, "url", "?"),
+                )
+                await _emit_screenshot(page)
         except Exception:  # noqa: BLE001 - never fail the tool call
             page_url = getattr(page, "url", "unknown") if page else "no page"
             closed = page.is_closed() if page and hasattr(page, "is_closed") else "?"

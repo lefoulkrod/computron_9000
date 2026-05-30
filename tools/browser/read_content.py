@@ -6,7 +6,7 @@ import logging
 
 from playwright.async_api import Error as PlaywrightError
 
-from tools.browser.core import get_active_view
+from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._formatting import format_page_view
 from tools.browser.core._html import html_to_markdown
 from tools.browser.core.exceptions import BrowserToolError
@@ -107,6 +107,8 @@ def _filter_by_query(
 async def read_page(
     page_number: int = 1,
     query: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """Read the current page as clean markdown text.
 
@@ -137,7 +139,8 @@ async def read_page(
             "page_number must be 1 or greater", tool="read_page"
         )
 
-    _, view = await get_active_view("read_page")
+    browser, view = await get_active_view("read_page", tab=tab)
+    resolved_page = view.page
 
     try:
         raw_html: str = await view.frame.evaluate(_CONTENT_ROOT_JS)
@@ -193,6 +196,7 @@ async def read_page(
         viewport=viewport_data,
         content=content,
         truncated=truncated,
+        tab_id=browser.tab_id_of(resolved_page),
     )
 
 

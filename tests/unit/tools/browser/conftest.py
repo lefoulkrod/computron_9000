@@ -16,47 +16,64 @@ class _SimpleBrowser:
 
     def __init__(self, page: Any) -> None:
         self._page = page
-        self._active_frame: Any | None = None
+        self._dominant_frames: dict[Any, Any] = {}
         self._last_metadata: dict[str, Any] | None = None
 
     async def current_page(self) -> Any:
         return self._page
 
-    async def active_frame(self) -> Any:
-        if self._active_frame is not None:
-            if hasattr(self._active_frame, "is_detached") and self._active_frame.is_detached():
-                self._active_frame = None
+    async def active_frame(self, page: Any = None) -> Any:
+        if page is None:
+            page = self._page
+        cached = self._dominant_frames.get(page)
+        if cached is not None:
+            if hasattr(cached, "is_detached") and cached.is_detached():
+                self._dominant_frames.pop(page, None)
             else:
-                return self._active_frame
-        return self._page
+                return cached
+        return page
 
-    async def active_view(self) -> Any:
+    async def active_view(self, page: Any = None) -> Any:
         from tools.browser.core.browser import ActiveView
-        frame = await self.active_frame()
-        page = await self.current_page()
+        if page is None:
+            page = await self.current_page()
+        frame = await self.active_frame(page)
         try:
             title = await page.title()
         except Exception:
             title = "Test Page"
         return ActiveView(frame=frame, title=title, url=page.url)
 
-    def clear_active_frame(self) -> None:
-        self._active_frame = None
+    def invalidate_dominant_frame(self, page: Any) -> None:
+        self._dominant_frames.pop(page, None)
 
-    async def navigate_back(self) -> BrowserInteractionResult:
-        page = await self.current_page()
+    async def navigate_back(self, page: Any = None) -> BrowserInteractionResult:
+        if page is None:
+            page = await self.current_page()
 
         async def _back() -> None:
             await page.go_back(wait_until="domcontentloaded")
 
-        return await self.perform_interaction(_back)
+        return await self.perform_interaction(_back, page=page)
+
+    def open_tabs(self) -> list[Any]:
+        return [self._page]
+
+    def tab_id_of(self, page: Any) -> int | None:
+        return 1 if page is self._page else None
+
+    def resolve_tab(self, tab: Any) -> Any:
+        return self._page
 
     async def perform_interaction(
         self,
         action: Callable[[], Awaitable[Any]],
+        *,
+        page: Any = None,
     ) -> BrowserInteractionResult:
         """Mimic Browser.perform for tests without requiring Playwright."""
-        page = await self.current_page()
+        if page is None:
+            page = await self.current_page()
         await action()
 
         from tools.browser.core.waits import wait_for_page_settle as settle_helper
@@ -114,7 +131,9 @@ def patch_interactions_browser(monkeypatch: pytest.MonkeyPatch) -> Callable[[Any
         async def _get_browser() -> _SimpleBrowser:
             return browser
 
-        async def _get_active_view(tool_name: str) -> tuple[_SimpleBrowser, Any]:
+        async def _get_active_view(
+            tool_name: str, *, tab: Any = None,
+        ) -> tuple[_SimpleBrowser, Any]:
             from tools.browser.core.exceptions import BrowserToolError
             view = await browser.active_view()
             if view.url in {"", "about:blank"}:

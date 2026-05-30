@@ -36,7 +36,7 @@ async def test_press_and_hold_basic(
         _human_press_and_hold_passthrough,
     )
 
-    result = await press_and_hold("1", duration_ms=3000)
+    result = await press_and_hold("1", duration_ms=3000, tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
@@ -52,7 +52,7 @@ async def test_press_and_hold_empty_selector(
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError, match="non-empty"):
-        await press_and_hold("   ")
+        await press_and_hold("   ", tab="1")
 
 
 @pytest.mark.unit
@@ -70,7 +70,7 @@ async def test_press_and_hold_about_blank(
     )
 
     with pytest.raises(BrowserToolError, match="Navigate"):
-        await press_and_hold("1")
+        await press_and_hold("1", tab="1")
 
 
 @pytest.mark.unit
@@ -92,7 +92,7 @@ async def test_press_and_hold_not_found(
     )
 
     with pytest.raises(BrowserToolError):
-        await press_and_hold("99")
+        await press_and_hold("99", tab="1")
 
 
 @pytest.mark.unit
@@ -121,13 +121,13 @@ async def test_press_and_hold_duration_clamped(
     )
 
     # Below minimum: should clamp to 500
-    await press_and_hold("1", duration_ms=100)
+    await press_and_hold("1", duration_ms=100, tab="1")
     assert captured_durations[-1] == 500
 
     # Above maximum: should clamp to 10000
-    await press_and_hold("1", duration_ms=99999)
+    await press_and_hold("1", duration_ms=99999, tab="1")
     assert captured_durations[-1] == 10000
 
     # Within range: should pass through
-    await press_and_hold("1", duration_ms=5000)
+    await press_and_hold("1", duration_ms=5000, tab="1")
     assert captured_durations[-1] == 5000

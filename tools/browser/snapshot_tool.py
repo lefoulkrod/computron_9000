@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from tools.browser.core import get_active_view
+from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._formatting import format_page_view
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.page_view import build_page_view
@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 @emit_screenshot_after
-async def browse_page(scope: str | None = None, full_page: bool = False) -> str:
+async def browse_page(
+    scope: str | None = None,
+    full_page: bool = False,
+    *,
+    tab: str,
+) -> str:
     """See interactive elements on the current page with ref numbers.
 
     Use this when you need to INTERACT: find buttons, links, forms, and get
@@ -55,7 +60,8 @@ async def browse_page(scope: str | None = None, full_page: bool = False) -> str:
     Raises:
         BrowserToolError: If there is no open page.
     """
-    _, view = await get_active_view("browse_page")
+    browser, view = await get_active_view("browse_page", tab=tab)
+    page = view.page
 
     try:
         pv = await build_page_view(view, None, scope=scope, full_page=full_page)
@@ -66,6 +72,7 @@ async def browse_page(scope: str | None = None, full_page: bool = False) -> str:
             viewport=pv.viewport,
             content=pv.content,
             truncated=pv.truncated,
+            tab_id=browser.tab_id_of(page),
         )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Failed to build annotated snapshot")

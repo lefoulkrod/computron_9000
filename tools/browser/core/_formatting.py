@@ -20,6 +20,7 @@ def format_page_view(
     content: str,
     truncated: bool,
     downloaded_file: Any | None = None,
+    tab_id: int | None = None,
 ) -> str:
     """Format a page view as a plain-text string for the LLM.
 
@@ -31,6 +32,9 @@ def format_page_view(
         content: Annotated page content.
         truncated: Whether content was truncated.
         downloaded_file: Optional DownloadInfo from file detection.
+        tab_id: Stable tab ID for the snapshot's tab.  When set, the
+            header carries ``tab=N`` so the agent can echo it back on
+            subsequent calls.
 
     Returns:
         Formatted string with header and content.
@@ -43,7 +47,8 @@ def format_page_view(
     status = status_code if status_code is not None else ""
     trunc = " | truncated" if truncated else ""
 
-    header = f"[Page: {title} | {url} | {status}]"
+    tab_segment = f" | tab={tab_id}" if tab_id is not None else ""
+    header = f"[Page: {title} | {url} | {status}{tab_segment}]"
     if viewport is None:
         vp_line = "[Viewport: unavailable]"
     else:

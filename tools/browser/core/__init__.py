@@ -22,15 +22,20 @@ __all__ = [
 ]
 
 
-async def get_active_view(tool_name: str) -> tuple[Browser, ActiveView]:
-    """Get the browser and active view, raising ``BrowserToolError`` if unavailable.
+async def get_active_view(
+    tool_name: str, *, tab: str,
+) -> tuple[Browser, ActiveView]:
+    """Get the browser and active view for *tab*.
 
-    Replaces the repeated boilerplate of ``get_browser()`` + ``current_page()``
-    + URL check + ``active_frame()`` that every browser tool previously had.
+    Resolves *tab* via :meth:`Browser.resolve_tab`.  Raises
+    ``BrowserToolError`` when *tab* doesn't resolve to an open tab.
     """
     try:
         browser = await get_browser()
-        view = await browser.active_view()
+        page = browser.resolve_tab(tab)
+        view = await browser.active_view(page=page)
+    except ValueError as exc:
+        raise BrowserToolError(str(exc), tool=tool_name) from exc
     except (PlaywrightError, RuntimeError) as exc:
         raise BrowserToolError(
             "Unable to access browser page", tool=tool_name,

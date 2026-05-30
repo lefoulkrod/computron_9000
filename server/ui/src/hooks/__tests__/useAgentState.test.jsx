@@ -50,6 +50,7 @@ const BROWSER_SNAPSHOT = {
     title: 'Example',
     screenshot: 'AAAA',
     agentId: 'root-1',
+    tabId: 1,
 };
 
 const TERMINAL_EVENT = {
@@ -89,7 +90,8 @@ describe('useAgentState reducer', () => {
             dispatch(agentStarted('root-2'));
 
             const newRoot = getState().agents['root-2'];
-            expect(newRoot.browserSnapshot).toEqual(BROWSER_SNAPSHOT);
+            expect(newRoot.browserTabs[1]).toEqual(BROWSER_SNAPSHOT);
+            expect(newRoot.lastBrowserTabId).toBe(1);
         });
 
         it('carries terminal lines from previous root to new root', () => {
@@ -166,7 +168,7 @@ describe('useAgentState reducer', () => {
             const newSnapshot = { ...BROWSER_SNAPSHOT, url: 'https://new.com', agentId: 'root-2' };
             dispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId: 'root-2', snapshot: newSnapshot });
 
-            expect(getState().agents['root-2'].browserSnapshot.url).toBe('https://new.com');
+            expect(getState().agents['root-2'].browserTabs[1].url).toBe('https://new.com');
         });
 
         it('terminal lines are appended in new turn (not reset)', () => {

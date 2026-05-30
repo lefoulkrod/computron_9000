@@ -24,7 +24,7 @@ async def test_go_back_navigates_backward(
     )
     patch_interactions_browser(page)
 
-    result = await go_back()
+    result = await go_back(tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert "https://example.test/start" in result
@@ -43,6 +43,6 @@ async def test_go_back_no_history_returns_snapshot(patch_interactions_browser) -
     )
     patch_interactions_browser(page)
 
-    result = await go_back()
+    result = await go_back(tab="1")
     assert isinstance(result, str)
     assert "Only" in result

@@ -42,7 +42,36 @@
     border-radius: 3px;
     object-fit: cover;
     border: 1px solid var(--border);
+    display: block;
 }
+
+/* Multi-tab card stack — up to three offset thumbnails so the user
+   reads "this agent has several tabs" at a glance.  Top of the stack
+   (DOM-last) is the most recently updated tab. */
+.thumbStack {
+    position: relative;
+    width: 58px;        /* room for the 10px max offset */
+    height: 40px;
+}
+
+.stackedThumb {
+    position: absolute;
+    width: 48px;
+    height: 30px;
+    border-radius: 3px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: block;
+}
+
+/* DOM order is back-to-front, so the last child paints on top. */
+.thumbStack[data-count="2"] .stackedThumb:nth-child(1) { left: 5px;  top: 5px;  opacity: 0.82; }
+.thumbStack[data-count="2"] .stackedThumb:nth-child(2) { left: 0;    top: 0; }
+
+.thumbStack[data-count="3"] .stackedThumb:nth-child(1) { left: 10px; top: 10px; opacity: 0.65; }
+.thumbStack[data-count="3"] .stackedThumb:nth-child(2) { left: 5px;  top: 5px;  opacity: 0.82; }
+.thumbStack[data-count="3"] .stackedThumb:nth-child(3) { left: 0;    top: 0; }
 
 /* Meta badges row */
 .meta {

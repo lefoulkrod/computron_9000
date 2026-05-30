@@ -23,8 +23,8 @@ vi.mock('../components/ChatPanel.jsx', () => ({
 }));
 
 vi.mock('../components/BrowserPreview.jsx', () => ({
-    default: ({ snapshot }) => snapshot
-        ? <div data-testid="browser-preview">Browser: {snapshot.url}</div>
+    default: ({ tabs }) => tabs?.length
+        ? <div data-testid="browser-preview">Browser: {tabs[0].snapshot.url}</div>
         : null,
 }));
 
@@ -279,7 +279,7 @@ describe('DesktopApp view transitions', () => {
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
-                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
+                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG, tabId: 1 },
             });
 
             expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
@@ -318,7 +318,7 @@ describe('DesktopApp view transitions', () => {
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
-                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
+                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG, tabId: 1 },
             });
 
             expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
@@ -366,14 +366,14 @@ describe('DesktopApp view transitions', () => {
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
-                snapshot: { url: 'https://first.com', title: 'First', screenshot: TINY_PNG },
+                snapshot: { url: 'https://first.com', title: 'First', screenshot: TINY_PNG, tabId: 1 },
             });
 
             startRoot(dispatch, 'r2');
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r2',
-                snapshot: { url: 'https://second.com', title: 'Second', screenshot: TINY_PNG },
+                snapshot: { url: 'https://second.com', title: 'Second', screenshot: TINY_PNG, tabId: 1 },
             });
 
             expect(screen.getByText('Browser: https://second.com')).toBeInTheDocument();
@@ -424,7 +424,7 @@ describe('DesktopApp view transitions', () => {
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
-                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
+                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG, tabId: 1 },
             });
             expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
 
@@ -442,7 +442,7 @@ describe('DesktopApp view transitions', () => {
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
-                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
+                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG, tabId: 1 },
             });
 
             startSubAgent(dispatch, 's1', 'r1');
@@ -509,7 +509,7 @@ describe('DesktopApp view transitions', () => {
             dispatch({
                 type: 'UPDATE_BROWSER_SNAPSHOT',
                 agentId: 'r1',
-                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG },
+                snapshot: { url: 'https://test.com', title: 'Test', screenshot: TINY_PNG, tabId: 1 },
             });
             expect(screen.getByTestId('browser-preview')).toBeInTheDocument();
 

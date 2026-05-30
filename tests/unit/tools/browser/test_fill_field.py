@@ -37,7 +37,7 @@ async def test_fill_field_by_css(
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
-    result = await fill_field(".search-box", "chips")
+    result = await fill_field(".search-box", "chips", tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
@@ -61,7 +61,7 @@ async def test_fill_field_by_ref(
     monkeypatch.setattr("tools.browser.interactions.human_click", _passthrough_human_click)
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
-    result = await fill_field("1", "user@example.com")
+    result = await fill_field("1", "user@example.com", tab="1")
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
 
@@ -84,7 +84,7 @@ async def test_fill_field_rejects_checkbox(
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     with pytest.raises(BrowserToolError):
-        await fill_field("#agree", True)
+        await fill_field("#agree", True, tab="1")
 
 
 @pytest.mark.unit
@@ -104,7 +104,7 @@ async def test_fill_field_requires_non_empty_selector(
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     with pytest.raises(BrowserToolError):
-        await fill_field("   ", "value")
+        await fill_field("   ", "value", tab="1")
 
 
 @pytest.mark.unit
@@ -125,4 +125,4 @@ async def test_fill_field_select_element(
     monkeypatch.setattr("tools.browser.interactions.human_type", _passthrough_human_type)
 
     with pytest.raises(BrowserToolError):
-        await fill_field("#country", "us")
+        await fill_field("#country", "us", tab="1")
