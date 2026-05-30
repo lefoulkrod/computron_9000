@@ -198,19 +198,9 @@ function _agentReducer(state, action) {
             // Snapshots are keyed by tab id and update independently.
             // BrowserPreview picks which tab to display from local state,
             // so the reducer only stores; it doesn't track selection.
-            // snapshot === null is the "clear everything" signal.
             const { agentId, snapshot } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
-            if (snapshot === null) {
-                return {
-                    ...state,
-                    agents: {
-                        ...state.agents,
-                        [agentId]: { ...agent, browserTabs: {}, lastBrowserTabId: null },
-                    },
-                };
-            }
             // Snapshots without a tab id collapse onto a single 'untracked'
             // slot — covers older clients or emit paths that can't resolve
             // a tab.
@@ -224,6 +214,19 @@ function _agentReducer(state, action) {
                         browserTabs: { ...agent.browserTabs, [key]: snapshot },
                         lastBrowserTabId: key,
                     },
+                },
+            };
+        }
+
+        case 'CLEAR_BROWSER_TABS': {
+            const { agentId } = action;
+            const agent = state.agents[agentId];
+            if (!agent) return state;
+            return {
+                ...state,
+                agents: {
+                    ...state.agents,
+                    [agentId]: { ...agent, browserTabs: {}, lastBrowserTabId: null },
                 },
             };
         }

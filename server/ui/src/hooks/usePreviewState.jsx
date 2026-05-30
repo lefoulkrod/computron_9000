@@ -71,9 +71,8 @@ export default function usePreviewState(agentState, agentDispatch) {
         if (!agentId) return;
 
         if (id === 'browser') {
-            // Clear all browser tabs at once (this is the preview-panel
-            // close, not the agent's close_tab tool).
-            agentDispatch({ type: 'UPDATE_BROWSER_SNAPSHOT', agentId, snapshot: null });
+            // The preview-panel close, not the agent's close_tab tool.
+            agentDispatch({ type: 'CLEAR_BROWSER_TABS', agentId });
         } else if (id.startsWith('file:')) {
             agentDispatch({ type: 'CLOSE_FILE', agentId, filename: id.slice(5) });
         } else if (id === 'terminal') {
