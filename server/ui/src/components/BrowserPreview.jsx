@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import styles from './BrowserPreview.module.css';
 import LockIcon from './icons/LockIcon.jsx';
 import ExpandIcon from './icons/ExpandIcon.jsx';
@@ -22,15 +22,6 @@ function _hostOf(url) {
  */
 export default function BrowserPreview({ tabs, onFullscreen }) {
     const [selectedId, setSelectedId] = useState(tabs[0]?.id ?? null);
-
-    // If the currently-selected tab disappears (e.g. agent closed it),
-    // fall back to the first available tab.  Initial first-tab pick is
-    // handled by useState default.
-    useEffect(() => {
-        if (!tabs.some(t => t.id === selectedId)) {
-            setSelectedId(tabs[0]?.id ?? null);
-        }
-    }, [tabs, selectedId]);
 
     const activeTab = tabs.find(t => t.id === selectedId) || tabs[0];
     if (!activeTab) return null;
