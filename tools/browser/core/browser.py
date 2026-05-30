@@ -62,6 +62,11 @@ class ActiveView(NamedTuple):
     title: str
     url: str
 
+    @property
+    def page(self) -> Page:
+        """The ``Page`` owning ``frame`` — same as ``frame`` for the main page."""
+        return self.frame.page if isinstance(self.frame, Frame) else self.frame
+
 logger = logging.getLogger(__name__)
 
 

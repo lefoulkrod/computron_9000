@@ -21,7 +21,7 @@ from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.page_view import build_page_view
 from tools.browser.events import emit_screenshot_after
-from tools.browser.interactions import _format_result, _page_of
+from tools.browser.interactions import _format_result
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ async def inspect_page(
 
     _browser, view = await get_active_view(_SCREENSHOT_TOOL_NAME, tab=tab)
     # Screenshots require the Page object (not Frame)
-    page = _page_of(view)
+    page = view.page
 
     try:
         if normalized_mode == "selector":
@@ -153,7 +153,7 @@ async def browser_visual_action(task: str, tab: str | None = None) -> str:
         raise BrowserToolError(msg, tool=_VISUAL_ACTION_TOOL_NAME)
 
     browser, view = await get_active_view(_VISUAL_ACTION_TOOL_NAME, tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     # Capture viewport screenshot.
     try:

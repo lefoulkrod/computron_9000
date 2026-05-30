@@ -17,7 +17,6 @@ from tools.browser.core import get_active_view
 from tools.browser.core._formatting import format_javascript_result
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.events import emit_screenshot
-from tools.browser.interactions import _page_of
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -51,7 +50,7 @@ async def execute_javascript(
 
     # Capture console output during execution
     console_lines: list[str] = []
-    page = _page_of(view)
+    page = view.page
 
     def _on_console(msg: Any) -> None:
         text = msg.text

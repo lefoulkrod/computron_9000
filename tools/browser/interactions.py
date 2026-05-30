@@ -12,13 +12,13 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from playwright.async_api import Error as PlaywrightError, Frame, Page
+from playwright.async_api import Error as PlaywrightError, Page
 
 if TYPE_CHECKING:
     from playwright.async_api import Response
 
 from config import load_config
-from tools.browser.core import ActiveView, get_active_view, get_browser
+from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._formatting import format_page_view
 from tools.browser.core._selectors import _LocatorResolution, _resolve_locator
 from tools.browser.core.browser import BrowserInteractionResult
@@ -114,11 +114,6 @@ def _log_browser_panel(
         border_style="dim",
         expand=False,
     ))
-
-
-def _page_of(view: ActiveView) -> Page:
-    """Return the ``Page`` owning the view's frame."""
-    return view.frame.page if isinstance(view.frame, Frame) else view.frame
 
 
 async def _build_snapshot(
@@ -240,7 +235,7 @@ async def click(selector: str, tab: str | None = None) -> str:
         raise BrowserToolError(msg, tool="click")
 
     browser, view = await get_active_view("click", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     try:
         resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="click")
@@ -287,7 +282,7 @@ async def press_and_hold(
     clamped_duration = max(500, min(10000, duration_ms))
 
     browser, view = await get_active_view("press_and_hold", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="press_and_hold")
 
@@ -341,7 +336,7 @@ async def drag(
         raise BrowserToolError("target must be a non-empty string", tool="drag")
 
     browser, view = await get_active_view("drag", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     source_resolution = await _resolve_or_raise(view.frame, clean_source, tool_name="drag")
 
@@ -408,7 +403,7 @@ async def fill_field(
     text_value = "" if value is None else str(value)
 
     browser, view = await get_active_view("fill_field", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     resolution = await _resolve_or_raise(view.frame, clean_selector, tool_name="fill_field")
 
@@ -480,7 +475,7 @@ async def press_keys(keys: list[str], tab: str | None = None) -> str:
         raise BrowserToolError("keys must be a non-empty list of key names", tool="press_keys")
 
     browser, view = await get_active_view("press_keys", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     try:
         result = await browser.perform_interaction(
@@ -524,7 +519,7 @@ async def scroll_page(
         raise BrowserToolError("direction must be a non-empty string", tool="scroll_page")
 
     browser, view = await get_active_view("scroll_page", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     cfg = load_config()
     warn_threshold = cfg.tools.browser.scroll_warn_threshold
@@ -602,7 +597,7 @@ async def go_back(tab: str | None = None) -> str:
         BrowserToolError: If back navigation fails.
     """
     browser, view = await get_active_view("go_back", tab=tab)
-    page = _page_of(view)
+    page = view.page
 
     try:
         browser_result = await browser.navigate_back(page=page)

@@ -8,7 +8,6 @@ from playwright.async_api import Error as PlaywrightError
 
 from tools.browser.core import get_active_view, get_browser
 from tools.browser.core._formatting import format_page_view
-from tools.browser.interactions import _page_of
 from tools.browser.core._html import html_to_markdown
 from tools.browser.core.exceptions import BrowserToolError
 
@@ -140,7 +139,7 @@ async def read_page(
         )
 
     browser, view = await get_active_view("read_page", tab=tab)
-    resolved_page = _page_of(view)
+    resolved_page = view.page
 
     try:
         raw_html: str = await view.frame.evaluate(_CONTENT_ROOT_JS)

@@ -10,7 +10,7 @@ from playwright.async_api import ElementHandle, Error as PlaywrightError, Page
 from .core import get_active_view
 from .core.exceptions import BrowserToolError
 from .core.human import human_click, human_press_keys
-from .interactions import _format_result, _page_of, _resolve_or_raise
+from .interactions import _format_result, _resolve_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ async def select_option(
         select_handle = await select_locator.element_handle(timeout=5000)
 
         # Get the page for wait_for_timeout calls
-        page = _page_of(view)
+        page = view.page
 
         async def _perform_select() -> None:
             # Click the dropdown to open it (human-like mouse movement).
