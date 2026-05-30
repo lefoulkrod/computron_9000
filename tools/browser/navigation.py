@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @emit_screenshot_after
-async def goto(url: str, tab: str) -> str:
+async def goto(url: str, *, tab: str) -> str:
     """Navigate an existing tab to ``url`` and return its snapshot.
 
     ``goto`` only re-points a tab that already exists.  To open a fresh
@@ -77,7 +77,7 @@ async def new_tab(url: str) -> str:
         raise BrowserToolError(str(exc), tool="new_tab") from exc
 
 
-async def close_tab(tab: str | None = None) -> str:
+async def close_tab(*, tab: str) -> str:
     """Close a tab and free its resources.
 
     With one tab open, ``tab`` may be omitted.  With multiple tabs,

@@ -624,28 +624,13 @@ class Browser:
             rows.append(f"  tab={tid}: {page.url}")
         return "Open tabs:\n" + "\n".join(rows) if rows else "No open tabs"
 
-    def resolve_tab(self, tab: str | int | None) -> Page:
-        """Look up the tab the tool should act on, by stable ID.
+    def resolve_tab(self, tab: str | int) -> Page:
+        """Look up the open tab with the given stable ID.
 
-        * ``tab=None`` and exactly one open tab → that tab.
-        * ``tab=None`` and multiple tabs → raises ``ValueError`` with the
-          listing so the caller knows to pass ``tab=``.
-        * ``tab="N"`` / ``tab=N`` → the open tab with that ID.
-
-        IDs are stable and monotonic — closing a tab does not free its
-        ID, so a stale reference always errors rather than silently
-        landing on a different tab.
+        IDs are monotonic — closing a tab does not free its ID, so a
+        stale reference always errors rather than silently landing on a
+        different tab.
         """
-        if tab is None:
-            tabs = self.open_tabs()
-            if not tabs:
-                raise ValueError("No open tabs; call new_tab(url) first")
-            if len(tabs) == 1:
-                return tabs[0]
-            raise ValueError(
-                f"{len(tabs)} tabs open; specify tab=N. {self._tab_listing()}",
-            )
-
         try:
             target_id = int(str(tab).strip())
         except ValueError:
@@ -655,10 +640,6 @@ class Browser:
         for page, tid in self._tab_id_of.items():
             if tid == target_id and not page.is_closed():
                 return page
-        # Specific tab requested but not in the live map.  Surface it as
-        # "not found" rather than the generic "no open tabs" — under
-        # concurrent close_tab calls the tab really doesn't exist, and the
-        # caller passed a specific id they thought was valid.
         raise ValueError(
             f"tab={tab!r} not found. {self._tab_listing()}",
         )

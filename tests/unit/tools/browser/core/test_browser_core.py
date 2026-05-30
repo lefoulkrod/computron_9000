@@ -112,20 +112,6 @@ async def test_resolve_tab_by_id() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_resolve_tab_errors_when_multiple_and_no_tab() -> None:
-    """No tab arg with multiple tabs lists open tabs in the error."""
-    ctx = FakeContext()
-    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
-
-    await browser.new_page()
-    await browser.new_page()
-
-    with pytest.raises(ValueError, match="2 tabs open"):
-        browser.resolve_tab(None)
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
 async def test_resolve_tab_errors_when_id_unknown() -> None:
     ctx = FakeContext()
     browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]

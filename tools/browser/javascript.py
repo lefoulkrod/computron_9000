@@ -25,7 +25,7 @@ _CODE_PREVIEW_LEN = 120
 
 
 async def execute_javascript(
-    code: str, timeout_ms: int = 10000, tab: str | None = None,
+    code: str, timeout_ms: int = 10000, *, tab: str,
 ) -> str:
     """Execute JavaScript in the page context.  Advanced — prefer structured tools.
 

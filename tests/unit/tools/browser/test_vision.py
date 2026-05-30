@@ -151,7 +151,7 @@ async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
     with patch("sdk.providers.vision_generate", _fake_vision_generate):
-        answer = await inspect_page("What is in the header?")
+        answer = await inspect_page("What is in the header?", tab="1")
 
     assert answer == "Mock answer"
     assert _fake_vision_generate.called
@@ -165,7 +165,7 @@ async def test_inspect_page_success(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_inspect_page_rejects_blank_prompt() -> None:
     """Blank prompts should raise a BrowserToolError."""
     with pytest.raises(BrowserToolError):
-        await inspect_page("   ")
+        await inspect_page("   ", tab="1")
 
 
 @pytest.mark.unit
@@ -184,7 +184,7 @@ async def test_inspect_page_requires_navigation(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await inspect_page("Describe the page")
+        await inspect_page("Describe the page", tab="1")
 
 
 @pytest.mark.unit
@@ -211,7 +211,7 @@ async def test_inspect_page_selector_mode(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(settings_module, "load_settings", lambda: dict(_FAKE_SETTINGS))
 
     with patch("sdk.providers.vision_generate", _fake_vision_generate):
-        answer = await inspect_page("Describe the hero", mode="selector", selector="#hero")
+        answer = await inspect_page("Describe the hero", mode="selector", selector="#hero", tab="1")
 
     assert answer == "Mock answer"
     assert _fake_vision_generate.called
@@ -235,7 +235,7 @@ async def test_selector_requires_non_empty(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await inspect_page("prompt", mode="selector", selector="   ")
+        await inspect_page("prompt", mode="selector", selector="   ", tab="1")
 
 
 @pytest.mark.unit
@@ -253,7 +253,7 @@ async def test_selector_missing_element(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError) as excinfo:
-        await inspect_page("Anything", mode="selector", selector="#missing")
+        await inspect_page("Anything", mode="selector", selector="#missing", tab="1")
 
     msg = str(excinfo.value)
     assert "No element matched selector handle '#missing'" in msg or "No element matched selector '#missing'" in msg
@@ -316,7 +316,7 @@ async def test_browser_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(module, "_format_result", fake_format_result)
 
-    result = await browser_visual_action("Click the login button")
+    result = await browser_visual_action("Click the login button", tab="1")
     assert isinstance(result, str)
 
 
@@ -357,7 +357,7 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(module, "build_page_view", fake_build_page_view)
 
-    result = await browser_visual_action("Check if login succeeded")
+    result = await browser_visual_action("Check if login succeeded", tab="1")
     assert "finished" in result.lower() or "Login was successful" in result
 
 
@@ -366,7 +366,7 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 async def test_browser_visual_action_empty_task() -> None:
     """Empty task should raise BrowserToolError."""
     with pytest.raises(BrowserToolError):
-        await browser_visual_action("   ")
+        await browser_visual_action("   ", tab="1")
 
 
 @pytest.mark.unit
@@ -387,7 +387,7 @@ async def test_browser_visual_action_grounding_failure(monkeypatch: pytest.Monke
     monkeypatch.setattr(grounding_module, "run_grounding", failing_grounding)
 
     with pytest.raises(BrowserToolError, match="Grounding request failed"):
-        await browser_visual_action("Click login")
+        await browser_visual_action("Click login", tab="1")
 
 
 @pytest.mark.unit
@@ -401,4 +401,4 @@ async def test_browser_visual_action_requires_navigation(monkeypatch: pytest.Mon
     monkeypatch.setattr(module, "get_active_view", _make_fake_get_active_view(browser))
 
     with pytest.raises(BrowserToolError):
-        await browser_visual_action("Click login")
+        await browser_visual_action("Click login", tab="1")

@@ -95,7 +95,8 @@ async def select_option(
     selector: str,
     value: str,
     wait_after_select_ms: int | None = None,
-    tab: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """Select an option from a ``<select>`` dropdown by visible text.
 

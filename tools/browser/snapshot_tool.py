@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 async def browse_page(
     scope: str | None = None,
     full_page: bool = False,
-    tab: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """See interactive elements on the current page with ref numbers.
 

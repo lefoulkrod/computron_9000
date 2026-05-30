@@ -206,7 +206,7 @@ async def _resolve_or_raise(
 
 
 @emit_screenshot_after
-async def click(selector: str, tab: str | None = None) -> str:
+async def click(selector: str, *, tab: str) -> str:
     """Click an element by its ref number from the page view.
 
     Always returns an updated page snapshot.  For AJAX actions (e.g. add-to-cart),
@@ -215,8 +215,7 @@ async def click(selector: str, tab: str | None = None) -> str:
     Args:
         selector: Ref number from ``browse_page()`` output.
             Examples: ``"7"``, ``"12"``.
-        tab: 1-based tab index when multiple tabs are open.  Omit when
-            only one tab exists.
+        tab: Tab ID from new_tab() or browse_page() output.
 
     Returns:
         Updated page snapshot string.
@@ -251,7 +250,7 @@ async def click(selector: str, tab: str | None = None) -> str:
 
 @emit_screenshot_after
 async def press_and_hold(
-    selector: str, duration_ms: int = 3000, tab: str | None = None,
+    selector: str, duration_ms: int = 3000, *, tab: str,
 ) -> str:
     """Press and hold an element for a specified duration.
 
@@ -308,7 +307,8 @@ async def press_and_hold(
 async def drag(
     source: str,
     target: str,
-    tab: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """Drag from a source element to a target element.
 
@@ -371,7 +371,8 @@ async def drag(
 async def fill_field(
     selector: str,
     value: str | int | float | bool | None,
-    tab: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """Type into a text input or textarea field.
 
@@ -450,7 +451,7 @@ async def fill_field(
 
 
 @emit_screenshot_after
-async def press_keys(keys: list[str], tab: str | None = None) -> str:
+async def press_keys(keys: list[str], *, tab: str) -> str:
     """Press keyboard keys on the currently focused element.
 
     Commonly used after ``fill_field()`` to submit a form
@@ -489,7 +490,8 @@ async def press_keys(keys: list[str], tab: str | None = None) -> str:
 async def scroll_page(
     direction: str = "down",
     amount: int | None = None,
-    tab: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """Scroll the page and return an updated snapshot.
 
@@ -579,11 +581,11 @@ async def scroll_page(
 
 
 @emit_screenshot_after
-async def go_back(tab: str | None = None) -> str:
+async def go_back(*, tab: str) -> str:
     """Navigate back in browser history and return an updated snapshot.
 
     Args:
-        tab: 1-based tab index when multiple tabs are open.
+        tab: Tab ID to act on.
 
     Returns:
         Updated page snapshot string.

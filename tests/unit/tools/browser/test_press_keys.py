@@ -47,7 +47,7 @@ async def test_press_keys_success(
 
     monkeypatch.setattr("tools.browser.interactions.human_press_keys", fake_human_press_keys)
 
-    result = await press_keys(["Enter"])
+    result = await press_keys(["Enter"], tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert settle_tracker["count"] == 1
@@ -57,4 +57,4 @@ async def test_press_keys_success(
 @pytest.mark.asyncio
 async def test_press_keys_invalid_input() -> None:
     with pytest.raises(BrowserToolError):
-        await press_keys([])
+        await press_keys([], tab="1")

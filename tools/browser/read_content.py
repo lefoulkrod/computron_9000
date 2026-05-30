@@ -107,7 +107,8 @@ def _filter_by_query(
 async def read_page(
     page_number: int = 1,
     query: str | None = None,
-    tab: str | None = None,
+    *,
+    tab: str,
 ) -> str:
     """Read the current page as clean markdown text.
 

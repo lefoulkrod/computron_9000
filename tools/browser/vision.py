@@ -34,7 +34,7 @@ async def inspect_page(
     *,
     mode: str = "full_page",
     selector: str | None = None,
-    tab: str | None = None,
+    tab: str,
 ) -> str:
     """Inspect the current page visually and answer a question about it.  SLOW.
 
@@ -123,7 +123,7 @@ async def inspect_page(
 
 
 @emit_screenshot_after
-async def browser_visual_action(task: str, tab: str | None = None) -> str:
+async def browser_visual_action(task: str, *, tab: str) -> str:
     """Ask a vision model to decide and execute the next GUI action.
 
     Only the current viewport is screenshotted — the target element must

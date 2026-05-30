@@ -199,15 +199,6 @@ async def test_close_tab_errors_when_unknown(stub_browser: _StubBrowser) -> None
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_close_tab_last_tab(stub_browser: _StubBrowser) -> None:
-    await new_tab("https://a.com")
-    output = await close_tab()
-    assert output == "Closed tab=1."
-    assert stub_browser.open_tabs() == []
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
 async def test_parallel_goto_on_different_tabs_both_succeed(
     stub_browser: _StubBrowser,
 ) -> None:

@@ -23,14 +23,12 @@ __all__ = [
 
 
 async def get_active_view(
-    tool_name: str, *, tab: str | None = None,
+    tool_name: str, *, tab: str,
 ) -> tuple[Browser, ActiveView]:
     """Get the browser and active view for *tab*.
 
-    Resolves *tab* via :meth:`Browser.resolve_tab` so every tool follows
-    the same rule: ``tab=None`` only works when exactly one tab is open;
-    otherwise the caller must pass ``tab=N``.  Raises ``BrowserToolError``
-    when no page is available or *tab* doesn't resolve.
+    Resolves *tab* via :meth:`Browser.resolve_tab`.  Raises
+    ``BrowserToolError`` when *tab* doesn't resolve to an open tab.
     """
     try:
         browser = await get_browser()

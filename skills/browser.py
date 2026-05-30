@@ -67,10 +67,9 @@ _SKILL = Skill(
                                    open another one.
             close_tab(tab="3")   — close a tab when you're done with it.
         Page-acting tools (click, scroll_page, read_page, browse_page,
-        fill_field, ...) all take optional ``tab="N"``. Omit it when only
-        one tab is open; pass it when multiple. Tools error with a tab
-        listing when ``tab`` is missing or unknown. Concurrent goto on
-        the same tab errors — use new_tab(url) for parallel opens.
+        fill_field, ...) all require ``tab="N"``. Tools error with the
+        open-tab listing when ``tab`` is missing or unknown. Concurrent
+        goto on the same tab errors — use new_tab(url) for parallel opens.
 
         SLIDERS: [slider] elements are adjusted with drag(). browse_page() shows
         the current value after dragging (e.g. [7] [slider] Volume = 8).

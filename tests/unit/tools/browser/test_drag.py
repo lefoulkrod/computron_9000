@@ -40,7 +40,7 @@ async def test_drag_with_target_selector(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
-    result = await drag("#handle", ".drop-zone")
+    result = await drag("#handle", ".drop-zone", tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert page.drag_calls == [
@@ -68,7 +68,7 @@ async def test_drag_with_ref(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_drag", _human_drag_probe)
 
-    result = await drag("1", "2")
+    result = await drag("1", "2", tab="1")
     assert "[Page:" in result
     assert page.drag_calls == [
         {"source": source_locator, "target": target_locator}
@@ -89,7 +89,7 @@ async def test_drag_empty_source(
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
-        await drag("", "1")
+        await drag("", "1", tab="1")
 
 
 @pytest.mark.unit
@@ -106,7 +106,7 @@ async def test_drag_empty_target(
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
-        await drag("1", "")
+        await drag("1", "", tab="1")
 
 
 @pytest.mark.unit
@@ -123,4 +123,4 @@ async def test_drag_target_not_found(
     patch_interactions_browser(page)
 
     with pytest.raises(BrowserToolError):
-        await drag("#handle", ".missing")
+        await drag("#handle", ".missing", tab="1")

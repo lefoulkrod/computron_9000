@@ -34,7 +34,7 @@ async def test_click_by_ref(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    result = await click("1")
+    result = await click("1", tab="1")
     assert isinstance(result, str)
     assert "[Page:" in result
     assert "https://example.test/after" in result
@@ -66,7 +66,7 @@ async def test_click_by_css_selector(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    result = await click(".cta")
+    result = await click(".cta", tab="1")
     assert "[Page:" in result
     assert "/cta" in result
     assert "After Click" in result
@@ -88,7 +88,7 @@ async def test_click_ref_not_found(
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    result = await click("99")
+    result = await click("99", tab="1")
     assert "Ref 99 not found" in result
 
 
@@ -106,5 +106,5 @@ async def test_click_not_found(monkeypatch: pytest.MonkeyPatch, patch_interactio
     patch_interactions_browser(page)
     monkeypatch.setattr("tools.browser.interactions.human_click", _human_click_passthrough)
 
-    result = await click("Does Not Exist")
+    result = await click("Does Not Exist", tab="1")
     assert "No element found" in result
