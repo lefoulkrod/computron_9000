@@ -153,12 +153,7 @@ async def _format_result(
         )
     snapshot = await _build_snapshot(result.navigation_response, page=page)
     browser = await get_browser()
-    tab_id_fn = getattr(browser, "tab_id_of", None)
-    tab_id = (
-        tab_id_fn(page)
-        if callable(tab_id_fn) and page is not None
-        else None
-    )
+    tab_id = browser.tab_id_of(page) if page is not None else None
     _log_browser_panel(result, snapshot=snapshot, tool_name=tool_name, resolution=resolution)
     return format_page_view(
         title=snapshot.title,

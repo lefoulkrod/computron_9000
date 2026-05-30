@@ -64,8 +64,6 @@ async def browse_page(
 
     try:
         pv = await build_page_view(view, None, scope=scope, full_page=full_page)
-        tab_id_fn = getattr(browser, "tab_id_of", None)
-        tab_id = tab_id_fn(page) if callable(tab_id_fn) else None
         return format_page_view(
             title=pv.title,
             url=pv.url,
@@ -73,7 +71,7 @@ async def browse_page(
             viewport=pv.viewport,
             content=pv.content,
             truncated=pv.truncated,
-            tab_id=tab_id,
+            tab_id=browser.tab_id_of(page),
         )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Failed to build annotated snapshot")

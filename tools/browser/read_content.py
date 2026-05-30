@@ -188,8 +188,6 @@ async def read_page(
             "Failed to read page content", tool="read_page"
         ) from exc
 
-    tab_id_fn = getattr(browser, "tab_id_of", None)
-    tab_id = tab_id_fn(resolved_page) if callable(tab_id_fn) else None
     return format_page_view(
         title=view.title,
         url=view.url,
@@ -197,7 +195,7 @@ async def read_page(
         viewport=viewport_data,
         content=content,
         truncated=truncated,
-        tab_id=tab_id,
+        tab_id=browser.tab_id_of(resolved_page),
     )
 
 
