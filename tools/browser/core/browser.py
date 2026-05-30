@@ -577,9 +577,8 @@ class Browser:
         """Open a new page within the persistent context.
 
         Assigns a stable monotonic tab ID that never repeats — closing a
-        tab does not free its ID for reuse, so prior references stay
-        consistent (they fail loud rather than silently pointing at a
-        different page).
+        tab does not free its ID for reuse, so a later call that uses
+        the old ID errors instead of pointing at a different page.
 
         Returns:
             The newly created Playwright ``Page``.

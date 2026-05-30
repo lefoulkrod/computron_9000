@@ -19,7 +19,7 @@ async def goto(url: str, tab: str) -> str:
     ``goto`` only re-points a tab that already exists.  To open a fresh
     page, use ``new_tab(url)`` — that is the only way to create a tab.
 
-    Two concurrent ``goto`` calls on the same tab error loudly — open
+    Two concurrent ``goto`` calls on the same tab error — open
     pages in parallel with ``new_tab(url)`` instead.
 
     Args:
@@ -78,8 +78,8 @@ async def close_tab(tab: str | None = None) -> str:
 
     With one tab open, ``tab`` may be omitted.  With multiple tabs,
     pass the ID of the tab to close.  Closing a tab does not free its
-    ID — stale references to a closed tab fail loud rather than
-    silently landing on a different tab.
+    ID — a later call that references a closed tab errors with the
+    open-tab listing, rather than acting on a different tab.
 
     Args:
         tab: Stable tab ID to close.  Omit when only one tab is open.
