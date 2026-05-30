@@ -65,7 +65,7 @@ export default function Sidebar({
             data-collapsed={collapsed}
         >
             <div className={styles.brand}>
-                {!collapsed && <span className={styles.wordmark}>COMPUTRON</span>}
+                {!collapsed && <span className={styles.wordmark}>OMNIDECK</span>}
                 <button
                     className={styles.iconBtn}
                     onClick={toggleCollapsed}
