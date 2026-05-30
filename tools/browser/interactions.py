@@ -142,11 +142,17 @@ async def _build_snapshot(
 
 async def _format_result(
     result: BrowserInteractionResult,
+    page: Page | None = None,
     *,
     tool_name: str = "",
     resolution: _LocatorResolution | None = None,
 ) -> str:
-    """Format a BrowserInteractionResult as a page view string."""
+    """Format a BrowserInteractionResult as a page view string.
+
+    Pass *page* so the snapshot is taken from that specific tab and the
+    header carries its tab ID.  Parallel calls on different tabs each
+    pass their own page; nothing is read from a shared "active view".
+    """
     if result.download is not None:
         _log_browser_panel(result, snapshot=None, tool_name=tool_name, resolution=resolution)
         return format_page_view(
@@ -158,14 +164,12 @@ async def _format_result(
             truncated=False,
             downloaded_file=result.download,
         )
-    snapshot = await _build_snapshot(
-        result.navigation_response, page=result.page,
-    )
+    snapshot = await _build_snapshot(result.navigation_response, page=page)
     browser = await get_browser()
     tab_id_fn = getattr(browser, "tab_id_of", None)
     tab_id = (
-        tab_id_fn(result.page)
-        if callable(tab_id_fn) and result.page is not None
+        tab_id_fn(page)
+        if callable(tab_id_fn) and page is not None
         else None
     )
     _log_browser_panel(result, snapshot=snapshot, tool_name=tool_name, resolution=resolution)
@@ -255,7 +259,7 @@ async def click(selector: str, tab: str | None = None) -> str:
         result = await browser.perform_interaction(
             lambda: human_click(view.frame, resolution.locator), page=page,
         )
-        return await _format_result(result, tool_name="click", resolution=resolution)
+        return await _format_result(result, page, tool_name="click", resolution=resolution)
     except BrowserToolError as exc:
         return str(exc)
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -306,7 +310,7 @@ async def press_and_hold(
             lambda: human_press_and_hold(view.frame, resolution.locator, duration_ms=clamped_duration),
             page=page,
         )
-        return await _format_result(result, tool_name="press_and_hold", resolution=resolution)
+        return await _format_result(result, page, tool_name="press_and_hold", resolution=resolution)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:  # pragma: no cover - final safety net
@@ -378,7 +382,7 @@ async def drag(
         msg = "Playwright error performing drag"
         raise BrowserToolError(msg, tool="drag", details=details) from exc
 
-    return await _format_result(browser_result, tool_name="drag", resolution=source_resolution)
+    return await _format_result(browser_result, page, tool_name="drag", resolution=source_resolution)
 
 
 @emit_screenshot_after
@@ -454,7 +458,7 @@ async def fill_field(
 
     try:
         result = await browser.perform_interaction(_perform_fill, page=page)
-        return await _format_result(result, tool_name="fill_field", resolution=resolution)
+        return await _format_result(result, page, tool_name="fill_field", resolution=resolution)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -490,7 +494,7 @@ async def press_keys(keys: list[str], tab: str | None = None) -> str:
         result = await browser.perform_interaction(
             lambda: human_press_keys(view.frame, keys), page=page,
         )
-        return await _format_result(result, tool_name="press_keys")
+        return await _format_result(result, page, tool_name="press_keys")
     except BrowserToolError:
         raise
     except PlaywrightError as exc:
@@ -617,7 +621,7 @@ async def go_back(tab: str | None = None) -> str:
         msg = "Failed to navigate back"
         raise BrowserToolError(msg, tool="go_back") from exc
 
-    return await _format_result(browser_result, tool_name="go_back")
+    return await _format_result(browser_result, page, tool_name="go_back")
 
 
 __all__ = [

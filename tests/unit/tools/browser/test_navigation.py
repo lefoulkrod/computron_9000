@@ -75,7 +75,6 @@ class _StubBrowser:
             return BrowserInteractionResult(
                 navigation_response=None,
                 download=None,
-                page=page,
             )
         finally:
             self._navigating.discard(page)

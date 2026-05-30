@@ -206,7 +206,7 @@ async def browser_visual_action(task: str, tab: str | None = None) -> str:
             lambda: execute_action(response, page, view.frame),
             page=page,
         )
-        return await _format_result(result, tool_name=_VISUAL_ACTION_TOOL_NAME)
+        return await _format_result(result, page, tool_name=_VISUAL_ACTION_TOOL_NAME)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:

@@ -672,7 +672,6 @@ class StubBrowser:
         return BrowserInteractionResult(
             navigation_response=None,
             download=None,
-            page=target,
         )
 
     async def navigate_back(self, page: Any = None) -> Any:

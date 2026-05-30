@@ -163,7 +163,7 @@ async def select_option(
 
         # Perform interaction and check for page changes
         browser_result = await browser.perform_interaction(_perform_select, page=page)
-        return await _format_result(browser_result)
+        return await _format_result(browser_result, page)
     except BrowserToolError:
         raise
     except PlaywrightError as exc:

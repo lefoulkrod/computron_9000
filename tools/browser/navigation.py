@@ -42,7 +42,7 @@ async def goto(url: str, tab: str | None = None) -> str:
             except ValueError as exc:
                 raise BrowserToolError(str(exc), tool="goto") from exc
         result = await browser.navigate(url, page=page)
-        return await _format_result(result, tool_name="goto")
+        return await _format_result(result, page, tool_name="goto")
     except BrowserToolError:
         raise
     except Exception as exc:  # pragma: no cover - wrap into tool error
@@ -70,7 +70,7 @@ async def new_tab(url: str) -> str:
         browser = await browser_core.get_browser()
         page = await browser.new_page()
         result = await browser.navigate(url, page=page)
-        return await _format_result(result, tool_name="new_tab")
+        return await _format_result(result, page, tool_name="new_tab")
     except BrowserToolError:
         raise
     except Exception as exc:  # pragma: no cover - wrap into tool error

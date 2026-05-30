@@ -153,12 +153,6 @@ class BrowserInteractionResult(BaseModel):
     settle_timings: browser_waits.SettleTimings | None = None
     frame_transition: str | None = None
     action_ms: float = 0.0
-    # The page this result was produced on.  Threaded through so parallel
-    # calls on different tabs each snapshot their own page rather than
-    # racing on whichever tab happens to be most recent at format time.
-    # Typed as ``Any`` for test-stub friendliness; in production it's
-    # always either ``None`` or a Playwright ``Page``.
-    page: Any = None
 
 
 def _chrome_ua_metadata(version: str) -> tuple[str, dict]:
@@ -1093,7 +1087,6 @@ class Browser:
             download=download_info,
             settle_timings=settle_timings,
             frame_transition=frame_transition,
-            page=page,
         )
 
     async def _probe_file_url(self, new_page: Page, url: str) -> Page | None:

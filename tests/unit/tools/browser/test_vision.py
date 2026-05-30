@@ -105,7 +105,6 @@ class _FakeBrowser:
             action_ms=10.0,
             settle_timings=None,
             navigation_response=None,
-            page=page if page is not None else self._page,
         )
 
 
@@ -314,7 +313,7 @@ async def test_browser_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> N
     # Mock _format_result — it's imported lazily inside browser_visual_action
     interactions_module = importlib.import_module("tools.browser.interactions")
 
-    async def fake_format_result(result, *, tool_name="", resolution=None):
+    async def fake_format_result(result, page=None, *, tool_name="", resolution=None):
         return "[page snapshot]"
 
     monkeypatch.setattr(interactions_module, "_format_result", fake_format_result)

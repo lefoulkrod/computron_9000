@@ -338,7 +338,6 @@ class TestGotoFileDetection:
         result = BrowserInteractionResult(
             navigation_response=None,
             download=None,
-            page=mock_page,
         )
 
         mock_view = ActiveView(frame=AsyncMock(), title="Test", url="https://example.com")
