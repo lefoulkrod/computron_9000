@@ -85,11 +85,7 @@ async def close_tab(tab: str | None = None) -> str:
         tab: Stable tab ID to close.  Omit when only one tab is open.
 
     Returns:
-        Confirmation line naming the closed tab.  Current open-tab
-        state is reflected in the next snapshot header — this tool
-        does not list it because parallel ``close_tab`` calls would
-        produce inconsistent listings (each call's snapshot is taken
-        at its own completion time).
+        Confirmation line naming the closed tab.
     """
     try:
         browser = await browser_core.get_browser()
