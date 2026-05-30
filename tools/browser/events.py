@@ -90,16 +90,9 @@ async def _emit_screenshot(page: Page) -> None:
         title = ""
 
     # Tag the event with the tab ID so the UI can route each screenshot
-    # to its own thumbnail slot.  Best-effort: if the Browser instance
-    # isn't reachable (e.g. early in shutdown) we just omit it.
-    tab_id: int | None = None
-    try:
-        from tools.browser.core import get_browser
-
-        browser = await get_browser()
-        tab_id = browser.tab_id_of(page)
-    except Exception:  # noqa: BLE001
-        pass
+    # to its own thumbnail slot.
+    browser = await get_browser()
+    tab_id = browser.tab_id_of(page)
 
     publish_event(AgentEvent(payload=BrowserScreenshotPayload(
         type="browser_screenshot",

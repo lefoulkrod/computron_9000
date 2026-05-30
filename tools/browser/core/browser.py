@@ -606,9 +606,7 @@ class Browser:
         """Return the stable tab ID for *page*, or ``None`` if untracked.
 
         The lookup lives on the Browser because Playwright's ``Page`` is
-        not our class — we can't hang an ID attribute on it.  Callers
-        that already have a Browser reference (e.g. the snapshot
-        formatter) ask for the ID by passing the page they care about.
+        not our class — we can't hang an ID attribute on it.
         """
         return self._tab_id_of.get(page)
 
@@ -1264,15 +1262,13 @@ async def _get_root_browser() -> Browser:
     """Return the persistent root browser, initializing it on first call.
 
     Locked so concurrent first callers don't each spin up their own root
-    Browser — without this, parallel sub-agent tool calls (e.g. three
-    ``close_tab``s gather()ed together) can all see ``_browser is None``
-    and race to launch separate Playwright instances.
+    Browser — without this, parallel tool calls that hit a cold cache
+    would each race past the ``_browser is None`` check and launch their
+    own Playwright instance.
     """
     global _browser
     async with _agent_browser_lock:
         if _browser is None:
-            register_agent_span_exit_hook(release_agent_browser)
-
             config = load_config()
             profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
             downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
@@ -1334,6 +1330,9 @@ async def release_agent_browser(key: str) -> None:
             logger.info("Released browser context for '%s'", key)
         except Exception:  # noqa: BLE001
             logger.warning("Failed to release browser context for '%s'", key)
+
+
+register_agent_span_exit_hook(release_agent_browser)
 
 
 async def close_browser() -> None:
