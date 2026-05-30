@@ -310,13 +310,11 @@ async def test_browser_visual_action_click(monkeypatch: pytest.MonkeyPatch) -> N
     mock_execute = AsyncMock()
     monkeypatch.setattr("tools.browser._action_map.execute_action", mock_execute)
 
-    # Mock _format_result — it's imported lazily inside browser_visual_action
-    interactions_module = importlib.import_module("tools.browser.interactions")
-
+    # Mock _format_result — patch the name bound in the vision module.
     async def fake_format_result(result, page=None, *, tool_name="", resolution=None):
         return "[page snapshot]"
 
-    monkeypatch.setattr(interactions_module, "_format_result", fake_format_result)
+    monkeypatch.setattr(module, "_format_result", fake_format_result)
 
     result = await browser_visual_action("Click the login button")
     assert isinstance(result, str)
@@ -339,9 +337,8 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(grounding_module, "run_grounding", fake_run_grounding)
 
-    # Mock build_page_view — it's lazy-imported inside browser_visual_action
+    # Mock build_page_view — patch the name bound in the vision module.
     from tools.browser.core.page_view import PageView
-    page_view_module = importlib.import_module("tools.browser.core.page_view")
 
     fake_snapshot = PageView(
         title="Test Page",
@@ -358,7 +355,7 @@ async def test_browser_visual_action_finished(monkeypatch: pytest.MonkeyPatch) -
     async def fake_build_page_view(view, response):
         return fake_snapshot
 
-    monkeypatch.setattr(page_view_module, "build_page_view", fake_build_page_view)
+    monkeypatch.setattr(module, "build_page_view", fake_build_page_view)
 
     result = await browser_visual_action("Check if login succeeded")
     assert "finished" in result.lower() or "Login was successful" in result

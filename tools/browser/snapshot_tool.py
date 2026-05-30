@@ -14,6 +14,7 @@ from tools.browser.core._formatting import format_page_view
 from tools.browser.core.exceptions import BrowserToolError
 from tools.browser.core.page_view import build_page_view
 from tools.browser.events import emit_screenshot_after
+from tools.browser.interactions import _page_of
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,6 @@ async def browse_page(
         BrowserToolError: If there is no open page.
     """
     browser, view = await get_active_view("browse_page", tab=tab)
-    from tools.browser.interactions import _page_of
     page = _page_of(view)
 
     try:

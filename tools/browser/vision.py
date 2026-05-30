@@ -16,9 +16,12 @@ from playwright.async_api import Page
 
 from settings import load_settings
 from tools.browser.core import get_active_view, get_browser
+from tools.browser.core._formatting import format_page_view
 from tools.browser.core._selectors import _resolve_locator
 from tools.browser.core.exceptions import BrowserToolError
+from tools.browser.core.page_view import build_page_view
 from tools.browser.events import emit_screenshot_after
+from tools.browser.interactions import _format_result, _page_of
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +71,6 @@ async def inspect_page(
         raise BrowserToolError(msg, tool=_SCREENSHOT_TOOL_NAME)
 
     _browser, view = await get_active_view(_SCREENSHOT_TOOL_NAME, tab=tab)
-    from tools.browser.interactions import _page_of
     # Screenshots require the Page object (not Frame)
     page = _page_of(view)
 
@@ -144,7 +146,6 @@ async def browser_visual_action(task: str, tab: str | None = None) -> str:
     """
     from tools._grounding import run_grounding
     from tools.browser._action_map import execute_action
-    from tools.browser.interactions import _format_result
 
     clean_task = task.strip()
     if not clean_task:
@@ -152,7 +153,6 @@ async def browser_visual_action(task: str, tab: str | None = None) -> str:
         raise BrowserToolError(msg, tool=_VISUAL_ACTION_TOOL_NAME)
 
     browser, view = await get_active_view(_VISUAL_ACTION_TOOL_NAME, tab=tab)
-    from tools.browser.interactions import _page_of
     page = _page_of(view)
 
     # Capture viewport screenshot.
@@ -183,9 +183,6 @@ async def browser_visual_action(task: str, tab: str | None = None) -> str:
     # Handle finished — return snapshot with note.
     if response.action_type == "finished":
         finished_content = response.raw.get("finished_content", "")
-        from tools.browser.core._formatting import format_page_view
-        from tools.browser.core.page_view import build_page_view
-
         snapshot = await build_page_view(view, None)
         content = snapshot.content
         if finished_content:
