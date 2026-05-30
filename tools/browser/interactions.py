@@ -126,17 +126,9 @@ async def _build_snapshot(
     *,
     page: Page | None = None,
 ) -> PageView:
-    """Build a page view from a specific page or the browser's active view.
-
-    When *page* is supplied (e.g. from a tool that resolved its tab),
-    snapshot that page directly so parallel calls on different tabs
-    don't collide on a shared "active view".
-    """
+    """Snapshot *page* (or the current page if None) into a ``PageView``."""
     browser = await get_browser()
-    if page is not None:
-        view = await browser.active_view(page=page)
-    else:
-        view = await browser.active_view()
+    view = await browser.active_view(page=page)
     return await build_page_view(view, response)
 
 
