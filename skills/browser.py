@@ -58,18 +58,19 @@ _SKILL = Skill(
         TABS: every tab has a stable ID shown in snapshot headers as
         ``tab=N``. Once you've seen an ID it never changes — closing a
         tab does not renumber the rest.
-            goto(url)            — navigate the current tab (creates the
-                                   first tab if none exist)
-            goto(url, tab="3")   — navigate tab 3 to a new URL
-            new_tab(url)         — open a new tab at url (keeps existing
-                                   tabs intact; use this for parallel reads
-                                   or "open in new tab" workflows)
-            close_tab(tab="3")   — close a tab when you're done with it
+            new_tab(url)         — the only way to open a tab. Use this
+                                   for the first URL of a session and
+                                   any time you want a fresh page.
+            goto(url, tab="3")   — re-point an existing tab to a new
+                                   URL. Tab is required. Use this when
+                                   you want to reuse a tab rather than
+                                   open another one.
+            close_tab(tab="3")   — close a tab when you're done with it.
         Page-acting tools (click, scroll_page, read_page, browse_page,
         fill_field, ...) all take optional ``tab="N"``. Omit it when only
         one tab is open; pass it when multiple. Tools error with a tab
-        listing when ``tab`` is missing or unknown. Concurrent goto on the
-        same tab errors — use new_tab(url) for parallel navigation.
+        listing when ``tab`` is missing or unknown. Concurrent goto on
+        the same tab errors — use new_tab(url) for parallel opens.
 
         SLIDERS: [slider] elements are adjusted with drag(). browse_page() shows
         the current value after dragging (e.g. [7] [slider] Volume = 8).

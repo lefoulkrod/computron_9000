@@ -309,8 +309,7 @@ class TestGotoFileDetection:
 
         mock_page = AsyncMock()
         mock_browser = AsyncMock()
-        mock_browser.open_tabs = lambda: []  # bootstrap path
-        mock_browser.new_page = AsyncMock(return_value=mock_page)
+        mock_browser.resolve_tab = lambda tab: mock_page
         mock_browser.navigate = AsyncMock(return_value=result)
 
         async def _get_browser():
@@ -321,7 +320,7 @@ class TestGotoFileDetection:
 
         from tools.browser.navigation import goto
 
-        output = await goto("https://example.com/test.pdf")
+        output = await goto("https://example.com/test.pdf", tab="1")
 
         assert isinstance(output, str)
         assert "test.pdf" in output
@@ -343,8 +342,7 @@ class TestGotoFileDetection:
         mock_view = ActiveView(frame=AsyncMock(), title="Test", url="https://example.com")
 
         mock_browser = AsyncMock()
-        mock_browser.open_tabs = lambda: []
-        mock_browser.new_page = AsyncMock(return_value=mock_page)
+        mock_browser.resolve_tab = lambda tab: mock_page
         mock_browser.navigate = AsyncMock(return_value=result)
         mock_browser.active_view = AsyncMock(return_value=mock_view)
         mock_browser.tab_id_of = lambda p: 1
@@ -371,7 +369,7 @@ class TestGotoFileDetection:
 
         from tools.browser.navigation import goto
 
-        output = await goto("https://example.com")
+        output = await goto("https://example.com", tab="1")
 
         assert isinstance(output, str)
         assert "Test" in output

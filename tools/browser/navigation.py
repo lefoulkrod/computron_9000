@@ -13,34 +13,29 @@ logger = logging.getLogger(__name__)
 
 
 @emit_screenshot_after
-async def goto(url: str, tab: str | None = None) -> str:
-    """Navigate a tab to ``url`` and return the page snapshot.
+async def goto(url: str, tab: str) -> str:
+    """Navigate an existing tab to ``url`` and return its snapshot.
 
-    With no tabs open, the first ``goto`` auto-creates the tab and
-    navigates it.  With one tab open, ``tab`` may be omitted.  With
-    multiple tabs open, ``tab`` is required — pass the ID shown in the
-    snapshot header (e.g. ``tab="3"``).
+    ``goto`` only re-points a tab that already exists.  To open a fresh
+    page, use ``new_tab(url)`` — that is the only way to create a tab.
 
     Two concurrent ``goto`` calls on the same tab error loudly — open
     pages in parallel with ``new_tab(url)`` instead.
 
     Args:
         url: The URL to navigate to.
-        tab: Stable tab ID to navigate.  Omit when only one tab is
-            open or no tabs exist (a fresh one will be created).
+        tab: Stable tab ID to navigate — pass the ID shown in the
+            snapshot header (e.g. ``tab="3"``).
 
     Returns:
         Annotated page snapshot of the navigated tab.
     """
     try:
         browser = await browser_core.get_browser()
-        if tab is None and not browser.open_tabs():
-            page = await browser.new_page()
-        else:
-            try:
-                page = browser.resolve_tab(tab)
-            except ValueError as exc:
-                raise BrowserToolError(str(exc), tool="goto") from exc
+        try:
+            page = browser.resolve_tab(tab)
+        except ValueError as exc:
+            raise BrowserToolError(str(exc), tool="goto") from exc
         result = await browser.navigate(url, page=page)
         return await _format_result(result, page, tool_name="goto")
     except BrowserToolError:

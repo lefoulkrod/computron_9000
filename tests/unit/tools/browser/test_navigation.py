@@ -122,33 +122,20 @@ def stub_browser(monkeypatch: pytest.MonkeyPatch) -> _StubBrowser:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_goto_bootstrap_creates_first_tab(stub_browser: _StubBrowser) -> None:
-    """First goto auto-creates a tab when none exist."""
-    output = await goto("https://example.com")
-    assert len(stub_browser.open_tabs()) == 1
-    assert "tab=1" in output
+async def test_goto_errors_when_no_tabs(stub_browser: _StubBrowser) -> None:
+    """goto needs an existing tab — call new_tab first."""
+    with pytest.raises(BrowserToolError, match="No open tabs"):
+        await goto("https://example.com", tab="1")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_goto_reuses_only_tab(stub_browser: _StubBrowser) -> None:
-    """With one tab open, goto navigates it in place (no new tab)."""
-    await goto("https://example.com")
-    await goto("https://other.com")
+async def test_goto_navigates_existing_tab(stub_browser: _StubBrowser) -> None:
+    """goto re-points an existing tab in place."""
+    await new_tab("https://example.com")
+    await goto("https://other.com", tab="1")
     assert len(stub_browser.open_tabs()) == 1
     assert stub_browser.open_tabs()[0].url == "https://other.com"
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_goto_errors_when_multiple_tabs_and_no_tab_arg(
-    stub_browser: _StubBrowser,
-) -> None:
-    """goto without tab= errors when multiple tabs are open."""
-    await new_tab("https://a.com")
-    await new_tab("https://b.com")
-    with pytest.raises(BrowserToolError, match="2 tabs open"):
-        await goto("https://c.com")
 
 
 @pytest.mark.unit
@@ -174,7 +161,7 @@ async def test_goto_unknown_tab_errors(stub_browser: _StubBrowser) -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_new_tab_opens_new(stub_browser: _StubBrowser) -> None:
-    await goto("https://a.com")
+    await new_tab("https://a.com")
     out = await new_tab("https://b.com")
     assert len(stub_browser.open_tabs()) == 2
     assert "tab=2" in out
