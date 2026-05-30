@@ -599,7 +599,13 @@ class Browser:
         return page
 
     def tab_id_of(self, page: Page) -> int | None:
-        """Return the stable tab ID for *page*, or ``None`` if untracked."""
+        """Return the stable tab ID for *page*, or ``None`` if untracked.
+
+        The lookup lives on the Browser because Playwright's ``Page`` is
+        not our class — we can't hang an ID attribute on it.  Callers
+        that already have a Browser reference (e.g. the snapshot
+        formatter) ask for the ID by passing the page they care about.
+        """
         return self._tab_id_of.get(page)
 
     async def current_page(self) -> Page:
