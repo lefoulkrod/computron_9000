@@ -15,18 +15,14 @@ export default function usePreviewState(agentState, agentDispatch) {
     const previewAgent = (selectedAgentId && agentState.agents[selectedAgentId]) || rootAgent;
 
     const browserTabs = previewAgent?.browserTabs || {};
-    // Stable rail order: numeric ids ascending, 'untracked' last.
+    // Stable rail order: numeric ids ascending.
     // BrowserPreview owns which tab is shown; we just hand it the list.
     const browserTabsList = useMemo(() => {
         const entries = Object.entries(browserTabs).map(([k, snap]) => ({
-            id: k === 'untracked' ? 'untracked' : Number(k),
+            id: Number(k),
             snapshot: snap,
         }));
-        entries.sort((a, b) => {
-            if (a.id === 'untracked') return 1;
-            if (b.id === 'untracked') return -1;
-            return a.id - b.id;
-        });
+        entries.sort((a, b) => a.id - b.id);
         return entries;
     }, [browserTabs]);
     const hasBrowser = browserTabsList.length > 0;

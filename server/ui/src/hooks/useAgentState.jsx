@@ -201,10 +201,7 @@ function _agentReducer(state, action) {
             const { agentId, snapshot } = action;
             const agent = state.agents[agentId];
             if (!agent) return state;
-            // Snapshots without a tab id collapse onto a single 'untracked'
-            // slot — covers older clients or emit paths that can't resolve
-            // a tab.
-            const key = snapshot.tabId ?? 'untracked';
+            const key = snapshot.tabId;
             return {
                 ...state,
                 agents: {
