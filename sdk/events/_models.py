@@ -88,12 +88,15 @@ class BrowserScreenshotPayload(BaseModel):
         url: The current URL of the browser page.
         title: The page title.
         screenshot: Base64-encoded PNG screenshot of the viewport.
+        tab_id: Stable tab ID this screenshot belongs to.  The UI uses
+            it to route screenshots into per-tab thumbnail slots.
     """
 
     type: Literal["browser_screenshot"]
     url: str
     title: str
     screenshot: str  # base64 encoded PNG
+    tab_id: int | None = None
 
 
 class FileOutputPayload(BaseModel):

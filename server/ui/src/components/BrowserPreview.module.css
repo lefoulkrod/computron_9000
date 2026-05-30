@@ -53,6 +53,80 @@
   display: block;
 }
 
+/* Thumbnail rail — appears when the agent is driving more than one tab.
+   Each thumb is a mini screenshot + host caption.  Active tab gets the
+   accent border; design tokens only, no raw colors. */
+.thumbRail {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.thumbCard {
+  flex: 0 0 96px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  display: block;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.thumbCard:hover {
+  border-color: var(--border-strong);
+}
+
+.thumbCardActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+
+.thumbFrame {
+  aspect-ratio: 16 / 10;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbMeta {
+  padding: 4px 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--surface);
+}
+
+.thumbCardActive .thumbMeta {
+  color: var(--text-primary);
+}
+
+:global([data-theme="light"]) .thumbCard {
+  background: var(--canvas);
+  border-color: var(--border-strong);
+}
+
+:global([data-theme="light"]) .thumbMeta {
+  background: var(--canvas);
+}
+
 /* Light theme */
 :global([data-theme="light"]) .urlBar {
   background: var(--canvas);

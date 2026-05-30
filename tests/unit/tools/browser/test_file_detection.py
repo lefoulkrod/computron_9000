@@ -403,7 +403,8 @@ class TestFormatResultFileDetection:
             download=download_info,
         )
 
-        output = await _format_result(result)
+        # download path returns early before touching page; pass a dummy.
+        output = await _format_result(result, AsyncMock())
 
         assert isinstance(output, str)
         assert "doc.pdf" in output
@@ -442,7 +443,7 @@ class TestFormatResultFileDetection:
 
         monkeypatch.setattr("tools.browser.interactions.get_browser", _get_browser)
 
-        output = await _format_result(result)
+        output = await _format_result(result, AsyncMock())
 
         assert isinstance(output, str)
         assert "Test" in output

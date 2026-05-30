@@ -49,6 +49,7 @@ function _handleStreamEvent(data, callbacks) {
             url: payload.url,
             title: payload.title,
             screenshot: payload.screenshot,
+            tabId: payload.tab_id ?? null,
             agentId,
         });
     }

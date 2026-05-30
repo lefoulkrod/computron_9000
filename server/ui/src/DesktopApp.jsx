@@ -472,9 +472,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                                     onTabChange={preview.setActiveTab}
                                     onCloseTab={preview.closeTab}
                                 >
-                                    {preview.activeTab === 'browser' && preview.browserSnapshot && (
+                                    {preview.activeTab === 'browser' && preview.browserTabsList.length > 0 && (
                                         <BrowserPreview
-                                            snapshot={preview.browserSnapshot}
+                                            tabs={preview.browserTabsList}
                                             onFullscreen={() => preview.setFullscreenItem({ kind: 'browser' })}
                                         />
                                     )}
@@ -517,9 +517,9 @@ function DesktopAppInner({ dark, onToggleTheme }) {
                     onClose={() => preview.setFullscreenItem(null)}
                 />
             )}
-            {preview.fullscreenItem?.kind === 'browser' && preview.browserSnapshot && (
+            {preview.fullscreenItem?.kind === 'browser' && preview.browserTabsList.length > 0 && (
                 <BrowserFullscreen
-                    snapshot={preview.browserSnapshot}
+                    snapshot={preview.browserTabsList[0].snapshot}
                     onClose={() => preview.setFullscreenItem(null)}
                 />
             )}

@@ -612,34 +612,6 @@ class Browser:
         """
         return self._tab_id_of.get(page)
 
-    async def current_page(self) -> Page:
-        """Return the current page from the browser context.
-
-        This selects the most recently opened, non-closed page from the
-        underlying persistent ``BrowserContext``. If no such page exists,
-        a new page is created, configured, and returned.
-
-        Returns:
-            Page: The active page to use for interactions.
-
-        Raises:
-            RuntimeError: If the browser has already been closed.
-        """
-        if self._closed:
-            msg = "Browser context is closed; no current page available"
-            raise RuntimeError(msg)
-
-        # Return the most recently opened page that hasn't been closed.
-        pages = self._context.pages  # Playwright provides a list[Page]
-        for page in reversed(pages):
-            # ``is_closed`` is a synchronous check in Playwright's async API
-            if not page.is_closed():
-                self._attach_download_listener(page)
-                return page
-
-        msg = "No open pages available in browser context"
-        raise RuntimeError(msg)
-
     def open_tabs(self) -> list[Page]:
         """Return non-closed pages in the context, in opening order."""
         return [p for p in self._context.pages if not p.is_closed()]
@@ -664,11 +636,10 @@ class Browser:
         ID, so a stale reference always errors rather than silently
         landing on a different tab.
         """
-        tabs = self.open_tabs()
-        if not tabs:
-            raise ValueError("No open tabs; call new_tab(url) first")
-
         if tab is None:
+            tabs = self.open_tabs()
+            if not tabs:
+                raise ValueError("No open tabs; call new_tab(url) first")
             if len(tabs) == 1:
                 return tabs[0]
             raise ValueError(
@@ -684,28 +655,29 @@ class Browser:
         for page, tid in self._tab_id_of.items():
             if tid == target_id and not page.is_closed():
                 return page
+        # Specific tab requested but not in the live map.  Surface it as
+        # "not found" rather than the generic "no open tabs" — under
+        # concurrent close_tab calls the tab really doesn't exist, and the
+        # caller passed a specific id they thought was valid.
         raise ValueError(
             f"tab={tab!r} not found. {self._tab_listing()}",
         )
 
-    async def active_frame(self, page: Page | None = None) -> Page | Frame:
+    async def active_frame(self, page: Page) -> Page | Frame:
         """Return the cached dominant iframe for *page*, else the page.
 
         When a tab has a large iframe overlay (booking widget, payment
         frame, embedded app) that covers most of the viewport, all
         DOM-reading tools should operate on that iframe instead of the
-        main page.  This method returns whichever the tools should use,
-        per tab.
+        main page.  This method returns whichever the tools should use.
 
         Args:
-            page: The tab to look up.  Defaults to ``current_page()``.
+            page: The tab to look up.
 
         Returns:
             The cached dominant ``Frame`` if one is tracked for *page*
             and still attached, otherwise *page* itself.
         """
-        if page is None:
-            page = await self.current_page()
         cached = self._dominant_frames.get(page)
         if cached is not None:
             if cached.is_detached():
@@ -723,17 +695,12 @@ class Browser:
         """
         self._dominant_frames.pop(page, None)
 
-    async def active_view(self, page: Page | None = None) -> ActiveView:
+    async def active_view(self, page: Page) -> ActiveView:
         """Return an ``ActiveView`` for tools to operate on.
 
-        When *page* is given, build the view for that tab.  Otherwise
-        fall back to ``current_page()``.  Reads the dominant-iframe
-        cache for that tab; re-detects (and updates the cache) when the
-        cached frame is missing or has detached.
+        Reads the dominant-iframe cache for *page*; re-detects (and
+        updates the cache) when the cached frame is missing or detached.
         """
-        if page is None:
-            page = await self.current_page()
-
         cached = self._dominant_frames.get(page)
         if cached is not None and not cached.is_detached():
             frame: Page | Frame = cached
@@ -882,15 +849,9 @@ class Browser:
             self._pages_in_navigation.discard(page)
 
     async def navigate_back(
-        self, page: Page | None = None,
+        self, page: Page,
     ) -> BrowserInteractionResult:
-        """Navigate back in history via ``perform_interaction``.
-
-        Pass *page* to operate on a specific tab; defaults to the most
-        recently opened.
-        """
-        if page is None:
-            page = await self.current_page()
+        """Navigate *page* back in history via ``perform_interaction``."""
 
         async def _back() -> None:
             try:
@@ -1170,15 +1131,9 @@ class Browser:
         self,
         action: Callable[[], Awaitable[Any]],
         *,
-        page: Page | None = None,
+        page: Page,
     ) -> BrowserInteractionResult:
-        """Perform an interaction and run the shared post-action pipeline.
-
-        Pass *page* to bind the interaction to a specific tab so parallel
-        tool calls on different tabs don't race for the "current" page.
-        """
-        if page is None:
-            page = await self.current_page()
+        """Perform an interaction on *page* and run the shared post-action pipeline."""
         initial_url = getattr(page, "url", "")
 
         self._pending_downloads.clear()
@@ -1325,23 +1280,30 @@ def _atexit_kill_browser() -> None:
 
 
 async def _get_root_browser() -> Browser:
-    """Return the persistent root browser, initializing it on first call."""
-    global _browser
-    if _browser is None:
-        register_agent_span_exit_hook(release_agent_browser)
+    """Return the persistent root browser, initializing it on first call.
 
-        config = load_config()
-        profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
-        downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
-        headless = config.tools.browser.headless
-        _browser = await Browser.start(
-            str(profile_path),
-            headless=headless,
-            downloads_path=downloads_dir,
-        )
-        _browser._downloads_dir = downloads_dir
-        atexit.register(_atexit_kill_browser)
-    return _browser
+    Locked so concurrent first callers don't each spin up their own root
+    Browser — without this, parallel sub-agent tool calls (e.g. three
+    ``close_tab``s gather()ed together) can all see ``_browser is None``
+    and race to launch separate Playwright instances.
+    """
+    global _browser
+    async with _agent_browser_lock:
+        if _browser is None:
+            register_agent_span_exit_hook(release_agent_browser)
+
+            config = load_config()
+            profile_path = Path(config.settings.home_dir) / "browser" / "profiles" / "default"
+            downloads_dir = str(Path(config.virtual_computer.home_dir) / "downloads")
+            headless = config.tools.browser.headless
+            _browser = await Browser.start(
+                str(profile_path),
+                headless=headless,
+                downloads_path=downloads_dir,
+            )
+            _browser._downloads_dir = downloads_dir
+            atexit.register(_atexit_kill_browser)
+        return _browser
 
 
 async def get_browser() -> Browser:

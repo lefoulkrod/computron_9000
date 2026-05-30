@@ -119,9 +119,9 @@ def _log_browser_panel(
 async def _build_snapshot(
     response: Response | None,
     *,
-    page: Page | None = None,
+    page: Page,
 ) -> PageView:
-    """Snapshot *page* (or the current page if None) into a ``PageView``."""
+    """Snapshot *page* into a ``PageView``."""
     browser = await get_browser()
     view = await browser.active_view(page=page)
     return await build_page_view(view, response)
@@ -129,16 +129,16 @@ async def _build_snapshot(
 
 async def _format_result(
     result: BrowserInteractionResult,
-    page: Page | None = None,
+    page: Page,
     *,
     tool_name: str = "",
     resolution: _LocatorResolution | None = None,
 ) -> str:
     """Format a BrowserInteractionResult as a page view string.
 
-    Pass *page* so the snapshot is taken from that specific tab and the
-    header carries its tab ID.  Parallel calls on different tabs each
-    pass their own page; nothing is read from a shared "active view".
+    *page* is the tab the snapshot is taken from; its tab ID goes in
+    the header.  Parallel calls on different tabs each pass their own
+    page; nothing is read from any shared global page state.
     """
     if result.download is not None:
         _log_browser_panel(result, snapshot=None, tool_name=tool_name, resolution=resolution)
@@ -153,7 +153,7 @@ async def _format_result(
         )
     snapshot = await _build_snapshot(result.navigation_response, page=page)
     browser = await get_browser()
-    tab_id = browser.tab_id_of(page) if page is not None else None
+    tab_id = browser.tab_id_of(page)
     _log_browser_panel(result, snapshot=snapshot, tool_name=tool_name, resolution=resolution)
     return format_page_view(
         title=snapshot.title,

@@ -6,7 +6,7 @@ import logging
 
 import tools.browser.core as browser_core
 from tools.browser.core.exceptions import BrowserToolError
-from tools.browser.events import emit_screenshot_after
+from tools.browser.events import emit_screenshot, emit_screenshot_after
 from tools.browser.interactions import _format_result
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,6 @@ async def goto(url: str, tab: str) -> str:
         raise BrowserToolError(str(exc), tool="goto") from exc
 
 
-@emit_screenshot_after
 async def new_tab(url: str) -> str:
     """Open a new tab at ``url`` and return its snapshot.
 
@@ -65,7 +64,12 @@ async def new_tab(url: str) -> str:
         browser = await browser_core.get_browser()
         page = await browser.new_page()
         result = await browser.navigate(url, page=page)
-        return await _format_result(result, page, tool_name="new_tab")
+        formatted = await _format_result(result, page, tool_name="new_tab")
+        # new_tab is the one tool that doesn't take a ``tab`` kwarg, so
+        # it emits its own screenshot explicitly rather than going through
+        # the @emit_screenshot_after decorator.
+        await emit_screenshot(page)
+        return formatted
     except BrowserToolError:
         raise
     except Exception as exc:  # pragma: no cover - wrap into tool error
