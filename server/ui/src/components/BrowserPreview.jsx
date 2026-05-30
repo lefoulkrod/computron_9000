@@ -19,35 +19,27 @@ function _hostOf(url) {
  * BrowserPreview picks one to display in the main area — the first one
  * by default, or whichever the user last clicked in the rail.  The rail
  * only renders when there's more than one tab.
- *
- * When the consumer has just a single tab, passing ``tabs=[{ id, snapshot }]``
- * works the same as passing the legacy ``snapshot`` prop alone.
  */
-export default function BrowserPreview({ snapshot, tabs, onFullscreen }) {
-    // Normalize to a tabs array; legacy callers pass only `snapshot`.
-    const tabList = Array.isArray(tabs) && tabs.length > 0
-        ? tabs
-        : (snapshot ? [{ id: 'only', snapshot }] : []);
-
-    const [selectedId, setSelectedId] = useState(tabList[0]?.id ?? null);
+export default function BrowserPreview({ tabs, onFullscreen }) {
+    const [selectedId, setSelectedId] = useState(tabs[0]?.id ?? null);
 
     // If the currently-selected tab disappears (e.g. agent closed it),
     // fall back to the first available tab.  Initial first-tab pick is
     // handled by useState default.
     useEffect(() => {
-        if (!tabList.some(t => t.id === selectedId)) {
-            setSelectedId(tabList[0]?.id ?? null);
+        if (!tabs.some(t => t.id === selectedId)) {
+            setSelectedId(tabs[0]?.id ?? null);
         }
-    }, [tabList, selectedId]);
+    }, [tabs, selectedId]);
 
-    const activeTab = tabList.find(t => t.id === selectedId) || tabList[0];
+    const activeTab = tabs.find(t => t.id === selectedId) || tabs[0];
     if (!activeTab) return null;
 
     const activeSnapshot = activeTab.snapshot;
     const screenshotSrc = activeSnapshot.screenshot
         ? `data:image/png;base64,${activeSnapshot.screenshot}`
         : null;
-    const showRail = tabList.length > 1;
+    const showRail = tabs.length > 1;
 
     return (
         <div className={styles.content}>
@@ -91,7 +83,7 @@ export default function BrowserPreview({ snapshot, tabs, onFullscreen }) {
 
             {showRail && (
                 <div className={styles.thumbRail} role="tablist" aria-label="Open browser tabs">
-                    {tabList.map(({ id, snapshot: tabSnap }) => {
+                    {tabs.map(({ id, snapshot: tabSnap }) => {
                         const thumbSrc = tabSnap.screenshot
                             ? `data:image/png;base64,${tabSnap.screenshot}`
                             : null;
