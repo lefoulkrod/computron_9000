@@ -156,7 +156,7 @@ async def test_concurrent_goto_on_same_tab_errors() -> None:
     browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
 
     page = await browser.new_page()
-    browser._navigating.add(page)  # simulate in-flight nav
+    browser._pages_in_navigation.add(page)  # simulate in-flight nav
 
     with pytest.raises(BrowserToolError, match="in flight"):
         await browser.navigate("https://example.com", page=page)

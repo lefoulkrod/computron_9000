@@ -243,7 +243,7 @@ class Browser:
         self._active_frame: Frame | None = None
         self._tab_id_of: dict[Page, int] = {}
         self._next_tab_id: int = 0
-        self._navigating: set[Page] = set()
+        self._pages_in_navigation: set[Page] = set()
         self._pending_downloads: list[DownloadInfo] = []
         self._downloads_dir: str = ""
         self._download_listener_pages: set[int] = set()  # page id() tracking
@@ -577,7 +577,7 @@ class Browser:
 
         def _on_close(_p: Any) -> None:
             self._tab_id_of.pop(page, None)
-            self._navigating.discard(page)
+            self._pages_in_navigation.discard(page)
             if self._active_frame is not None and self._active_frame.page is page:
                 self._active_frame = None
 
@@ -815,14 +815,14 @@ class Browser:
         concurrent goto on the same tab is the loud-error case that
         teaches the agent to use ``new_tab`` for parallelism.
         """
-        if page in self._navigating:
+        if page in self._pages_in_navigation:
             tid = self._tab_id_of.get(page, "?")
             raise BrowserToolError(
                 f"Navigation already in flight on tab={tid}. "
                 f"Use new_tab(url) to open in parallel.",
                 tool="goto",
             )
-        self._navigating.add(page)
+        self._pages_in_navigation.add(page)
         self.clear_active_frame()
         self._pending_downloads.clear()
         initial_url = getattr(page, "url", "")
@@ -846,7 +846,7 @@ class Browser:
                 page, response=response, initial_url=initial_url,
             )
         finally:
-            self._navigating.discard(page)
+            self._pages_in_navigation.discard(page)
 
     async def navigate_back(
         self, page: Page | None = None,

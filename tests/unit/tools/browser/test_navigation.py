@@ -31,7 +31,7 @@ class _StubBrowser:
         self._pages: list[_StubPage] = []
         self._ids: dict[_StubPage, int] = {}
         self._next_id = 0
-        self._navigating: set[_StubPage] = set()
+        self._pages_in_navigation: set[_StubPage] = set()
 
     # ── Tab tracking ──────────────────────────────────────────────────
     def open_tabs(self) -> list[_StubPage]:
@@ -63,13 +63,13 @@ class _StubBrowser:
         return page
 
     async def navigate(self, url: str, *, page: _StubPage) -> BrowserInteractionResult:
-        if page in self._navigating:
+        if page in self._pages_in_navigation:
             tid = self._ids.get(page)
             raise BrowserToolError(
                 f"Navigation already in flight on tab={tid}. Use new_tab(url).",
                 tool="goto",
             )
-        self._navigating.add(page)
+        self._pages_in_navigation.add(page)
         try:
             page.url = url
             return BrowserInteractionResult(
@@ -77,7 +77,7 @@ class _StubBrowser:
                 download=None,
             )
         finally:
-            self._navigating.discard(page)
+            self._pages_in_navigation.discard(page)
 
     async def active_view(self, page: _StubPage | None = None) -> ActiveView:
         if page is None:
