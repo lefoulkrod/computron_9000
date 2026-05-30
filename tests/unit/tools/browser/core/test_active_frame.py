@@ -201,48 +201,50 @@ async def test_detect_picks_largest_frame() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_active_frame_returns_page_when_no_frame() -> None:
-    """With no active frame, active_frame() returns the page."""
+    """With no cached dominant frame, active_frame() returns the page."""
     page = _FakePage()
     browser = _make_browser(page)
-    result = await browser.active_frame()
+    result = await browser.active_frame(page)  # type: ignore[arg-type]
     assert result is page
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_active_frame_returns_tracked_frame() -> None:
-    """When _active_frame is set, active_frame() returns it."""
+async def test_active_frame_returns_cached_frame() -> None:
+    """When a dominant frame is cached for the page, active_frame returns it."""
     page = _FakePage()
     browser = _make_browser(page)
     frame = _FakeFrame()
-    browser._active_frame = frame  # type: ignore[assignment]
-    result = await browser.active_frame()
+    browser._dominant_frames[page] = frame  # type: ignore[index]
+    result = await browser.active_frame(page)  # type: ignore[arg-type]
     assert result is frame
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_active_frame_falls_back_on_detach() -> None:
-    """When the tracked frame detaches, fall back to the page."""
+    """When the cached frame detaches, drop it and fall back to the page."""
     page = _FakePage()
     browser = _make_browser(page)
     frame = _FakeFrame(detached=True)
-    browser._active_frame = frame  # type: ignore[assignment]
-    result = await browser.active_frame()
+    browser._dominant_frames[page] = frame  # type: ignore[index]
+    result = await browser.active_frame(page)  # type: ignore[arg-type]
     assert result is page
-    # Should have cleared the reference
-    assert browser._active_frame is None
+    assert page not in browser._dominant_frames
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_clear_active_frame() -> None:
-    """clear_active_frame() resets _active_frame to None."""
+async def test_invalidate_dominant_frame() -> None:
+    """invalidate_dominant_frame(page) drops only that tab's entry."""
     page = _FakePage()
+    other_page = _FakePage()
     browser = _make_browser(page)
-    browser._active_frame = _FakeFrame()  # type: ignore[assignment]
-    browser.clear_active_frame()
-    assert browser._active_frame is None
+    browser._dominant_frames[page] = _FakeFrame()  # type: ignore[index]
+    browser._dominant_frames[other_page] = _FakeFrame()  # type: ignore[index]
+    browser.invalidate_dominant_frame(page)  # type: ignore[arg-type]
+    assert page not in browser._dominant_frames
+    assert other_page in browser._dominant_frames
 
 
 @pytest.mark.unit

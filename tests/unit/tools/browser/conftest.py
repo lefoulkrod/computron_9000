@@ -16,33 +16,36 @@ class _SimpleBrowser:
 
     def __init__(self, page: Any) -> None:
         self._page = page
-        self._active_frame: Any | None = None
+        self._dominant_frames: dict[Any, Any] = {}
         self._last_metadata: dict[str, Any] | None = None
 
     async def current_page(self) -> Any:
         return self._page
 
-    async def active_frame(self) -> Any:
-        if self._active_frame is not None:
-            if hasattr(self._active_frame, "is_detached") and self._active_frame.is_detached():
-                self._active_frame = None
+    async def active_frame(self, page: Any = None) -> Any:
+        if page is None:
+            page = self._page
+        cached = self._dominant_frames.get(page)
+        if cached is not None:
+            if hasattr(cached, "is_detached") and cached.is_detached():
+                self._dominant_frames.pop(page, None)
             else:
-                return self._active_frame
-        return self._page
+                return cached
+        return page
 
     async def active_view(self, page: Any = None) -> Any:
         from tools.browser.core.browser import ActiveView
-        frame = await self.active_frame()
         if page is None:
             page = await self.current_page()
+        frame = await self.active_frame(page)
         try:
             title = await page.title()
         except Exception:
             title = "Test Page"
         return ActiveView(frame=frame, title=title, url=page.url)
 
-    def clear_active_frame(self) -> None:
-        self._active_frame = None
+    def invalidate_dominant_frame(self, page: Any) -> None:
+        self._dominant_frames.pop(page, None)
 
     async def navigate_back(self, page: Any = None) -> BrowserInteractionResult:
         if page is None:

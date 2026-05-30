@@ -240,7 +240,22 @@ class Browser:
         self._pw: Playwright | None = pw
         self._pw_browser: Any = pw_browser
         self._closed: bool = False
-        self._active_frame: Frame | None = None
+        # Per-tab cache of the dominant iframe we detected on that tab.
+        #
+        # Some pages render their primary content inside a large iframe
+        # (booking widgets, payment frames, embedded apps).  When such a
+        # frame covers most of the viewport we cache it so subsequent
+        # tool calls read/click against its DOM instead of the parent
+        # page's.  Re-detecting on every tool call would be wasteful and
+        # would also disturb settle timings.
+        #
+        # Invalidated when any of these happen for a given page:
+        #   - the tab is closed (page "close" listener)
+        #   - the tab is about to navigate (cleared at the top of navigate())
+        #   - _finalize_action sees a download or a URL change (PDF
+        #     viewer stub or a fresh page — old frame is gone)
+        #   - the cached frame becomes detached (checked at read time)
+        self._dominant_frames: dict[Page, Frame] = {}
         self._tab_id_of: dict[Page, int] = {}
         self._next_tab_id: int = 0
         self._pages_in_navigation: set[Page] = set()
@@ -578,8 +593,7 @@ class Browser:
         def _on_close(_p: Any) -> None:
             self._tab_id_of.pop(page, None)
             self._pages_in_navigation.discard(page)
-            if self._active_frame is not None and self._active_frame.page is page:
-                self._active_frame = None
+            self._dominant_frames.pop(page, None)
 
         page.on("close", _on_close)
         return page
@@ -664,54 +678,61 @@ class Browser:
             f"tab={tab!r} not found. {self._tab_listing()}",
         )
 
-    async def active_frame(self) -> Page | Frame:
-        """Return the dominant iframe if one is active, otherwise the current page.
+    async def active_frame(self, page: Page | None = None) -> Page | Frame:
+        """Return the cached dominant iframe for *page*, else the page.
 
-        When a large iframe (e.g. a booking widget overlay) covers a significant
-        portion of the viewport, all DOM-reading tools should operate on that
-        iframe instead of the main frame.  This method transparently returns
-        whichever context the tools should use.
+        When a tab has a large iframe overlay (booking widget, payment
+        frame, embedded app) that covers most of the viewport, all
+        DOM-reading tools should operate on that iframe instead of the
+        main page.  This method returns whichever the tools should use,
+        per tab.
+
+        Args:
+            page: The tab to look up.  Defaults to ``current_page()``.
 
         Returns:
-            The active ``Frame`` if a dominant iframe is tracked and still
-            attached, otherwise the current ``Page``.
+            The cached dominant ``Frame`` if one is tracked for *page*
+            and still attached, otherwise *page* itself.
         """
-        if self._active_frame is not None:
-            if self._active_frame.is_detached():
-                logger.debug("Active frame detached; falling back to page")
-                self._active_frame = None
+        if page is None:
+            page = await self.current_page()
+        cached = self._dominant_frames.get(page)
+        if cached is not None:
+            if cached.is_detached():
+                logger.debug("Dominant frame for tab detached; falling back to page")
+                self._dominant_frames.pop(page, None)
             else:
-                return self._active_frame
-        return await self.current_page()
+                return cached
+        return page
 
-    def clear_active_frame(self) -> None:
-        """Reset the active frame so tools operate on the main page."""
-        self._active_frame = None
+    def invalidate_dominant_frame(self, page: Page) -> None:
+        """Drop the cached dominant iframe for *page*, if any.
+
+        Call before a navigation on that tab (the new DOM won't share
+        the old iframe) or whenever the cache should be re-evaluated.
+        """
+        self._dominant_frames.pop(page, None)
 
     async def active_view(self, page: Page | None = None) -> ActiveView:
         """Return an ``ActiveView`` for tools to operate on.
 
-        When *page* is given, build the view for that page.  Otherwise
-        fall back to ``current_page()`` (most recently opened).  Iframe
-        detection runs on the chosen page.  The cached ``_active_frame``
-        is only reused when it belongs to the chosen page.
+        When *page* is given, build the view for that tab.  Otherwise
+        fall back to ``current_page()``.  Reads the dominant-iframe
+        cache for that tab; re-detects (and updates the cache) when the
+        cached frame is missing or has detached.
         """
         if page is None:
             page = await self.current_page()
 
-        cached = self._active_frame
-        if (
-            cached is not None
-            and not cached.is_detached()
-            and cached.page is page
-        ):
+        cached = self._dominant_frames.get(page)
+        if cached is not None and not cached.is_detached():
             frame: Page | Frame = cached
         else:
-            self._active_frame = None
+            self._dominant_frames.pop(page, None)
             try:
                 dominant = await self._detect_dominant_frame(page)
                 if dominant is not None:
-                    self._active_frame = dominant
+                    self._dominant_frames[page] = dominant
                     frame = dominant
                 else:
                     frame = page
@@ -823,7 +844,9 @@ class Browser:
                 tool="goto",
             )
         self._pages_in_navigation.add(page)
-        self.clear_active_frame()
+        # Any cached dominant iframe belongs to the old DOM; drop it
+        # so the post-nav settle re-detects against the new one.
+        self.invalidate_dominant_frame(page)
         self._pending_downloads.clear()
         initial_url = getattr(page, "url", "")
         try:
@@ -1054,24 +1077,29 @@ class Browser:
                 )
 
         # 3. Iframe detection (skip if download — page may be a PDF viewer stub)
+        # Operates on this tab's dominant-frame slot only; other tabs'
+        # cached frames are untouched.
         frame_transition: str | None = None
         final_url = getattr(page, "url", initial_url)
         navigated = bool(initial_url and final_url and final_url != initial_url)
 
         if download_info is not None:
-            self._active_frame = None
+            self._dominant_frames.pop(page, None)
         elif navigated:
-            self._active_frame = None
+            self._dominant_frames.pop(page, None)
         else:
             try:
-                previous_frame = self._active_frame
+                previous_frame = self._dominant_frames.get(page)
                 dominant = await self._detect_dominant_frame(page)
-                if dominant != self._active_frame:
+                if dominant != previous_frame:
                     if dominant is not None:
                         frame_transition = f"→ iframe {dominant.url}"
-                    elif self._active_frame is not None:
+                    elif previous_frame is not None:
                         frame_transition = "→ main page"
-                    self._active_frame = dominant
+                    if dominant is not None:
+                        self._dominant_frames[page] = dominant
+                    else:
+                        self._dominant_frames.pop(page, None)
 
                 if dominant is not None and dominant != previous_frame:
                     try:
