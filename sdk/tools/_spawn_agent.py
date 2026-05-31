@@ -191,6 +191,7 @@ async def spawn_agent(
     conversation = Conversation(
         id=instance_id,
         history=ConversationHistory(instance_id=instance_id),
+        agent_state=state,
     )
 
     accumulated: list[str] = []
@@ -199,7 +200,6 @@ async def spawn_agent(
             conversation=conversation,
             agent=agent,
             user_content=instructions,
-            preloaded_skills=agent_profile.skills,
             profile_name=agent_profile.name,
             sub_agent_name=agent_name,
             sub_agent_id=short_id,

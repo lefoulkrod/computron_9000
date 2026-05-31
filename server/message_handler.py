@@ -1,5 +1,6 @@
 """Message handler for user prompts."""
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Sequence
 
@@ -25,11 +26,15 @@ from sdk.events import (
     ContentPayload,
     TurnEndPayload,
 )
+from sdk.skills import AgentState
 from sdk.turn import is_turn_active
 from tools.browser.core import release_agent_browser
 from tools.memory import forget, memory_prompt_block, remember
 from tools.virtual_computer.receive_file import receive_attachment
 from tools.virtual_computer.run_bash_cmd import run_bash_cmd
+
+# Background tasks held to prevent GC; cleared via done callback.
+_background_tasks: set[asyncio.Task] = set()
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -180,19 +185,23 @@ async def handle_user_message(
 
     _log_turn_start(profile)
 
-    agent = build_agent(profile, tools=[run_bash_cmd, remember, forget])
+    if conversation.agent_state is None:
+        conversation.agent_state = await AgentState.create(
+            skill_names=[*profile.skills, *_persistence.load_skills(conversation.id)],
+        )
 
+    agent = build_agent(profile, tools=[run_bash_cmd, remember, forget])
+    agent.instruction = memory_prompt_block() + agent.instruction
+
+    events: list[AgentEvent] = []
     try:
         async for event in _turn_executor.execute(
             conversation=conversation,
             agent=agent,
             user_content=user_content,
-            is_new_conversation=is_new_conversation,
-            preloaded_skills=profile.skills,
-            persistence=_persistence,
-            build_system_prompt=lambda: memory_prompt_block() + agent.instruction,
             profile_name=profile.name,
         ):
+            events.append(event)
             yield event
     except Exception:
         logger.exception("Error handling user message")
@@ -203,3 +212,25 @@ async def handle_user_message(
             )
         )
         yield AgentEvent(payload=TurnEndPayload(type="turn_end"))
+        return
+
+    # Post-turn persistence. Errors logged, never raised — the user already
+    # got their reply.
+    try:
+        _persistence.save_events(conversation.id, events)
+    except Exception:
+        logger.exception("Failed to save agent events for '%s'", conversation.id)
+    if conversation.agent_state.loaded_skill_names:
+        try:
+            _persistence.save_skills(
+                conversation.id,
+                conversation.agent_state.loaded_skill_names,
+            )
+        except Exception:
+            logger.exception("Failed to save loaded skills for '%s'", conversation.id)
+    if is_new_conversation:
+        task = asyncio.create_task(
+            _persistence.on_new_conversation(conversation.id, user_content),
+        )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)

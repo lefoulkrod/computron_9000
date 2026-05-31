@@ -1,11 +1,13 @@
 """Tracks base tools and dynamically loaded skills for an agent scope."""
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from typing import Any
 
-from ._registry import Skill
+from sdk.tools._core import get_core_tools
+
+from ._registry import Skill, get_skill
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,25 @@ class AgentState:
     def __init__(self, base_tools: list[Callable[..., Any]]) -> None:
         self._base_tools: list[Callable[..., Any]] = list(base_tools)
         self._skills: dict[str, Skill] = {}
+
+    @classmethod
+    async def create(cls, *, skill_names: Iterable[str] = ()) -> "AgentState":
+        """Build an ``AgentState`` with the core tool set and named skills loaded.
+
+        Missing skills are logged and skipped — matches the historical
+        tolerance baked into the turn loop. Callers that want stricter
+        semantics (raise on missing, surface to the LLM, etc.) should
+        pre-validate names via ``get_skill`` and then use the regular
+        constructor + ``add``.
+        """
+        state = cls(await get_core_tools())
+        for name in skill_names:
+            skill = get_skill(name)
+            if skill is None:
+                logger.warning("Skill %r not registered, skipping", name)
+                continue
+            state.add(skill)
+        return state
 
     def add(self, skill: Skill) -> None:
         """Attach a skill to this state. No-op if already attached."""

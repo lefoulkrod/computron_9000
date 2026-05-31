@@ -22,7 +22,8 @@ from .providers import LLMRuntimeStats, llm_runtime_stats
 # own minimal module so importers below the SDK layer can grab it without
 # pulling in the full executor.
 from .turn._conversation import Conversation
-from .turn._executor import SystemPromptBuilder, TurnExecutor, TurnPersistence
+from .turn._executor import TurnExecutor
+from .turn._persistence import TurnPersistence
 
 __all__ = [
     "BudgetGuard",
@@ -35,7 +36,6 @@ __all__ = [
     "LoopDetector",
     "PersistenceHook",
     "StopHook",
-    "SystemPromptBuilder",
     "TurnExecutor",
     "TurnPersistence",
     "default_hooks",

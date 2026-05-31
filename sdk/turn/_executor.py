@@ -1,86 +1,42 @@
-"""High-level turn executor: wraps the agent loop with context management,
-skill state, hooks, and optional caller-supplied persistence and prompt
-augmentation.
+"""Single-turn agent driver.
 
-The caller builds the ``Agent``, creates a ``Conversation``, optionally
-provides a ``TurnPersistence`` and a ``SystemPromptBuilder``, then iterates
-the yielded events.
+Given a fully-wired ``Conversation`` (with ``agent_state`` populated)
+and an ``Agent``, drives one turn: opens the turn/agent spans, appends
+the user message, composes the system prompt with the skill block,
+runs the agent loop, and yields events to the caller.
+
+Per-conversation lifecycle work — hydrating ``agent_state`` from disk,
+saving events, flushing skills, firing first-turn hooks — is the
+caller's responsibility, not the executor's. See the channels (web /
+telegram) and one-shot callers (TaskExecutor, ``spawn_agent``) for the
+two shapes that lifecycle takes.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Callable, Iterable, Sequence
+from collections.abc import AsyncGenerator
 from contextlib import suppress
-from typing import Protocol
 
 from agents.types import Agent
 from sdk.context._manager import ContextManager
 from sdk.context._strategy import LLMCompactionStrategy
-from sdk.events._context import agent_span, get_current_dispatcher
+from sdk.events._context import agent_span
 from sdk.events._models import AgentEvent
-from sdk.hooks._agent_event_buffer import AgentEventBufferHook
 from sdk.hooks._default import default_hooks
 from sdk.hooks._persistence import PersistenceHook
-from sdk.skills import AgentState, get_skill
-from sdk.tools._core import get_core_tools
 from sdk.turn._conversation import Conversation
 from sdk.turn._execution import run_turn
 from sdk.turn._turn import StopRequestedError, turn_scope
 
 logger = logging.getLogger(__name__)
 
-# Background tasks held to prevent GC; cleared via done callback.
-_background_tasks: set[asyncio.Task] = set()
-
-
-class TurnPersistence(Protocol):
-    """Optional persistence hooks invoked by ``TurnExecutor``.
-
-    Channels that don't want persistence pass ``None`` instead of an
-    implementation. Implementations are typically thin wrappers over the
-    application's on-disk store.
-    """
-
-    def load_skills(self, conversation_id: str) -> Iterable[str]:
-        """Return persisted skill names to restore for this conversation."""
-
-    def save_skills(self, conversation_id: str, skills: Iterable[str]) -> None:
-        """Persist the set of currently-loaded skill names."""
-
-    def save_events(
-        self,
-        conversation_id: str,
-        events: list[AgentEvent],
-    ) -> None:
-        """Persist agent lifecycle events captured during the turn."""
-
-    async def on_new_conversation(
-        self,
-        conversation_id: str,
-        first_message: str,
-    ) -> None:
-        """Hook fired once when a conversation runs its first turn.
-
-        Typical use: generate and persist a conversation title.
-        """
-
-
-SystemPromptBuilder = Callable[[], str]
-"""Caller-supplied function returning the base system prompt for this turn.
-
-Called fresh each turn so the caller can inject up-to-date state (e.g. a
-memory block). If absent, the agent's ``instruction`` is used as-is.
-"""
-
 
 class TurnExecutor:
-    """Executes a single agent turn with setup, hooks, and persistence.
+    """Drives a single agent turn against a pre-wired ``Conversation``.
 
-    Callers build the ``Agent`` themselves and supply optional persistence
-    and prompt-building injection points. The executor is stateless and
-    safe to share across conversations.
+    Stateless and safe to share across conversations.
     """
 
     async def execute(
@@ -89,10 +45,6 @@ class TurnExecutor:
         conversation: Conversation,
         agent: Agent,
         user_content: str,
-        is_new_conversation: bool = False,
-        preloaded_skills: Sequence[str] = (),
-        persistence: TurnPersistence | None = None,
-        build_system_prompt: SystemPromptBuilder | None = None,
         profile_name: str | None = None,
         sub_agent_name: str | None = None,
         sub_agent_id: str | None = None,
@@ -101,20 +53,11 @@ class TurnExecutor:
         """Run a single turn and yield events.
 
         Args:
-            conversation: Per-conversation state.
-            agent: The fully-constructed Agent to run.
+            conversation: Per-conversation state. ``conversation.agent_state``
+                must be populated before calling — callers hydrate it from
+                disk on cache miss or build it inline for one-shot turns.
+            agent: The fully-constructed ``Agent`` to run.
             user_content: The user's message, already augmented if needed.
-            is_new_conversation: True if this is the conversation's first
-                turn. Triggers ``persistence.on_new_conversation`` when set;
-                a no-op without a persistence implementation.
-            preloaded_skills: Skill names to install before turn start
-                (e.g. profile-attached skills).
-            persistence: Optional persistence bundle. ``None`` skips all
-                persistence calls.
-            build_system_prompt: Optional callable returning the base system
-                prompt; re-evaluated each turn so callers can inject
-                up-to-date state (e.g. a memory block). Falls back to
-                ``agent.instruction`` when ``None``.
             profile_name: Optional metadata threaded through ``agent_span``.
             sub_agent_name: When this turn is a sub-agent invocation, the
                 short uppercase agent name. Forwarded to ``PersistenceHook``
@@ -129,41 +72,21 @@ class TurnExecutor:
         Yields:
             AgentEvent: Events emitted by the agent during the turn.
         """
+        if conversation.agent_state is None:
+            msg = (
+                f"Conversation {conversation.id!r} has no agent_state; "
+                "caller must populate it before running a turn."
+            )
+            raise ValueError(msg)
+
         conv_id = conversation.id
+        agent_state = conversation.agent_state
         logger.info(
             "Turn started: conv=%s agent=%s message=%.80s",
             conv_id,
             agent.name,
             user_content,
         )
-
-        # Fresh AgentState each turn; pre-load profile skills then restore
-        # any persisted skills from a previous turn.
-        agent_state = AgentState(await get_core_tools() + agent.tools)
-        for skill_name in preloaded_skills:
-            skill = get_skill(skill_name)
-            if skill is None:
-                logger.warning(
-                    "Preloaded skill '%s' not registered; skipping", skill_name,
-                )
-                continue
-            agent_state.add(skill)
-            logger.info("Preloaded skill '%s' for conv=%s", skill_name, conv_id)
-
-        if persistence is not None:
-            for skill_name in persistence.load_skills(conv_id):
-                if skill_name in agent_state.loaded_skill_names:
-                    continue
-                skill = get_skill(skill_name)
-                if skill is None:
-                    logger.warning(
-                        "Persisted skill '%s' for conv=%s not found in registry; skipping",
-                        skill_name,
-                        conv_id,
-                    )
-                    continue
-                agent_state.add(skill)
-                logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
 
         # Fresh ContextManager per turn — it borrows the live agent_state so
         # the token estimate reflects the current tool set, and the strategy
@@ -195,11 +118,6 @@ class TurnExecutor:
                     handler=_queue_handler,
                     conversation_id=conv_id,
                 ):
-                    event_buffer = AgentEventBufferHook()
-                    dispatcher = get_current_dispatcher()
-                    if dispatcher:
-                        dispatcher.subscribe(event_buffer.handle_event)
-
                     async with agent_span(
                         agent.name,
                         instruction=user_content,
@@ -211,16 +129,11 @@ class TurnExecutor:
                             {"role": "user", "content": user_content},
                         )
 
-                        base_prompt = (
-                            build_system_prompt()
-                            if build_system_prompt is not None
-                            else agent.instruction
-                        )
                         skill_prompt = agent_state.build_skill_prompt()
                         full_prompt = (
-                            f"{base_prompt}\n{skill_prompt}"
+                            f"{agent.instruction}\n{skill_prompt}"
                             if skill_prompt
-                            else base_prompt
+                            else agent.instruction
                         )
                         conversation.history.set_system_message(full_prompt)
 
@@ -244,43 +157,6 @@ class TurnExecutor:
                                 agent=agent,
                                 hooks=hooks,
                             )
-
-                    if persistence is not None and agent_state.loaded_skill_names:
-                        try:
-                            persistence.save_skills(
-                                conv_id,
-                                agent_state.loaded_skill_names,
-                            )
-                        except Exception:
-                            logger.exception(
-                                "Failed to save loaded skills for '%s'", conv_id,
-                            )
-
-                    # Yield once so synchronous handlers registered via
-                    # call_soon get to run before we read the buffer.
-                    await asyncio.sleep(0)
-
-                    if persistence is not None:
-                        buffered_events = event_buffer.get_events()
-                        if buffered_events:
-                            try:
-                                persistence.save_events(conv_id, buffered_events)
-                                logger.info(
-                                    "Saved %d agent events for conv=%s",
-                                    len(buffered_events),
-                                    conv_id,
-                                )
-                            except Exception:
-                                logger.exception(
-                                    "Failed to save agent events for '%s'", conv_id,
-                                )
-
-                    if is_new_conversation and persistence is not None:
-                        task = asyncio.create_task(
-                            persistence.on_new_conversation(conv_id, user_content),
-                        )
-                        _background_tasks.add(task)
-                        task.add_done_callback(_background_tasks.discard)
             finally:
                 await queue.put(None)
 

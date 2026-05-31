@@ -81,8 +81,11 @@ async def test_build_agent_awaits_core_tools(monkeypatch: pytest.MonkeyPatch) ->
     )
     executor = TaskExecutor(store=None)  # type: ignore[arg-type]
 
-    agent = await executor._build_agent(task)
+    agent, state = await executor._build_agent(task)
     assert agent.name == "TASK_AGENT"
+    # state holds the core tools (none registered in this stub) — primarily
+    # asserting we got both pieces back, not their contents.
+    assert state is not None
 
 
 @pytest.mark.unit

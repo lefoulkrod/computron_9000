@@ -42,11 +42,12 @@ class TaskExecutor:
         conversation_id = f"goals/{run.goal_id}/{run.id}/{task_result.id}"
         self._store.set_conversation_id(task_result.id, conversation_id)
 
-        agent = await self._build_agent(task)
+        agent, agent_state = await self._build_agent(task)
 
         conversation = Conversation(
             id=conversation_id,
             history=ConversationHistory(instance_id=conversation_id),
+            agent_state=agent_state,
         )
 
         accumulated_text: list[str] = []
@@ -65,12 +66,12 @@ class TaskExecutor:
 
         return "".join(accumulated_text), file_paths
 
-    async def _build_agent(self, task: Task) -> Agent:
-        """Construct an Agent from the task's agent profile.
+    async def _build_agent(self, task: Task) -> tuple[Agent, AgentState]:
+        """Construct an ``Agent`` and matching ``AgentState`` for the task.
 
-        Pre-validates the profile's skills so a missing one trips the task
-        runner with a clear message before the turn starts. ``TurnExecutor``
-        independently restores the same skills via ``preloaded_skills``.
+        Strict on missing skills: a profile that references an unregistered
+        skill fails the task synchronously with a clear message rather than
+        running with a silently degraded tool set.
         """
         if not task.agent_profile:
             msg = f"Task {task.id} has no agent_profile set"
@@ -88,7 +89,8 @@ class TaskExecutor:
                 raise RuntimeError(msg)
             state.add(skill)
 
-        return build_agent(profile, tools=state.tools, name="TASK_AGENT")
+        agent = build_agent(profile, tools=state.tools, name="TASK_AGENT")
+        return agent, state
 
     def _build_instruction(
         self, task_result: TaskResult, task: Task, goal: Goal

@@ -35,6 +35,8 @@ from integrations.broker_client import (
     call as broker_call,
 )
 from sdk import TurnExecutor
+from sdk.events import AgentEvent
+from sdk.skills import AgentState
 from sdk.turn import is_turn_active, request_stop
 from tools.memory import forget, memory_prompt_block, remember
 from tools.virtual_computer.run_bash_cmd import run_bash_cmd
@@ -91,6 +93,9 @@ class TelegramChannel:
         self._default_profile_id: str = "computron"
         self._pull_task: asyncio.Task[None] | None = None
         self._turn_tasks: set[asyncio.Task[None]] = set()
+        # Fire-and-forget tasks (e.g. title generation on first turn). Held
+        # so the GC doesn't reap them; cleared via done_callback.
+        self._background_tasks: set[asyncio.Task[None]] = set()
         # Per-chat in-flight turn tracker. Owned by the dispatch loop so the
         # "one turn at a time" check is race-free — ContextVar-based
         # ``is_turn_active`` doesn't flip True until the task actually runs,
@@ -530,7 +535,16 @@ class TelegramChannel:
             )
             return
 
+        if conversation.agent_state is None:
+            conversation.agent_state = await AgentState.create(
+                skill_names=[
+                    *profile.skills,
+                    *self._persistence.load_skills(conversation.id),
+                ],
+            )
+
         agent = build_agent(profile, tools=[run_bash_cmd, remember, forget])
+        agent.instruction = memory_prompt_block() + agent.instruction
 
         logger.info(
             "telegram turn start  chat_id=%s  conversation_id=%s  is_new=%s  profile=%s",
@@ -545,18 +559,16 @@ class TelegramChannel:
         collected_text = ""
         file_paths: list[str] = []
         wrote_started = False
+        events: list[AgentEvent] = []
 
         try:
             async for event in self._turn_executor.execute(
                 conversation=conversation,
                 agent=agent,
                 user_content=text,
-                is_new_conversation=is_new,
-                preloaded_skills=profile.skills,
-                persistence=self._persistence,
-                build_system_prompt=lambda: memory_prompt_block() + agent.instruction,
                 profile_name=profile.name,
             ):
+                events.append(event)
                 payload = event.payload
                 ptype = payload.type
                 if ptype == "tool_call" and hasattr(payload, "name"):
@@ -596,6 +608,31 @@ class TelegramChannel:
 
         for path in file_paths:
             await self._send_document(chat_id, path)
+
+        # Post-turn persistence. Errors logged, never raised — the user
+        # already got their reply.
+        try:
+            self._persistence.save_events(conversation.id, events)
+        except Exception:
+            logger.exception(
+                "Failed to save agent events for '%s'", conversation.id,
+            )
+        if conversation.agent_state.loaded_skill_names:
+            try:
+                self._persistence.save_skills(
+                    conversation.id,
+                    conversation.agent_state.loaded_skill_names,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to save loaded skills for '%s'", conversation.id,
+                )
+        if is_new:
+            task = asyncio.create_task(
+                self._persistence.on_new_conversation(conversation.id, text),
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         logger.info(
             "telegram turn end  chat_id=%s  conversation_id=%s  text_len=%d  files=%d",
