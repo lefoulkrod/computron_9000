@@ -138,6 +138,42 @@ async def test_resolve_tab_id_missing_reports_not_found_even_when_no_tabs() -> N
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_resolve_tab_none_with_single_tab() -> None:
+    """resolve_tab(None) returns the only open tab."""
+    ctx = FakeContext()
+    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
+
+    p1 = await browser.new_page()
+    assert browser.resolve_tab(None) is p1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_tab_none_with_multiple_tabs_errors() -> None:
+    """resolve_tab(None) errors when multiple tabs are open."""
+    ctx = FakeContext()
+    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
+
+    await browser.new_page()
+    await browser.new_page()
+
+    with pytest.raises(ValueError, match="tabs open; specify tab="):
+        browser.resolve_tab(None)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_tab_empty_string_with_single_tab() -> None:
+    """resolve_tab('') returns the only open tab."""
+    ctx = FakeContext()
+    browser = Browser(context=ctx, extra_headers={})  # type: ignore[arg-type]
+
+    p1 = await browser.new_page()
+    assert browser.resolve_tab("") is p1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_concurrent_goto_on_same_tab_errors() -> None:
     """A second navigate while one is in flight on the same tab errors loudly."""
     ctx = FakeContext()

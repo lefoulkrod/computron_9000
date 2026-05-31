@@ -622,13 +622,23 @@ class Browser:
             rows.append(f"  tab={tid}: {page.url}")
         return "Open tabs:\n" + "\n".join(rows) if rows else "No open tabs"
 
-    def resolve_tab(self, tab: str | int) -> Page:
+    def resolve_tab(self, tab: str | int | None = None) -> Page:
         """Look up the open tab with the given stable ID.
 
         IDs are monotonic — closing a tab does not free its ID, so a
         stale reference always errors rather than silently landing on a
         different tab.
+
+        When *tab* is ``None`` or an empty string and exactly one tab is
+        open, that tab is returned.  With multiple tabs, *tab* is required.
         """
+        if tab is None or (isinstance(tab, str) and tab.strip() == ""):
+            open_tabs = self.open_tabs()
+            if len(open_tabs) == 1:
+                return open_tabs[0]
+            raise ValueError(
+                f"{len(open_tabs)} tabs open; specify tab=N. {self._tab_listing()}",
+            )
         try:
             target_id = int(str(tab).strip())
         except ValueError:

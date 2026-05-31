@@ -77,7 +77,7 @@ async def new_tab(url: str) -> str:
         raise BrowserToolError(str(exc), tool="new_tab") from exc
 
 
-async def close_tab(*, tab: str) -> str:
+async def close_tab(*, tab: str | None = None) -> str:
     """Close a tab and free its resources.
 
     With one tab open, ``tab`` may be omitted.  With multiple tabs,

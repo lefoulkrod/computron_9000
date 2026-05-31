@@ -199,6 +199,28 @@ async def test_close_tab_errors_when_unknown(stub_browser: _StubBrowser) -> None
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_close_tab_omitting_tab_with_single_tab(stub_browser: _StubBrowser) -> None:
+    """close_tab() without tab closes the only open tab."""
+    await new_tab("https://a.com")
+    output = await close_tab()
+    assert output == "Closed tab=1."
+    assert len(stub_browser.open_tabs()) == 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_close_tab_omitting_tab_with_multiple_tabs_errors(
+    stub_browser: _StubBrowser,
+) -> None:
+    """close_tab() without tab errors when multiple tabs are open."""
+    await new_tab("https://a.com")
+    await new_tab("https://b.com")
+    with pytest.raises(BrowserToolError, match="tabs open; specify tab="):
+        await close_tab()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_parallel_goto_on_different_tabs_both_succeed(
     stub_browser: _StubBrowser,
 ) -> None:
