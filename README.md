@@ -5,12 +5,12 @@ Come join us as we build the agent harness for the masses! [omnideck](https://gi
 
 Get started with omnideck by using the CLI 
 
-For Linxu
+For Linux
 ```
 curl -L https://github.com/omnideck-dev/cli/releases/latest/download/omnideck-linux-amd64 -o omnideck && chmod +x omnideck && sudo mv omnideck /usr/local/bin/
 ```
 
-For MacOs Silicon
+For macOS Silicon
 ```
 curl -L https://github.com/omnideck-dev/cli/releases/latest/download/omnideck-darwin-arm64 -o omnideck && chmod +x omnideck && sudo mv omnideck /usr/local/bin/
 ```
