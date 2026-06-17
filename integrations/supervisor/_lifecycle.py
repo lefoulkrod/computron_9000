@@ -22,6 +22,7 @@ from integrations._rpc import serve_rpc
 from integrations.supervisor._app_sock import AppSockHandler
 from integrations.supervisor._catalog import CatalogEntry, validate_host_path_bindings
 from integrations.supervisor._crypto import load_or_init_master_key
+from integrations.supervisor._maintenance import run_pending as run_pending_maintenance
 from integrations.supervisor._manager import BrokerManager, ReconcileError
 from integrations.supervisor._registry import Registry
 from integrations.supervisor._store import list_integration_ids
@@ -86,6 +87,14 @@ class Supervisor:
         self.vault_dir.mkdir(parents=True, exist_ok=True)
         self.sockets_dir.mkdir(parents=True, exist_ok=True)
 
+        # One-shot perm heals (e.g. legacy 0o640 broker downloads). Runs as
+        # the broker uid so it can chmod broker-owned files the app server
+        # can't. Tracked in vault_dir so each task applies once per host.
+        downloads = self.host_paths.get("downloads")
+        run_pending_maintenance(
+            self.vault_dir, downloads.path if downloads else None,
+        )
+
         self._master_key = load_or_init_master_key(self.vault_dir)
         self._registry = Registry()
         self._manager = BrokerManager(
@@ -102,6 +111,7 @@ class Supervisor:
         self._handler = AppSockHandler(
             manager=self._manager,
             registry=self._registry,
+            catalog=self.catalog,
         )
         self._server = await serve_rpc(self.app_sock_path, self._handler.handle)
         logger.info("supervisor listening at %s", self.app_sock_path)

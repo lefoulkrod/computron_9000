@@ -26,6 +26,17 @@ export const PROVIDERS = [
         capabilities: ['email'],
     },
     {
+        slug: 'icloud_drive',
+        authFlow: 'app_password_2fa',
+        category: 'Files & Storage',
+        title: 'iCloud Drive',
+        description: 'Files and folders',
+        icon: 'bi-folder',
+        vendor: 'Apple',
+        emailPlaceholder: 'you@icloud.com',
+        capabilities: ['drive'],
+    },
+    {
         slug: 'google_workspace',
         authFlow: 'oauth_device',
         category: 'Productivity Suites',
@@ -74,6 +85,7 @@ export const PROVIDERS = [
 export function errorCopy(error, provider) {
     const vendor = provider?.vendor ?? provider?.title ?? 'this provider';
     const isOauth = provider?.authFlow === 'oauth_device';
+    const is2fa = provider?.authFlow === 'app_password_2fa';
     switch (error?.code) {
         case 'AUTH':
             if (isOauth) {
@@ -84,6 +96,14 @@ export function errorCopy(error, provider) {
                         + 'Other common causes: the OAuth client type isn\'t "Desktop app", '
                         + 'or the app hasn\'t been published '
                         + '(Google Auth Platform → Audience → Publish app).',
+                };
+            }
+            if (is2fa) {
+                return {
+                    title: `${vendor} rejected the sign-in`,
+                    description:
+                        error.message
+                        || 'Check your Apple ID, password, and the 2FA code, then try again.',
                 };
             }
             return {

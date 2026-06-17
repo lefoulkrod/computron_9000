@@ -50,10 +50,18 @@ SOCKET_MODE = 0o660
 # (computron) traverse to reach the sockets — write is broker-only.
 RUNTIME_DIR_MODE = 0o750
 
-# Email-attachment files written by the broker into the shared downloads dir.
-# Owner (broker) rw, group (broker — which computron is in) r, others none.
-# Group read is what lets the computron-UID side open these files.
-ATTACHMENT_FILE_MODE = 0o640
+# Files a broker drops into the shared downloads dir for the agent.
+# Owner (broker) rw, group (broker — which computron is in) rw, others none.
+# Group write lets the agent treat downloaded files as its own — read, modify,
+# and (combined with ``AGENT_OWNED_DIR_MODE`` on the parent) delete. The
+# broker can't technically chown to the computron uid without CAP_CHOWN, so
+# this is "functional ownership" via the broker group rather than uid hand-off.
+AGENT_OWNED_FILE_MODE = 0o660
+
+# Mode for the shared downloads dir itself. ``2770``: setgid so files created
+# here inherit the broker group automatically, no sticky bit so the agent can
+# unlink broker-written files. Pair with ``AGENT_OWNED_FILE_MODE`` above.
+AGENT_OWNED_DIR_MODE = 0o2770
 
 # Process-wide umask the supervisor and brokers install at startup. ``0o077``
 # masks every group/other bit, so any subsequent ``mkdir`` / ``open`` /

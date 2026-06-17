@@ -32,14 +32,16 @@ The handler is a thin dispatcher: it parses args and delegates to a
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
-from integrations._rpc import RpcError
+from integrations._rpc import RpcError, get_peer_uid
 from integrations.permissions import (
     access_to_str,
     permissions_from_dict,
     permissions_to_dict,
 )
+from integrations.supervisor._catalog import CatalogEntry
 from integrations.supervisor._manager import BrokerManager
 from integrations.supervisor._registry import IntegrationRecord, Registry
 
@@ -54,9 +56,11 @@ class AppSockHandler:
         *,
         manager: BrokerManager,
         registry: Registry,
+        catalog: dict[str, CatalogEntry],
     ) -> None:
         self._manager = manager
         self._registry = registry
+        self._catalog = catalog
 
     async def handle(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
         """Entry point called by the RPC layer for every incoming frame."""
@@ -70,6 +74,8 @@ class AppSockHandler:
             return await self._update(args)
         if verb == "remove":
             return await self._remove(args)
+        if verb == "update_secrets":
+            return await self._update_secrets(args)
         msg = f"unknown verb: {verb}"
         raise RpcError("BAD_REQUEST", msg)
 
@@ -130,6 +136,54 @@ class AppSockHandler:
     async def _remove(self, args: dict[str, Any]) -> dict[str, Any]:
         integration_id = _require_str(args, "id")
         await self._manager.remove(integration_id)
+        return {"id": integration_id}
+
+    async def _update_secrets(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Merge a partial patch into an integration's stored secret bundle.
+
+        Reserved for the brokers themselves — the only legitimate writers of
+        runtime-acquired credential state (e.g. rclone session cookies). The
+        peer uid is checked against the supervisor's own uid; brokers spawn
+        as the same uid as the supervisor and so match, while the app server
+        (different uid in the broker group) gets rejected.
+
+        Each catalog entry whitelists which secret-bundle keys its broker
+        may patch via :attr:`CatalogEntry.patchable_secret_keys`. Any patch
+        key outside that whitelist is refused so a compromised or buggy
+        broker can't overwrite the user's primary credentials.
+        """
+        peer_uid = get_peer_uid()
+        if peer_uid is None or peer_uid != os.getuid():
+            raise RpcError("PERMISSION_DENIED", "update_secrets is for brokers only")
+
+        integration_id = _require_str(args, "id")
+        patch = args.get("patch")
+        if not isinstance(patch, dict):
+            raise RpcError("BAD_REQUEST", "'patch' required (object)")
+        if not patch:
+            raise RpcError("BAD_REQUEST", "'patch' must not be empty")
+
+        record = self._registry.get(integration_id)
+        if record is None:
+            raise RpcError("NOT_FOUND", f"unknown integration: {integration_id}")
+
+        entry = self._catalog.get(record.meta.slug)
+        if entry is None:
+            raise RpcError("INTERNAL", f"catalog has no entry for {record.meta.slug!r}")
+
+        allowed = entry.patchable_secret_keys
+        for key, value in patch.items():
+            if key not in allowed:
+                raise RpcError(
+                    "PERMISSION_DENIED",
+                    f"key {key!r} is not patchable for slug {record.meta.slug!r}",
+                )
+            if not isinstance(value, str):
+                raise RpcError(
+                    "BAD_REQUEST", f"patch[{key!r}] must be a string",
+                )
+
+        await self._manager.update_secrets(integration_id, patch)
         return {"id": integration_id}
 
 

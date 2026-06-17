@@ -1,3 +1,21 @@
+# ── Build patched rclone (PR rclone/rclone#9447 — fixes ADP PCS for iCloud Drive) ────────────
+# Upstream v1.74.1 only acquires PCS cookies for "photos"; iCloud Drive
+# also needs PCS cookies for "iclouddrive" or operations fail with HTTP 423
+# "Missing PCS cookies". The PR generalises PCS to acquire cookies for
+# every webservice that reports pcsRequired. Pin to a known-good commit so
+# the build is reproducible; bump when the PR merges to upstream master.
+FROM docker.io/golang:1.25-bookworm AS rclone-builder
+ARG TARGETARCH
+ARG RCLONE_FORK_URL=https://github.com/Lyapsus/rclone.git
+ARG RCLONE_FORK_COMMIT=0f2ac246e8438123d3aab736ee7b777edbb2fee2
+RUN git clone --filter=blob:none "${RCLONE_FORK_URL}" /src && \
+    git -C /src checkout "${RCLONE_FORK_COMMIT}"
+WORKDIR /src
+RUN CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
+    go build -trimpath -ldflags='-s -w' -o /out/rclone . && \
+    /out/rclone version
+
+
 FROM docker.io/ubuntu:22.04
 
 # ── BuildKit arch detection ──────────────────────────────────────────────────
@@ -65,6 +83,13 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get update && \
     apt-get install -y --no-install-recommends gh && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── rclone — backend for the rclone_broker (iCloud Drive, etc.) ───────────────
+# Patched build from rclone PR #9447 (ADP/PCS fix). See the rclone-builder
+# stage at the top of this file. Once the PR merges and a release ships
+# with the fix, this can switch back to installing the official .deb.
+COPY --from=rclone-builder /out/rclone /usr/local/bin/rclone
+RUN chmod 0755 /usr/local/bin/rclone && rclone version
 
 # ── Node.js LTS ───────────────────────────────────────────────────────────────
 # Node distributes: linux-x64 (amd64), linux-arm64 (arm64), linux-armv7l (arm/v7).

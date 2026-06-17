@@ -23,6 +23,11 @@ const SLUG_META = {
         icon: 'bi-envelope-at',
         category: 'Email & Calendar',
     },
+    icloud_drive: {
+        label: 'iCloud Drive',
+        icon: 'bi-folder',
+        category: 'Files & Storage',
+    },
     google_workspace: {
         label: 'Google Workspace',
         icon: 'bi-google',
