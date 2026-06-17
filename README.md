@@ -1,3 +1,23 @@
+# COMPUTRON IS NOW OMNIDECK
+Computron is now omnideck! This repo will no longer be maintained.
+
+Come join us as we build the agent harness for the masses! [omnideck] https://github.com/omnideck-dev/omnideck
+
+Get started with omnideck by using the CLI 
+
+For Linxu
+```
+curl -L https://github.com/omnideck-dev/cli/releases/latest/download/omnideck-linux-amd64 -o omnideck && chmod +x omnideck && sudo mv omnideck /usr/local/bin/
+```
+
+For MacOs Silicon
+```
+curl -L https://github.com/omnideck-dev/cli/releases/latest/download/omnideck-darwin-arm64 -o omnideck && chmod +x omnideck && sudo mv omnideck /usr/local/bin/
+```
+
+Windows CLI is coming soon!!
+
+
 # COMPUTRON
 
 A self-hosted agentic workbench in a single container. Bring your own LLMs — securely-brokered cloud providers (OpenAI, Anthropic, OpenRouter, any OpenAI-compatible endpoint) or local Ollama models — and connect the integrations your agents need (Gmail, Calendar, Drive, custom MCP servers). Agents browse the web, write and run code, and control a Linux desktop. Everything runs on your hardware.
