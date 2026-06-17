@@ -1,7 +1,7 @@
 # COMPUTRON IS NOW OMNIDECK
 Computron is now omnideck! This repo will no longer be maintained.
 
-Come join us as we build the agent harness for the masses! [omnideck] https://github.com/omnideck-dev/omnideck
+Come join us as we build the agent harness for the masses! [omnideck](https://github.com/omnideck-dev/omnideck)
 
 Get started with omnideck by using the CLI 
 
