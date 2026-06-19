@@ -199,6 +199,25 @@ _GOOGLE_WORKSPACE = CatalogEntry(
 )
 
 
+_TELEGRAM = CatalogEntry(
+    slug="telegram",
+    command=["python", "-m", "integrations.brokers.telegram_broker"],
+    capabilities={Capability.TELEGRAM: Access.READ_WRITE},
+    static_env={},
+    env_injection={
+        "token": "TELEGRAM_BOT_TOKEN",
+        "allowed_user_ids": "TELEGRAM_ALLOWED_USER_IDS",
+    },
+    host_paths=(
+        # Inbound photos/documents land in the shared "downloads" role —
+        # same place email attachments and browser saves are written. The
+        # broker writes; the main app process (and the agent's virtual
+        # computer view) reads from the same path.
+        HostPathBinding(role="downloads", env_var="DOWNLOADS_DIR", mode="write"),
+    ),
+)
+
+
 DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "icloud": _ICLOUD,
     "gmail": _GMAIL,
@@ -207,6 +226,7 @@ DEFAULT_CATALOG: dict[str, CatalogEntry] = {
     "llm_openrouter": _LLM_OPENROUTER,
     "llm_openai_compat": _LLM_OPENAI_COMPAT,
     "google_workspace": _GOOGLE_WORKSPACE,
+    "telegram": _TELEGRAM,
 }
 
 

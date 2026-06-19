@@ -2,9 +2,7 @@
 
 import asyncio
 import logging
-from collections import OrderedDict
-from collections.abc import AsyncGenerator, Callable, Sequence
-from contextlib import suppress
+from collections.abc import AsyncGenerator, Sequence
 
 from rich.console import Console
 from rich.panel import Panel
@@ -15,38 +13,28 @@ from agents import (
     build_agent,
     get_agent_profile,
 )
-from agents.types import Agent, Data
+from agents.types import Data
 from conversations import (
-    generate_conversation_title,
+    ConversationCache,
+    DiskTurnPersistence,
     load_agent_events,
-    load_conversation_history,
-    load_loaded_skills,
     load_preview_state,
-    save_agent_events,
-    save_conversation_title,
-    save_loaded_skills,
 )
-from sdk import (
-    PersistenceHook,
-    default_hooks,
-    run_turn,
-)
-from sdk.context import ContextManager, ConversationHistory, LLMCompactionStrategy
+from sdk import TurnExecutor
 from sdk.events import (
     AgentEvent,
     ContentPayload,
     TurnEndPayload,
-    agent_span,
-    get_current_dispatcher,
 )
-from sdk.hooks._agent_event_buffer import AgentEventBufferHook
-from sdk.skills import AgentState, get_skill
-from sdk.tools._core import get_core_tools
-from sdk.turn import is_turn_active, turn_scope
-from sdk.turn._turn import StopRequestedError
+from sdk.skills import AgentState
+from sdk.turn import is_turn_active
 from tools.browser.core import release_agent_browser
-from tools.memory import load_memory
+from tools.memory import forget, memory_prompt_block, remember
 from tools.virtual_computer.receive_file import receive_attachment
+from tools.virtual_computer.run_bash_cmd import run_bash_cmd
+
+# Background tasks held to prevent GC; cleared via done callback.
+_background_tasks: set[asyncio.Task] = set()
 
 logger = logging.getLogger(__name__)
 _console = Console(stderr=True)
@@ -102,76 +90,19 @@ def _log_turn_start(profile: AgentProfile) -> None:
     )
 
 
-# In-memory conversation cache. LRU-bounded so a long-lived process
-# doesn't hold every conversation a user has ever opened. The on-disk
-# state is authoritative; an evicted entry is rehydrated from disk on
-# next access.
-_MAX_CACHED_CONVERSATIONS = 25
-_conversations: OrderedDict[str, ConversationHistory] = OrderedDict()
+# Shared in-memory conversation cache. The on-disk store is authoritative;
+# the cache exists so consecutive turns reuse the same Conversation object
+# (and the PersistenceHook's in-place history mutations survive across
+# turns). Eviction releases per-conversation browser contexts so evicted
+# rows don't leak a Playwright instance.
+_cache = ConversationCache(
+    is_active=is_turn_active,
+    on_evict=lambda cid: release_agent_browser(f"conv:{cid}"),
+)
 
-# Track background tasks to avoid garbage collection (RUF006)
-_background_tasks: set[asyncio.Task] = set()
-
-
-async def _get_conversation(conversation_id: str) -> tuple[ConversationHistory, bool]:
-    """Return ``(history, is_new)`` for the given ID, creating it if needed.
-
-    ``is_new`` is True only when the conversation has no in-memory entry
-    AND no on-disk history — a genuine first-time use. On any cache miss
-    we hydrate from disk so turns survive process restarts: the browser
-    preserves a conversation id across server bounces (e.g. ``just
-    restart-app``), and without hydration the next turn would build on an
-    empty history and the persistence hook would overwrite the saved file.
-
-    Cache hits move the entry to the end of the LRU; cache misses insert
-    at the end and may evict the least-recently-used entry whose turn is
-    not currently active.
-    """
-    if not conversation_id:
-        msg = "conversation_id is required"
-        raise ValueError(msg)
-    if conversation_id in _conversations:
-        _conversations.move_to_end(conversation_id)
-        return _conversations[conversation_id], False
-    persisted = load_conversation_history(conversation_id)
-    is_new = persisted is None
-    if is_new:
-        logger.info("Creating new conversation %s", conversation_id)
-    _conversations[conversation_id] = ConversationHistory(persisted, instance_id=conversation_id)
-    await _evict_lru_conversation(exclude=conversation_id)
-    return _conversations[conversation_id], is_new
-
-
-async def _evict_lru_conversation(exclude: str | None = None) -> None:
-    """Drop the oldest non-active entries until we are at or below the cap.
-
-    Conversations whose turn is currently in flight are skipped — popping
-    them from the dict would leave the running turn writing to a referent
-    nobody else can find, and a subsequent chat for the same id would
-    rehydrate from disk, producing two parallel writers.
-
-    ``exclude`` skips the conversation that triggered this eviction. The
-    caller has not yet entered ``turn_scope`` for it, so ``is_turn_active``
-    cannot recognize it as protected — without this guard the just-inserted
-    entry would be evicted by its own insert in the rare case where every
-    other cached entry is mid-turn.
-    """
-    while len(_conversations) > _MAX_CACHED_CONVERSATIONS:
-        for cid in _conversations:
-            if cid == exclude:
-                continue
-            if not is_turn_active(cid):
-                _conversations.pop(cid)
-                await release_agent_browser(f"conv:{cid}")
-                logger.info(
-                    "Evicted LRU conversation %s from in-memory cache", cid,
-                )
-                break
-        else:
-            # Every cached conversation is mid-turn (or is the just-inserted
-            # caller) — accept temporary overflow rather than evict an
-            # active one. The next insert will retry.
-            return
+# Shared turn executor — stateless, safe to reuse across conversations.
+_turn_executor = TurnExecutor()
+_persistence = DiskTurnPersistence()
 
 
 async def resume_conversation(conversation_id: str) -> dict | None:
@@ -187,35 +118,14 @@ async def resume_conversation(conversation_id: str) -> dict | None:
 
     None if the conversation isn't found.
     """
-    messages = load_conversation_history(conversation_id)
-    if messages is None:
+    conversation = await _cache.resume(conversation_id)
+    if conversation is None:
         return None
-
-    _conversations[conversation_id] = ConversationHistory(messages, instance_id=conversation_id)
-    _conversations.move_to_end(conversation_id)
-    await _evict_lru_conversation(exclude=conversation_id)
     return {
-        "messages": messages,
+        "messages": list(conversation.history.messages),
         "events": load_agent_events(conversation_id),
         "preview_state": load_preview_state(conversation_id),
     }
-
-
-def _refresh_system_message(history: ConversationHistory, system_prompt: str) -> None:
-    """Re-inserts the system message at the start of history with up-to-date memory.
-
-    Called before each model invocation so any memories stored during the previous
-    turn are visible immediately.
-    """
-    instruction = system_prompt
-    memory = load_memory()
-    if memory:
-        lines = "\n".join(f"  {k}: {e.value}" for k, e in memory.items())
-        sep = "─" * 64
-        memory_block = f"\n── Memory (persisted across sessions) ──────────────────────────\n{lines}\n{sep}\n"
-        instruction = memory_block + instruction
-
-    history.set_system_message(instruction)
 
 
 def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str:
@@ -232,145 +142,6 @@ def _augment_message_with_attachments(message: str, data: Sequence[Data]) -> str
 
     files_block = "\n".join(file_lines)
     return f"{message}\n\n[Attached files written to virtual computer]\n{files_block}"
-
-
-def _build_agent_from_profile(profile: AgentProfile) -> Agent:
-    """Construct an Agent from an AgentProfile."""
-    from tools.memory import forget, remember
-    from tools.virtual_computer.run_bash_cmd import run_bash_cmd
-
-    return build_agent(profile, tools=[run_bash_cmd, remember, forget])
-
-
-async def _run_turn(
-    *,
-    history: ConversationHistory,
-    active_agent: Agent,
-    profile: AgentProfile,
-    user_content: str,
-    conversation_id: str,
-    handler: Callable[[AgentEvent], object],
-    is_new_conversation: bool = False,
-) -> None:
-    """Execute a single conversation turn: model calls, tool execution, persistence."""
-    logger.info(
-        "Turn started: conv=%s agent=%s message=%.80s",
-        conversation_id,
-        active_agent.name,
-        user_content,
-    )
-    _log_turn_start(profile)
-
-    conv_id = conversation_id
-
-    # Fresh AgentState each turn, restored from persisted skill names.
-    # Pre-load skills from the profile.
-    agent_state = AgentState(await get_core_tools() + active_agent.tools)
-    for skill_name in profile.skills:
-        skill = get_skill(skill_name)
-        if skill is None:
-            logger.warning("Profile skill '%s' not registered; skipping", skill_name)
-            continue
-        agent_state.add(skill)
-        logger.info("Pre-loaded profile skill '%s' for conv=%s", skill_name, conv_id)
-    for skill_name in load_loaded_skills(conv_id):
-        if skill_name in agent_state.loaded_skill_names:
-            continue
-        skill = get_skill(skill_name)
-        if skill is None:
-            logger.warning(
-                "Persisted skill '%s' for conv=%s was not found in the skills registry; skipping",
-                skill_name,
-                conv_id,
-            )
-            continue
-        agent_state.add(skill)
-        logger.info("Restored skill '%s' for conv=%s", skill_name, conv_id)
-
-    ctx_manager = ContextManager(
-        history=history,
-        agent_state=agent_state,
-        context_limit=active_agent.context_window,
-        agent_name=active_agent.name,
-        compaction_threshold=active_agent.compaction_threshold,
-        strategies=[
-            LLMCompactionStrategy(threshold=active_agent.compaction_threshold),
-        ],
-    )
-
-    async with turn_scope(handler=handler, conversation_id=conversation_id):
-        # Subscribe event buffer to capture agent lifecycle/preview events
-        event_buffer = AgentEventBufferHook()
-        dispatcher = get_current_dispatcher()
-        if dispatcher:
-            dispatcher.subscribe(event_buffer.handle_event)
-
-        async with agent_span(
-            active_agent.name, instruction=user_content, agent_state=agent_state, profile_name=profile.name
-        ):
-            history.append({"role": "user", "content": user_content})
-            # Build full system prompt: profile prompt + loaded skill prompts
-            full_prompt = active_agent.instruction
-            skill_prompt = agent_state.build_skill_prompt()
-            if skill_prompt:
-                full_prompt = full_prompt + "\n" + skill_prompt
-            _refresh_system_message(history, full_prompt)
-
-            hooks = default_hooks(
-                active_agent,
-                max_iterations=active_agent.max_iterations,
-                ctx_manager=ctx_manager,
-            )
-
-            hooks.append(
-                PersistenceHook(
-                    conversation_id=conv_id,
-                    history=history,
-                )
-            )
-
-            with suppress(StopRequestedError):
-                await run_turn(
-                    history=history,
-                    agent=active_agent,
-                    hooks=hooks,
-                )
-
-        # Persist loaded skills so they survive across turns and restarts
-        if agent_state.loaded_skill_names:
-            try:
-                save_loaded_skills(conv_id, agent_state.loaded_skill_names)
-            except Exception:
-                logger.exception("Failed to save loaded skills for '%s'", conv_id)
-
-        # Yield to event loop so call_soon callbacks (sync event handlers)
-        # have a chance to run before we read the buffer
-        await asyncio.sleep(0)
-
-        # Save agent events after the turn (outside agent_span so completion is captured)
-        buffered_events = event_buffer.get_events()
-        if buffered_events:
-            try:
-                save_agent_events(conv_id, buffered_events)
-                logger.info("Saved %d agent events for conv=%s", len(buffered_events), conv_id)
-            except Exception:
-                logger.exception("Failed to save agent events for '%s'", conv_id)
-
-        # Generate a title for new conversations after the first successful turn
-        if is_new_conversation and conversation_id:
-            task = asyncio.create_task(_generate_title(conversation_id, user_content))
-            _background_tasks.add(task)
-            task.add_done_callback(_background_tasks.discard)
-
-
-async def _generate_title(conversation_id: str, first_message: str) -> None:
-    """Generate and save a title for a new conversation."""
-    try:
-        title = await generate_conversation_title(first_message)
-        save_conversation_title(conversation_id, title)
-        logger.info("Generated title for conversation %s: %r", conversation_id, title)
-    except Exception:
-        logger.exception("Failed to generate title for conversation %s", conversation_id)
 
 
 async def handle_user_message(
@@ -394,7 +165,7 @@ async def handle_user_message(
     if not conversation_id:
         msg = "conversation_id is required"
         raise ValueError(msg)
-    history, is_new_conversation = await _get_conversation(conversation_id)
+    conversation, is_new_conversation = await _cache.get(conversation_id)
 
     user_content = message
     if data:
@@ -412,45 +183,26 @@ async def handle_user_message(
         msg = "No model configured. Complete the setup wizard to select a model."
         raise ValueError(msg)
 
+    _log_turn_start(profile)
+
+    if conversation.agent_state is None:
+        conversation.agent_state = await AgentState.create(
+            skill_names=[*profile.skills, *_persistence.load_skills(conversation.id)],
+        )
+
+    agent = build_agent(profile, tools=[run_bash_cmd, remember, forget])
+    agent.instruction = memory_prompt_block() + agent.instruction
+
+    events: list[AgentEvent] = []
     try:
-        # Bridge published events via a queue so we can stream them to the caller.
-        queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
-
-        async def _queue_handler(evt: AgentEvent) -> None:
-            try:
-                await queue.put(evt)
-            except Exception:  # pragma: no cover - defensive logging
-                logger.exception("Failed to enqueue AgentEvent in message handler")
-
-        active_agent = _build_agent_from_profile(profile)
-
-        async def _producer() -> None:
-            try:
-                await _run_turn(
-                    history=history,
-                    active_agent=active_agent,
-                    profile=profile,
-                    user_content=user_content,
-                    conversation_id=conversation_id,
-                    handler=_queue_handler,
-                    is_new_conversation=is_new_conversation,
-                )
-            finally:
-                await queue.put(None)
-
-        producer_task = asyncio.create_task(_producer())
-        try:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                yield item
-        finally:
-            if not producer_task.done():
-                producer_task.cancel()
-            with suppress(Exception):
-                await producer_task
-
+        async for event in _turn_executor.execute(
+            conversation=conversation,
+            agent=agent,
+            user_content=user_content,
+            profile_name=profile.name,
+        ):
+            events.append(event)
+            yield event
     except Exception:
         logger.exception("Error handling user message")
         yield AgentEvent(
@@ -460,3 +212,25 @@ async def handle_user_message(
             )
         )
         yield AgentEvent(payload=TurnEndPayload(type="turn_end"))
+        return
+
+    # Post-turn persistence. Errors logged, never raised — the user already
+    # got their reply.
+    try:
+        _persistence.save_events(conversation.id, events)
+    except Exception:
+        logger.exception("Failed to save agent events for '%s'", conversation.id)
+    if conversation.agent_state.loaded_skill_names:
+        try:
+            _persistence.save_skills(
+                conversation.id,
+                conversation.agent_state.loaded_skill_names,
+            )
+        except Exception:
+            logger.exception("Failed to save loaded skills for '%s'", conversation.id)
+    if is_new_conversation:
+        task = asyncio.create_task(
+            _persistence.on_new_conversation(conversation.id, user_content),
+        )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)

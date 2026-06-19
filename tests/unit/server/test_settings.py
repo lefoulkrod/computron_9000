@@ -156,3 +156,32 @@ class TestSettingsUpdate:
         assert "vision_model" in dumped
         assert "setup_complete" not in dumped
         assert "direct_providers" not in dumped
+
+
+@pytest.mark.unit
+def test_telegram_notifier_settings_accepted():
+    """The notifier integration_id and chat_id fields round-trip through the model."""
+    u = SettingsUpdate(
+        telegram_notifier_integration_id="telegram_personal",
+        telegram_notifier_chat_id=42,
+    )
+    assert u.telegram_notifier_integration_id == "telegram_personal"
+    assert u.telegram_notifier_chat_id == 42
+
+
+@pytest.mark.unit
+def test_telegram_notifier_settings_nullable():
+    """Both fields accept null (the explicit "disabled" value)."""
+    u = SettingsUpdate(
+        telegram_notifier_integration_id=None,
+        telegram_notifier_chat_id=None,
+    )
+    assert u.telegram_notifier_integration_id is None
+    assert u.telegram_notifier_chat_id is None
+
+
+@pytest.mark.unit
+def test_telegram_notifier_chat_id_accepts_negative():
+    """Group chats have negative IDs; the field must accept them."""
+    u = SettingsUpdate(telegram_notifier_chat_id=-1001234567890)
+    assert u.telegram_notifier_chat_id == -1001234567890

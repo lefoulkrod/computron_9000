@@ -12,6 +12,9 @@ from migrations._002_install_default_profiles import migrate as _002_install_def
 from migrations._003_vision_settings import migrate as _003_vision_settings
 from migrations._004_rename_num_ctx import migrate as _004_rename_num_ctx
 from migrations._005_multi_provider import migrate as _005_multi_provider
+from migrations._006_telegram_notifier_settings import (
+    migrate as _006_telegram_notifier_settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +29,7 @@ _MIGRATIONS: list[tuple[str, Callable[[Path], None]]] = [
     ("003_vision_settings", _003_vision_settings),
     ("004_rename_num_ctx", _004_rename_num_ctx),
     ("005_multi_provider", _005_multi_provider),
+    ("006_telegram_notifier_settings", _006_telegram_notifier_settings),
 ]
 
 

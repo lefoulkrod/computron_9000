@@ -58,6 +58,23 @@ def load_memory() -> dict[str, MemoryEntry]:
     return _load_raw()
 
 
+def memory_prompt_block() -> str:
+    """Return a formatted memory block to prepend to a system prompt.
+
+    Empty string when no memories are stored — callers can concatenate
+    unconditionally.
+    """
+    memory = _load_raw()
+    if not memory:
+        return ""
+    lines = "\n".join(f"  {k}: {e.value}" for k, e in memory.items())
+    sep = "─" * 64
+    return (
+        f"\n── Memory (persisted across sessions) "
+        f"──────────────────────────────────────────\n{lines}\n{sep}\n"
+    )
+
+
 def set_key_hidden(key: str, hidden: bool) -> None:
     """Mark a memory key as hidden or visible in the UI."""
     data = _load_raw()

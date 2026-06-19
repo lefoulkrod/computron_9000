@@ -1,19 +1,30 @@
 import { useEffect, useState } from 'react';
 
 import styles from './add-wizard.module.css';
-import { slugifyEmail } from './providers.js';
+import { slugifyEmail, slugifyLabel } from './providers.js';
 import { ProviderPicker, SuccessScreen } from './SharedSteps.jsx';
 import { ExplainerStep, CredentialsStep, VerifyingStep } from './AppPasswordSteps.jsx';
+import {
+    ExplainerStep as BotExplainerStep,
+    CredentialsStep as BotCredentialsStep,
+    VerifyingStep as BotVerifyingStep,
+} from './BotTokenSteps.jsx';
 import { OauthCapabilitiesStep, OauthGcpSetupStep, OauthRedirectStep } from './OAuthSteps.jsx';
 
 export default function AddIntegrationModal({ onClose, onAdded }) {
     const [provider, setProvider] = useState(null);
     const [step, setStep] = useState(1);
     const [form, setForm] = useState({
-        email: '',
-        password: '',
+        // Shared
         label: '',
         permissions: {},
+        // App-password flow
+        email: '',
+        password: '',
+        // Bot-token flow
+        token: '',
+        allowedUserIds: '',
+        instanceName: '',
     });
     const [oauth, setOauth] = useState({
         clientId: '',
@@ -80,6 +91,59 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                 code: 'NETWORK',
                 message: err?.message || 'Request failed',
             });
+            setSubmitting(false);
+            setStep(2);
+        }
+    };
+
+    const handleBotTokenSubmit = async () => {
+        setSubmitting(true);
+        setError(null);
+        setStep(3);
+        const token = form.token.trim().replace(/\s+/g, '');
+        const allowedUserIds = form.allowedUserIds.trim();
+        const instanceName = form.instanceName.trim() || 'personal';
+        const userSuffix = slugifyLabel(instanceName);
+        if (!userSuffix) {
+            setError({code: 'BAD_REQUEST', message: 'Instance name produced an empty ID'});
+            setSubmitting(false);
+            setStep(2);
+            return;
+        }
+        const label = form.label.trim() || `${provider.title} · ${instanceName}`;
+        try {
+            const resp = await fetch('/api/integrations', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    slug: provider.slug,
+                    user_suffix: userSuffix,
+                    label,
+                    auth_blob: {
+                        token,
+                        allowed_user_ids: allowedUserIds,
+                    },
+                    permissions: Object.fromEntries(
+                        (provider.capabilities || []).map(
+                            cap => [cap, form.permissions[cap] || 'rw'],
+                        ),
+                    ),
+                }),
+            });
+            const body = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                setError({
+                    code: body?.error?.code || 'ERROR',
+                    message: body?.error?.message || `HTTP ${resp.status}`,
+                });
+                setSubmitting(false);
+                setStep(2);
+                return;
+            }
+            setResult(body);
+            setSubmitting(false);
+        } catch (err) {
+            setError({code: 'NETWORK', message: err?.message || 'Request failed'});
             setSubmitting(false);
             setStep(2);
         }
@@ -236,7 +300,9 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                             setResult(null);
                             setStep(1);
                             setForm({
-                                email: '', password: '', label: '', permissions: {},
+                                label: '', permissions: {},
+                                email: '', password: '',
+                                token: '', allowedUserIds: '', instanceName: '',
                             });
                             setOauth({
                                 clientId: '', clientSecret: '',
@@ -247,6 +313,26 @@ export default function AddIntegrationModal({ onClose, onAdded }) {
                         }}
                         onDone={() => { onAdded?.(); }}
                     />
+                ) : provider.authFlow === 'bot_token' ? (
+                    step === 1 ? (
+                        <BotExplainerStep
+                            provider={provider}
+                            onBack={() => setProvider(null)}
+                            onNext={() => setStep(2)}
+                        />
+                    ) : step === 2 ? (
+                        <BotCredentialsStep
+                            provider={provider}
+                            form={form}
+                            setForm={setForm}
+                            error={error}
+                            onBack={() => setStep(1)}
+                            onCancel={onClose}
+                            onSubmit={handleBotTokenSubmit}
+                        />
+                    ) : (
+                        <BotVerifyingStep />
+                    )
                 ) : provider.authFlow === 'oauth_device' ? (
                     step === 1 ? (
                         <OauthCapabilitiesStep

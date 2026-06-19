@@ -4,6 +4,7 @@ import ModelPicker from './ModelPicker.jsx';
 import PackageIcon from './icons/PackageIcon';
 import EyeIcon from './icons/EyeIcon';
 import CompactionIcon from './icons/CompactionIcon';
+import SendIcon from './icons/SendIcon';
 import ToggleSwitch from './ToggleSwitch.jsx';
 import ChevronRightIcon from './icons/ChevronRightIcon';
 
@@ -11,23 +12,28 @@ export default function SystemSettings() {
     const [providers, setProviders] = useState([]);
     const [profiles, setProfiles] = useState([]);
     const [settings, setSettings] = useState({ default_agent: 'computron' });
+    const [telegramIntegrations, setTelegramIntegrations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [visionAdvancedOpen, setVisionAdvancedOpen] = useState(false);
 
     useEffect(() => {
         async function init() {
             try {
-                const [providersRes, settingsRes, profilesRes] = await Promise.all([
+                const [providersRes, settingsRes, profilesRes, integrationsRes] = await Promise.all([
                     fetch('/api/providers'),
                     fetch('/api/settings'),
                     fetch('/api/profiles'),
+                    fetch('/api/integrations'),
                 ]);
                 const providersData = await providersRes.json();
                 const settingsData = await settingsRes.json();
                 const profilesData = await profilesRes.json();
+                const integrationsData = integrationsRes.ok ? await integrationsRes.json() : { integrations: [] };
                 setProviders(providersData.providers || []);
                 setSettings(settingsData);
                 setProfiles(profilesData);
+                const all = integrationsData.integrations || [];
+                setTelegramIntegrations(all.filter((i) => i.slug === 'telegram'));
             } catch {
                 // keep defaults on error
             } finally {
@@ -238,6 +244,60 @@ export default function SystemSettings() {
                         onSelect={(p, m) => updateProviderModel('title_provider', 'title_model', p, m)}
                         placeholder="Choose a title model…"
                         inline
+                    />
+                </div>
+            </div>
+
+            {/* Notifications */}
+            <div className={styles.sectionLabel}>Notifications</div>
+
+            <div className={styles.groupCard}>
+                <div className={styles.settingRow}>
+                    <div className={styles.settingIcon}>
+                        <SendIcon />
+                    </div>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Telegram</span>
+                        <span className={styles.settingDesc}>Push goal completion / failure messages to a Telegram chat via a bot integration. Leave either field blank to disable.</span>
+                    </div>
+                </div>
+                <div className={styles.groupRow}>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Bot integration</span>
+                        <span className={styles.settingDesc}>Add a Telegram integration in the Integrations tab first, then pick it here.</span>
+                    </div>
+                    <select
+                        className={styles.select}
+                        value={settings.telegram_notifier_integration_id || ''}
+                        onChange={(e) => updateSetting('telegram_notifier_integration_id', e.target.value)}
+                        data-testid="notifier-integration-select"
+                    >
+                        <option value="">— none —</option>
+                        {telegramIntegrations.map((i) => (
+                            <option key={i.id} value={i.id}>{i.label || i.id}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className={styles.groupRow}>
+                    <div className={styles.settingInfo}>
+                        <span className={styles.settingTitle}>Chat ID</span>
+                        <span className={styles.settingDesc}>
+                            Message your bot once, then visit{' '}
+                            <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>{' '}
+                            and copy <code>chat.id</code>. Group chat IDs are negative.
+                        </span>
+                    </div>
+                    <input
+                        className={styles.numberInput}
+                        type="number"
+                        step={1}
+                        value={settings.telegram_notifier_chat_id ?? ''}
+                        data-testid="notifier-chat-id-input"
+                        onChange={(e) => {
+                            const raw = e.target.value;
+                            const num = raw === '' ? null : Number(raw);
+                            updateSetting('telegram_notifier_chat_id', num);
+                        }}
                     />
                 </div>
             </div>

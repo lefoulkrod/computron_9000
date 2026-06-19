@@ -23,6 +23,8 @@ dependencies = [
     "google-auth>=2.30",
     "google-auth-oauthlib>=1.2",
     "google-api-python-client>=2.130",
+    "aiogram>=3.7",
+    "telegramify-markdown>=1.1.5",
 ]
 
 [project.optional-dependencies]
@@ -148,6 +150,7 @@ build-backend = "setuptools.build_meta"
 # Explicitly include our flat-layout top-level packages
 include = [
     "agents*",
+    "channels*",
     "config*",
     "migrations*",
     "models*",
